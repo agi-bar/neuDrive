@@ -3,8 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-
-	"github.com/go-chi/chi/v5"
 )
 
 type UserProfile struct {
@@ -41,26 +39,41 @@ type ProjectLogRequest struct {
 	Metadata string `json:"metadata,omitempty"`
 }
 
-func HandleMemoryProfileGet(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) handleMemoryProfileGet(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: query database for user profile
+	profiles, err := s.MemoryService.GetProfile(r.Context(), userID)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	// Transform to the API response format: preferences map
+	prefs := make(map[string]string)
+	for _, p := range profiles {
+		prefs[p.Category] = p.Content
+	}
+
 	profile := &UserProfile{
-		UserID:      user.UserID,
-		DisplayName: user.Username,
-		Preferences: map[string]string{},
+		UserID:      userID.String(),
+		Preferences: prefs,
+	}
+
+	// Get user display name if available
+	if user, err := s.UserService.GetByID(r.Context(), userID); err == nil {
+		profile.DisplayName = user.DisplayName
 	}
 
 	respondOK(w, profile)
 }
 
-func HandleMemoryProfileUpdate(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) handleMemoryProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -71,86 +84,27 @@ func HandleMemoryProfileUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: update user profile in database
+	// Upsert each preference as a separate memory profile entry
+	for category, content := range req.Preferences {
+		if err := s.MemoryService.UpsertProfile(r.Context(), userID, category, content, "web"); err != nil {
+			respondInternalError(w, err)
+			return
+		}
+	}
+
+	// Update display name if provided
+	if req.DisplayName != "" {
+		if err := s.MemoryService.UpsertProfile(r.Context(), userID, "display_name", req.DisplayName, "web"); err != nil {
+			respondInternalError(w, err)
+			return
+		}
+	}
+
 	profile := &UserProfile{
-		UserID:      user.UserID,
+		UserID:      userID.String(),
 		DisplayName: req.DisplayName,
 		Preferences: req.Preferences,
 	}
 
 	respondOK(w, profile)
-}
-
-func HandleMemoryProjectsList(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
-		respondUnauthorized(w)
-		return
-	}
-
-	// TODO: query database for user projects
-	_ = user
-	projects := []Project{}
-
-	respondOK(w, map[string]interface{}{
-		"projects": projects,
-	})
-}
-
-func HandleMemoryProjectGet(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-
-	user := GetUser(r.Context())
-	if user == nil {
-		respondUnauthorized(w)
-		return
-	}
-
-	// TODO: query database for specific project
-	_ = user
-	project := &Project{
-		Name: name,
-		Logs: []ProjectLog{},
-	}
-
-	respondOK(w, project)
-}
-
-func HandleMemoryProjectLog(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-
-	user := GetUser(r.Context())
-	if user == nil {
-		respondUnauthorized(w)
-		return
-	}
-
-	var req ProjectLogRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
-		return
-	}
-
-	if req.Message == "" {
-		respondValidationError(w, "message", "message is required")
-		return
-	}
-
-	if req.Level == "" {
-		req.Level = "info"
-	}
-
-	// TODO: insert log entry into database
-	_ = user
-	logEntry := &ProjectLog{
-		ID:       "generated-id",
-		Message:  req.Message,
-		Level:    req.Level,
-		Metadata: req.Metadata,
-	}
-
-	respondCreated(w, map[string]interface{}{
-		"project": name,
-		"log":     logEntry,
-	})
 }

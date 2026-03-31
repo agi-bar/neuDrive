@@ -41,6 +41,9 @@ func (s *MemoryService) GetProfile(ctx context.Context, userID uuid.UUID) ([]mod
 }
 
 func (s *MemoryService) UpsertProfile(ctx context.Context, userID uuid.UUID, category, content, source string) error {
+	if err := validateContentLength(content, maxContentBytes); err != nil {
+		return fmt.Errorf("memory.UpsertProfile: %w", err)
+	}
 	now := time.Now().UTC()
 	_, err := s.db.Exec(ctx,
 		`INSERT INTO memory_profile (id, user_id, category, content, source, created_at, updated_at)
@@ -85,6 +88,9 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 }
 
 func (s *MemoryService) WriteScratch(ctx context.Context, userID uuid.UUID, content, source string) error {
+	if err := validateContentLength(content, maxContentBytes); err != nil {
+		return fmt.Errorf("memory.WriteScratch: %w", err)
+	}
 	now := time.Now().UTC()
 	date := now.Format("2006-01-02")
 	// Default TTL: 7 days from now.

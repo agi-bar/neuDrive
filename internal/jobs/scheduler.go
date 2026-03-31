@@ -17,10 +17,10 @@ type JobConfig struct {
 
 // SchedulerConfig holds the configuration for all background jobs.
 type SchedulerConfig struct {
-	CleanExpiredScratch   JobConfig
-	CleanExpiredTokens    JobConfig
+	CleanExpiredScratch    JobConfig
+	CleanExpiredTokens     JobConfig
 	ArchiveExpiredMessages JobConfig
-	GenerateDailyScratch  JobConfig
+	GenerateDailyScratch   JobConfig
 }
 
 // DefaultSchedulerConfig returns the default configuration for all jobs.

@@ -71,6 +71,9 @@ func (s *VaultService) Read(ctx context.Context, userID uuid.UUID, scope string,
 
 // Write encrypts and upserts a vault entry.
 func (s *VaultService) Write(ctx context.Context, userID uuid.UUID, scope, plaintext, description string, minTrustLevel int) error {
+	if err := validateSlug(scope, 128); err != nil {
+		return fmt.Errorf("vault.Write: invalid scope: %w", err)
+	}
 	ciphertext, nonce, err := s.vault.Encrypt([]byte(plaintext))
 	if err != nil {
 		return fmt.Errorf("vault.Write: encrypt: %w", err)

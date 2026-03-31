@@ -323,29 +323,42 @@ agenthub/
 
 ### 已完成
 
+**核心功能**
+
 - [x] 统一身份 (邮箱密码 + GitHub OAuth + JWT + Scoped Token + OAuth Provider)
 - [x] 上下文漫游 (三层记忆 + 冲突检测 + 自动摘要)
 - [x] 秘密管理 (AES-256-GCM + 四级信任等级)
 - [x] 能力路由 (.skill 注册 + 批量导入)
-- [x] Agent 通信 (邮件系统 + 自动归档)
-- [x] 设备控制 (统一接口)
-- [x] MCP 协议 (Claude Code/Desktop 兼容)
+- [x] Agent 通信 (邮件系统 + 全文搜索 + TTL 自动归档)
+- [x] 设备控制 (统一注册/发现接口，调用层为 mock，真实协议对接见 P1)
+- [x] MCP 协议 (20 个工具，Claude Code/Desktop 兼容)
 - [x] GPT Actions (ChatGPT 兼容)
-- [x] JS/Python SDK
-- [x] 浏览器扩展
-- [x] 跨用户协作
-- [x] Webhook 通知
+- [x] JS/Python SDK (同步 + 异步)
+- [x] 浏览器扩展 (Claude/GPT/Gemini/Kimi 四平台)
+- [x] 跨用户协作 (路径级共享 + 过期时间)
+- [x] Webhook 通知 (HMAC-SHA256 签名)
 - [x] 管理后台 (7 页面)
 - [x] 数据导出 (ZIP + JSON)
 - [x] CI/CD + Docker
 
+**代码成熟化**
+
+- [x] API Handler 全部接通 Service 层 (消除 26 个 TODO stub)
+- [x] Agent API 端点全部接通真实数据 (tree/vault/inbox/device 7 个端点)
+- [x] 消除 crypto 操作中的 panic，改为 error 返回
+- [x] 输入验证 (slug 格式、内容长度限制)
+- [x] 错误处理完善 (fire-and-forget 日志、transaction rollback)
+- [x] Service 层纯函数测试 (crypto 生成、hash 一致性、diffRatio、验证器)
+- [x] 死代码清理 (未使用的 auth.go legacy handler)
+
 ### 下一步 (P1)
 
-- [ ] 设备 Adapter 真实对接 (HTTP/MQTT/米家/HomeAssistant)
-- [ ] 向量搜索 (pgvector 语义检索)
-- [ ] Claude Memory 自动导入
-- [ ] 邮件通知 (注册验证/密码重置)
-- [ ] 国际化 (中/英)
+- [ ] 设备 Adapter 真实对接 (HTTP/MQTT/米家/HomeAssistant) — 当前 `DeviceService.Call()` 返回 mock 响应
+- [ ] 向量搜索 (pgvector 语义检索) — 当前仅支持 PostgreSQL GIN 全文检索
+- [ ] Claude Memory 自动导入 — 当前支持手动批量导入，缺少自动拉取
+- [ ] 邮件通知 (注册验证/密码重置) — 当前无 SMTP 集成
+- [ ] 国际化 (中/英) — 前端和扩展当前仅中文
+- [ ] 测试覆盖率提升 — API 层需要 mock service 实现完整集成测试
 
 ### 未来 (P2-P3)
 

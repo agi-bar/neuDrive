@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -27,26 +28,39 @@ type DeviceCallResponse struct {
 	Result string `json:"result,omitempty"`
 }
 
-func HandleDevicesList(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+type RegisterDeviceRequest struct {
+	Name       string                 `json:"name"`
+	DeviceType string                 `json:"device_type"`
+	Brand      string                 `json:"brand,omitempty"`
+	Protocol   string                 `json:"protocol,omitempty"`
+	Endpoint   string                 `json:"endpoint,omitempty"`
+	SkillMD    string                 `json:"skill_md,omitempty"`
+	Config     map[string]interface{} `json:"config,omitempty"`
+}
+
+func (s *Server) handleDevicesList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: query database for devices belonging to user
-	devices := []Device{}
+	devices, err := s.DeviceService.List(r.Context(), userID)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
 
 	respondOK(w, map[string]interface{}{
 		"devices": devices,
 	})
 }
 
-func HandleDeviceCall(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleDeviceCall(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -62,13 +76,56 @@ func HandleDeviceCall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: dispatch device call via appropriate service
-	_ = user
-	resp := &DeviceCallResponse{
-		Device: name,
-		Action: req.Action,
-		Status: "dispatched",
+	var params map[string]interface{}
+	if req.Params != nil {
+		if err := json.Unmarshal(req.Params, &params); err != nil {
+			respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid params format")
+			return
+		}
 	}
 
-	respondOK(w, resp)
+	result, err := s.DeviceService.Call(r.Context(), userID, name, req.Action, params)
+	if err != nil {
+		respondNotFound(w, "device")
+		return
+	}
+
+	respondOK(w, result)
+}
+
+func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	var req RegisterDeviceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" || req.DeviceType == "" {
+		respondValidationError(w, "name,device_type", "name and device_type are required")
+		return
+	}
+
+	device := models.Device{
+		Name:       req.Name,
+		DeviceType: req.DeviceType,
+		Brand:      req.Brand,
+		Protocol:   req.Protocol,
+		Endpoint:   req.Endpoint,
+		SkillMD:    req.SkillMD,
+		Config:     req.Config,
+	}
+
+	registered, err := s.DeviceService.Register(r.Context(), userID, device)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondCreated(w, registered)
 }

@@ -56,6 +56,9 @@ func (s *ProjectService) Get(ctx context.Context, userID uuid.UUID, name string)
 
 // Create creates a new project and a corresponding worker role scoped to it.
 func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name string) (*models.Project, error) {
+	if err := validateSlug(name, 128); err != nil {
+		return nil, fmt.Errorf("project.Create: invalid name: %w", err)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("project.Create: begin tx: %w", err)

@@ -13,10 +13,10 @@ import (
 // ---------------------------------------------------------------------------
 
 type createCollaborationRequest struct {
-	GuestSlug    string   `json:"guest_slug"`
-	SharedPaths  []string `json:"shared_paths"`
-	Permissions  string   `json:"permissions"`
-	ExpiresInDays *int    `json:"expires_in_days,omitempty"`
+	GuestSlug     string   `json:"guest_slug"`
+	SharedPaths   []string `json:"shared_paths"`
+	Permissions   string   `json:"permissions"`
+	ExpiresInDays *int     `json:"expires_in_days,omitempty"`
 }
 
 func (s *Server) handleListCollaborations(w http.ResponseWriter, r *http.Request) {

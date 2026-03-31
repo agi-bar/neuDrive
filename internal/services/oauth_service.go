@@ -36,14 +36,20 @@ func (s *OAuthService) RegisterApp(ctx context.Context, userID uuid.UUID, name s
 		return nil, fmt.Errorf("oauth.RegisterApp: at least one redirect_uri is required")
 	}
 
-	clientID := generateClientID()
-	clientSecret := generateClientSecret()
+	clientID, err := generateClientID()
+	if err != nil {
+		return nil, fmt.Errorf("oauth.RegisterApp: %w", err)
+	}
+	clientSecret, err := generateClientSecret()
+	if err != nil {
+		return nil, fmt.Errorf("oauth.RegisterApp: %w", err)
+	}
 	secretHash := hashString(clientSecret)
 
 	id := uuid.New()
 	now := time.Now().UTC()
 
-	_, err := s.db.Exec(ctx,
+	_, err = s.db.Exec(ctx,
 		`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, logo_url, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		id, userID, name, clientID, secretHash, redirectURIs, scopes, description, logoURL, now)
@@ -66,12 +72,15 @@ func (s *OAuthService) RegisterApp(ctx context.Context, userID uuid.UUID, name s
 // Authorize creates an authorization code for the given app and user.
 // It also creates or updates the grant record.
 func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, scopes []string, redirectURI string) (string, error) {
-	code := generateAuthCode()
+	code, err := generateAuthCode()
+	if err != nil {
+		return "", fmt.Errorf("oauth.Authorize: %w", err)
+	}
 	codeHash := hashString(code)
 	expiresAt := time.Now().UTC().Add(10 * time.Minute)
 
 	id := uuid.New()
-	_, err := s.db.Exec(ctx,
+	_, err = s.db.Exec(ctx,
 		`INSERT INTO oauth_codes (id, app_id, user_id, code_hash, scopes, redirect_uri, expires_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		id, appID, userID, codeHash, scopes, redirectURI, expiresAt)
@@ -295,28 +304,28 @@ func (s *OAuthService) ValidateRedirectURI(app *models.OAuthApp, uri string) boo
 // Helpers
 // ---------------------------------------------------------------------------
 
-func generateClientID() string {
+func generateClientID() (string, error) {
 	b := make([]byte, 16)
 	if _, err := rand.Read(b); err != nil {
-		panic("oauth: failed to generate random bytes: " + err.Error())
+		return "", fmt.Errorf("oauth: failed to generate client ID: %w", err)
 	}
-	return "ahc_" + hex.EncodeToString(b)
+	return "ahc_" + hex.EncodeToString(b), nil
 }
 
-func generateClientSecret() string {
+func generateClientSecret() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		panic("oauth: failed to generate random bytes: " + err.Error())
+		return "", fmt.Errorf("oauth: failed to generate client secret: %w", err)
 	}
-	return "ahs_" + hex.EncodeToString(b)
+	return "ahs_" + hex.EncodeToString(b), nil
 }
 
-func generateAuthCode() string {
+func generateAuthCode() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		panic("oauth: failed to generate random bytes: " + err.Error())
+		return "", fmt.Errorf("oauth: failed to generate auth code: %w", err)
 	}
-	return hex.EncodeToString(b)
+	return hex.EncodeToString(b), nil
 }
 
 func hashString(s string) string {

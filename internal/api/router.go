@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -34,31 +35,31 @@ const (
 
 // Server holds the HTTP router and all service dependencies.
 type Server struct {
-	Router             *chi.Mux
-	UserService        *services.UserService
-	AuthService        *services.AuthService
-	ConnectionService  *services.ConnectionService
-	FileTreeService    *services.FileTreeService
-	VaultService       *services.VaultService
-	MemoryService      *services.MemoryService
-	DeviceService      *services.DeviceService
-	ProjectService     *services.ProjectService
-	SummaryService     *services.SummaryService
-	RoleService        *services.RoleService
-	InboxService       *services.InboxService
-	DashboardService   *services.DashboardService
-	TokenService       *services.TokenService
+	Router               *chi.Mux
+	UserService          *services.UserService
+	AuthService          *services.AuthService
+	ConnectionService    *services.ConnectionService
+	FileTreeService      *services.FileTreeService
+	VaultService         *services.VaultService
+	MemoryService        *services.MemoryService
+	DeviceService        *services.DeviceService
+	ProjectService       *services.ProjectService
+	SummaryService       *services.SummaryService
+	RoleService          *services.RoleService
+	InboxService         *services.InboxService
+	DashboardService     *services.DashboardService
+	TokenService         *services.TokenService
 	ImportService        *services.ImportService
 	ExportService        *services.ExportService
 	CollaborationService *services.CollaborationService
 	WebhookService       *services.WebhookService
 	OAuthService         *services.OAuthService
 	Vault                *vaultpkg.Vault
-	AuthHandler        *auth.Handler
-	Config             *config.Config
-	JWTSecret          string
-	GitHubClientID     string
-	GitHubClientSecret string
+	AuthHandler          *auth.Handler
+	Config               *config.Config
+	JWTSecret            string
+	GitHubClientID       string
+	GitHubClientSecret   string
 }
 
 // NewServer creates a fully wired Server with routes configured.
@@ -87,29 +88,29 @@ func NewServer(
 	ghClientSecret string,
 ) *Server {
 	s := &Server{
-		Router:             chi.NewRouter(),
-		UserService:        userSvc,
-		AuthService:        authSvc,
-		ConnectionService:  connSvc,
-		FileTreeService:    fileTreeSvc,
-		VaultService:       vaultSvc,
-		MemoryService:      memorySvc,
-		ProjectService:     projectSvc,
-		SummaryService:     summarySvc,
-		RoleService:        roleSvc,
-		InboxService:       inboxSvc,
-		DeviceService:      deviceSvc,
-		DashboardService:   dashboardSvc,
-		TokenService:       tokenSvc,
+		Router:               chi.NewRouter(),
+		UserService:          userSvc,
+		AuthService:          authSvc,
+		ConnectionService:    connSvc,
+		FileTreeService:      fileTreeSvc,
+		VaultService:         vaultSvc,
+		MemoryService:        memorySvc,
+		ProjectService:       projectSvc,
+		SummaryService:       summarySvc,
+		RoleService:          roleSvc,
+		InboxService:         inboxSvc,
+		DeviceService:        deviceSvc,
+		DashboardService:     dashboardSvc,
+		TokenService:         tokenSvc,
 		ImportService:        importSvc,
 		CollaborationService: collabSvc,
 		WebhookService:       webhookSvc,
 		ExportService:        exportSvc,
 		Vault:                vault,
-		JWTSecret:          jwtSecret,
-		Config:             cfg,
-		GitHubClientID:     ghClientID,
-		GitHubClientSecret: ghClientSecret,
+		JWTSecret:            jwtSecret,
+		Config:               cfg,
+		GitHubClientID:       ghClientID,
+		GitHubClientSecret:   ghClientSecret,
 	}
 	s.AuthHandler = auth.NewHandler(userSvc, authSvc, jwtSecret, ghClientID, ghClientSecret)
 	s.setupRoutes()
@@ -164,31 +165,31 @@ func (s *Server) setupRoutes() {
 		r.Delete("/api/auth/sessions/{id}", s.AuthHandler.HandleRevokeSession)
 
 		// File tree
-		r.Get("/api/tree/*", HandleTreeRead)
-		r.Put("/api/tree/*", HandleTreeWrite)
-		r.Delete("/api/tree/*", HandleTreeDelete)
-		r.Get("/api/search", HandleSearch)
+		r.Get("/api/tree/*", s.handleTreeRead)
+		r.Put("/api/tree/*", s.handleTreeWrite)
+		r.Delete("/api/tree/*", s.handleTreeDelete)
+		r.Get("/api/search", s.handleSearch)
 
 		// Vault
-		r.Get("/api/vault/scopes", HandleVaultListScopes)
-		r.Get("/api/vault/{scope}", HandleVaultRead)
-		r.Put("/api/vault/{scope}", HandleVaultWrite)
-		r.Delete("/api/vault/{scope}", HandleVaultDelete)
+		r.Get("/api/vault/scopes", s.HandleVaultListScopes)
+		r.Get("/api/vault/{scope}", s.HandleVaultRead)
+		r.Put("/api/vault/{scope}", s.HandleVaultWrite)
+		r.Delete("/api/vault/{scope}", s.HandleVaultDelete)
 
 		// Connections
-		r.Get("/api/connections", HandleConnectionsList)
-		r.Post("/api/connections", HandleConnectionsCreate)
-		r.Put("/api/connections/{id}", HandleConnectionsUpdate)
-		r.Delete("/api/connections/{id}", HandleConnectionsDelete)
+		r.Get("/api/connections", s.handleConnectionsList)
+		r.Post("/api/connections", s.handleConnectionsCreate)
+		r.Put("/api/connections/{id}", s.handleConnectionsUpdate)
+		r.Delete("/api/connections/{id}", s.handleConnectionsDelete)
 
 		// Roles
-		r.Get("/api/roles", HandleRolesList)
-		r.Post("/api/roles", HandleRolesCreate)
-		r.Delete("/api/roles/{name}", HandleRolesDelete)
+		r.Get("/api/roles", s.handleRolesList)
+		r.Post("/api/roles", s.handleRolesCreate)
+		r.Delete("/api/roles/{name}", s.handleRolesDelete)
 
 		// Memory
-		r.Get("/api/memory/profile", HandleMemoryProfileGet)
-		r.Put("/api/memory/profile", HandleMemoryProfileUpdate)
+		r.Get("/api/memory/profile", s.handleMemoryProfileGet)
+		r.Put("/api/memory/profile", s.handleMemoryProfileUpdate)
 		r.Get("/api/memory/scratch", s.handleGetScratch)
 		r.Get("/api/memory/conflicts", s.handleListConflicts)
 		r.Post("/api/memory/conflicts/{id}/resolve", s.handleResolveConflict)
@@ -202,14 +203,14 @@ func (s *Server) setupRoutes() {
 		r.Post("/api/projects/{name}/summarize", s.handleSummarizeProject)
 
 		// Inbox
-		r.Get("/api/inbox/{role}", HandleInboxList)
-		r.Post("/api/inbox/send", HandleInboxSend)
-		r.Put("/api/inbox/{id}/archive", HandleInboxArchive)
+		r.Get("/api/inbox/{role}", s.handleInboxList)
+		r.Post("/api/inbox/send", s.handleInboxSend)
+		r.Put("/api/inbox/{id}/archive", s.handleInboxArchive)
 
 		// Devices
-		r.Get("/api/devices", HandleDevicesList)
+		r.Get("/api/devices", s.handleDevicesList)
 		r.Post("/api/devices", s.handleRegisterDevice)
-		r.Post("/api/devices/{name}/call", HandleDeviceCall)
+		r.Post("/api/devices/{name}/call", s.handleDeviceCall)
 
 		// Dashboard
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
@@ -507,87 +508,159 @@ func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// Dashboard
+// Memory: scratch
 // ---------------------------------------------------------------------------
 
-func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetScratch(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// Basic stats - counts from connections for now.
-	conns, _ := s.ConnectionService.ListByUser(r.Context(), userID)
-
-	respondOK(w, map[string]interface{}{
-		"file_count":         0,
-		"vault_scopes":       0,
-		"connections":        len(conns),
-		"roles":              0,
-		"projects":           0,
-		"unread_messages":    0,
-		"registered_devices": 0,
-	})
-}
-
-// ---------------------------------------------------------------------------
-// Stub handlers for routes that reference services not yet wired
-// ---------------------------------------------------------------------------
-
-func (s *Server) handleGetScratch(w http.ResponseWriter, r *http.Request) {
-	_, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
+	entries, err := s.MemoryService.GetScratch(r.Context(), userID, 7)
+	if err != nil {
+		respondInternalError(w, err)
 		return
 	}
-	respondOK(w, map[string]interface{}{"scratch": map[string]interface{}{}})
+
+	respondOK(w, map[string]interface{}{"scratch": entries})
 }
+
+// ---------------------------------------------------------------------------
+// Projects
+// ---------------------------------------------------------------------------
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
-	_, ok := userIDFromCtx(r.Context())
+	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
 		return
 	}
-	respondOK(w, map[string]interface{}{"projects": []interface{}{}})
+
+	projects, err := s.ProjectService.List(r.Context(), userID)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, map[string]interface{}{"projects": projects})
 }
 
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
-	_, ok := userIDFromCtx(r.Context())
+	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
 		return
 	}
-	respondCreated(w, map[string]string{"status": "created"})
+
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Name == "" {
+		respondValidationError(w, "name", "project name is required")
+		return
+	}
+
+	project, err := s.ProjectService.Create(r.Context(), userID, req.Name)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondCreated(w, project)
 }
 
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	_, ok := userIDFromCtx(r.Context())
+	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
 		return
 	}
-	respondOK(w, map[string]interface{}{"name": name, "logs": []interface{}{}})
+
+	project, err := s.ProjectService.Get(r.Context(), userID, name)
+	if err != nil {
+		respondNotFound(w, "project")
+		return
+	}
+
+	logs, err := s.ProjectService.GetLogs(r.Context(), project.ID, 50)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, map[string]interface{}{
+		"project": project,
+		"logs":    logs,
+	})
 }
 
 func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) {
-	_, ok := userIDFromCtx(r.Context())
+	name := chi.URLParam(r, "name")
+	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
 		return
 	}
-	respondCreated(w, map[string]string{"status": "appended"})
+
+	project, err := s.ProjectService.Get(r.Context(), userID, name)
+	if err != nil {
+		respondNotFound(w, "project")
+		return
+	}
+
+	var req struct {
+		Source  string   `json:"source"`
+		Action  string   `json:"action"`
+		Summary string   `json:"summary"`
+		Tags    []string `json:"tags,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Summary == "" {
+		respondValidationError(w, "summary", "summary is required")
+		return
+	}
+
+	logEntry := models.ProjectLog{
+		ProjectID: project.ID,
+		Source:    req.Source,
+		Action:    req.Action,
+		Summary:   req.Summary,
+		Tags:      req.Tags,
+	}
+
+	if err := s.ProjectService.AppendLog(r.Context(), project.ID, logEntry); err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondCreated(w, map[string]string{"status": "appended", "project": name})
 }
 
 func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	_, ok := userIDFromCtx(r.Context())
+	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
 		return
 	}
+
+	if err := s.ProjectService.Archive(r.Context(), userID, name); err != nil {
+		respondNotFound(w, "project")
+		return
+	}
+
 	respondOK(w, map[string]string{"status": "archived", "name": name})
 }
 
@@ -628,13 +701,36 @@ func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
-func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
-	_, ok := userIDFromCtx(r.Context())
+// ---------------------------------------------------------------------------
+// Dashboard
+// ---------------------------------------------------------------------------
+
+func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
 		return
 	}
-	respondCreated(w, map[string]string{"status": "registered"})
+
+	if s.DashboardService != nil {
+		stats, err := s.DashboardService.GetStats(r.Context(), userID)
+		if err == nil {
+			respondOK(w, stats)
+			return
+		}
+	}
+
+	// Fallback: basic stats
+	conns, _ := s.ConnectionService.ListByUser(r.Context(), userID)
+	respondOK(w, map[string]interface{}{
+		"file_count":         0,
+		"vault_scopes":       0,
+		"connections":        len(conns),
+		"roles":              0,
+		"projects":           0,
+		"unread_messages":    0,
+		"registered_devices": 0,
+	})
 }
 
 // ---------------------------------------------------------------------------
@@ -666,31 +762,72 @@ func (s *Server) handleAgentTreeList(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadTree) {
 		return
 	}
+	userID, _ := userIDFromCtx(r.Context())
+	trustLevel := trustLevelFromCtx(r.Context())
 	path := chi.URLParam(r, "*")
 	if path == "" {
 		path = "/"
 	}
-	respondOK(w, map[string]interface{}{"path": path, "children": []interface{}{}})
+
+	entries, err := s.FileTreeService.List(r.Context(), userID, path, trustLevel)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, map[string]interface{}{"path": path, "children": entries})
 }
 
 func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeSearch) {
 		return
 	}
+	userID, _ := userIDFromCtx(r.Context())
+	trustLevel := trustLevelFromCtx(r.Context())
 	query := r.URL.Query().Get("q")
-	respondOK(w, map[string]interface{}{"query": query, "results": []interface{}{}})
+
+	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, map[string]interface{}{"query": query, "results": entries})
 }
 
 func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeWriteTree) {
 		return
 	}
+	userID, _ := userIDFromCtx(r.Context())
 	path := chi.URLParam(r, "*")
-	respondOK(w, map[string]interface{}{"path": path, "status": "written"})
+
+	var req struct {
+		Content     string `json:"content"`
+		ContentType string `json:"content_type,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+
+	contentType := req.ContentType
+	if contentType == "" {
+		contentType = "text/plain"
+	}
+
+	entry, err := s.FileTreeService.Write(r.Context(), userID, path, req.Content, contentType, models.TrustLevelFull)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, entry)
 }
 
 func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
-	if _, ok := userIDFromCtx(r.Context()); !ok {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -720,30 +857,87 @@ func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondOK(w, map[string]interface{}{"scope": scope, "data": ""})
+	plaintext, err := s.VaultService.Read(r.Context(), userID, scope, trustLevel)
+	if err != nil {
+		respondNotFound(w, "vault entry")
+		return
+	}
+
+	respondOK(w, map[string]interface{}{"scope": scope, "data": plaintext})
 }
 
 func (s *Server) handleAgentGetInbox(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadInbox) {
 		return
 	}
+	userID, _ := userIDFromCtx(r.Context())
 	role := chi.URLParam(r, "role")
-	respondOK(w, map[string]interface{}{"role": role, "messages": []interface{}{}})
+
+	messages, err := s.InboxService.GetMessages(r.Context(), userID, role, "")
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, map[string]interface{}{"role": role, "messages": messages})
 }
 
 func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteInbox) {
 		return
 	}
-	respondCreated(w, map[string]string{"status": "sent"})
+	userID, _ := userIDFromCtx(r.Context())
+
+	var req struct {
+		To      string `json:"to"`
+		Subject string `json:"subject"`
+		Body    string `json:"body"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+
+	msg := models.InboxMessage{
+		FromAddress: "assistant@" + userID.String(),
+		ToAddress:   req.To,
+		Subject:     req.Subject,
+		Body:        req.Body,
+		Priority:    "normal",
+	}
+
+	sent, err := s.InboxService.Send(r.Context(), userID, msg)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondCreated(w, sent)
 }
 
 func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeCallDevices) {
 		return
 	}
+	userID, _ := userIDFromCtx(r.Context())
 	name := chi.URLParam(r, "name")
-	respondOK(w, map[string]interface{}{"device": name, "status": "dispatched"})
+
+	var req struct {
+		Action string                 `json:"action"`
+		Params map[string]interface{} `json:"params,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+
+	result, err := s.DeviceService.Call(r.Context(), userID, name, req.Action, req.Params)
+	if err != nil {
+		respondNotFound(w, "device")
+		return
+	}
+
+	respondOK(w, result)
 }
 
 func (s *Server) handleAgentGetProfile(w http.ResponseWriter, r *http.Request) {

@@ -16,7 +16,7 @@ const (
 	ScopeWriteMemory = "write:memory"
 
 	ScopeReadVault     = "read:vault"      // all vault
-	ScopeReadVaultAuth = "read:vault.auth"  // only auth.* scopes
+	ScopeReadVaultAuth = "read:vault.auth" // only auth.* scopes
 	ScopeWriteVault    = "write:vault"
 
 	ScopeReadSkills  = "read:skills"
@@ -89,21 +89,21 @@ func ScopeCategories() map[string][]string {
 
 // ScopedToken represents a scoped access token stored in the database.
 type ScopedToken struct {
-	ID              uuid.UUID  `json:"id"`
-	UserID          uuid.UUID  `json:"user_id"`
-	Name            string     `json:"name"`
-	TokenHash       string     `json:"-"`           // never expose
-	TokenPrefix     string     `json:"token_prefix"`
-	Scopes          []string   `json:"scopes"`
-	MaxTrustLevel   int        `json:"max_trust_level"`
-	ExpiresAt       time.Time  `json:"expires_at"`
-	RateLimit       int        `json:"rate_limit"`
-	RequestCount    int        `json:"request_count"`
-	RateLimitResetAt time.Time `json:"rate_limit_reset_at"`
-	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
-	LastUsedIP      string     `json:"last_used_ip,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	RevokedAt       *time.Time `json:"revoked_at,omitempty"`
+	ID               uuid.UUID  `json:"id"`
+	UserID           uuid.UUID  `json:"user_id"`
+	Name             string     `json:"name"`
+	TokenHash        string     `json:"-"` // never expose
+	TokenPrefix      string     `json:"token_prefix"`
+	Scopes           []string   `json:"scopes"`
+	MaxTrustLevel    int        `json:"max_trust_level"`
+	ExpiresAt        time.Time  `json:"expires_at"`
+	RateLimit        int        `json:"rate_limit"`
+	RequestCount     int        `json:"request_count"`
+	RateLimitResetAt time.Time  `json:"rate_limit_reset_at"`
+	LastUsedAt       *time.Time `json:"last_used_at,omitempty"`
+	LastUsedIP       string     `json:"last_used_ip,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
 }
 
 // ScopedTokenResponse is the API representation (excludes hash, adds computed fields).
@@ -135,9 +135,9 @@ type CreateTokenRequest struct {
 
 // CreateTokenResponse includes the raw token (shown only once).
 type CreateTokenResponse struct {
-	Token        string              `json:"token"`         // raw token, shown only once
-	TokenPrefix  string              `json:"token_prefix"`
-	ScopedToken  ScopedTokenResponse `json:"scoped_token"`
+	Token       string              `json:"token"` // raw token, shown only once
+	TokenPrefix string              `json:"token_prefix"`
+	ScopedToken ScopedTokenResponse `json:"scoped_token"`
 }
 
 // ValidateTokenRequest is used by external services to validate a token.

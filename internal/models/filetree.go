@@ -20,7 +20,7 @@ type FileTreeEntry struct {
 }
 
 type FileTreeListResult struct {
-	Path    string           `json:"path"`
-	Entries []FileTreeEntry  `json:"entries"`
-	Total   int              `json:"total"`
+	Path    string          `json:"path"`
+	Entries []FileTreeEntry `json:"entries"`
+	Total   int             `json:"total"`
 }

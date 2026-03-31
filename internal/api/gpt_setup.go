@@ -18,8 +18,8 @@ func (s *Server) handleGPTSetup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondOK(w, map[string]interface{}{
-		"schema_url": baseURL + "/docs/gpt-actions-schema.yaml",
-		"auth_type":  "bearer",
+		"schema_url":   baseURL + "/docs/gpt-actions-schema.yaml",
+		"auth_type":    "bearer",
 		"token_prefix": "aht_",
 		"instructions": map[string]string{
 			"step_1": "在 Agent Hub 设置页面创建一个 Token（推荐 Agent 完整权限）",

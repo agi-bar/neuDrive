@@ -69,15 +69,15 @@ type MCPServer struct {
 	TrustLevel int
 	Scopes     []string
 
-	FileTree  *services.FileTreeService
-	Vault     *services.VaultService
+	FileTree    *services.FileTreeService
+	Vault       *services.VaultService
 	VaultCrypto *vault.Vault
-	Memory    *services.MemoryService
-	Project   *services.ProjectService
-	Inbox     *services.InboxService
-	Device    *services.DeviceService
-	Dashboard *services.DashboardService
-	Import    *services.ImportService
+	Memory      *services.MemoryService
+	Project     *services.ProjectService
+	Inbox       *services.InboxService
+	Device      *services.DeviceService
+	Dashboard   *services.DashboardService
+	Import      *services.ImportService
 }
 
 func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
@@ -250,12 +250,12 @@ func (s *MCPServer) getTools() []MCPTool {
 			Name:        "send_message",
 			Description: "发送 Agent 间消息",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"to":      prop("string", "收件地址 (如 worker:policy@de.hub)"),
-				"subject": prop("string", "主题"),
-				"body":    prop("string", "正文（自包含，收件方无需前置信息）"),
-				"domain":  prop("string", "领域: governance, kb, collab, tools"),
+				"to":          prop("string", "收件地址 (如 worker:policy@de.hub)"),
+				"subject":     prop("string", "主题"),
+				"body":        prop("string", "正文（自包含，收件方无需前置信息）"),
+				"domain":      prop("string", "领域: governance, kb, collab, tools"),
 				"action_type": prop("string", "类型: task_request, info, result, alert, handoff, memory_sync"),
-				"tags":    propArray("string", "标签"),
+				"tags":        propArray("string", "标签"),
 			}, "to", "subject", "body"),
 		},
 		{

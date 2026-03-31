@@ -107,13 +107,13 @@ type OAuthTokenResponse struct {
 
 // OAuthUserInfoResponse is returned from the /oauth/userinfo endpoint.
 type OAuthUserInfoResponse struct {
-	Sub         string `json:"sub"`
-	Name        string `json:"name"`
-	Slug        string `json:"slug"`
-	Email       string `json:"email,omitempty"`
-	AvatarURL   string `json:"avatar_url,omitempty"`
-	Timezone    string `json:"timezone,omitempty"`
-	Language    string `json:"language,omitempty"`
+	Sub       string `json:"sub"`
+	Name      string `json:"name"`
+	Slug      string `json:"slug"`
+	Email     string `json:"email,omitempty"`
+	AvatarURL string `json:"avatar_url,omitempty"`
+	Timezone  string `json:"timezone,omitempty"`
+	Language  string `json:"language,omitempty"`
 }
 
 // OAuthGrantResponse is used when listing grants a user has given.

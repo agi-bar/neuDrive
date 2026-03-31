@@ -12,6 +12,7 @@ type User struct {
 	DisplayName string    `json:"display_name" db:"display_name"`
 	Email       string    `json:"email,omitempty" db:"email"`
 	AvatarURL   string    `json:"avatar_url,omitempty" db:"avatar_url"`
+	Bio         string    `json:"bio,omitempty" db:"bio"`
 	Timezone    string    `json:"timezone" db:"timezone"`
 	Language    string    `json:"language" db:"language"`
 	CreatedAt   time.Time `json:"created_at" db:"created_at"`
@@ -75,4 +76,16 @@ type AuthResponse struct {
 
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
+}
+
+type ChangePasswordRequest struct {
+	OldPassword string `json:"old_password"`
+	NewPassword string `json:"new_password"`
+}
+
+type UpdateProfileRequest struct {
+	DisplayName string `json:"display_name"`
+	Bio         string `json:"bio"`
+	Timezone    string `json:"timezone"`
+	Language    string `json:"language"`
 }

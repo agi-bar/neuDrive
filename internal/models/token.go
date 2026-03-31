@@ -6,131 +6,203 @@ import (
 	"github.com/google/uuid"
 )
 
-// Token scope constants - fine-grained permissions
+// Token scope constants — hierarchical, colon-separated
+// Format: "action:resource" or "action:resource.sub"
 const (
-	// Profile scopes
 	ScopeReadProfile  = "read:profile"
 	ScopeWriteProfile = "write:profile"
 
-	// Memory scopes
 	ScopeReadMemory  = "read:memory"
 	ScopeWriteMemory = "write:memory"
 
-	// Vault scopes (can be further narrowed: read:vault.auth, read:vault.identity)
-	ScopeReadVault  = "read:vault"
-	ScopeWriteVault = "write:vault"
+	ScopeReadVault     = "read:vault"      // all vault
+	ScopeReadVaultAuth = "read:vault.auth"  // only auth.* scopes
+	ScopeWriteVault    = "write:vault"
 
-	// Skills scopes
 	ScopeReadSkills  = "read:skills"
 	ScopeWriteSkills = "write:skills"
 
-	// Devices
 	ScopeReadDevices = "read:devices"
 	ScopeCallDevices = "call:devices"
 
-	// Inbox
-	ScopeReadInbox = "read:inbox"
-	ScopeSendInbox = "send:inbox"
+	ScopeReadInbox  = "read:inbox"
+	ScopeWriteInbox = "write:inbox"
 
-	// Projects
 	ScopeReadProjects  = "read:projects"
 	ScopeWriteProjects = "write:projects"
 
-	// Roles
-	ScopeReadRoles   = "read:roles"
-	ScopeManageRoles = "manage:roles"
-
-	// File tree (general)
 	ScopeReadTree  = "read:tree"
 	ScopeWriteTree = "write:tree"
 
-	// Admin - full access
-	ScopeAdmin = "admin"
+	ScopeSearch = "search"
+
+	ScopeAdmin = "admin" // full access
 )
 
-// AllScopes returns all available scopes
-func AllScopes() []string {
-	return []string{
-		ScopeReadProfile, ScopeWriteProfile,
-		ScopeReadMemory, ScopeWriteMemory,
-		ScopeReadVault, ScopeWriteVault,
-		ScopeReadSkills, ScopeWriteSkills,
-		ScopeReadDevices, ScopeCallDevices,
-		ScopeReadInbox, ScopeSendInbox,
-		ScopeReadProjects, ScopeWriteProjects,
-		ScopeReadRoles, ScopeManageRoles,
-		ScopeReadTree, ScopeWriteTree,
-		ScopeAdmin,
-	}
+// AllScopes returns every recognised scope for validation.
+var AllScopes = []string{
+	ScopeReadProfile, ScopeWriteProfile,
+	ScopeReadMemory, ScopeWriteMemory,
+	ScopeReadVault, ScopeReadVaultAuth, ScopeWriteVault,
+	ScopeReadSkills, ScopeWriteSkills,
+	ScopeReadDevices, ScopeCallDevices,
+	ScopeReadInbox, ScopeWriteInbox,
+	ScopeReadProjects, ScopeWriteProjects,
+	ScopeReadTree, ScopeWriteTree,
+	ScopeSearch,
+	ScopeAdmin,
 }
 
-// ScopeCategories returns scopes grouped by category for UI display
+// Predefined scope bundles (for easy token creation).
+var ScopeBundleReadOnly = []string{
+	ScopeReadProfile, ScopeReadMemory, ScopeReadSkills,
+	ScopeReadProjects, ScopeReadTree, ScopeSearch,
+}
+
+var ScopeBundleAgent = []string{
+	ScopeReadProfile, ScopeReadMemory, ScopeWriteMemory,
+	ScopeReadSkills, ScopeReadVaultAuth,
+	ScopeReadDevices, ScopeCallDevices,
+	ScopeReadInbox, ScopeWriteInbox,
+	ScopeReadProjects, ScopeWriteProjects,
+	ScopeReadTree, ScopeWriteTree,
+	ScopeSearch,
+}
+
+var ScopeBundleFull = []string{ScopeAdmin}
+
+// ScopeCategories returns scopes grouped by category for UI display.
 func ScopeCategories() map[string][]string {
 	return map[string][]string{
-		"身份与偏好": {ScopeReadProfile, ScopeWriteProfile},
-		"记忆":      {ScopeReadMemory, ScopeWriteMemory},
-		"密钥保险柜":  {ScopeReadVault, ScopeWriteVault},
-		"技能":      {ScopeReadSkills, ScopeWriteSkills},
-		"设备":      {ScopeReadDevices, ScopeCallDevices},
-		"收件箱":     {ScopeReadInbox, ScopeSendInbox},
-		"项目":      {ScopeReadProjects, ScopeWriteProjects},
-		"角色":      {ScopeReadRoles, ScopeManageRoles},
-		"文件树":     {ScopeReadTree, ScopeWriteTree},
-		"管理员":     {ScopeAdmin},
+		"Profile":  {ScopeReadProfile, ScopeWriteProfile},
+		"Memory":   {ScopeReadMemory, ScopeWriteMemory},
+		"Vault":    {ScopeReadVault, ScopeReadVaultAuth, ScopeWriteVault},
+		"Skills":   {ScopeReadSkills, ScopeWriteSkills},
+		"Devices":  {ScopeReadDevices, ScopeCallDevices},
+		"Inbox":    {ScopeReadInbox, ScopeWriteInbox},
+		"Projects": {ScopeReadProjects, ScopeWriteProjects},
+		"Tree":     {ScopeReadTree, ScopeWriteTree},
+		"Search":   {ScopeSearch},
+		"Admin":    {ScopeAdmin},
 	}
 }
 
-type AccessToken struct {
+// ScopedToken represents a scoped access token stored in the database.
+type ScopedToken struct {
+	ID              uuid.UUID  `json:"id"`
+	UserID          uuid.UUID  `json:"user_id"`
+	Name            string     `json:"name"`
+	TokenHash       string     `json:"-"`           // never expose
+	TokenPrefix     string     `json:"token_prefix"`
+	Scopes          []string   `json:"scopes"`
+	MaxTrustLevel   int        `json:"max_trust_level"`
+	ExpiresAt       time.Time  `json:"expires_at"`
+	RateLimit       int        `json:"rate_limit"`
+	RequestCount    int        `json:"request_count"`
+	RateLimitResetAt time.Time `json:"rate_limit_reset_at"`
+	LastUsedAt      *time.Time `json:"last_used_at,omitempty"`
+	LastUsedIP      string     `json:"last_used_ip,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	RevokedAt       *time.Time `json:"revoked_at,omitempty"`
+}
+
+// ScopedTokenResponse is the API representation (excludes hash, adds computed fields).
+type ScopedTokenResponse struct {
 	ID            uuid.UUID  `json:"id"`
 	UserID        uuid.UUID  `json:"user_id"`
 	Name          string     `json:"name"`
-	TokenHash     string     `json:"-"`          // never expose
 	TokenPrefix   string     `json:"token_prefix"`
 	Scopes        []string   `json:"scopes"`
 	MaxTrustLevel int        `json:"max_trust_level"`
-	ExpiresAt     *time.Time `json:"expires_at"`
-	LastUsedAt    *time.Time `json:"last_used_at"`
+	ExpiresAt     time.Time  `json:"expires_at"`
+	RateLimit     int        `json:"rate_limit"`
+	RequestCount  int        `json:"request_count"`
+	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
 	LastUsedIP    string     `json:"last_used_ip,omitempty"`
-	UseCount      int        `json:"use_count"`
-	IsActive      bool       `json:"is_active"`
-	RevokedAt     *time.Time `json:"revoked_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
-	UpdatedAt     time.Time  `json:"updated_at"`
+	RevokedAt     *time.Time `json:"revoked_at,omitempty"`
+	IsExpired     bool       `json:"is_expired"`
+	IsRevoked     bool       `json:"is_revoked"`
 }
 
-// CreateTokenRequest for API
+// CreateTokenRequest for the API.
 type CreateTokenRequest struct {
 	Name          string   `json:"name"`
 	Scopes        []string `json:"scopes"`
 	MaxTrustLevel int      `json:"max_trust_level"`
-	ExpiresInDays *int     `json:"expires_in_days"` // nil = never expires
+	ExpiresInDays int      `json:"expires_in_days"`
 }
 
-// CreateTokenResponse includes the raw token (shown only once)
+// CreateTokenResponse includes the raw token (shown only once).
 type CreateTokenResponse struct {
-	Token       string      `json:"token"`        // raw token, shown only once!
-	TokenPrefix string      `json:"token_prefix"`
-	AccessToken AccessToken `json:"access_token"`
+	Token        string              `json:"token"`         // raw token, shown only once
+	TokenPrefix  string              `json:"token_prefix"`
+	ScopedToken  ScopedTokenResponse `json:"scoped_token"`
 }
 
-// HasScope checks if the token has a specific scope (or admin)
-func (t *AccessToken) HasScope(scope string) bool {
-	for _, s := range t.Scopes {
-		if s == ScopeAdmin || s == scope {
+// ValidateTokenRequest is used by external services to validate a token.
+type ValidateTokenRequest struct {
+	Token string `json:"token"`
+}
+
+// ValidateTokenResponse is returned by the validate endpoint.
+type ValidateTokenResponse struct {
+	Valid         bool     `json:"valid"`
+	UserID        string   `json:"user_id,omitempty"`
+	Scopes        []string `json:"scopes,omitempty"`
+	MaxTrustLevel int      `json:"max_trust_level,omitempty"`
+	ExpiresAt     string   `json:"expires_at,omitempty"`
+	Error         string   `json:"error,omitempty"`
+}
+
+// ToResponse converts a ScopedToken to a ScopedTokenResponse.
+func (t *ScopedToken) ToResponse() ScopedTokenResponse {
+	return ScopedTokenResponse{
+		ID:            t.ID,
+		UserID:        t.UserID,
+		Name:          t.Name,
+		TokenPrefix:   t.TokenPrefix,
+		Scopes:        t.Scopes,
+		MaxTrustLevel: t.MaxTrustLevel,
+		ExpiresAt:     t.ExpiresAt,
+		RateLimit:     t.RateLimit,
+		RequestCount:  t.RequestCount,
+		LastUsedAt:    t.LastUsedAt,
+		LastUsedIP:    t.LastUsedIP,
+		CreatedAt:     t.CreatedAt,
+		RevokedAt:     t.RevokedAt,
+		IsExpired:     t.IsExpired(),
+		IsRevoked:     t.RevokedAt != nil,
+	}
+}
+
+// IsExpired checks if the token has passed its expiration time.
+func (t *ScopedToken) IsExpired() bool {
+	return time.Now().After(t.ExpiresAt)
+}
+
+// IsRevoked checks if the token has been revoked.
+func (t *ScopedToken) IsRevoked() bool {
+	return t.RevokedAt != nil
+}
+
+// IsActive returns true if the token is neither expired nor revoked.
+func (t *ScopedToken) IsActive() bool {
+	return !t.IsExpired() && !t.IsRevoked()
+}
+
+// HasScope checks if the token's scopes include the required scope.
+// Handles hierarchical matching: "read:vault" matches "read:vault.auth".
+// "admin" matches everything.
+func HasScope(scopes []string, required string) bool {
+	for _, s := range scopes {
+		if s == ScopeAdmin || s == required {
 			return true
 		}
-		// Check wildcard: "read:vault" covers "read:vault.auth"
-		if len(scope) > len(s) && scope[:len(s)] == s && scope[len(s)] == '.' {
+		// Hierarchical: "read:vault" covers "read:vault.auth"
+		if len(required) > len(s) && required[:len(s)] == s && required[len(s)] == '.' {
 			return true
 		}
 	}
 	return false
-}
-
-// IsExpired checks if the token has expired
-func (t *AccessToken) IsExpired() bool {
-	if t.ExpiresAt == nil {
-		return false
-	}
-	return time.Now().After(*t.ExpiresAt)
 }

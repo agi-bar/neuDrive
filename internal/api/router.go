@@ -490,17 +490,32 @@ func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// Agent API handlers — authenticated via X-API-Key, trust-level filtered
+// Agent API handlers — authenticated via X-API-Key or Bearer scoped token
 // ---------------------------------------------------------------------------
 
-func (s *Server) handleAgentTreeList(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
+// agentCheckAuth verifies the request is authenticated (via connection or scoped token)
+// and that the trust level meets the minimum. For scoped tokens, also checks the required scope.
+func (s *Server) agentCheckAuth(w http.ResponseWriter, r *http.Request, minTrust int, requiredScope string) bool {
+	if _, ok := userIDFromCtx(r.Context()); !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
+		return false
 	}
-	if conn.TrustLevel < models.TrustLevelCollaborate {
+	if trustLevelFromCtx(r.Context()) < minTrust {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+		return false
+	}
+	// For scoped tokens, check the required scope.
+	if token := scopedTokenFromCtx(r.Context()); token != nil && requiredScope != "" {
+		if !models.HasScope(token.Scopes, requiredScope) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "token missing required scope: " + requiredScope})
+			return false
+		}
+	}
+	return true
+}
+
+func (s *Server) handleAgentTreeList(w http.ResponseWriter, r *http.Request) {
+	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadTree) {
 		return
 	}
 	path := chi.URLParam(r, "*")
@@ -511,13 +526,7 @@ func (s *Server) handleAgentTreeList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	if conn.TrustLevel < models.TrustLevelCollaborate {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeSearch) {
 		return
 	}
 	query := r.URL.Query().Get("q")
@@ -525,13 +534,7 @@ func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	if conn.TrustLevel < models.TrustLevelWork {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeWriteTree) {
 		return
 	}
 	path := chi.URLParam(r, "*")
@@ -539,32 +542,41 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
+	if _, ok := userIDFromCtx(r.Context()); !ok {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
+
+	trustLevel := trustLevelFromCtx(r.Context())
 	scope := chi.URLParam(r, "scope")
+
 	// Vault requires at least Work level; personal scope requires Full.
-	if conn.TrustLevel < models.TrustLevelWork {
+	if trustLevel < models.TrustLevelWork {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
 		return
 	}
-	if strings.HasPrefix(scope, "personal") && conn.TrustLevel < models.TrustLevelFull {
+	if strings.HasPrefix(scope, "personal") && trustLevel < models.TrustLevelFull {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level for personal vault"})
 		return
 	}
+
+	// For scoped tokens, check the specific vault sub-scope.
+	if token := scopedTokenFromCtx(r.Context()); token != nil {
+		requiredScope := models.ScopeReadVault
+		if strings.HasPrefix(scope, "auth") {
+			requiredScope = models.ScopeReadVaultAuth
+		}
+		if !models.HasScope(token.Scopes, requiredScope) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "token missing required scope: " + requiredScope})
+			return
+		}
+	}
+
 	writeJSON(w, http.StatusOK, map[string]interface{}{"scope": scope, "data": ""})
 }
 
 func (s *Server) handleAgentGetInbox(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	if conn.TrustLevel < models.TrustLevelCollaborate {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadInbox) {
 		return
 	}
 	role := chi.URLParam(r, "role")
@@ -572,26 +584,14 @@ func (s *Server) handleAgentGetInbox(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	if conn.TrustLevel < models.TrustLevelCollaborate {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteInbox) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]string{"status": "sent"})
 }
 
 func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	if conn.TrustLevel < models.TrustLevelWork {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeCallDevices) {
 		return
 	}
 	name := chi.URLParam(r, "name")
@@ -599,17 +599,12 @@ func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAgentGetProfile(w http.ResponseWriter, r *http.Request) {
-	conn := connectionFromCtx(r.Context())
-	if conn == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
-		return
-	}
-	if conn.TrustLevel < models.TrustLevelGuest {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+	if !s.agentCheckAuth(w, r, models.TrustLevelGuest, models.ScopeReadProfile) {
 		return
 	}
 
-	user, err := s.UserService.GetByID(r.Context(), conn.UserID)
+	userID, _ := userIDFromCtx(r.Context())
+	user, err := s.UserService.GetByID(r.Context(), userID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 		return

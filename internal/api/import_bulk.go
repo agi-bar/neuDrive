@@ -469,7 +469,7 @@ func agentAuth(r *http.Request) (userID *uuid.UUID, trustLevel int) {
 	}
 
 	// Fall back to token-based auth.
-	token := accessTokenFromCtx(r.Context())
+	token := scopedTokenFromCtx(r.Context())
 	if token != nil {
 		return &token.UserID, token.MaxTrustLevel
 	}

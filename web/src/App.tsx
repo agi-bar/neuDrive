@@ -114,6 +114,7 @@ function App() {
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/info" element={<InfoPage />} />
           <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/collaborations" element={<CollaborationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </main>

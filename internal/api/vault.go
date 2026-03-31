@@ -21,14 +21,14 @@ type VaultWriteRequest struct {
 func HandleVaultListScopes(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: query database for vault scopes belonging to user
 	scopes := []string{}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"scopes": scopes,
 	})
 }
@@ -38,7 +38,7 @@ func HandleVaultRead(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -49,7 +49,7 @@ func HandleVaultRead(w http.ResponseWriter, r *http.Request) {
 		Data:  "",
 	}
 
-	writeJSON(w, http.StatusOK, entry)
+	respondOK(w, entry)
 }
 
 func HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
@@ -57,13 +57,13 @@ func HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req VaultWriteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
@@ -74,7 +74,7 @@ func HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
 		Data:  req.Data,
 	}
 
-	writeJSON(w, http.StatusOK, entry)
+	respondOK(w, entry)
 }
 
 func HandleVaultDelete(w http.ResponseWriter, r *http.Request) {
@@ -82,11 +82,11 @@ func HandleVaultDelete(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: delete vault entry from database
 	_ = user
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "scope": scope})
+	respondOK(w, map[string]string{"status": "deleted", "scope": scope})
 }

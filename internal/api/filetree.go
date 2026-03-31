@@ -38,7 +38,7 @@ func HandleTreeRead(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -52,25 +52,25 @@ func HandleTreeRead(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	writeJSON(w, http.StatusOK, node)
+	respondOK(w, node)
 }
 
 func HandleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path is required"})
+		respondValidationError(w, "path", "path is required")
 		return
 	}
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req WriteFileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
@@ -84,43 +84,43 @@ func HandleTreeWrite(w http.ResponseWriter, r *http.Request) {
 		Size:     int64(len(req.Content)),
 	}
 
-	writeJSON(w, http.StatusOK, node)
+	respondOK(w, node)
 }
 
 func HandleTreeDelete(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "path is required"})
+		respondValidationError(w, "path", "path is required")
 		return
 	}
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: delete file tree entry from database
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "path": path})
+	respondOK(w, map[string]string{"status": "deleted", "path": path})
 }
 
 func HandleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "query parameter 'q' is required"})
+		respondValidationError(w, "q", "query parameter 'q' is required")
 		return
 	}
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: full-text search in database
 	results := []FileNode{}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"query":   query,
 		"results": results,
 	})

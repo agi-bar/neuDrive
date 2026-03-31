@@ -20,29 +20,29 @@ type GithubCallbackRequest struct {
 func HandleGithubCallback(w http.ResponseWriter, r *http.Request) {
 	var req GithubCallbackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Code == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "code is required"})
+		respondValidationError(w, "code", "code is required")
 		return
 	}
 
 	if githubConfig == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "github oauth not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "github oauth not configured")
 		return
 	}
 
 	tokenResp, err := auth.ExchangeGithubCode(githubConfig, req.Code)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to exchange code with github"})
+		respondError(w, http.StatusBadGateway, ErrCodeInternal, "failed to exchange code with github")
 		return
 	}
 
 	ghUser, err := auth.FetchGithubUser(tokenResp.AccessToken)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "failed to fetch github user"})
+		respondError(w, http.StatusBadGateway, ErrCodeInternal, "failed to fetch github user")
 		return
 	}
 
@@ -50,11 +50,11 @@ func HandleGithubCallback(w http.ResponseWriter, r *http.Request) {
 
 	jwtToken, err := auth.GenerateJWT(githubConfig.JWTSecret, ghUser)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
+		respondInternalError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"token": jwtToken,
 		"user": map[string]interface{}{
 			"id":       ghUser.ID,

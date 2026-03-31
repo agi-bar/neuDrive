@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 )
 
@@ -14,6 +15,10 @@ type Config struct {
 	GithubClientSecret string
 	VaultMasterKey     string
 	CORSOrigins        []string
+	RateLimit          int   // max requests per minute
+	MaxBodySize        int64 // max request body in bytes
+	LogLevel           string
+	LogFormat          string
 }
 
 func Load() (*Config, error) {
@@ -25,6 +30,10 @@ func Load() (*Config, error) {
 		GithubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
 		VaultMasterKey:     getEnv("VAULT_MASTER_KEY", ""),
 		CORSOrigins:        strings.Split(getEnv("CORS_ORIGINS", "http://localhost:3000"), ","),
+		RateLimit:          getEnvInt("RATE_LIMIT", 100),
+		MaxBodySize:        int64(getEnvInt("MAX_BODY_SIZE", 10*1024*1024)),
+		LogLevel:           getEnv("LOG_LEVEL", "info"),
+		LogFormat:          getEnv("LOG_FORMAT", "text"),
 	}
 
 	if cfg.JWTSecret == "" {

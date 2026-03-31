@@ -44,7 +44,7 @@ type ProjectLogRequest struct {
 func HandleMemoryProfileGet(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -55,19 +55,19 @@ func HandleMemoryProfileGet(w http.ResponseWriter, r *http.Request) {
 		Preferences: map[string]string{},
 	}
 
-	writeJSON(w, http.StatusOK, profile)
+	respondOK(w, profile)
 }
 
 func HandleMemoryProfileUpdate(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req UpdateProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
@@ -78,13 +78,13 @@ func HandleMemoryProfileUpdate(w http.ResponseWriter, r *http.Request) {
 		Preferences: req.Preferences,
 	}
 
-	writeJSON(w, http.StatusOK, profile)
+	respondOK(w, profile)
 }
 
 func HandleMemoryProjectsList(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -92,7 +92,7 @@ func HandleMemoryProjectsList(w http.ResponseWriter, r *http.Request) {
 	_ = user
 	projects := []Project{}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"projects": projects,
 	})
 }
@@ -102,7 +102,7 @@ func HandleMemoryProjectGet(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -113,7 +113,7 @@ func HandleMemoryProjectGet(w http.ResponseWriter, r *http.Request) {
 		Logs: []ProjectLog{},
 	}
 
-	writeJSON(w, http.StatusOK, project)
+	respondOK(w, project)
 }
 
 func HandleMemoryProjectLog(w http.ResponseWriter, r *http.Request) {
@@ -121,18 +121,18 @@ func HandleMemoryProjectLog(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req ProjectLogRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Message == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "message is required"})
+		respondValidationError(w, "message", "message is required")
 		return
 	}
 
@@ -149,7 +149,7 @@ func HandleMemoryProjectLog(w http.ResponseWriter, r *http.Request) {
 		Metadata: req.Metadata,
 	}
 
-	writeJSON(w, http.StatusCreated, map[string]interface{}{
+	respondCreated(w, map[string]interface{}{
 		"project": name,
 		"log":     logEntry,
 	})

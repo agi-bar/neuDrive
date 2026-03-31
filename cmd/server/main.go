@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +15,7 @@ import (
 	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/config"
 	"github.com/agi-bar/agenthub/internal/database"
+	"github.com/agi-bar/agenthub/internal/jobs"
 	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/agi-bar/agenthub/internal/vault"
 	"github.com/google/uuid"
@@ -88,7 +90,19 @@ func main() {
 
 	authSvc := services.NewAuthService(pool, tokenGen, ghExchange)
 	connSvc := services.NewConnectionService(pool)
+	fileTreeSvc := services.NewFileTreeService(pool)
+	vaultSvc := services.NewVaultService(pool, v)
+	memorySvc := services.NewMemoryService(pool)
+	roleSvc := services.NewRoleService(pool)
+	projectSvc := services.NewProjectService(pool, roleSvc)
+	summarySvc := services.NewSummaryService(pool, projectSvc)
+	inboxSvc := services.NewInboxService(pool)
+	deviceSvc := services.NewDeviceService(pool)
+	dashboardSvc := services.NewDashboardService(pool)
 	tokenSvc := services.NewTokenService(pool)
+	importSvc := services.NewImportService(pool, fileTreeSvc, memorySvc, vaultSvc)
+	collabSvc := services.NewCollaborationService(pool)
+	webhookSvc := services.NewWebhookService(pool)
 
 	// ---------------------------------------------------------------
 	// Seed default user if database is empty
@@ -102,12 +116,24 @@ func main() {
 		userSvc,
 		authSvc,
 		connSvc,
+		fileTreeSvc,
+		vaultSvc,
+		memorySvc,
+		projectSvc,
+		summarySvc,
+		roleSvc,
+		inboxSvc,
+		deviceSvc,
+		dashboardSvc,
+		tokenSvc,
+		importSvc,
+		collabSvc,
+		webhookSvc,
 		v,
 		cfg.JWTSecret,
 		cfg.GithubClientID,
 		cfg.GithubClientSecret,
 	)
-	srv.TokenService = tokenSvc
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -126,6 +152,15 @@ func main() {
 	}()
 
 	// ---------------------------------------------------------------
+	// Background Jobs
+	// ---------------------------------------------------------------
+	jobLogger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+	scheduler := jobs.NewScheduler(memorySvc, tokenSvc, inboxSvc, jobLogger)
+	scheduler.Start(context.Background())
+
+	// ---------------------------------------------------------------
 	// Graceful shutdown
 	// ---------------------------------------------------------------
 	quit := make(chan os.Signal, 1)
@@ -133,6 +168,8 @@ func main() {
 	<-quit
 
 	log.Println("shutting down server...")
+
+	scheduler.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

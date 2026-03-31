@@ -4,7 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 
 	"github.com/agi-bar/agenthub/internal/config"
@@ -26,17 +26,17 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("config error: %v", err)
+		slog.Error("config error", "error", err); os.Exit(1)
 	}
 
 	db, err := database.InitDB(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("database connection failed: %v", err)
+		slog.Error("database connection failed", "error", err); os.Exit(1)
 	}
 	defer db.Close()
 
 	// Validate token
-	tokenSvc := &services.TokenService{}
+	tokenSvc := services.NewTokenService(db)
 	scopedToken, err := tokenSvc.ValidateToken(context.Background(), *token)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: invalid token: %v\n", err)
@@ -48,19 +48,20 @@ func main() {
 	if cfg.VaultMasterKey != "" {
 		v, err = vault.NewVault(cfg.VaultMasterKey)
 		if err != nil {
-			log.Fatalf("vault init failed: %v", err)
+			slog.Error("vault init failed", "error", err); os.Exit(1)
 		}
 	}
 
 	// Create services
-	fileTreeSvc := &services.FileTreeService{}
-	vaultSvc := &services.VaultService{}
-	memorySvc := &services.MemoryService{}
-	projectSvc := &services.ProjectService{}
-	inboxSvc := &services.InboxService{}
-	deviceSvc := &services.DeviceService{}
-	dashboardSvc := &services.DashboardService{}
-	importSvc := &services.ImportService{}
+	fileTreeSvc := services.NewFileTreeService(db)
+	vaultSvc := services.NewVaultService(db, v)
+	memorySvc := services.NewMemoryService(db)
+	roleSvc := services.NewRoleService(db)
+	projectSvc := services.NewProjectService(db, roleSvc)
+	inboxSvc := services.NewInboxService(db)
+	deviceSvc := services.NewDeviceService(db)
+	dashboardSvc := services.NewDashboardService(db)
+	importSvc := services.NewImportService(db, fileTreeSvc, memorySvc, vaultSvc)
 
 	// Create MCP server
 	server := &mcp.MCPServer{
@@ -81,6 +82,6 @@ func main() {
 	// Run stdio transport
 	fmt.Fprintln(os.Stderr, "agenthub-mcp: connected, waiting for requests...")
 	if err := server.RunStdio(os.Stdin, os.Stdout); err != nil {
-		log.Fatalf("stdio error: %v", err)
+		slog.Error("stdio error", "error", err); os.Exit(1)
 	}
 }

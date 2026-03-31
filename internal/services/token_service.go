@@ -228,6 +228,19 @@ func (s *TokenService) getByID(ctx context.Context, id uuid.UUID) (*models.Scope
 	return &t, nil
 }
 
+// DeactivateExpiredTokens revokes all tokens that have passed their expiration time
+// and have not already been revoked. Returns the number of tokens affected.
+func (s *TokenService) DeactivateExpiredTokens(ctx context.Context) (int64, error) {
+	now := time.Now().UTC()
+	tag, err := s.db.Exec(ctx,
+		`UPDATE scoped_tokens SET revoked_at = $1
+		 WHERE expires_at < $1 AND revoked_at IS NULL`, now)
+	if err != nil {
+		return 0, fmt.Errorf("token.DeactivateExpiredTokens: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // generateToken produces a random token and returns (rawToken, sha256Hash, prefix).
 // Token format: "aht_" + 40 hex chars (20 random bytes).
 func generateToken() (rawToken, hashedToken, prefix string) {

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Agent Hub",
+  "version": "0.1.0",
+  "description": "将你的 AI 身份和记忆连接到任何 AI 平台",
+  "permissions": ["storage", "activeTab"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://chat.openai.com/*",
+    "https://gemini.google.com/*",
+    "https://kimi.moonshot.cn/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [{
+    "matches": [
+      "https://claude.ai/*",
+      "https://chat.openai.com/*",
+      "https://gemini.google.com/*",
+      "https://kimi.moonshot.cn/*"
+    ],
+    "js": ["content.js"],
+    "css": ["content.css"]
+  }],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": "icon48.png"
+  },
+  "icons": {
+    "48": "icon48.png",
+    "128": "icon128.png"
+  }
+}

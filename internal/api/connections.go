@@ -35,14 +35,14 @@ type UpdateConnectionRequest struct {
 func HandleConnectionsList(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: query database for connections belonging to user
 	connections := []Connection{}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"connections": connections,
 	})
 }
@@ -50,18 +50,18 @@ func HandleConnectionsList(w http.ResponseWriter, r *http.Request) {
 func HandleConnectionsCreate(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req CreateConnectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Name == "" || req.Type == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name and type are required"})
+		respondValidationError(w, "name,type", "name and type are required")
 		return
 	}
 
@@ -76,7 +76,7 @@ func HandleConnectionsCreate(w http.ResponseWriter, r *http.Request) {
 		Config:     req.Config,
 	}
 
-	writeJSON(w, http.StatusCreated, conn)
+	respondCreated(w, conn)
 }
 
 func HandleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
@@ -84,13 +84,13 @@ func HandleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req UpdateConnectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
@@ -104,7 +104,7 @@ func HandleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
 		Config:     req.Config,
 	}
 
-	writeJSON(w, http.StatusOK, conn)
+	respondOK(w, conn)
 }
 
 func HandleConnectionsDelete(w http.ResponseWriter, r *http.Request) {
@@ -112,11 +112,11 @@ func HandleConnectionsDelete(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: delete connection from database
 	_ = user
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "id": id})
+	respondOK(w, map[string]string{"status": "deleted", "id": id})
 }

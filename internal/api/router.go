@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	vaultpkg "github.com/agi-bar/agenthub/internal/vault"
+	"github.com/agi-bar/agenthub/internal/web"
 	"github.com/google/uuid"
 )
 
@@ -42,9 +44,16 @@ type Server struct {
 	MemoryService      *services.MemoryService
 	DeviceService      *services.DeviceService
 	ProjectService     *services.ProjectService
+	SummaryService     *services.SummaryService
+	RoleService        *services.RoleService
+	InboxService       *services.InboxService
+	DashboardService   *services.DashboardService
 	TokenService       *services.TokenService
-	ImportService      *services.ImportService
-	Vault              *vaultpkg.Vault
+	ImportService        *services.ImportService
+	ExportService        *services.ExportService
+	CollaborationService *services.CollaborationService
+	WebhookService       *services.WebhookService
+	Vault                *vaultpkg.Vault
 	AuthHandler        *auth.Handler
 	JWTSecret          string
 	GitHubClientID     string
@@ -56,6 +65,20 @@ func NewServer(
 	userSvc *services.UserService,
 	authSvc *services.AuthService,
 	connSvc *services.ConnectionService,
+	fileTreeSvc *services.FileTreeService,
+	vaultSvc *services.VaultService,
+	memorySvc *services.MemoryService,
+	projectSvc *services.ProjectService,
+	summarySvc *services.SummaryService,
+	roleSvc *services.RoleService,
+	inboxSvc *services.InboxService,
+	deviceSvc *services.DeviceService,
+	dashboardSvc *services.DashboardService,
+	tokenSvc *services.TokenService,
+	importSvc *services.ImportService,
+	exportSvc *services.ExportService,
+	collabSvc *services.CollaborationService,
+	webhookSvc *services.WebhookService,
 	vault *vaultpkg.Vault,
 	jwtSecret string,
 	ghClientID string,
@@ -66,7 +89,20 @@ func NewServer(
 		UserService:        userSvc,
 		AuthService:        authSvc,
 		ConnectionService:  connSvc,
-		Vault:              vault,
+		FileTreeService:    fileTreeSvc,
+		VaultService:       vaultSvc,
+		MemoryService:      memorySvc,
+		ProjectService:     projectSvc,
+		SummaryService:     summarySvc,
+		RoleService:        roleSvc,
+		InboxService:       inboxSvc,
+		DeviceService:      deviceSvc,
+		DashboardService:   dashboardSvc,
+		TokenService:       tokenSvc,
+		ImportService:        importSvc,
+		CollaborationService: collabSvc,
+		WebhookService:       webhookSvc,
+		Vault:                vault,
 		JWTSecret:          jwtSecret,
 		GitHubClientID:     ghClientID,
 		GitHubClientSecret: ghClientSecret,
@@ -80,9 +116,9 @@ func (s *Server) setupRoutes() {
 	r := s.Router
 
 	// Global middleware
-	r.Use(middleware.Logger)
+	r.Use(RequestIDMiddleware)
+	r.Use(LoggingMiddleware)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.RequestID)
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
@@ -173,6 +209,11 @@ func (s *Server) setupRoutes() {
 		r.Post("/api/import/bulk", s.handleImportBulk)
 		r.Get("/api/export/all", s.handleExportAll)
 
+		// Collaborations
+		r.Get("/api/collaborations", s.handleListCollaborations)
+		r.Post("/api/collaborations", s.handleCreateCollaboration)
+		r.Delete("/api/collaborations/{id}", s.handleRevokeCollaboration)
+
 		// Tokens (scoped access tokens)
 		r.Post("/api/tokens", s.handleCreateToken)
 		r.Get("/api/tokens", s.handleListTokens)
@@ -180,6 +221,38 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/tokens/{id}", s.handleGetToken)
 		r.Delete("/api/tokens/{id}", s.handleRevokeToken)
 		r.Post("/api/tokens/validate", s.handleValidateToken)
+
+		// Webhooks
+		r.Get("/api/webhooks", s.handleListWebhooks)
+		r.Post("/api/webhooks", s.handleRegisterWebhook)
+		r.Delete("/api/webhooks/{id}", s.handleDeleteWebhook)
+		r.Post("/api/webhooks/{id}/test", s.handleTestWebhook)
+	})
+
+	// GPT Actions API (authenticated via Bearer scoped token)
+	r.Group(func(r chi.Router) {
+		r.Use(s.apiKeyMiddleware)
+
+		r.Get("/gpt/profile", s.handleGPTGetProfile)
+		r.Get("/gpt/preferences", s.handleGPTGetPreferences)
+		r.Post("/gpt/search", s.handleGPTSearch)
+		r.Get("/gpt/projects", s.handleGPTListProjects)
+		r.Get("/gpt/project/{name}", s.handleGPTGetProject)
+		r.Post("/gpt/log", s.handleGPTLog)
+		r.Get("/gpt/skills", s.handleGPTListSkills)
+		r.Get("/gpt/skill/{name}", s.handleGPTGetSkill)
+		r.Get("/gpt/devices", s.handleGPTListDevices)
+		r.Post("/gpt/device/{name}", s.handleGPTCallDevice)
+		r.Post("/gpt/message", s.handleGPTSendMessage)
+		r.Get("/gpt/inbox", s.handleGPTGetInbox)
+		r.Get("/gpt/secrets", s.handleGPTListSecrets)
+		r.Get("/gpt/secret/{scope}", s.handleGPTGetSecret)
+	})
+
+	// GPT Setup (authenticated via JWT -- accessed from the web UI)
+	r.Group(func(r chi.Router) {
+		r.Use(s.authMiddleware)
+		r.Get("/api/gpt/setup", s.handleGPTSetup)
 	})
 
 	// Agent API (authenticated via X-API-Key)
@@ -195,11 +268,17 @@ func (s *Server) setupRoutes() {
 		r.Post("/agent/devices/{name}/call", s.handleAgentCallDevice)
 		r.Get("/agent/memory/profile", s.handleAgentGetProfile)
 
+		// Agent cross-user shared access
+		r.Get("/agent/shared/{owner_slug}/tree/*", s.handleAgentSharedTree)
+
 		// Agent Import (bulk API)
 		r.Post("/agent/import/skill", s.handleAgentImportSkill)
 		r.Post("/agent/import/claude-memory", s.handleAgentImportClaudeMemory)
 		r.Post("/agent/import/bulk", s.handleAgentImportBulk)
 	})
+
+	// Embedded frontend (SPA) — catch-all for non-API routes.
+	r.NotFound(web.Handler().ServeHTTP)
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +313,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 				// Fire-and-forget last_used_at update.
 				go func() {
 					if err := s.ConnectionService.UpdateLastUsed(context.Background(), conn.ID); err != nil {
-						log.Printf("warning: failed to update last_used_at for connection %s: %v", conn.ID, err)
+						slog.Warn("failed to update last_used_at", "connection_id", conn.ID, "error", err)
 					}
 				}()
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -242,7 +321,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			}
 		}
 
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing or invalid authentication"})
+		respondUnauthorized(w)
 	})
 }
 
@@ -267,7 +346,7 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		// Step 2: Check X-API-Key header.
 		apiKey := auth.ExtractAPIKey(r)
 		if apiKey == "" {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "missing authentication: provide Authorization: Bearer aht_xxx or X-API-Key header"})
+			respondError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "missing authentication: provide Authorization: Bearer aht_xxx or X-API-Key header")
 			return
 		}
 
@@ -280,7 +359,7 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		// Step 2b: Legacy connection API key (ahk_ prefix or others).
 		conn, err := s.lookupConnection(r.Context(), apiKey)
 		if err != nil {
-			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid API key"})
+			respondError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "invalid API key")
 			return
 		}
 
@@ -291,7 +370,7 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		// Fire-and-forget last_used_at update.
 		go func() {
 			if err := s.ConnectionService.UpdateLastUsed(context.Background(), conn.ID); err != nil {
-				log.Printf("warning: failed to update last_used_at for connection %s: %v", conn.ID, err)
+				slog.Warn("failed to update last_used_at", "connection_id", conn.ID, "error", err)
 			}
 		}()
 
@@ -478,6 +557,43 @@ func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "archived", "name": name})
+}
+
+func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+
+	if s.SummaryService == nil {
+		respondInternalError(w, fmt.Errorf("summary service not configured"))
+		return
+	}
+
+	project, err := s.ProjectService.Get(r.Context(), userID, name)
+	if err != nil {
+		respondNotFound(w, "project")
+		return
+	}
+
+	md, err := s.SummaryService.GenerateProjectSummary(r.Context(), project.ID)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	if err := s.ProjectService.UpdateContext(r.Context(), userID, name, md); err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":     "summarized",
+		"name":       name,
+		"context_md": md,
+	})
 }
 
 func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {

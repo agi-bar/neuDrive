@@ -112,7 +112,7 @@ type ImportResult struct {
 func (s *Server) HandleImportSkills(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -124,7 +124,7 @@ func (s *Server) HandleImportSkills(w http.ResponseWriter, r *http.Request) {
 		// Handle zip file upload.
 		extracted, err := extractSkillsFromZip(r)
 		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("failed to process zip: %v", err)})
+			respondError(w, http.StatusBadRequest, ErrCodeBadRequest, fmt.Sprintf("failed to process zip: %v", err))
 			return
 		}
 		skills = extracted
@@ -132,14 +132,14 @@ func (s *Server) HandleImportSkills(w http.ResponseWriter, r *http.Request) {
 		// Handle JSON payload.
 		var req ImportSkillsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+			respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 			return
 		}
 		skills = req.Skills
 	}
 
 	if s.FileTreeService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "file tree service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "file tree service not configured")
 		return
 	}
 
@@ -178,7 +178,7 @@ func (s *Server) HandleImportSkills(w http.ResponseWriter, r *http.Request) {
 		result.Imported++
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	respondOK(w, result)
 }
 
 // extractSkillsFromZip reads a zip file from the multipart form field "file"
@@ -253,18 +253,18 @@ func extractSkillsFromZip(r *http.Request) ([]SkillFile, error) {
 func (s *Server) HandleImportClaudeMemory(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req ImportClaudeMemoryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if s.MemoryService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "memory service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "memory service not configured")
 		return
 	}
 
@@ -290,7 +290,7 @@ func (s *Server) HandleImportClaudeMemory(w http.ResponseWriter, r *http.Request
 		result.Imported++
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	respondOK(w, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -301,18 +301,18 @@ func (s *Server) HandleImportClaudeMemory(w http.ResponseWriter, r *http.Request
 func (s *Server) HandleImportProfile(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req ImportProfileRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if s.MemoryService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "memory service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "memory service not configured")
 		return
 	}
 
@@ -336,7 +336,7 @@ func (s *Server) HandleImportProfile(w http.ResponseWriter, r *http.Request) {
 		result.Imported++
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	respondOK(w, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -347,18 +347,18 @@ func (s *Server) HandleImportProfile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleImportVault(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req ImportVaultRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if s.VaultService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "vault service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "vault service not configured")
 		return
 	}
 
@@ -381,7 +381,7 @@ func (s *Server) HandleImportVault(w http.ResponseWriter, r *http.Request) {
 		result.Imported++
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	respondOK(w, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -392,18 +392,18 @@ func (s *Server) HandleImportVault(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleImportDevices(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req ImportDevicesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if s.DeviceService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "device service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "device service not configured")
 		return
 	}
 
@@ -432,7 +432,7 @@ func (s *Server) HandleImportDevices(w http.ResponseWriter, r *http.Request) {
 		result.Imported++
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	respondOK(w, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -443,13 +443,13 @@ func (s *Server) HandleImportDevices(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var export FullHubExport
 	if err := json.NewDecoder(r.Body).Decode(&export); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
@@ -545,7 +545,7 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, result)
+	respondOK(w, result)
 }
 
 // ---------------------------------------------------------------------------
@@ -556,7 +556,7 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 func (s *Server) HandleExportFull(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -648,6 +648,5 @@ func (s *Server) HandleExportFull(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	writeJSON(w, http.StatusOK, export)
+	respondOK(w, export)
 }
-

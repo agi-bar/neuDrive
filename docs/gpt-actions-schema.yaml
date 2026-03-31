@@ -1,0 +1,375 @@
+openapi: '3.0.3'
+info:
+  title: Agent Hub
+  description: 连接你的 AI 身份和记忆到 ChatGPT
+  version: '1.0.0'
+servers:
+  - url: https://hub.agibar.ai
+paths:
+  /gpt/profile:
+    get:
+      operationId: getProfile
+      summary: 获取用户偏好和身份信息
+      responses:
+        '200':
+          description: 用户资料
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slug:
+                    type: string
+                  display_name:
+                    type: string
+                  timezone:
+                    type: string
+                  language:
+                    type: string
+  /gpt/preferences:
+    get:
+      operationId: getPreferences
+      summary: 获取用户偏好设置
+      responses:
+        '200':
+          description: 偏好设置
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  timezone:
+                    type: string
+                  language:
+                    type: string
+  /gpt/search:
+    post:
+      operationId: searchMemory
+      summary: 搜索用户记忆和知识库
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - query
+              properties:
+                query:
+                  type: string
+                  description: 搜索关键词
+      responses:
+        '200':
+          description: 搜索结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  query:
+                    type: string
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path:
+                          type: string
+                        snippet:
+                          type: string
+                        score:
+                          type: number
+  /gpt/projects:
+    get:
+      operationId: listProjects
+      summary: 列出所有项目
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  projects:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        status:
+                          type: string
+                        updated_at:
+                          type: string
+  /gpt/project/{name}:
+    get:
+      operationId: getProject
+      summary: 获取项目详情
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 项目详情
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  logs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        action:
+                          type: string
+                        summary:
+                          type: string
+                        timestamp:
+                          type: string
+  /gpt/log:
+    post:
+      operationId: logAction
+      summary: 记录项目操作日志
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - project
+              properties:
+                project:
+                  type: string
+                  description: 项目名称
+                action:
+                  type: string
+                  description: 操作类型
+                summary:
+                  type: string
+                  description: 操作摘要
+      responses:
+        '200':
+          description: 日志已记录
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+  /gpt/skills:
+    get:
+      operationId: listSkills
+      summary: 列出所有技能
+      responses:
+        '200':
+          description: 技能列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  skills:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        description:
+                          type: string
+  /gpt/skill/{name}:
+    get:
+      operationId: getSkill
+      summary: 读取技能内容
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 技能内容
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name:
+                    type: string
+                  content:
+                    type: string
+  /gpt/devices:
+    get:
+      operationId: listDevices
+      summary: 列出已注册设备
+      responses:
+        '200':
+          description: 设备列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  devices:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        type:
+                          type: string
+                        status:
+                          type: string
+  /gpt/device/{name}:
+    post:
+      operationId: callDevice
+      summary: 调用设备执行操作
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  description: 要执行的操作
+                params:
+                  type: object
+                  description: 操作参数
+      responses:
+        '200':
+          description: 设备调用结果
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  device:
+                    type: string
+                  action:
+                    type: string
+                  status:
+                    type: string
+  /gpt/message:
+    post:
+      operationId: sendMessage
+      summary: 发送消息到收件箱
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - to
+              properties:
+                to:
+                  type: string
+                  description: 收件人
+                subject:
+                  type: string
+                  description: 主题
+                body:
+                  type: string
+                  description: 正文
+      responses:
+        '200':
+          description: 消息已发送
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+  /gpt/inbox:
+    get:
+      operationId: getInbox
+      summary: 读取收件箱
+      responses:
+        '200':
+          description: 收件箱消息
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  messages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        from:
+                          type: string
+                        subject:
+                          type: string
+                        body:
+                          type: string
+                        timestamp:
+                          type: string
+  /gpt/secrets:
+    get:
+      operationId: listSecrets
+      summary: 列出保险库范围
+      responses:
+        '200':
+          description: 保险库范围列表
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scopes:
+                    type: array
+                    items:
+                      type: string
+  /gpt/secret/{scope}:
+    get:
+      operationId: getSecret
+      summary: 读取保险库条目
+      parameters:
+        - name: scope
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 保险库内容
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scope:
+                    type: string
+                  data:
+                    type: string
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      description: 使用 Agent Hub Token (aht_...) 进行认证
+security:
+  - BearerAuth: []

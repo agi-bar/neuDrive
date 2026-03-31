@@ -1,0 +1,78 @@
+name: CI
+on:
+  push:
+    branches: [main, claude/*]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go vet ./...
+      - run: |
+          go install golang.org/x/tools/cmd/goimports@latest
+          goimports -l . | (! grep .)
+
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agenthub
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: agenthub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go test ./... -v -race -coverprofile=coverage.out
+        env:
+          DATABASE_URL: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
+          JWT_SECRET: test-jwt-secret
+          VAULT_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.out
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - run: go build -o agenthub ./cmd/server/
+      - run: go build -o agenthub-mcp ./cmd/mcp/
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: cd web && npm ci && npm run build
+      - run: cd web && npx tsc --noEmit
+
+  docker:
+    runs-on: ubuntu-latest
+    needs: [lint, test, build, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -t agenthub:test .

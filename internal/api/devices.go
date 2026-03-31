@@ -30,14 +30,14 @@ type DeviceCallResponse struct {
 func HandleDevicesList(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: query database for devices belonging to user
 	devices := []Device{}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"devices": devices,
 	})
 }
@@ -47,18 +47,18 @@ func HandleDeviceCall(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req DeviceCallRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Action == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "action is required"})
+		respondValidationError(w, "action", "action is required")
 		return
 	}
 
@@ -70,5 +70,5 @@ func HandleDeviceCall(w http.ResponseWriter, r *http.Request) {
 		Status: "dispatched",
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	respondOK(w, resp)
 }

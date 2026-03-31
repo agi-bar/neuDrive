@@ -23,17 +23,26 @@ import (
 type contextKey string
 
 const (
-	ctxKeyUserID     contextKey = "user_id"
-	ctxKeyUserSlug   contextKey = "user_slug"
-	ctxKeyConnection contextKey = "connection"
-	ctxKeyTrustLevel contextKey = "trust_level"
+	ctxKeyUserID      contextKey = "user_id"
+	ctxKeyUserSlug    contextKey = "user_slug"
+	ctxKeyConnection  contextKey = "connection"
+	ctxKeyTrustLevel  contextKey = "trust_level"
+	ctxKeyAccessToken contextKey = "access_token"
+	ctxKeyScopes      contextKey = "scopes"
 )
 
 // Server holds the HTTP router and all service dependencies.
 type Server struct {
 	Router             *chi.Mux
 	UserService        *services.UserService
+	AuthService        *services.AuthService
 	ConnectionService  *services.ConnectionService
+	FileTreeService    *services.FileTreeService
+	VaultService       *services.VaultService
+	MemoryService      *services.MemoryService
+	DeviceService      *services.DeviceService
+	ProjectService     *services.ProjectService
+	TokenService       *services.TokenService
 	Vault              *vaultpkg.Vault
 	AuthHandler        *auth.Handler
 	JWTSecret          string
@@ -44,6 +53,7 @@ type Server struct {
 // NewServer creates a fully wired Server with routes configured.
 func NewServer(
 	userSvc *services.UserService,
+	authSvc *services.AuthService,
 	connSvc *services.ConnectionService,
 	vault *vaultpkg.Vault,
 	jwtSecret string,
@@ -53,13 +63,14 @@ func NewServer(
 	s := &Server{
 		Router:             chi.NewRouter(),
 		UserService:        userSvc,
+		AuthService:        authSvc,
 		ConnectionService:  connSvc,
 		Vault:              vault,
 		JWTSecret:          jwtSecret,
 		GitHubClientID:     ghClientID,
 		GitHubClientSecret: ghClientSecret,
 	}
-	s.AuthHandler = auth.NewHandler(userSvc, jwtSecret, ghClientID, ghClientSecret)
+	s.AuthHandler = auth.NewHandler(userSvc, authSvc, jwtSecret, ghClientID, ghClientSecret)
 	s.setupRoutes()
 	return s
 }
@@ -82,6 +93,10 @@ func (s *Server) setupRoutes() {
 	r.Get("/api/health", s.healthCheck)
 
 	// Auth (public)
+	r.Post("/api/auth/register", s.AuthHandler.HandleRegister)
+	r.Post("/api/auth/login", s.AuthHandler.HandleLogin)
+	r.Post("/api/auth/refresh", s.AuthHandler.HandleRefresh)
+	r.Post("/api/auth/logout", s.AuthHandler.HandleLogout)
 	r.Post("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
 	r.Post("/api/auth/token/dev", s.AuthHandler.HandleDevToken)
 
@@ -90,6 +105,8 @@ func (s *Server) setupRoutes() {
 		r.Use(s.authMiddleware)
 
 		r.Get("/api/auth/me", s.AuthHandler.HandleMe)
+		r.Get("/api/auth/sessions", s.AuthHandler.HandleListSessions)
+		r.Delete("/api/auth/sessions/{id}", s.AuthHandler.HandleRevokeSession)
 
 		// File tree
 		r.Get("/api/tree/*", HandleTreeRead)
@@ -138,6 +155,22 @@ func (s *Server) setupRoutes() {
 
 		// Dashboard
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
+
+		// Import / Export
+		r.Post("/api/import/skills", s.HandleImportSkills)
+		r.Post("/api/import/claude-memory", s.HandleImportClaudeMemory)
+		r.Post("/api/import/profile", s.HandleImportProfile)
+		r.Post("/api/import/vault", s.HandleImportVault)
+		r.Post("/api/import/devices", s.HandleImportDevices)
+		r.Post("/api/import/full", s.HandleImportFull)
+		r.Get("/api/export/full", s.HandleExportFull)
+
+		// Tokens (scoped access tokens)
+		r.Get("/api/tokens", s.handleListTokens)
+		r.Post("/api/tokens", s.handleCreateToken)
+		r.Delete("/api/tokens", s.handleRevokeAllTokens)
+		r.Delete("/api/tokens/{id}", s.handleRevokeToken)
+		r.Get("/api/tokens/scopes", s.handleListScopes)
 	})
 
 	// Agent API (authenticated via X-API-Key)
@@ -199,8 +232,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// apiKeyMiddleware authenticates requests exclusively via X-API-Key.
-// It sets user_id, connection, and trust_level in context and updates last_used_at.
+// apiKeyMiddleware authenticates requests via X-API-Key header.
+// It supports both legacy connection API keys (ahk_ prefix) and new scoped
+// access tokens (aht_ prefix). On success it sets user_id, trust_level, and
+// optionally connection/access_token/scopes in context.
 func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		apiKey := auth.ExtractAPIKey(r)
@@ -209,6 +244,23 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// New scoped token path (aht_ prefix).
+		if strings.HasPrefix(apiKey, "aht_") && s.TokenService != nil {
+			token, err := s.TokenService.ValidateToken(r.Context(), apiKey)
+			if err != nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired token"})
+				return
+			}
+
+			ctx := context.WithValue(r.Context(), ctxKeyUserID, token.UserID)
+			ctx = context.WithValue(ctx, ctxKeyAccessToken, token)
+			ctx = context.WithValue(ctx, ctxKeyTrustLevel, token.MaxTrustLevel)
+			ctx = context.WithValue(ctx, ctxKeyScopes, token.Scopes)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+
+		// Legacy connection API key path.
 		conn, err := s.lookupConnection(r.Context(), apiKey)
 		if err != nil {
 			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid API key"})
@@ -228,6 +280,29 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
+}
+
+// requireScope returns a middleware that checks whether the current request
+// has the specified scope. If authentication was via a scoped token, the scope
+// must be present (or the token must have ScopeAdmin). If authentication was
+// via a legacy connection API key or JWT (no scopes in context), the request
+// passes through (scopes are not enforced for those auth methods).
+func requireScope(scope string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			token := accessTokenFromCtx(r.Context())
+			if token != nil {
+				// Scoped token: enforce scope check.
+				if !token.HasScope(scope) {
+					writeJSON(w, http.StatusForbidden, map[string]string{
+						"error": "token missing required scope: " + scope,
+					})
+					return
+				}
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // lookupConnection hashes the raw API key and looks it up in the connections table.
@@ -257,6 +332,16 @@ func trustLevelFromCtx(ctx context.Context) int {
 		return 0
 	}
 	return tl
+}
+
+func accessTokenFromCtx(ctx context.Context) *models.AccessToken {
+	t, _ := ctx.Value(ctxKeyAccessToken).(*models.AccessToken)
+	return t
+}
+
+func scopesFromCtx(ctx context.Context) []string {
+	s, _ := ctx.Value(ctxKeyScopes).([]string)
+	return s
 }
 
 // ---------------------------------------------------------------------------

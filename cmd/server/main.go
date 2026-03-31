@@ -62,7 +62,9 @@ func main() {
 	// Services
 	// ---------------------------------------------------------------
 	userSvc := services.NewUserService(pool)
+	authSvc := services.NewAuthService(pool, cfg.JWTSecret, cfg.GithubClientID, cfg.GithubClientSecret)
 	connSvc := services.NewConnectionService(pool)
+	tokenSvc := services.NewTokenService(pool)
 
 	// ---------------------------------------------------------------
 	// Seed default user if database is empty
@@ -74,12 +76,14 @@ func main() {
 	// ---------------------------------------------------------------
 	srv := api.NewServer(
 		userSvc,
+		authSvc,
 		connSvc,
 		v,
 		cfg.JWTSecret,
 		cfg.GithubClientID,
 		cfg.GithubClientSecret,
 	)
+	srv.TokenService = tokenSvc
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,

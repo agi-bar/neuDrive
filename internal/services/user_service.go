@@ -22,9 +22,9 @@ func NewUserService(db *pgxpool.Pool) *UserService {
 func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	var u models.User
 	err := s.db.QueryRow(ctx,
-		`SELECT id, slug, display_name, timezone, language, created_at, updated_at
+		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
 		 FROM users WHERE id = $1`, id).
-		Scan(&u.ID, &u.Slug, &u.DisplayName, &u.Timezone, &u.Language, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&u.ID, &u.Slug, &u.DisplayName, &u.Email, &u.AvatarURL, &u.Timezone, &u.Language, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("user.GetByID: %w", err)
 	}
@@ -34,9 +34,9 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (*models.User, 
 func (s *UserService) GetBySlug(ctx context.Context, slug string) (*models.User, error) {
 	var u models.User
 	err := s.db.QueryRow(ctx,
-		`SELECT id, slug, display_name, timezone, language, created_at, updated_at
+		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
 		 FROM users WHERE slug = $1`, slug).
-		Scan(&u.ID, &u.Slug, &u.DisplayName, &u.Timezone, &u.Language, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&u.ID, &u.Slug, &u.DisplayName, &u.Email, &u.AvatarURL, &u.Timezone, &u.Language, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("user.GetBySlug: %w", err)
 	}

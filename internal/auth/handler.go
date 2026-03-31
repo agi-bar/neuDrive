@@ -6,21 +6,26 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // Handler holds dependencies for auth HTTP handlers.
 type Handler struct {
 	UserService        *services.UserService
+	AuthService        *services.AuthService
 	JWTSecret          string
 	GitHubClientID     string
 	GitHubClientSecret string
 }
 
 // NewHandler creates a new auth Handler.
-func NewHandler(userSvc *services.UserService, jwtSecret, ghClientID, ghClientSecret string) *Handler {
+func NewHandler(userSvc *services.UserService, authSvc *services.AuthService, jwtSecret, ghClientID, ghClientSecret string) *Handler {
 	return &Handler{
 		UserService:        userSvc,
+		AuthService:        authSvc,
 		JWTSecret:          jwtSecret,
 		GitHubClientID:     ghClientID,
 		GitHubClientSecret: ghClientSecret,
@@ -35,9 +40,80 @@ type devTokenRequest struct {
 	Slug string `json:"slug"`
 }
 
+// HandleRegister handles POST /api/auth/register.
+func (h *Handler) HandleRegister(w http.ResponseWriter, r *http.Request) {
+	var req models.RegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	resp, err := h.AuthService.Register(r.Context(), req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+// HandleLogin handles POST /api/auth/login.
+func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
+	var req models.LoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	userAgent := r.UserAgent()
+	ipAddress := r.RemoteAddr
+
+	resp, err := h.AuthService.Login(r.Context(), req, userAgent, ipAddress)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandleRefresh handles POST /api/auth/refresh.
+func (h *Handler) HandleRefresh(w http.ResponseWriter, r *http.Request) {
+	var req models.RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	userAgent := r.UserAgent()
+	ipAddress := r.RemoteAddr
+
+	resp, err := h.AuthService.RefreshToken(r.Context(), req.RefreshToken, userAgent, ipAddress)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+// HandleLogout handles POST /api/auth/logout.
+func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
+	var req models.RefreshRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if err := h.AuthService.Logout(r.Context(), req.RefreshToken); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // HandleGitHubCallback handles POST /api/auth/github/callback.
-// It receives a {code} body, exchanges it for a GitHub user, creates or updates
-// the user via UserService, and returns a JWT along with user info.
 func (h *Handler) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	var req githubCallbackRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -49,54 +125,19 @@ func (h *Handler) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if h.GitHubClientID == "" || h.GitHubClientSecret == "" {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "github oauth not configured"})
-		return
-	}
+	userAgent := r.UserAgent()
+	ipAddress := r.RemoteAddr
 
-	ghUser, err := ExchangeGitHubCode(r.Context(), h.GitHubClientID, h.GitHubClientSecret, req.Code)
+	resp, err := h.AuthService.GitHubLogin(r.Context(), req.Code, userAgent, ipAddress)
 	if err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("github exchange failed: %v", err)})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("github login failed: %v", err)})
 		return
 	}
 
-	// Determine display name; fall back to login if name is empty.
-	displayName := ghUser.Name
-	if displayName == "" {
-		displayName = ghUser.Login
-	}
-
-	// Create or update user in the database.
-	user, err := h.UserService.CreateOrUpdateFromGitHub(
-		r.Context(),
-		strconv.Itoa(ghUser.ID),
-		ghUser.Login,
-		displayName,
-	)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to upsert user"})
-		return
-	}
-
-	// Generate JWT.
-	token, err := GenerateToken(user.ID, user.Slug, h.JWTSecret)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to generate token"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"token": token,
-		"user": map[string]interface{}{
-			"id":           user.ID,
-			"slug":         user.Slug,
-			"display_name": user.DisplayName,
-		},
-	})
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // HandleMe handles GET /api/auth/me.
-// It validates the JWT from the Authorization header and returns the current user info.
 func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 	tokenStr, err := ExtractTokenFromHeader(r)
 	if err != nil {
@@ -120,15 +161,68 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 		"id":           user.ID,
 		"slug":         user.Slug,
 		"display_name": user.DisplayName,
+		"email":        user.Email,
+		"avatar_url":   user.AvatarURL,
 		"timezone":     user.Timezone,
 		"language":     user.Language,
 		"created_at":   user.CreatedAt,
 	})
 }
 
+// HandleListSessions handles GET /api/auth/sessions.
+func (h *Handler) HandleListSessions(w http.ResponseWriter, r *http.Request) {
+	tokenStr, err := ExtractTokenFromHeader(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no token provided"})
+		return
+	}
+
+	claims, err := ValidateToken(tokenStr, h.JWTSecret)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired token"})
+		return
+	}
+
+	sessions, err := h.AuthService.ListSessions(r.Context(), claims.UserID)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list sessions"})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, sessions)
+}
+
+// HandleRevokeSession handles DELETE /api/auth/sessions/{id}.
+func (h *Handler) HandleRevokeSession(w http.ResponseWriter, r *http.Request) {
+	tokenStr, err := ExtractTokenFromHeader(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no token provided"})
+		return
+	}
+
+	claims, err := ValidateToken(tokenStr, h.JWTSecret)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired token"})
+		return
+	}
+
+	sessionIDStr := chi.URLParam(r, "id")
+	sessionID, err := uuid.Parse(sessionIDStr)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid session id"})
+		return
+	}
+
+	if err := h.AuthService.RevokeSession(r.Context(), claims.UserID, sessionID); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
 // HandleDevToken handles POST /api/auth/token/dev.
 // DEV ONLY: creates a JWT for a user by slug without GitHub OAuth.
-// This is intended for local development and testing.
 func (h *Handler) HandleDevToken(w http.ResponseWriter, r *http.Request) {
 	var req devTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -161,6 +255,9 @@ func (h *Handler) HandleDevToken(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 }
+
+// Ensure strconv import is used (for HandleGitHubCallback's old flow)
+var _ = strconv.Itoa
 
 func writeJSON(w http.ResponseWriter, status int, data interface{}) {
 	w.Header().Set("Content-Type", "application/json")

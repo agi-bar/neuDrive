@@ -15,6 +15,7 @@ interface Connection {
   trust_level: number
   last_used?: string
   api_key?: string
+  api_key_prefix?: string
   created_at?: string
 }
 
@@ -254,11 +255,19 @@ export default function ConnectionsPage() {
                 const trust = getTrustInfo(conn.trust_level)
                 return (
                   <tr key={conn.id}>
-                    <td className="cell-name">{conn.name}</td>
+                    <td className="cell-name">
+                      <div>{conn.name}</div>
+                      {conn.api_key_prefix && (
+                        <div className="cell-key-prefix">{conn.api_key_prefix}...</div>
+                      )}
+                    </td>
                     <td>
                       <span className="badge badge-platform">{conn.platform}</span>
                     </td>
                     <td>
+                      <span className={`badge badge-l${conn.trust_level}`} style={{ marginRight: 8 }}>
+                        {trust.label}
+                      </span>
                       <select
                         className={`trust-select ${trust.className}`}
                         value={conn.trust_level}

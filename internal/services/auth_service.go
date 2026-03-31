@@ -136,8 +136,8 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 
 	// Create default 'assistant' role
 	_, err = tx.Exec(ctx,
-		`INSERT INTO roles (id, user_id, name, system_prompt, created_at)
-		 VALUES ($1, $2, 'assistant', 'You are a helpful assistant.', $3)
+		`INSERT INTO roles (id, user_id, name, role_type, config, allowed_paths, allowed_vault_scopes, lifecycle, created_at)
+		 VALUES ($1, $2, 'assistant', 'assistant', '{}', ARRAY['/'], ARRAY[]::TEXT[], 'permanent', $3)
 		 ON CONFLICT DO NOTHING`,
 		uuid.New(), userID, now)
 	if err != nil {
@@ -328,8 +328,8 @@ func (s *AuthService) GitHubLogin(ctx context.Context, code, userAgent, ipAddres
 
 		// Create default role
 		_, err = tx.Exec(ctx,
-			`INSERT INTO roles (id, user_id, name, system_prompt, created_at)
-			 VALUES ($1, $2, 'assistant', 'You are a helpful assistant.', $3)
+			`INSERT INTO roles (id, user_id, name, role_type, config, allowed_paths, allowed_vault_scopes, lifecycle, created_at)
+			 VALUES ($1, $2, 'assistant', 'assistant', '{}', ARRAY['/'], ARRAY[]::TEXT[], 'permanent', $3)
 			 ON CONFLICT DO NOTHING`,
 			uuid.New(), userID, now)
 		if err != nil {

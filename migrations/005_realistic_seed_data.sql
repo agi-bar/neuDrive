@@ -68,31 +68,31 @@ ON CONFLICT (user_id, name) DO NOTHING;
 
 -- Projects
 INSERT INTO projects (id, user_id, name, status, context_md) VALUES
-    ('p0000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001',
+    ('b5000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001',
      'AGI Bar', 'active',
      '# AGI Bar\n\nAI 从业者社区。核心成员 50+，公众号关注 5000+。\n\n当前重点：Agent Hub 基础设施、社区线下活动、内容输出。'),
-    ('p0000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001',
+    ('b5000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001',
      'CyberZen Writing', 'active',
      '# 禅与赛博朋克\n\n公众号写作项目。风格：信息密度高、不用句号结尾、段落简短。\n\n已发布 30+ 篇，主题覆盖 AI 政策、技术趋势、产品思考。'),
-    ('p0000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000001',
+    ('b5000000-0000-0000-0000-000000000003', 'd0000000-0000-0000-0000-000000000001',
      'Haidian Policy', 'active',
      '# 海淀算力券政策研究\n\n跟踪海淀区 AI 算力补贴政策，分析对创业公司的实际影响。'),
-    ('p0000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000001',
+    ('b5000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000001',
      'Agent Hub', 'active',
      '# Agent Hub\n\nAI 时代的身份与信任基础设施。Phase 1 核心系统开发中。'),
-    ('p0000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000001',
+    ('b5000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000001',
      'ClawColony', 'archived',
      '# ClawColony\n\n之前的游戏项目，已归档。')
 ON CONFLICT (user_id, name) DO NOTHING;
 
 -- Project logs
 INSERT INTO project_logs (project_id, source, role, action, summary, tags) VALUES
-    ('p0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'planned_event', '规划了 4 月线下活动方案，确定主题为 Agent 协作', ARRAY['event', 'planning']),
-    ('p0000000-0000-0000-0000-000000000001', 'feishu', 'assistant', 'synced_calendar', '同步了 AGI Bar 核心组 Q2 会议日程', ARRAY['calendar', 'sync']),
-    ('p0000000-0000-0000-0000-000000000002', 'claude', 'assistant', 'wrote_article', '写了《算力券到底补贴了谁》，标题信息密度高', ARRAY['writing', 'policy']),
-    ('p0000000-0000-0000-0000-000000000002', 'gpt', 'assistant', 'translated', '翻译了一篇英文 AI 政策分析为中文', ARRAY['writing', 'translation']),
-    ('p0000000-0000-0000-0000-000000000003', 'claude', 'worker', 'researched', '整理了海淀区 2025-2026 算力券申报条件和补贴比例', ARRAY['policy', 'haidian']),
-    ('p0000000-0000-0000-0000-000000000004', 'claude', 'assistant', 'implemented', 'Phase 1 核心系统 scaffold 完成，包括后端 API 和前端管理后台', ARRAY['dev', 'milestone']);
+    ('b5000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'planned_event', '规划了 4 月线下活动方案，确定主题为 Agent 协作', ARRAY['event', 'planning']),
+    ('b5000000-0000-0000-0000-000000000001', 'feishu', 'assistant', 'synced_calendar', '同步了 AGI Bar 核心组 Q2 会议日程', ARRAY['calendar', 'sync']),
+    ('b5000000-0000-0000-0000-000000000002', 'claude', 'assistant', 'wrote_article', '写了《算力券到底补贴了谁》，标题信息密度高', ARRAY['writing', 'policy']),
+    ('b5000000-0000-0000-0000-000000000002', 'gpt', 'assistant', 'translated', '翻译了一篇英文 AI 政策分析为中文', ARRAY['writing', 'translation']),
+    ('b5000000-0000-0000-0000-000000000003', 'claude', 'worker', 'researched', '整理了海淀区 2025-2026 算力券申报条件和补贴比例', ARRAY['policy', 'haidian']),
+    ('b5000000-0000-0000-0000-000000000004', 'claude', 'assistant', 'implemented', 'Phase 1 核心系统 scaffold 完成，包括后端 API 和前端管理后台', ARRAY['dev', 'milestone']);
 
 -- Memory profile
 INSERT INTO memory_profile (user_id, category, content, source) VALUES

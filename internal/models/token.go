@@ -101,7 +101,7 @@ type ScopedToken struct {
 	RequestCount     int        `json:"request_count"`
 	RateLimitResetAt time.Time  `json:"rate_limit_reset_at"`
 	LastUsedAt       *time.Time `json:"last_used_at,omitempty"`
-	LastUsedIP       string     `json:"last_used_ip,omitempty"`
+	LastUsedIP       *string    `json:"last_used_ip,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 	RevokedAt        *time.Time `json:"revoked_at,omitempty"`
 }
@@ -118,7 +118,7 @@ type ScopedTokenResponse struct {
 	RateLimit     int        `json:"rate_limit"`
 	RequestCount  int        `json:"request_count"`
 	LastUsedAt    *time.Time `json:"last_used_at,omitempty"`
-	LastUsedIP    string     `json:"last_used_ip,omitempty"`
+	LastUsedIP    *string    `json:"last_used_ip,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
 	RevokedAt     *time.Time `json:"revoked_at,omitempty"`
 	IsExpired     bool       `json:"is_expired"`

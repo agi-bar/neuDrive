@@ -189,7 +189,7 @@ export const api = {
   getStats: () => request<any>('/dashboard/stats'),
 
   // Connections
-  getConnections: () => request<any[]>('/connections'),
+  getConnections: () => request<{ connections: any[] }>('/connections').then(r => r.connections || []),
   createConnection: (data: any) =>
     request<any>('/connections', {
       method: 'POST',
@@ -212,8 +212,20 @@ export const api = {
     }),
 
   // Projects
-  getProjects: () => request<any[]>('/projects'),
+  getProjects: () => request<{ projects: any[] }>('/projects').then(r => r.projects),
   getProject: (name: string) => request<any>(`/projects/${name}`),
+  createProject: (name: string) =>
+    request<any>('/projects', {
+      method: 'POST',
+      body: JSON.stringify({ name }),
+    }),
+  archiveProject: (name: string) =>
+    request<any>(`/projects/${name}/archive`, { method: 'PUT' }),
+  appendProjectLog: (name: string, data: { source: string; action: string; summary: string; tags?: string[] }) =>
+    request<any>(`/projects/${name}/log`, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   // Memory conflicts
   getConflicts: () => request<{ conflicts: MemoryConflict[] }>('/memory/conflicts').then(r => r.conflicts),
@@ -234,13 +246,13 @@ export const api = {
     request<void>(`/collaborations/${id}`, { method: 'DELETE' }),
 
   // Vault
-  getVaultScopes: () => request<any[]>('/vault/scopes'),
+  getVaultScopes: () => request<{ scopes: any[] }>('/vault/scopes').then(r => r.scopes || []),
 
   // Roles
-  getRoles: () => request<any[]>('/roles'),
+  getRoles: () => request<{ roles: any[] }>('/roles').then(r => r.roles || []),
 
   // Devices
-  getDevices: () => request<any[]>('/devices'),
+  getDevices: () => request<{ devices: any[] }>('/devices').then(r => r.devices || []),
 
   // Inbox
   getInbox: (role: string) => request<any[]>(`/inbox/${role}`),

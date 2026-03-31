@@ -18,30 +18,18 @@ import (
 
 const testJWTSecret = "test-secret-key-for-unit-tests-only"
 
-// testUserID is a fixed UUID used across tests.
 var testUserID = uuid.MustParse("11111111-1111-1111-1111-111111111111")
 
 const testUserSlug = "testuser"
 
 // ---------------------------------------------------------------------------
-// Mock TokenService (wraps the real one can't be used without DB, so we
-// implement the methods the handlers call via a thin shim layer).
+// In-memory token store
 // ---------------------------------------------------------------------------
 
-// mockTokenService implements the subset of TokenService methods used by the
-// API handlers. Because the handlers call s.TokenService.* directly on a
-// concrete *services.TokenService, we cannot swap in an interface. Instead we
-// build a thin Server that bypasses the real service by injecting handlers
-// that manage an in-memory token store.
-//
-// To work around the concrete type, we create a testServer whose token
-// handlers use the in-memory store directly and register them on a fresh chi
-// router with identical routes.
-
 type inMemoryTokenStore struct {
-	tokens   map[uuid.UUID]models.ScopedToken
-	byHash   map[string]uuid.UUID
-	rawByID  map[uuid.UUID]string // raw token keyed by token ID (for validation tests)
+	tokens  map[uuid.UUID]models.ScopedToken
+	byHash  map[string]uuid.UUID
+	rawByID map[uuid.UUID]string
 }
 
 func newInMemoryTokenStore() *inMemoryTokenStore {
@@ -56,54 +44,40 @@ func newInMemoryTokenStore() *inMemoryTokenStore {
 // Test server builder
 // ---------------------------------------------------------------------------
 
-// newTestServer returns an httptest.Server whose router matches the production
-// routes but handlers either use in-memory state or are the real stub handlers
-// from router.go (which don't need a DB for most endpoints).
 func newTestServer() (*httptest.Server, *inMemoryTokenStore) {
 	store := newInMemoryTokenStore()
 	s := &Server{
 		Router:    chi.NewRouter(),
 		JWTSecret: testJWTSecret,
-		// Most services are nil; handlers that are stubs (projects, dashboard, etc.)
-		// only need userID from context, which our test middleware provides.
 	}
-
-	// We cannot set s.TokenService (requires DB), so we override token
-	// handlers below.
-
-	// Minimal AuthHandler for /api/auth/me.
-	// We skip register/login (they need AuthService with DB).
-
 	s.setupTestRoutes(store)
-
 	ts := httptest.NewServer(s.Router)
 	return ts, store
 }
 
-// setupTestRoutes mirrors the production routes but replaces DB-dependent
-// handlers with test-friendly versions.
 func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 	r := s.Router
 
-	// Health
+	// Health (uses respondOK -- from the real handler)
 	r.Get("/api/health", s.healthCheck)
 
-	// Auth endpoints (test-friendly: me only)
+	// Authenticated routes
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
 
+		// Auth me (custom test handler using respondOK envelope)
 		r.Get("/api/auth/me", func(w http.ResponseWriter, req *http.Request) {
 			tokenStr, err := auth.ExtractTokenFromHeader(req)
 			if err != nil {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no token"})
+				respondUnauthorized(w)
 				return
 			}
 			claims, err := auth.ValidateToken(tokenStr, s.JWTSecret)
 			if err != nil {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+				respondUnauthorized(w)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]interface{}{
+			respondOK(w, map[string]interface{}{
 				"id":           claims.UserID,
 				"slug":         claims.Slug,
 				"display_name": claims.Slug,
@@ -113,18 +87,18 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 			})
 		})
 
-		// File tree
+		// File tree (real handlers from filetree.go)
 		r.Get("/api/tree/*", HandleTreeRead)
 		r.Put("/api/tree/*", HandleTreeWrite)
 		r.Delete("/api/tree/*", HandleTreeDelete)
 		r.Get("/api/search", HandleSearch)
 
-		// Vault
+		// Vault (real handlers from vault.go)
 		r.Get("/api/vault/scopes", HandleVaultListScopes)
 		r.Get("/api/vault/{scope}", HandleVaultRead)
 		r.Put("/api/vault/{scope}", HandleVaultWrite)
 
-		// Memory
+		// Memory (real handlers from memory.go)
 		r.Get("/api/memory/profile", HandleMemoryProfileGet)
 		r.Put("/api/memory/profile", HandleMemoryProfileUpdate)
 
@@ -134,19 +108,19 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 		r.Get("/api/projects/{name}", s.handleGetProject)
 		r.Post("/api/projects/{name}/log", s.handleAppendProjectLog)
 
-		// Inbox
+		// Inbox (real handlers from inbox.go)
 		r.Get("/api/inbox/{role}", HandleInboxList)
 		r.Post("/api/inbox/send", HandleInboxSend)
 		r.Put("/api/inbox/{id}/archive", HandleInboxArchive)
 
-		// Dashboard
+		// Dashboard (custom test handler using respondOK)
 		r.Get("/api/dashboard/stats", func(w http.ResponseWriter, req *http.Request) {
 			_, ok := userIDFromCtx(req.Context())
 			if !ok {
-				writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+				respondUnauthorized(w)
 				return
 			}
-			writeJSON(w, http.StatusOK, map[string]interface{}{
+			respondOK(w, map[string]interface{}{
 				"file_count":         0,
 				"vault_scopes":       0,
 				"connections":        0,
@@ -173,21 +147,21 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 func (st *inMemoryTokenStore) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req models.CreateTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 	if req.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "name is required")
 		return
 	}
 	if len(req.Scopes) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one scope is required"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "at least one scope is required")
 		return
 	}
 	if req.MaxTrustLevel < 1 || req.MaxTrustLevel > 4 {
@@ -197,8 +171,8 @@ func (st *inMemoryTokenStore) handleCreateToken(w http.ResponseWriter, r *http.R
 		req.ExpiresInDays = 30
 	}
 
-	rawToken, tokenHash, tokenPrefix := services.GenerateAPIKey() // re-use key gen
-	rawToken = "aht_" + rawToken[4:]                              // replace prefix
+	rawToken, tokenHash, tokenPrefix := services.GenerateAPIKey()
+	rawToken = "aht_" + rawToken[4:]
 
 	id := uuid.New()
 	now := time.Now().UTC()
@@ -218,7 +192,7 @@ func (st *inMemoryTokenStore) handleCreateToken(w http.ResponseWriter, r *http.R
 	st.byHash[tokenHash] = id
 	st.rawByID[id] = rawToken
 
-	writeJSON(w, http.StatusCreated, models.CreateTokenResponse{
+	respondCreated(w, models.CreateTokenResponse{
 		Token:       rawToken,
 		TokenPrefix: tokenPrefix,
 		ScopedToken: token.ToResponse(),
@@ -228,7 +202,7 @@ func (st *inMemoryTokenStore) handleCreateToken(w http.ResponseWriter, r *http.R
 func (st *inMemoryTokenStore) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 	var tokens []models.ScopedTokenResponse
@@ -240,50 +214,50 @@ func (st *inMemoryTokenStore) handleListTokens(w http.ResponseWriter, r *http.Re
 	if tokens == nil {
 		tokens = []models.ScopedTokenResponse{}
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"tokens": tokens})
+	respondOK(w, map[string]interface{}{"tokens": tokens})
 }
 
 func (st *inMemoryTokenStore) handleGetToken(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 	idStr := chi.URLParam(r, "id")
 	tokenID, err := uuid.Parse(idStr)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid token ID"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid token ID")
 		return
 	}
 	t, exists := st.tokens[tokenID]
 	if !exists || t.UserID != userID {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		respondNotFound(w, "token")
 		return
 	}
-	writeJSON(w, http.StatusOK, t.ToResponse())
+	respondOK(w, t.ToResponse())
 }
 
 func (st *inMemoryTokenStore) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 	idStr := chi.URLParam(r, "id")
 	tokenID, err := uuid.Parse(idStr)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid token ID"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid token ID")
 		return
 	}
 	t, exists := st.tokens[tokenID]
 	if !exists || t.UserID != userID || t.RevokedAt != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found or already revoked"})
+		respondNotFound(w, "token")
 		return
 	}
 	now := time.Now().UTC()
 	t.RevokedAt = &now
 	st.tokens[tokenID] = t
-	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+	respondOK(w, map[string]string{"status": "revoked"})
 }
 
 // ---------------------------------------------------------------------------
@@ -299,7 +273,7 @@ func generateTestJWT() string {
 }
 
 // ---------------------------------------------------------------------------
-// Authenticated request helpers
+// Request helpers
 // ---------------------------------------------------------------------------
 
 func authGet(ts *httptest.Server, path string) (*http.Response, error) {
@@ -338,10 +312,37 @@ func authRequest(ts *httptest.Server, method, path string, body interface{}) (*h
 	return http.DefaultClient.Do(req)
 }
 
-// parseJSON decodes a response body into a map.
+// parseJSON decodes a JSON response body into a map.
+// For successful responses wrapped in {"ok": true, "data": {...}},
+// it returns the inner "data" map. For error or unwrapped responses
+// it returns the top-level map.
 func parseJSON(resp *http.Response) map[string]interface{} {
 	defer resp.Body.Close()
-	var result map[string]interface{}
-	json.NewDecoder(resp.Body).Decode(&result)
-	return result
+	var raw map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&raw)
+	if raw == nil {
+		return map[string]interface{}{}
+	}
+	// Unwrap APISuccess envelope: {"ok": true, "data": {...}}
+	if okVal, hasOK := raw["ok"]; hasOK {
+		if ok, isBool := okVal.(bool); isBool && ok {
+			if data, hasData := raw["data"]; hasData {
+				if dataMap, isMap := data.(map[string]interface{}); isMap {
+					return dataMap
+				}
+			}
+		}
+	}
+	return raw
+}
+
+// parseJSONRaw decodes a JSON response body without envelope unwrapping.
+func parseJSONRaw(resp *http.Response) map[string]interface{} {
+	defer resp.Body.Close()
+	var raw map[string]interface{}
+	json.NewDecoder(resp.Body).Decode(&raw)
+	if raw == nil {
+		return map[string]interface{}{}
+	}
+	return raw
 }

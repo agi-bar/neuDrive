@@ -429,6 +429,77 @@ func (s *AuthService) generateAuthResponse(ctx context.Context, user *models.Use
 	}, nil
 }
 
+// ChangePassword validates the old password and updates to a new one.
+func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldPassword, newPassword string) error {
+	if oldPassword == "" {
+		return fmt.Errorf("current password is required")
+	}
+	if len(newPassword) < 8 {
+		return fmt.Errorf("new password must be at least 8 characters")
+	}
+
+	// Look up credentials by user_id
+	var cred models.Credentials
+	err := s.db.QueryRow(ctx,
+		`SELECT id, password_hash FROM credentials WHERE user_id = $1`, userID).
+		Scan(&cred.ID, &cred.PasswordHash)
+	if err == pgx.ErrNoRows {
+		return fmt.Errorf("no password credentials found for this account")
+	}
+	if err != nil {
+		return fmt.Errorf("change password: query credentials: %w", err)
+	}
+
+	// Verify old password
+	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(oldPassword)); err != nil {
+		return fmt.Errorf("current password is incorrect")
+	}
+
+	// Hash new password
+	hash, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcryptCost)
+	if err != nil {
+		return fmt.Errorf("change password: hash: %w", err)
+	}
+
+	now := time.Now().UTC()
+	_, err = s.db.Exec(ctx,
+		`UPDATE credentials SET password_hash = $1, updated_at = $2 WHERE id = $3`,
+		string(hash), now, cred.ID)
+	if err != nil {
+		return fmt.Errorf("change password: update: %w", err)
+	}
+
+	return nil
+}
+
+// GetProfile returns the user profile for the given user ID.
+func (s *AuthService) GetProfile(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	var user models.User
+	err := s.db.QueryRow(ctx,
+		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''),
+		        COALESCE(bio, ''), timezone, language, created_at, updated_at
+		 FROM users WHERE id = $1`, userID).
+		Scan(&user.ID, &user.Slug, &user.DisplayName, &user.Email, &user.AvatarURL,
+			&user.Bio, &user.Timezone, &user.Language, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("get profile: %w", err)
+	}
+	return &user, nil
+}
+
+// UpdateProfile updates the user's display name, bio, timezone, and language.
+func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, displayName, bio, timezone, language string) (*models.User, error) {
+	now := time.Now().UTC()
+	_, err := s.db.Exec(ctx,
+		`UPDATE users SET display_name = $1, bio = $2, timezone = $3, language = $4, updated_at = $5
+		 WHERE id = $6`,
+		displayName, bio, timezone, language, now, userID)
+	if err != nil {
+		return nil, fmt.Errorf("update profile: %w", err)
+	}
+	return s.GetProfile(ctx, userID)
+}
+
 func hashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])

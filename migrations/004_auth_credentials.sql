@@ -17,9 +17,15 @@ CREATE TABLE IF NOT EXISTS credentials (
 CREATE INDEX IF NOT EXISTS idx_credentials_email ON credentials(email);
 CREATE INDEX IF NOT EXISTS idx_credentials_user ON credentials(user_id);
 
--- Add email field to users table if not exists
+-- Add extra columns to users table if not exist
 ALTER TABLE users ADD COLUMN IF NOT EXISTS email VARCHAR(512);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS password_hash VARCHAR(512);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN DEFAULT false;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url VARCHAR(1024);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS bio TEXT DEFAULT '';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS idx_users_email ON users(email) WHERE email IS NOT NULL;
 
 -- Sessions table for refresh tokens
 CREATE TABLE IF NOT EXISTS sessions (

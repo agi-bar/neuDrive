@@ -55,6 +55,7 @@ type Server struct {
 	WebhookService       *services.WebhookService
 	Vault                *vaultpkg.Vault
 	AuthHandler        *auth.Handler
+	Config             *config.Config
 	JWTSecret          string
 	GitHubClientID     string
 	GitHubClientSecret string
@@ -313,7 +314,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 				// Fire-and-forget last_used_at update.
 				go func() {
 					if err := s.ConnectionService.UpdateLastUsed(context.Background(), conn.ID); err != nil {
-						slog.Warn("failed to update last_used_at", "connection_id", conn.ID, "error", err)
+						_ = err // best-effort update
 					}
 				}()
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -370,7 +371,7 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		// Fire-and-forget last_used_at update.
 		go func() {
 			if err := s.ConnectionService.UpdateLastUsed(context.Background(), conn.ID); err != nil {
-				slog.Warn("failed to update last_used_at", "connection_id", conn.ID, "error", err)
+				_ = err // best-effort update
 			}
 		}()
 

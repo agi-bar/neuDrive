@@ -1,0 +1,325 @@
+/* ============================================
+   Agent Hub - Content Script Styles
+   Non-intrusive floating UI for AI chat platforms.
+   Supports light and dark modes.
+   ============================================ */
+
+/* --- CSS Custom Properties --- */
+:root {
+  --ah-primary: #6366f1;
+  --ah-primary-hover: #4f46e5;
+  --ah-bg: #ffffff;
+  --ah-bg-secondary: #f8fafc;
+  --ah-text: #1e293b;
+  --ah-text-secondary: #64748b;
+  --ah-border: #e2e8f0;
+  --ah-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
+  --ah-radius: 12px;
+  --ah-font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Dark mode detection */
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ah-bg: #1e1e2e;
+    --ah-bg-secondary: #2a2a3c;
+    --ah-text: #e2e8f0;
+    --ah-text-secondary: #94a3b8;
+    --ah-border: #3b3b52;
+    --ah-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  }
+}
+
+/* Also detect dark mode via body/html classes common on these platforms */
+html.dark :root,
+body.dark :root,
+html[data-theme="dark"] :root,
+body[data-theme="dark"] :root {
+  --ah-bg: #1e1e2e;
+  --ah-bg-secondary: #2a2a3c;
+  --ah-text: #e2e8f0;
+  --ah-text-secondary: #94a3b8;
+  --ah-border: #3b3b52;
+  --ah-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* --- Floating Action Button --- */
+#agenthub-fab {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--ah-primary);
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2147483646;
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#agenthub-fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
+  background: var(--ah-primary-hover);
+}
+
+#agenthub-fab.agenthub-fab-active {
+  transform: scale(0.95);
+  background: var(--ah-primary-hover);
+}
+
+#agenthub-fab svg {
+  width: 24px;
+  height: 24px;
+}
+
+/* --- Panel --- */
+#agenthub-panel {
+  position: fixed;
+  bottom: 84px;
+  right: 24px;
+  width: 320px;
+  max-height: 460px;
+  background: var(--ah-bg);
+  border: 1px solid var(--ah-border);
+  border-radius: var(--ah-radius);
+  box-shadow: var(--ah-shadow);
+  z-index: 2147483646;
+  font-family: var(--ah-font);
+  font-size: 14px;
+  color: var(--ah-text);
+  overflow: hidden;
+  opacity: 0;
+  transform: translateY(12px) scale(0.95);
+  pointer-events: none;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+#agenthub-panel.agenthub-panel-visible {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+/* Panel Header */
+.agenthub-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--ah-border);
+  background: var(--ah-bg-secondary);
+}
+
+.agenthub-panel-title {
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ah-text);
+}
+
+.agenthub-panel-close {
+  background: none;
+  border: none;
+  color: var(--ah-text-secondary);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+  transition: color 0.15s;
+}
+
+.agenthub-panel-close:hover {
+  color: var(--ah-text);
+}
+
+/* Panel Body */
+.agenthub-panel-body {
+  padding: 16px;
+  overflow-y: auto;
+  max-height: 380px;
+}
+
+/* Status */
+.agenthub-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ah-text-secondary);
+  margin-bottom: 12px;
+}
+
+.agenthub-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.agenthub-dot-ok {
+  background: #22c55e;
+}
+
+.agenthub-dot-err {
+  background: #ef4444;
+}
+
+.agenthub-dot-off {
+  background: #94a3b8;
+}
+
+/* Profile */
+.agenthub-profile {
+  margin-bottom: 16px;
+}
+
+.agenthub-profile-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ah-text);
+  margin-bottom: 4px;
+}
+
+.agenthub-profile-bio {
+  font-size: 12px;
+  color: var(--ah-text-secondary);
+  line-height: 1.4;
+}
+
+/* Action Buttons */
+.agenthub-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.agenthub-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: var(--ah-bg-secondary);
+  border: 1px solid var(--ah-border);
+  border-radius: 8px;
+  color: var(--ah-text);
+  font-size: 13px;
+  font-family: var(--ah-font);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  text-align: left;
+}
+
+.agenthub-btn:hover {
+  background: var(--ah-primary);
+  color: #ffffff;
+  border-color: var(--ah-primary);
+}
+
+.agenthub-btn-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+/* Hint Text */
+.agenthub-hint {
+  font-size: 12px;
+  color: var(--ah-text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+/* --- Toast Notification --- */
+#agenthub-toast {
+  position: fixed;
+  bottom: 84px;
+  left: 50%;
+  transform: translateX(-50%) translateY(12px);
+  background: var(--ah-bg-secondary);
+  color: var(--ah-text);
+  border: 1px solid var(--ah-border);
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-family: var(--ah-font);
+  font-size: 13px;
+  z-index: 2147483647;
+  opacity: 0;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+  box-shadow: var(--ah-shadow);
+}
+
+#agenthub-toast.agenthub-toast-visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* --- Auto-Inject Banner --- */
+#agenthub-auto-banner {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ah-bg);
+  border: 1px solid var(--ah-primary);
+  border-radius: 10px;
+  padding: 12px 20px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: var(--ah-font);
+  font-size: 13px;
+  color: var(--ah-text);
+  z-index: 2147483647;
+  box-shadow: var(--ah-shadow);
+  animation: agenthub-slide-in 0.3s ease;
+}
+
+@keyframes agenthub-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.agenthub-banner-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  font-size: 12px;
+  font-family: var(--ah-font);
+  cursor: pointer;
+  font-weight: 500;
+  transition: background 0.15s;
+}
+
+.agenthub-banner-btn-yes {
+  background: var(--ah-primary);
+  color: #ffffff;
+}
+
+.agenthub-banner-btn-yes:hover {
+  background: var(--ah-primary-hover);
+}
+
+.agenthub-banner-btn-no {
+  background: var(--ah-bg-secondary);
+  color: var(--ah-text-secondary);
+  border: 1px solid var(--ah-border);
+}
+
+.agenthub-banner-btn-no:hover {
+  background: var(--ah-border);
+}

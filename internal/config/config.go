@@ -53,3 +53,15 @@ func getEnv(key, fallback string) string {
 	}
 	return fallback
 }
+
+func getEnvInt(key string, fallback int) int {
+	s := getEnv(key, "")
+	if s == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fallback
+	}
+	return v
+}

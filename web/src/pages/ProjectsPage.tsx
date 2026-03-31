@@ -15,6 +15,9 @@ interface LogEntry {
   level?: string
   message: string
   source?: string
+  action?: string
+  summary?: string
+  tags?: string[]
 }
 
 export default function ProjectsPage() {
@@ -82,6 +85,21 @@ export default function ProjectsPage() {
       setError(err.message)
     } finally {
       setCreating(false)
+    }
+  }
+
+  const handleArchive = async (name: string) => {
+    if (!window.confirm(`确认归档项目 "${name}"？`)) return
+    try {
+      await api.updateConnection(name, { status: 'archived' })
+      setProjects((prev) =>
+        prev.map((p) => (p.name === name ? { ...p, status: 'archived' } : p))
+      )
+      if (selectedProject?.name === name) {
+        setSelectedProject({ ...selectedProject, status: 'archived' })
+      }
+    } catch (err: any) {
+      setError(err.message)
     }
   }
 
@@ -187,9 +205,22 @@ export default function ProjectsPage() {
               >
                 <div className="project-header">
                   <span className="project-name">{project.name}</span>
-                  <span className={`project-status ${getStatusClass(project.status)}`}>
-                    {getStatusLabel(project.status)}
-                  </span>
+                  <div className="project-header-actions">
+                    <span className={`badge ${project.status === 'active' ? 'badge-active' : 'badge-archived'}`}>
+                      {getStatusLabel(project.status)}
+                    </span>
+                    {project.status === 'active' && (
+                      <button
+                        className="btn btn-sm btn-outline"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleArchive(project.name)
+                        }}
+                      >
+                        归档
+                      </button>
+                    )}
+                  </div>
                 </div>
                 {project.description && (
                   <p className="project-desc">{project.description}</p>
@@ -219,17 +250,26 @@ export default function ProjectsPage() {
                           <h4 className="card-title">最近日志</h4>
                           <div className="log-timeline">
                             {selectedProject.logs.map((log, i) => (
-                              <div key={i} className="log-entry">
-                                <div className="log-time">
+                              <div key={i} className="timeline-item">
+                                <div className="time">
                                   {formatTime(log.timestamp)}
-                                </div>
-                                <div className="log-dot" />
-                                <div className="log-content">
                                   {log.source && (
-                                    <span className="log-source">{log.source}</span>
+                                    <span className="source" style={{ marginLeft: 8 }}>{log.source}</span>
                                   )}
-                                  <span className="log-message">{log.message}</span>
                                 </div>
+                                {log.action && (
+                                  <div style={{ fontSize: 13, fontWeight: 500, marginTop: 2 }}>{log.action}</div>
+                                )}
+                                <div className="summary">
+                                  {log.summary || log.message}
+                                </div>
+                                {log.tags && log.tags.length > 0 && (
+                                  <div className="tags">
+                                    {log.tags.map((tag, j) => (
+                                      <span key={j} className="tag">{tag}</span>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
                             ))}
                           </div>

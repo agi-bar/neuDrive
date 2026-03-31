@@ -52,7 +52,11 @@ export default function ConnectionsPage() {
     setError('')
 
     try {
-      const result = await api.createConnection(newConn)
+      const result = await api.createConnection({
+        name: newConn.name,
+        type: newConn.platform,
+        trust_level: newConn.trust_level,
+      })
       if (result.api_key) {
         setCreatedKey(result.api_key)
       }

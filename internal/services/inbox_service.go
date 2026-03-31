@@ -58,12 +58,12 @@ func (s *InboxService) Send(ctx context.Context, userID uuid.UUID, msg models.In
 	msg.CreatedAt = time.Now().UTC()
 
 	_, err := s.db.Exec(ctx,
-		`INSERT INTO inbox_messages (id, from_address, to_address, thread_id, priority, action_required, ttl, expires_at,
+		`INSERT INTO inbox_messages (id, user_id, from_address, to_address, thread_id, priority, action_required, ttl, expires_at,
 		                             domain, action_type, tags, context_hash,
 		                             subject, body, structured_payload, attachments,
 		                             status, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
-		msg.ID, msg.FromAddress, msg.ToAddress, msg.ThreadID, msg.Priority, msg.ActionRequired, msg.TTL, msg.ExpiresAt,
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+		msg.ID, userID, msg.FromAddress, msg.ToAddress, msg.ThreadID, msg.Priority, msg.ActionRequired, msg.TTL, msg.ExpiresAt,
 		msg.Domain, msg.ActionType, msg.Tags, msg.ContextHash,
 		msg.Subject, msg.Body, msg.StructuredPayload, msg.Attachments,
 		msg.Status, msg.CreatedAt)

@@ -17,10 +17,10 @@ type ActivityLog struct {
 }
 
 type DashboardStats struct {
-	TotalConnections int            `json:"total_connections"`
-	TotalSkills      int            `json:"total_skills"`
-	TotalDevices     int            `json:"total_devices"`
-	TotalProjects    int            `json:"total_projects"`
+	TotalConnections int            `json:"connections"`
+	TotalSkills      int            `json:"skills"`
+	TotalDevices     int            `json:"devices"`
+	TotalProjects    int            `json:"projects"`
 	WeeklyActivity   map[string]int `json:"weekly_activity"`
 	PendingConflicts int            `json:"pending_conflicts"`
 }

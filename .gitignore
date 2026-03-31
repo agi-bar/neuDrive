@@ -8,3 +8,5 @@ web/dist/
 # Keep the placeholder for embed but ignore real builds
 !internal/web/dist/index.html
 
+test-results/
+web/test-results/

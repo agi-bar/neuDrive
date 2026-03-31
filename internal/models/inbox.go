@@ -15,7 +15,7 @@ type InboxMessage struct {
 	ThreadID       string     `json:"thread_id,omitempty" db:"thread_id"`
 	Priority       string     `json:"priority" db:"priority"`
 	ActionRequired bool       `json:"action_required" db:"action_required"`
-	TTL            string     `json:"ttl,omitempty" db:"ttl"`
+	TTL            *string    `json:"ttl,omitempty" db:"ttl"`
 	ExpiresAt      *time.Time `json:"expires_at,omitempty" db:"expires_at"`
 
 	// Metadata

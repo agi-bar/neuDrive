@@ -206,7 +206,7 @@ ON CONFLICT (user_id, name) DO NOTHING;
 
 -- Projects
 INSERT INTO projects (id, user_id, name, status, context_md) VALUES
-    ('p0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'agenthub', 'active',
+    ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'agenthub', 'active',
      '# Agent Hub 项目
 
 ## 概述
@@ -220,7 +220,7 @@ Phase 1 开发中 - 核心系统构建
 - 数据库使用 PostgreSQL
 - MCP 作为首选连接协议
 - AES-256-GCM 用于 vault 加密'),
-    ('p0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'cyberzen', 'active',
+    ('b0000000-0000-0000-0000-000000000002', 'a0000000-0000-0000-0000-000000000001', 'cyberzen', 'active',
      '# CyberZen 公众号
 
 ## 概述
@@ -236,9 +236,9 @@ ON CONFLICT (user_id, name) DO NOTHING;
 
 -- Project logs
 INSERT INTO project_logs (project_id, source, role, action, summary, tags) VALUES
-    ('p0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'created_project', '创建了 Agent Hub 项目，完成了设计文档 v0.2', ARRAY['init', 'design']),
-    ('p0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'started_development', '开始 Phase 1 核心系统开发：Go 后端 + PostgreSQL + React 前端', ARRAY['development', 'phase1']),
-    ('p0000000-0000-0000-0000-000000000002', 'claude', 'assistant', 'wrote_article', '写了一篇关于海淀算力券的分析文章', ARRAY['writing', 'policy'])
+    ('b0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'created_project', '创建了 Agent Hub 项目，完成了设计文档 v0.2', ARRAY['init', 'design']),
+    ('b0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'started_development', '开始 Phase 1 核心系统开发：Go 后端 + PostgreSQL + React 前端', ARRAY['development', 'phase1']),
+    ('b0000000-0000-0000-0000-000000000002', 'claude', 'assistant', 'wrote_article', '写了一篇关于海淀算力券的分析文章', ARRAY['writing', 'policy'])
 ON CONFLICT DO NOTHING;
 
 -- Memory profile

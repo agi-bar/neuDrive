@@ -73,11 +73,7 @@ export default function ProjectsPage() {
     setError('')
 
     try {
-      const result = await api.createConnection({
-        name: newName.trim(),
-        type: 'project',
-      })
-      setProjects((prev) => [...prev, result])
+      await api.createProject(newName.trim())
       setNewName('')
       setShowNewForm(false)
       loadProjects()
@@ -91,7 +87,7 @@ export default function ProjectsPage() {
   const handleArchive = async (name: string) => {
     if (!window.confirm(`确认归档项目 "${name}"？`)) return
     try {
-      await api.updateConnection(name, { status: 'archived' })
+      await api.archiveProject(name)
       setProjects((prev) =>
         prev.map((p) => (p.name === name ? { ...p, status: 'archived' } : p))
       )

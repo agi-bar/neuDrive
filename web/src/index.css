@@ -132,6 +132,64 @@ a:hover {
   text-align: center;
 }
 
+/* === Auth Tabs === */
+.auth-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 20px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s;
+}
+
+.auth-tab:hover {
+  color: var(--color-text);
+}
+
+.auth-tab-active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+}
+
+/* === Auth Divider === */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+/* === GitHub Button === */
+.btn-github {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.github-icon {
+  flex-shrink: 0;
+}
+
 /* === App Layout === */
 .app-layout {
   display: flex;
@@ -1163,6 +1221,77 @@ a:hover {
   padding: 1px 6px;
   border-radius: 4px;
   border: 1px solid var(--color-border-light);
+}
+
+/* === Auth Tabs === */
+.auth-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--color-border);
+  margin-bottom: 20px;
+}
+
+.auth-tab {
+  flex: 1;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.auth-tab:hover {
+  color: var(--color-text);
+}
+
+.auth-tab-active {
+  color: var(--color-primary);
+  border-bottom-color: var(--color-primary);
+  font-weight: 500;
+}
+
+/* === Auth Divider === */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 0;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.auth-divider span {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+/* === GitHub Button === */
+.btn-github {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #24292e;
+  border-color: #24292e;
+  color: #fff;
+}
+
+.btn-github:hover {
+  background: #1b1f23;
+  color: #fff;
+}
+
+.github-icon {
+  flex-shrink: 0;
 }
 
 /* === Responsive === */

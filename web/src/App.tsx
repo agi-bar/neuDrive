@@ -23,6 +23,7 @@ function App() {
       setUser(me)
     } catch {
       localStorage.removeItem('token')
+      localStorage.removeItem('refresh_token')
     }
     setLoading(false)
   }, [])
@@ -37,8 +38,8 @@ function App() {
     navigate('/')
   }
 
-  const handleLogout = () => {
-    localStorage.removeItem('token')
+  const handleLogout = async () => {
+    await api.logout()
     setUser(null)
     navigate('/login')
   }

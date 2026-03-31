@@ -173,6 +173,18 @@ export const api = {
 
   getMe: () => request<any>('/auth/me'),
 
+  updateMe: (data: { display_name: string; bio: string; timezone: string; language: string }) =>
+    request<any>('/auth/me', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    }),
+
+  changePassword: (oldPassword: string, newPassword: string) =>
+    request<{ status: string }>('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
+    }),
+
   // Dashboard
   getStats: () => request<any>('/dashboard/stats'),
 

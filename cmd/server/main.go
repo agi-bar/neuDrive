@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/api"
+	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/config"
 	"github.com/agi-bar/agenthub/internal/database"
 	"github.com/agi-bar/agenthub/internal/services"
@@ -62,7 +63,30 @@ func main() {
 	// Services
 	// ---------------------------------------------------------------
 	userSvc := services.NewUserService(pool)
-	authSvc := services.NewAuthService(pool, cfg.JWTSecret, cfg.GithubClientID, cfg.GithubClientSecret)
+
+	// Token generator closure capturing the JWT secret.
+	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
+		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
+	}
+
+	// GitHub exchange closure capturing client credentials.
+	var ghExchange services.GitHubExchangeFunc
+	if cfg.GithubClientID != "" && cfg.GithubClientSecret != "" {
+		ghExchange = func(ctx context.Context, code string) (*services.GitHubUser, error) {
+			ghUser, err := auth.ExchangeGitHubCode(ctx, cfg.GithubClientID, cfg.GithubClientSecret, code)
+			if err != nil {
+				return nil, err
+			}
+			return &services.GitHubUser{
+				ID:    ghUser.ID,
+				Login: ghUser.Login,
+				Name:  ghUser.Name,
+				Email: ghUser.Email,
+			}, nil
+		}
+	}
+
+	authSvc := services.NewAuthService(pool, tokenGen, ghExchange)
 	connSvc := services.NewConnectionService(pool)
 	tokenSvc := services.NewTokenService(pool)
 

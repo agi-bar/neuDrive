@@ -151,7 +151,7 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.UserService.GetByID(r.Context(), claims.UserID)
+	user, err := h.AuthService.GetProfile(r.Context(), claims.UserID)
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
 		return
@@ -163,10 +163,78 @@ func (h *Handler) HandleMe(w http.ResponseWriter, r *http.Request) {
 		"display_name": user.DisplayName,
 		"email":        user.Email,
 		"avatar_url":   user.AvatarURL,
+		"bio":          user.Bio,
 		"timezone":     user.Timezone,
 		"language":     user.Language,
 		"created_at":   user.CreatedAt,
 	})
+}
+
+// HandleUpdateMe handles PUT /api/auth/me.
+func (h *Handler) HandleUpdateMe(w http.ResponseWriter, r *http.Request) {
+	tokenStr, err := ExtractTokenFromHeader(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no token provided"})
+		return
+	}
+
+	claims, err := ValidateToken(tokenStr, h.JWTSecret)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired token"})
+		return
+	}
+
+	var req models.UpdateProfileRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	user, err := h.AuthService.UpdateProfile(r.Context(), claims.UserID, req.DisplayName, req.Bio, req.Timezone, req.Language)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"id":           user.ID,
+		"slug":         user.Slug,
+		"display_name": user.DisplayName,
+		"email":        user.Email,
+		"avatar_url":   user.AvatarURL,
+		"bio":          user.Bio,
+		"timezone":     user.Timezone,
+		"language":     user.Language,
+		"created_at":   user.CreatedAt,
+	})
+}
+
+// HandleChangePassword handles POST /api/auth/change-password.
+func (h *Handler) HandleChangePassword(w http.ResponseWriter, r *http.Request) {
+	tokenStr, err := ExtractTokenFromHeader(r)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "no token provided"})
+		return
+	}
+
+	claims, err := ValidateToken(tokenStr, h.JWTSecret)
+	if err != nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired token"})
+		return
+	}
+
+	var req models.ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+
+	if err := h.AuthService.ChangePassword(r.Context(), claims.UserID, req.OldPassword, req.NewPassword); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
 // HandleListSessions handles GET /api/auth/sessions.

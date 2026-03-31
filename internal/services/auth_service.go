@@ -11,13 +11,26 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// TokenGeneratorFunc generates a JWT access token for a user.
+type TokenGeneratorFunc func(userID uuid.UUID, slug string) (string, error)
+
+// GitHubUser represents basic GitHub user info returned by the OAuth flow.
+type GitHubUser struct {
+	ID    int
+	Login string
+	Name  string
+	Email string
+}
+
+// GitHubExchangeFunc exchanges a GitHub OAuth code for user info.
+type GitHubExchangeFunc func(ctx context.Context, code string) (*GitHubUser, error)
 
 const (
 	bcryptCost          = 12
@@ -30,18 +43,16 @@ const (
 var emailRegexp = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
 type AuthService struct {
-	db                 *pgxpool.Pool
-	jwtSecret          string
-	gitHubClientID     string
-	gitHubClientSecret string
+	db              *pgxpool.Pool
+	generateToken   TokenGeneratorFunc
+	exchangeGitHub  GitHubExchangeFunc
 }
 
-func NewAuthService(db *pgxpool.Pool, jwtSecret, ghClientID, ghClientSecret string) *AuthService {
+func NewAuthService(db *pgxpool.Pool, tokenGen TokenGeneratorFunc, ghExchange GitHubExchangeFunc) *AuthService {
 	return &AuthService{
-		db:                 db,
-		jwtSecret:          jwtSecret,
-		gitHubClientID:     ghClientID,
-		gitHubClientSecret: ghClientSecret,
+		db:             db,
+		generateToken:  tokenGen,
+		exchangeGitHub: ghExchange,
 	}
 }
 
@@ -207,7 +218,7 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 		return nil, fmt.Errorf("refresh token is required")
 	}
 
-	tokenHash := hashToken(refreshToken)
+	tokenHash := hashRefreshToken(refreshToken)
 
 	var session models.Session
 	var userID uuid.UUID
@@ -251,7 +262,7 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 	if refreshToken == "" {
 		return nil
 	}
-	tokenHash := hashToken(refreshToken)
+	tokenHash := hashRefreshToken(refreshToken)
 	_, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE refresh_token_hash = $1`, tokenHash)
 	if err != nil {
 		return fmt.Errorf("logout: delete session: %w", err)
@@ -261,11 +272,11 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 
 // GitHubLogin exchanges a GitHub OAuth code and creates/gets a user.
 func (s *AuthService) GitHubLogin(ctx context.Context, code, userAgent, ipAddress string) (*models.AuthResponse, error) {
-	if s.gitHubClientID == "" || s.gitHubClientSecret == "" {
+	if s.exchangeGitHub == nil {
 		return nil, fmt.Errorf("github oauth not configured")
 	}
 
-	ghUser, err := auth.ExchangeGitHubCode(ctx, s.gitHubClientID, s.gitHubClientSecret, code)
+	ghUser, err := s.exchangeGitHub(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("github exchange failed: %w", err)
 	}
@@ -397,7 +408,7 @@ func (s *AuthService) RevokeSession(ctx context.Context, userID uuid.UUID, sessi
 // generateAuthResponse creates access+refresh tokens and persists the session.
 func (s *AuthService) generateAuthResponse(ctx context.Context, user *models.User, userAgent, ipAddress string) (*models.AuthResponse, error) {
 	// Generate access token (JWT)
-	accessToken, err := auth.GenerateToken(user.ID, user.Slug, s.jwtSecret)
+	accessToken, err := s.generateToken(user.ID, user.Slug)
 	if err != nil {
 		return nil, fmt.Errorf("generate access token: %w", err)
 	}
@@ -408,7 +419,7 @@ func (s *AuthService) generateAuthResponse(ctx context.Context, user *models.Use
 		return nil, fmt.Errorf("generate refresh token: %w", err)
 	}
 	refreshToken := hex.EncodeToString(refreshBytes)
-	refreshHash := hashToken(refreshToken)
+	refreshHash := hashRefreshToken(refreshToken)
 
 	// Store session
 	now := time.Now().UTC()
@@ -500,7 +511,7 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, displ
 	return s.GetProfile(ctx, userID)
 }
 
-func hashToken(token string) string {
+func hashRefreshToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])
 }

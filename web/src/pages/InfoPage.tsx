@@ -53,14 +53,20 @@ export default function InfoPage() {
       ])
 
       if (profileData.status === 'fulfilled') {
-        setProfiles(profileData.value || [])
-        // Initialize edit values
+        const raw = profileData.value || {}
+        // API returns {user_id, display_name, preferences: {key: value}}
+        // Transform preferences map into ProfileEntry[] for display
+        const prefs = raw.preferences || {}
+        const entries: ProfileEntry[] = Object.entries(prefs).map(([key, value]) => ({
+          category: key,
+          key: key,
+          value: String(value),
+        }))
+        setProfiles(entries)
+        // Initialize edit values from preferences
         const values: Record<string, string> = {}
         for (const cat of PROFILE_CATEGORIES) {
-          const entries = (profileData.value || []).filter(
-            (p: ProfileEntry) => p.category === cat.key
-          )
-          values[cat.key] = entries.map((e: ProfileEntry) => `${e.key}: ${e.value}`).join('\n')
+          values[cat.key] = prefs[cat.key] || ''
         }
         setEditValues(values)
       }

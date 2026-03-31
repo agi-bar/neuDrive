@@ -213,7 +213,7 @@ export const api = {
     request<void>(`/connections/${id}`, { method: 'DELETE' }),
 
   // Memory
-  getProfile: () => request<any[]>('/memory/profile'),
+  getProfile: () => request<any>('/memory/profile'),
   upsertProfile: (data: any) =>
     request<any>('/memory/profile', {
       method: 'PUT',

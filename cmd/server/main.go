@@ -2,7 +2,7 @@ package main
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
@@ -14,6 +14,8 @@ import (
 	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/config"
 	"github.com/agi-bar/agenthub/internal/database"
+	"github.com/agi-bar/agenthub/internal/jobs"
+	"github.com/agi-bar/agenthub/internal/logger"
 	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/agi-bar/agenthub/internal/vault"
 	"github.com/google/uuid"
@@ -22,23 +24,29 @@ import (
 )
 
 func main() {
-	log.SetFlags(log.LstdFlags | log.Lshortfile)
-	log.Println("starting Agent Hub server...")
-
 	// ---------------------------------------------------------------
 	// Configuration
 	// ---------------------------------------------------------------
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("failed to load config: %v", err)
+		// Logger not yet initialised; use a basic slog call.
+		slog.Error("failed to load config", "error", err)
+		os.Exit(1)
 	}
+
+	// ---------------------------------------------------------------
+	// Logger
+	// ---------------------------------------------------------------
+	logger.Init(cfg.LogLevel, cfg.LogFormat)
+	slog.Info("starting Agent Hub server...")
 
 	// ---------------------------------------------------------------
 	// Database
 	// ---------------------------------------------------------------
 	pool, err := database.InitDB(cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
 	defer database.Close()
 
@@ -47,7 +55,8 @@ func main() {
 	// ---------------------------------------------------------------
 	migrationsDir := resolveMigrationsDir()
 	if err := database.RunMigrations(pool, migrationsDir); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
 
 	// ---------------------------------------------------------------
@@ -55,9 +64,10 @@ func main() {
 	// ---------------------------------------------------------------
 	v, err := vault.NewVault(cfg.VaultMasterKey)
 	if err != nil {
-		log.Fatalf("failed to initialize vault: %v", err)
+		slog.Error("failed to initialize vault", "error", err)
+		os.Exit(1)
 	}
-	log.Println("vault initialized")
+	slog.Info("vault initialized")
 
 	// ---------------------------------------------------------------
 	// Services
@@ -88,7 +98,20 @@ func main() {
 
 	authSvc := services.NewAuthService(pool, tokenGen, ghExchange)
 	connSvc := services.NewConnectionService(pool)
+	fileTreeSvc := services.NewFileTreeService(pool)
+	vaultSvc := services.NewVaultService(pool, v)
+	memorySvc := services.NewMemoryService(pool)
+	roleSvc := services.NewRoleService(pool)
+	projectSvc := services.NewProjectService(pool, roleSvc)
+	summarySvc := services.NewSummaryService(pool, projectSvc)
+	inboxSvc := services.NewInboxService(pool)
+	deviceSvc := services.NewDeviceService(pool)
+	dashboardSvc := services.NewDashboardService(pool)
 	tokenSvc := services.NewTokenService(pool)
+	importSvc := services.NewImportService(pool, fileTreeSvc, memorySvc, vaultSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	collabSvc := services.NewCollaborationService(pool)
+	webhookSvc := services.NewWebhookService(pool)
 
 	// ---------------------------------------------------------------
 	// Seed default user if database is empty
@@ -99,15 +122,29 @@ func main() {
 	// HTTP Server
 	// ---------------------------------------------------------------
 	srv := api.NewServer(
+		cfg,
 		userSvc,
 		authSvc,
 		connSvc,
+		fileTreeSvc,
+		vaultSvc,
+		memorySvc,
+		projectSvc,
+		summarySvc,
+		roleSvc,
+		inboxSvc,
+		deviceSvc,
+		dashboardSvc,
+		tokenSvc,
+		importSvc,
+		exportSvc,
+		collabSvc,
+		webhookSvc,
 		v,
 		cfg.JWTSecret,
 		cfg.GithubClientID,
 		cfg.GithubClientSecret,
 	)
-	srv.TokenService = tokenSvc
 
 	httpServer := &http.Server{
 		Addr:         ":" + cfg.Port,
@@ -119,11 +156,18 @@ func main() {
 
 	// Start listening in background.
 	go func() {
-		log.Printf("server listening on :%s", cfg.Port)
+		slog.Info("server listening", "port", cfg.Port)
 		if err := httpServer.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("server error: %v", err)
+			slog.Error("server error", "error", err)
+			os.Exit(1)
 		}
 	}()
+
+	// ---------------------------------------------------------------
+	// Background Jobs
+	// ---------------------------------------------------------------
+	scheduler := jobs.NewScheduler(memorySvc, tokenSvc, inboxSvc, slog.Default())
+	scheduler.Start(context.Background())
 
 	// ---------------------------------------------------------------
 	// Graceful shutdown
@@ -132,16 +176,19 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Println("shutting down server...")
+	slog.Info("shutting down server...")
+
+	scheduler.Stop()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	if err := httpServer.Shutdown(ctx); err != nil {
-		log.Fatalf("server forced to shutdown: %v", err)
+		slog.Error("server forced to shutdown", "error", err)
+		os.Exit(1)
 	}
 
-	log.Println("server stopped")
+	slog.Info("server stopped")
 }
 
 // resolveMigrationsDir tries several common locations for the migrations
@@ -175,7 +222,7 @@ func seedDefaultUser(pool *pgxpool.Pool, userSvc *services.UserService) {
 	err := pool.QueryRow(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
 		// Table may not exist yet if migrations haven't created it.
-		log.Printf("warning: could not check user count (table may not exist): %v", err)
+		slog.Warn("could not check user count (table may not exist)", "error", err)
 		return
 	}
 
@@ -183,7 +230,7 @@ func seedDefaultUser(pool *pgxpool.Pool, userSvc *services.UserService) {
 		return
 	}
 
-	log.Println("no users found, creating default seed user...")
+	slog.Info("no users found, creating default seed user...")
 
 	now := time.Now().UTC()
 	userID := uuid.New()
@@ -193,7 +240,7 @@ func seedDefaultUser(pool *pgxpool.Pool, userSvc *services.UserService) {
 		 VALUES ($1, $2, $3, $4, $5, $6, $6)`,
 		userID, "admin", "Admin User", "UTC", "en", now)
 	if err != nil {
-		log.Printf("warning: failed to create seed user: %v", err)
+		slog.Warn("failed to create seed user", "error", err)
 		return
 	}
 
@@ -203,18 +250,18 @@ func seedDefaultUser(pool *pgxpool.Pool, userSvc *services.UserService) {
 		 VALUES ($1, $2, 'local', 'seed', '{}', $3)`,
 		uuid.New(), userID, now)
 	if err != nil {
-		log.Printf("warning: failed to create seed auth binding: %v", err)
+		slog.Warn("failed to create seed auth binding", "error", err)
 		return
 	}
 
 	// Verify the user was created.
 	user, err := userSvc.GetBySlug(ctx, "admin")
 	if err != nil {
-		log.Printf("warning: seed user created but could not verify: %v", err)
+		slog.Warn("seed user created but could not verify", "error", err)
 		return
 	}
 
-	log.Printf("seed user created: id=%s slug=%s", user.ID, user.Slug)
+	slog.Info("seed user created", "id", user.ID, "slug", user.Slug)
 
 	// Suppress unused import of pgx if only used for ErrNoRows check.
 	_ = pgx.ErrNoRows

@@ -1,6 +1,10 @@
 server
+bin/
 *.exe
 node_modules/
-dist/
+web/dist/
 .env
+
+# Keep the placeholder for embed but ignore real builds
+!internal/web/dist/index.html
 

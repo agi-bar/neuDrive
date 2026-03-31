@@ -64,33 +64,33 @@ type ImportResponseData struct {
 func (s *Server) handleImportSkill(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	var req ImportSkillRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "skill name is required"})
+		respondValidationError(w, "name", "skill name is required")
 		return
 	}
 	if len(req.Files) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one file is required"})
+		respondValidationError(w, "files", "at least one file is required")
 		return
 	}
 
 	count, err := s.ImportService.ImportSkill(r.Context(), userID, req.Name, req.Files)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
@@ -100,7 +100,7 @@ func (s *Server) handleImportSkill(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, ".skills/"+req.Name+"/"+relPath)
 	}
 
-	writeJSON(w, http.StatusOK, ImportResponse{
+	respondOK(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
@@ -116,35 +116,35 @@ func (s *Server) handleImportSkill(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleImportClaudeMemoryV2(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20)) // 10MB limit
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "failed to read request body")
 		return
 	}
 
 	// Validate JSON structure.
 	var check ImportClaudeMemoryV2Request
 	if err := json.Unmarshal(body, &check); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 	if len(check.Memories) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no memories provided"})
+		respondValidationError(w, "memories", "no memories provided")
 		return
 	}
 
 	count, err := s.ImportService.ImportClaudeMemory(r.Context(), userID, body)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
@@ -163,7 +163,7 @@ func (s *Server) handleImportClaudeMemoryV2(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	writeJSON(w, http.StatusOK, ImportResponse{
+	respondOK(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
@@ -179,18 +179,18 @@ func (s *Server) handleImportClaudeMemoryV2(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleImportProfileV2(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	var req ImportProfileV2Request
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
@@ -210,16 +210,16 @@ func (s *Server) handleImportProfileV2(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if len(profile) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one profile field is required"})
+		respondValidationError(w, "preferences,relationships,principles", "at least one profile field is required")
 		return
 	}
 
 	if err := s.ImportService.ImportProfile(r.Context(), userID, profile); err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, ImportResponse{
+	respondOK(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: len(profile),
@@ -235,23 +235,23 @@ func (s *Server) handleImportProfileV2(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleImportBulk(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	var req ImportBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if len(req.Files) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no files provided"})
+		respondValidationError(w, "files", "no files provided")
 		return
 	}
 
@@ -262,7 +262,7 @@ func (s *Server) handleImportBulk(w http.ResponseWriter, r *http.Request) {
 
 	count, err := s.ImportService.ImportBulkFiles(r.Context(), userID, req.Files, minTrust)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
@@ -271,7 +271,7 @@ func (s *Server) handleImportBulk(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, p)
 	}
 
-	writeJSON(w, http.StatusOK, ImportResponse{
+	respondOK(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
@@ -287,25 +287,22 @@ func (s *Server) handleImportBulk(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	data, err := s.ImportService.ExportAll(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"ok":   true,
-		"data": data,
-	})
+	respondOK(w, data)
 }
 
 // ---------------------------------------------------------------------------
@@ -315,37 +312,37 @@ func (s *Server) handleExportAll(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAgentImportSkill(w http.ResponseWriter, r *http.Request) {
 	userID, trustLevel := agentAuth(r)
 	if userID == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 	if trustLevel < models.TrustLevelWork {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+		respondForbidden(w, "insufficient trust level")
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	var req ImportSkillRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if req.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "skill name is required"})
+		respondValidationError(w, "name", "skill name is required")
 		return
 	}
 	if len(req.Files) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one file is required"})
+		respondValidationError(w, "files", "at least one file is required")
 		return
 	}
 
 	count, err := s.ImportService.ImportSkill(r.Context(), *userID, req.Name, req.Files)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
@@ -354,7 +351,7 @@ func (s *Server) handleAgentImportSkill(w http.ResponseWriter, r *http.Request) 
 		paths = append(paths, ".skills/"+req.Name+"/"+relPath)
 	}
 
-	writeJSON(w, http.StatusOK, ImportResponse{
+	respondOK(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
@@ -366,32 +363,32 @@ func (s *Server) handleAgentImportSkill(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleAgentImportClaudeMemory(w http.ResponseWriter, r *http.Request) {
 	userID, trustLevel := agentAuth(r)
 	if userID == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 	if trustLevel < models.TrustLevelWork {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+		respondForbidden(w, "insufficient trust level")
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, 10<<20))
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "failed to read request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "failed to read request body")
 		return
 	}
 
 	count, err := s.ImportService.ImportClaudeMemory(r.Context(), *userID, body)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
-	writeJSON(w, http.StatusOK, ImportResponse{
+	respondOK(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
@@ -402,27 +399,27 @@ func (s *Server) handleAgentImportClaudeMemory(w http.ResponseWriter, r *http.Re
 func (s *Server) handleAgentImportBulk(w http.ResponseWriter, r *http.Request) {
 	userID, trustLevel := agentAuth(r)
 	if userID == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 	if trustLevel < models.TrustLevelWork {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+		respondForbidden(w, "insufficient trust level")
 		return
 	}
 
 	if s.ImportService == nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "import service not configured"})
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
 		return
 	}
 
 	var req ImportBulkRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
 
 	if len(req.Files) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "no files provided"})
+		respondValidationError(w, "files", "no files provided")
 		return
 	}
 
@@ -438,7 +435,7 @@ func (s *Server) handleAgentImportBulk(w http.ResponseWriter, r *http.Request) {
 
 	count, err := s.ImportService.ImportBulkFiles(r.Context(), *userID, req.Files, minTrust)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 
@@ -447,7 +444,7 @@ func (s *Server) handleAgentImportBulk(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, p)
 	}
 
-	writeJSON(w, http.StatusOK, ImportResponse{
+	respondOK(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,

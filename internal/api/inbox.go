@@ -28,7 +28,7 @@ func HandleInboxList(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -36,7 +36,7 @@ func HandleInboxList(w http.ResponseWriter, r *http.Request) {
 	_ = user
 	messages := []Message{}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"role":     role,
 		"messages": messages,
 	})
@@ -45,18 +45,18 @@ func HandleInboxList(w http.ResponseWriter, r *http.Request) {
 func HandleInboxSend(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req SendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if req.To == "" || req.Body == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "to and body are required"})
+		respondValidationError(w, "to,body", "to and body are required")
 		return
 	}
 
@@ -69,7 +69,7 @@ func HandleInboxSend(w http.ResponseWriter, r *http.Request) {
 		Body:    req.Body,
 	}
 
-	writeJSON(w, http.StatusCreated, msg)
+	respondCreated(w, msg)
 }
 
 func HandleInboxArchive(w http.ResponseWriter, r *http.Request) {
@@ -77,11 +77,11 @@ func HandleInboxArchive(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: mark message as archived in database
 	_ = user
-	writeJSON(w, http.StatusOK, map[string]string{"status": "archived", "id": id})
+	respondOK(w, map[string]string{"status": "archived", "id": id})
 }

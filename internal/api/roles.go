@@ -25,14 +25,14 @@ type CreateRoleRequest struct {
 func HandleRolesList(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: query database for roles belonging to user
 	roles := []Role{}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"roles": roles,
 	})
 }
@@ -40,18 +40,18 @@ func HandleRolesList(w http.ResponseWriter, r *http.Request) {
 func HandleRolesCreate(w http.ResponseWriter, r *http.Request) {
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req CreateRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "role name is required"})
+		respondValidationError(w, "name", "role name is required")
 		return
 	}
 
@@ -64,7 +64,7 @@ func HandleRolesCreate(w http.ResponseWriter, r *http.Request) {
 		TrustLevel:  req.TrustLevel,
 	}
 
-	writeJSON(w, http.StatusCreated, role)
+	respondCreated(w, role)
 }
 
 func HandleRolesDelete(w http.ResponseWriter, r *http.Request) {
@@ -72,11 +72,11 @@ func HandleRolesDelete(w http.ResponseWriter, r *http.Request) {
 
 	user := GetUser(r.Context())
 	if user == nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// TODO: delete role from database
 	_ = user
-	writeJSON(w, http.StatusOK, map[string]string{"status": "deleted", "name": name})
+	respondOK(w, map[string]string{"status": "deleted", "name": name})
 }

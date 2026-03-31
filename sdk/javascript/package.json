@@ -1,0 +1,13 @@
+{
+  "name": "@agenthub/sdk",
+  "version": "0.1.0",
+  "description": "Agent Hub SDK - AI identity and trust infrastructure",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist/"],
+  "scripts": {
+    "build": "tsc",
+    "test": "node --test src/*.test.ts"
+  },
+  "license": "MIT"
+}

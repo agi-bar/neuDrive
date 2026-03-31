@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"sort"
@@ -40,7 +40,7 @@ func InitDB(connString string) (*pgxpool.Pool, error) {
 	}
 
 	pool = p
-	log.Println("database connection pool established")
+	slog.Info("database connection pool established")
 	return pool, nil
 }
 
@@ -51,7 +51,7 @@ func GetDB() *pgxpool.Pool {
 func Close() {
 	if pool != nil {
 		pool.Close()
-		log.Println("database connection pool closed")
+		slog.Info("database connection pool closed")
 	}
 }
 
@@ -72,7 +72,7 @@ func RunMigrations(p *pgxpool.Pool, migrationsDir string) error {
 	entries, err := os.ReadDir(migrationsDir)
 	if err != nil {
 		if os.IsNotExist(err) {
-			log.Println("no migrations directory found, skipping migrations")
+			slog.Info("no migrations directory found, skipping migrations")
 			return nil
 		}
 		return fmt.Errorf("failed to read migrations directory: %w", err)
@@ -120,7 +120,7 @@ func RunMigrations(p *pgxpool.Pool, migrationsDir string) error {
 			return fmt.Errorf("failed to commit migration %s: %w", file, err)
 		}
 
-		log.Printf("applied migration: %s", file)
+		slog.Info("applied migration", "file", file)
 	}
 
 	return nil

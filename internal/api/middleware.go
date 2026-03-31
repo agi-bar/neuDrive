@@ -2,11 +2,16 @@ package api
 
 import (
 	"encoding/json"
-	"log"
+	"fmt"
+	"log/slog"
 	"net/http"
+	"runtime/debug"
+	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/logger"
 	"github.com/go-chi/cors"
+	"github.com/google/uuid"
 )
 
 // GetUser returns an AuthenticatedUser from the context for backward
@@ -32,30 +37,93 @@ type AuthenticatedUser struct {
 	Email    string
 }
 
+// CORSMiddleware configures CORS with the given allowed origins. Credentials
+// are allowed, and rate-limit headers are exposed to the browser.
 func CORSMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
 	return cors.Handler(cors.Options{
 		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-API-Key"},
-		ExposedHeaders:   []string{"Link"},
+		ExposedHeaders:   []string{"Link", "X-RateLimit-Limit", "X-RateLimit-Remaining", "X-RateLimit-Reset", "Retry-After", "X-Request-ID"},
 		AllowCredentials: true,
 		MaxAge:           300,
+	})
+}
+
+// SecurityHeadersMiddleware adds standard security headers to every response.
+func SecurityHeadersMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.Header().Set("X-Frame-Options", "DENY")
+		w.Header().Set("X-XSS-Protection", "1; mode=block")
+		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+		w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+		// CSP for API-only paths: deny everything.
+		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/agent/") {
+			w.Header().Set("Content-Security-Policy", "default-src 'none'; frame-ancestors 'none'")
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+// PanicRecoveryMiddleware catches panics, logs a stack trace, and returns a
+// 500 Internal Server Error so the server stays up.
+func PanicRecoveryMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if rec := recover(); rec != nil {
+				stack := string(debug.Stack())
+				slog.Error("panic recovered",
+					"error", fmt.Sprintf("%v", rec),
+					"method", r.Method,
+					"path", r.URL.Path,
+					"stack", stack,
+				)
+				respondError(w, http.StatusInternalServerError, ErrCodeInternal, "internal server error")
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
+}
+
+// MaxBodySizeMiddleware limits the size of request bodies to prevent abuse.
+func MaxBodySizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Body != nil {
+				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequestIDMiddleware generates a UUID for each incoming request, stores it in
+// the context (accessible via logger.RequestIDFromContext), and sets the
+// X-Request-ID response header.
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		id := uuid.New().String()
+		ctx := logger.WithRequestID(r.Context(), id)
+		w.Header().Set("X-Request-ID", id)
+		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		wrapped := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
+		ww := &responseWriter{ResponseWriter: w, statusCode: http.StatusOK}
 
-		next.ServeHTTP(wrapped, r)
+		next.ServeHTTP(ww, r)
 
-		log.Printf("%s %s %d %s %s",
-			r.Method,
-			r.URL.Path,
-			wrapped.statusCode,
-			time.Since(start).Round(time.Millisecond),
-			r.RemoteAddr,
+		logger.FromContext(r.Context()).Info("request",
+			"method", r.Method,
+			"path", r.URL.Path,
+			"status", ww.statusCode,
+			"duration_ms", time.Since(start).Milliseconds(),
+			"ip", r.RemoteAddr,
+			"user_agent", r.UserAgent(),
 		)
 	})
 }
@@ -65,9 +133,7 @@ func TrustLevelMiddleware(requiredLevel int) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			trustLevel := trustLevelFromCtx(r.Context())
 			if trustLevel < requiredLevel {
-				writeJSON(w, http.StatusForbidden, map[string]string{
-					"error": "insufficient trust level",
-				})
+				respondForbidden(w, "insufficient trust level")
 				return
 			}
 			next.ServeHTTP(w, r)

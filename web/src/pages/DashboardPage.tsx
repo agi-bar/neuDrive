@@ -15,6 +15,9 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats>({})
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const [exporting, setExporting] = useState(false)
+  const [exportError, setExportError] = useState('')
+  const [exportSuccess, setExportSuccess] = useState('')
 
   useEffect(() => {
     loadStats()
@@ -44,6 +47,43 @@ export default function DashboardPage() {
       }
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleExportZip = async () => {
+    setExporting(true)
+    setExportError('')
+    setExportSuccess('')
+    try {
+      await api.exportZip()
+      setExportSuccess('ZIP 文件已开始下载。')
+    } catch (err: any) {
+      setExportError(err.message || '导出失败')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const handleExportJSON = async () => {
+    setExporting(true)
+    setExportError('')
+    setExportSuccess('')
+    try {
+      const data = await api.exportJSON()
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `agenthub-export-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setExportSuccess('JSON 文件已开始下载。')
+    } catch (err: any) {
+      setExportError(err.message || '导出失败')
+    } finally {
+      setExporting(false)
     }
   }
 
@@ -140,6 +180,31 @@ export default function DashboardPage() {
             <span>查看项目</span>
           </Link>
         </div>
+      </div>
+
+      <div className="card">
+        <h3 className="card-title">数据管理</h3>
+        <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
+          下载你所有的 Hub 数据（技能、记忆、项目、设备、角色等）。
+        </p>
+        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <button
+            className="btn btn-primary"
+            disabled={exporting}
+            onClick={handleExportZip}
+          >
+            {exporting ? '导出中...' : '导出数据 (ZIP)'}
+          </button>
+          <button
+            className="btn"
+            disabled={exporting}
+            onClick={handleExportJSON}
+          >
+            导出数据 (JSON)
+          </button>
+        </div>
+        {exportError && <div className="alert alert-warn" style={{ marginTop: '0.75rem' }}>{exportError}</div>}
+        {exportSuccess && <div className="alert alert-ok" style={{ marginTop: '0.75rem' }}>{exportSuccess}</div>}
       </div>
     </div>
   )

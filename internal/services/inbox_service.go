@@ -92,6 +92,19 @@ func (s *InboxService) Archive(ctx context.Context, msgID uuid.UUID) error {
 	return nil
 }
 
+// ArchiveExpiredMessages moves messages with a past expires_at to archived status.
+// Returns the number of messages archived.
+func (s *InboxService) ArchiveExpiredMessages(ctx context.Context) (int64, error) {
+	now := time.Now().UTC()
+	tag, err := s.db.Exec(ctx,
+		`UPDATE inbox_messages SET status = 'archived', archived_at = $1
+		 WHERE expires_at IS NOT NULL AND expires_at <= $1 AND status != 'archived'`, now)
+	if err != nil {
+		return 0, fmt.Errorf("inbox.ArchiveExpiredMessages: %w", err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // Search performs text search on subject and body fields.
 func (s *InboxService) Search(ctx context.Context, userID uuid.UUID, query, scope string) ([]models.InboxMessage, error) {
 	sqlQuery := `SELECT id, from_address, to_address, thread_id, priority, action_required, ttl, expires_at,

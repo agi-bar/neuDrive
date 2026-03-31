@@ -13,22 +13,22 @@ import (
 func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	var req models.CreateTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if req.Name == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "name is required"})
+		respondValidationError(w, "name", "name is required")
 		return
 	}
 	if len(req.Scopes) == 0 {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "at least one scope is required"})
+		respondValidationError(w, "scopes", "at least one scope is required")
 		return
 	}
 	if req.MaxTrustLevel < 1 || req.MaxTrustLevel > 4 {
@@ -40,24 +40,24 @@ func (s *Server) handleCreateToken(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := s.TokenService.CreateToken(r.Context(), userID, req)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, resp)
+	respondCreated(w, resp)
 }
 
 // handleListTokens returns all tokens (active and revoked) for the authenticated user.
 func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	tokens, err := s.TokenService.ListTokens(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to list tokens"})
+		respondInternalError(w, err)
 		return
 	}
 
@@ -67,7 +67,7 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 		responses = append(responses, tokens[i].ToResponse())
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"tokens": responses,
 	})
 }
@@ -76,47 +76,47 @@ func (s *Server) handleListTokens(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetToken(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	tokenID, err := uuid.Parse(idStr)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid token ID"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid token ID")
 		return
 	}
 
 	token, err := s.TokenService.GetByID(r.Context(), tokenID, userID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "token not found"})
+		respondNotFound(w, "token")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, token.ToResponse())
+	respondOK(w, token.ToResponse())
 }
 
 // handleRevokeToken revokes a single token by ID.
 func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	tokenID, err := uuid.Parse(idStr)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid token ID"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid token ID")
 		return
 	}
 
 	if err := s.TokenService.RevokeToken(r.Context(), userID, tokenID); err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		respondNotFound(w, "token")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+	respondOK(w, map[string]string{"status": "revoked"})
 }
 
 // handleValidateToken allows external services to validate a scoped token.
@@ -158,7 +158,7 @@ func (s *Server) handleValidateToken(w http.ResponseWriter, r *http.Request) {
 
 // handleListScopes returns the available scope definitions for UI display.
 func (s *Server) handleListScopes(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"scopes":     models.AllScopes,
 		"categories": models.ScopeCategories(),
 		"bundles": map[string][]string{

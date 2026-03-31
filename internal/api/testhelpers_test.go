@@ -116,6 +116,31 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 		r.Post("/api/inbox/send", s.handleInboxSend)
 		r.Put("/api/inbox/{id}/archive", s.handleInboxArchive)
 
+		// Connections
+		r.Get("/api/connections", s.handleConnectionsList)
+		r.Post("/api/connections", s.handleConnectionsCreate)
+		r.Put("/api/connections/{id}", s.handleConnectionsUpdate)
+		r.Delete("/api/connections/{id}", s.handleConnectionsDelete)
+
+		// Devices
+		r.Get("/api/devices", s.handleDevicesList)
+		r.Post("/api/devices", s.handleRegisterDevice)
+		r.Post("/api/devices/{name}/call", s.handleDeviceCall)
+
+		// Roles
+		r.Get("/api/roles", s.handleRolesList)
+		r.Post("/api/roles", s.handleRolesCreate)
+		r.Delete("/api/roles/{name}", s.handleRolesDelete)
+
+		// Projects (archive)
+		r.Put("/api/projects/{name}/archive", s.handleArchiveProject)
+
+		// Collaborations
+		r.Get("/api/collaborations", s.handleListCollaborations)
+
+		// Memory conflicts
+		r.Get("/api/memory/conflicts", s.handleListConflicts)
+
 		// Dashboard (custom test handler using respondOK)
 		r.Get("/api/dashboard/stats", func(w http.ResponseWriter, req *http.Request) {
 			_, ok := userIDFromCtx(req.Context())

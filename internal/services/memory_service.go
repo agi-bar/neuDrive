@@ -98,7 +98,7 @@ func (s *MemoryService) WriteScratch(ctx context.Context, userID uuid.UUID, cont
 
 	_, err := s.db.Exec(ctx,
 		`INSERT INTO memory_scratch (id, user_id, date, content, source, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+		 VALUES ($1, $2, $3::DATE, $4, $5, $6, $7)`,
 		uuid.New(), userID, date, content, source, expiresAt, now)
 	if err != nil {
 		return fmt.Errorf("memory.WriteScratch: %w", err)
@@ -116,14 +116,14 @@ func (s *MemoryService) GenerateDailyScratchPlaceholders(ctx context.Context) (i
 
 	tag, err := s.db.Exec(ctx,
 		`INSERT INTO memory_scratch (id, user_id, date, content, source, expires_at, created_at)
-		 SELECT gen_random_uuid(), u.user_id, $1, 'Daily summary placeholder for ' || $1, 'scheduler', $2, $3
+		 SELECT gen_random_uuid(), u.user_id, $1::DATE, 'Daily summary placeholder for ' || $1, 'scheduler', $2, $3
 		 FROM (
 		   SELECT DISTINCT user_id FROM memory_scratch
 		   WHERE created_at >= NOW() - INTERVAL '7 days'
 		 ) u
 		 WHERE NOT EXISTS (
 		   SELECT 1 FROM memory_scratch ms
-		   WHERE ms.user_id = u.user_id AND ms.date = $1 AND ms.source = 'scheduler'
+		   WHERE ms.user_id = u.user_id AND ms.date = $1::DATE AND ms.source = 'scheduler'
 		 )`, date, expiresAt, now)
 	if err != nil {
 		return 0, fmt.Errorf("memory.GenerateDailyScratchPlaceholders: %w", err)

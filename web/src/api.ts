@@ -259,6 +259,22 @@ export const api = {
       body: JSON.stringify(data),
     }),
   exportFull: () => request<FullHubExport>('/export/full'),
+
+  // Token management
+  getTokens: (): Promise<ScopedTokenResponse[]> =>
+    request<{ tokens: ScopedTokenResponse[] }>('/tokens').then(r => r.tokens),
+
+  createToken: (req: CreateTokenRequest): Promise<CreateTokenResponse> =>
+    request<CreateTokenResponse>('/tokens', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  revokeToken: (id: string): Promise<void> =>
+    request<void>(`/tokens/${id}`, { method: 'DELETE' }),
+
+  getTokenScopes: (): Promise<{ scopes: string[], categories: Record<string, string[]>, bundles: Record<string, string[]> }> =>
+    request('/tokens/scopes'),
   uploadSkillsZip: (file: File) => {
     const formData = new FormData()
     formData.append('file', file)
@@ -339,4 +355,39 @@ export interface ImportResult {
   imported: number
   skipped: number
   errors?: string[]
+}
+
+// ---------------------------------------------------------------------------
+// Token types
+// ---------------------------------------------------------------------------
+
+export interface ScopedTokenResponse {
+  id: string
+  user_id: string
+  name: string
+  token_prefix: string
+  scopes: string[]
+  max_trust_level: number
+  expires_at: string
+  rate_limit: number
+  request_count: number
+  last_used_at?: string
+  last_used_ip?: string
+  created_at: string
+  revoked_at?: string
+  is_expired: boolean
+  is_revoked: boolean
+}
+
+export interface CreateTokenRequest {
+  name: string
+  scopes: string[]
+  max_trust_level: number
+  expires_in_days: number
+}
+
+export interface CreateTokenResponse {
+  token: string
+  token_prefix: string
+  scoped_token: ScopedTokenResponse
 }

@@ -150,12 +150,12 @@ export default function ConnectionsPage() {
       {createdKey && (
         <div className="alert alert-success">
           <div className="key-display">
-            <p className="key-warning">
-              API Key 已生成 - 请立即复制保存，此密钥只显示一次！
+            <p className="api-key-warning">
+              此密钥仅显示一次
             </p>
-            <div className="key-value">
+            <div className="api-key-box">
               <code>{createdKey}</code>
-              <button className="btn btn-sm" onClick={copyKey}>
+              <button className="btn btn-sm" onClick={copyKey} style={{ marginLeft: 12, color: '#68d391' }}>
                 {keyCopied ? '已复制' : '复制'}
               </button>
             </div>
@@ -184,14 +184,18 @@ export default function ConnectionsPage() {
               </div>
               <div className="form-group">
                 <label htmlFor="conn-platform">平台</label>
-                <input
+                <select
                   id="conn-platform"
-                  type="text"
                   value={newConn.platform}
                   onChange={(e) => setNewConn({ ...newConn, platform: e.target.value })}
-                  placeholder="例如：telegram, slack, webhook"
                   disabled={creating}
-                />
+                >
+                  <option value="">请选择平台</option>
+                  <option value="claude">Claude</option>
+                  <option value="gpt">GPT</option>
+                  <option value="feishu">飞书</option>
+                  <option value="other">其他</option>
+                </select>
               </div>
               <div className="form-group">
                 <label htmlFor="conn-trust">信任等级</label>

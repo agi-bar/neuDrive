@@ -103,18 +103,27 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       })
       if (!retryRes.ok) {
         const err = await retryRes.json().catch(() => ({ error: retryRes.statusText }))
-        throw new Error(err.error || retryRes.statusText)
+        throw new Error(err.message || err.error || retryRes.statusText)
       }
-      return retryRes.json()
+      const retryJson = await retryRes.json()
+      if (retryJson && retryJson.ok === true && retryJson.data !== undefined) {
+        return retryJson.data
+      }
+      return retryJson
     }
     throw new Error('session expired')
   }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: res.statusText }))
-    throw new Error(err.error || res.statusText)
+    throw new Error(err.message || err.error || res.statusText)
   }
-  return res.json()
+  const json = await res.json()
+  // Unwrap APISuccess envelope: {ok: true, data: {...}} → return data
+  if (json && json.ok === true && json.data !== undefined) {
+    return json.data
+  }
+  return json
 }
 
 export const api = {

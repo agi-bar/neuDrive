@@ -25,7 +25,7 @@ type ImportSkillsRequest struct {
 
 // SkillFile represents a single skill file to import.
 type SkillFile struct {
-	Path        string `json:"path"`                    // e.g. "cyberzen-write/SKILL.md"
+	Path        string `json:"path"` // e.g. "cyberzen-write/SKILL.md"
 	Content     string `json:"content"`
 	ContentType string `json:"content_type,omitempty"` // default: text/markdown
 }
@@ -38,7 +38,7 @@ type ImportClaudeMemoryRequest struct {
 // ClaudeMemoryItem represents a single memory entry from Claude.
 type ClaudeMemoryItem struct {
 	Content   string `json:"content"`
-	Source    string `json:"source"`              // "claude"
+	Source    string `json:"source"` // "claude"
 	CreatedAt string `json:"created_at,omitempty"`
 }
 
@@ -83,7 +83,7 @@ type FullHubExport struct {
 	Version     string            `json:"version"`
 	ExportedAt  string            `json:"exported_at"`
 	User        models.User       `json:"user"`
-	Profile     map[string]string `json:"profile"`       // category -> content
+	Profile     map[string]string `json:"profile"` // category -> content
 	Skills      []SkillFile       `json:"skills"`
 	Devices     []DeviceImport    `json:"devices"`
 	Projects    []ProjectExport   `json:"projects"`

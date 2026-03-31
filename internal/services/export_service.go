@@ -152,11 +152,11 @@ func (s *ExportService) ExportToZip(ctx context.Context, userID uuid.UUID, w io.
 		"exported_at": time.Now().UTC().Format(time.RFC3339),
 		"user_id":     userID.String(),
 		"stats": map[string]int{
-			"skills":    len(data.SkillFiles),
-			"devices":   len(data.Devices),
-			"projects":  len(data.Projects),
-			"roles":     len(data.Roles),
-			"messages":  len(data.InboxMessages),
+			"skills":       len(data.SkillFiles),
+			"devices":      len(data.Devices),
+			"projects":     len(data.Projects),
+			"roles":        len(data.Roles),
+			"messages":     len(data.InboxMessages),
 			"vault_scopes": len(data.VaultScopes),
 		},
 	}

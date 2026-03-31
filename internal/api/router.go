@@ -35,31 +35,31 @@ const (
 
 // Server holds the HTTP router and all service dependencies.
 type Server struct {
-	Router             *chi.Mux
-	UserService        *services.UserService
-	AuthService        *services.AuthService
-	ConnectionService  *services.ConnectionService
-	FileTreeService    *services.FileTreeService
-	VaultService       *services.VaultService
-	MemoryService      *services.MemoryService
-	DeviceService      *services.DeviceService
-	ProjectService     *services.ProjectService
-	SummaryService     *services.SummaryService
-	RoleService        *services.RoleService
-	InboxService       *services.InboxService
-	DashboardService   *services.DashboardService
-	TokenService       *services.TokenService
+	Router               *chi.Mux
+	UserService          *services.UserService
+	AuthService          *services.AuthService
+	ConnectionService    *services.ConnectionService
+	FileTreeService      *services.FileTreeService
+	VaultService         *services.VaultService
+	MemoryService        *services.MemoryService
+	DeviceService        *services.DeviceService
+	ProjectService       *services.ProjectService
+	SummaryService       *services.SummaryService
+	RoleService          *services.RoleService
+	InboxService         *services.InboxService
+	DashboardService     *services.DashboardService
+	TokenService         *services.TokenService
 	ImportService        *services.ImportService
 	ExportService        *services.ExportService
 	CollaborationService *services.CollaborationService
 	WebhookService       *services.WebhookService
 	OAuthService         *services.OAuthService
 	Vault                *vaultpkg.Vault
-	AuthHandler        *auth.Handler
-	Config             *config.Config
-	JWTSecret          string
-	GitHubClientID     string
-	GitHubClientSecret string
+	AuthHandler          *auth.Handler
+	Config               *config.Config
+	JWTSecret            string
+	GitHubClientID       string
+	GitHubClientSecret   string
 }
 
 // NewServer creates a fully wired Server with routes configured.
@@ -88,29 +88,29 @@ func NewServer(
 	ghClientSecret string,
 ) *Server {
 	s := &Server{
-		Router:             chi.NewRouter(),
-		UserService:        userSvc,
-		AuthService:        authSvc,
-		ConnectionService:  connSvc,
-		FileTreeService:    fileTreeSvc,
-		VaultService:       vaultSvc,
-		MemoryService:      memorySvc,
-		ProjectService:     projectSvc,
-		SummaryService:     summarySvc,
-		RoleService:        roleSvc,
-		InboxService:       inboxSvc,
-		DeviceService:      deviceSvc,
-		DashboardService:   dashboardSvc,
-		TokenService:       tokenSvc,
+		Router:               chi.NewRouter(),
+		UserService:          userSvc,
+		AuthService:          authSvc,
+		ConnectionService:    connSvc,
+		FileTreeService:      fileTreeSvc,
+		VaultService:         vaultSvc,
+		MemoryService:        memorySvc,
+		ProjectService:       projectSvc,
+		SummaryService:       summarySvc,
+		RoleService:          roleSvc,
+		InboxService:         inboxSvc,
+		DeviceService:        deviceSvc,
+		DashboardService:     dashboardSvc,
+		TokenService:         tokenSvc,
 		ImportService:        importSvc,
 		CollaborationService: collabSvc,
 		WebhookService:       webhookSvc,
 		ExportService:        exportSvc,
 		Vault:                vault,
-		JWTSecret:          jwtSecret,
-		Config:             cfg,
-		GitHubClientID:     ghClientID,
-		GitHubClientSecret: ghClientSecret,
+		JWTSecret:            jwtSecret,
+		Config:               cfg,
+		GitHubClientID:       ghClientID,
+		GitHubClientSecret:   ghClientSecret,
 	}
 	s.AuthHandler = auth.NewHandler(userSvc, authSvc, jwtSecret, ghClientID, ghClientSecret)
 	s.setupRoutes()
@@ -617,7 +617,7 @@ func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) 
 	}
 
 	var req struct {
-		Source   string   `json:"source"`
+		Source  string   `json:"source"`
 		Action  string   `json:"action"`
 		Summary string   `json:"summary"`
 		Tags    []string `json:"tags,omitempty"`
@@ -635,9 +635,9 @@ func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) 
 	logEntry := models.ProjectLog{
 		ProjectID: project.ID,
 		Source:    req.Source,
-		Action:   req.Action,
-		Summary:  req.Summary,
-		Tags:     req.Tags,
+		Action:    req.Action,
+		Summary:   req.Summary,
+		Tags:      req.Tags,
 	}
 
 	if err := s.ProjectService.AppendLog(r.Context(), project.ID, logEntry); err != nil {

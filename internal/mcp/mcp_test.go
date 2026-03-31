@@ -407,10 +407,10 @@ func TestResourcesList(t *testing.T) {
 
 func TestMalformedJSONRPC(t *testing.T) {
 	tests := []struct {
-		name     string
-		method   string
-		wantErr  bool
-		errCode  int
+		name    string
+		method  string
+		wantErr bool
+		errCode int
 	}{
 		{
 			name:    "unknown method",

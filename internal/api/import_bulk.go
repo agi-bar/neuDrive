@@ -27,7 +27,7 @@ type ImportClaudeMemoryV2Request struct {
 // ClaudeMemoryV2Item represents a single typed memory entry from Claude.
 type ClaudeMemoryV2Item struct {
 	Content   string `json:"content"`
-	Type      string `json:"type"`                // preference, relationship, project
+	Type      string `json:"type"` // preference, relationship, project
 	CreatedAt string `json:"created_at,omitempty"`
 }
 
@@ -46,7 +46,7 @@ type ImportBulkRequest struct {
 
 // ImportResponse is the standard response for all new import endpoints.
 type ImportResponse struct {
-	OK   bool              `json:"ok"`
+	OK   bool               `json:"ok"`
 	Data ImportResponseData `json:"data"`
 }
 

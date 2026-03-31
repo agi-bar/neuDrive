@@ -26,12 +26,14 @@ func main() {
 
 	cfg, err := config.Load()
 	if err != nil {
-		slog.Error("config error", "error", err); os.Exit(1)
+		slog.Error("config error", "error", err)
+		os.Exit(1)
 	}
 
 	db, err := database.InitDB(cfg.DatabaseURL)
 	if err != nil {
-		slog.Error("database connection failed", "error", err); os.Exit(1)
+		slog.Error("database connection failed", "error", err)
+		os.Exit(1)
 	}
 	defer db.Close()
 
@@ -48,7 +50,8 @@ func main() {
 	if cfg.VaultMasterKey != "" {
 		v, err = vault.NewVault(cfg.VaultMasterKey)
 		if err != nil {
-			slog.Error("vault init failed", "error", err); os.Exit(1)
+			slog.Error("vault init failed", "error", err)
+			os.Exit(1)
 		}
 	}
 
@@ -65,23 +68,24 @@ func main() {
 
 	// Create MCP server
 	server := &mcp.MCPServer{
-		UserID:     scopedToken.UserID,
-		TrustLevel: scopedToken.MaxTrustLevel,
-		Scopes:     scopedToken.Scopes,
-		FileTree:   fileTreeSvc,
-		Vault:      vaultSvc,
+		UserID:      scopedToken.UserID,
+		TrustLevel:  scopedToken.MaxTrustLevel,
+		Scopes:      scopedToken.Scopes,
+		FileTree:    fileTreeSvc,
+		Vault:       vaultSvc,
 		VaultCrypto: v,
-		Memory:     memorySvc,
-		Project:    projectSvc,
-		Inbox:      inboxSvc,
-		Device:     deviceSvc,
-		Dashboard:  dashboardSvc,
-		Import:     importSvc,
+		Memory:      memorySvc,
+		Project:     projectSvc,
+		Inbox:       inboxSvc,
+		Device:      deviceSvc,
+		Dashboard:   dashboardSvc,
+		Import:      importSvc,
 	}
 
 	// Run stdio transport
 	fmt.Fprintln(os.Stderr, "agenthub-mcp: connected, waiting for requests...")
 	if err := server.RunStdio(os.Stdin, os.Stdout); err != nil {
-		slog.Error("stdio error", "error", err); os.Exit(1)
+		slog.Error("stdio error", "error", err)
+		os.Exit(1)
 	}
 }

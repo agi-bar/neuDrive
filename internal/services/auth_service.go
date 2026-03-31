@@ -34,19 +34,19 @@ type GitHubUser struct {
 type GitHubExchangeFunc func(ctx context.Context, code string) (*GitHubUser, error)
 
 const (
-	bcryptCost          = 12
-	accessTokenExpiry   = 24 * time.Hour
-	refreshTokenExpiry  = 30 * 24 * time.Hour
-	accessTokenSeconds  = 86400 // 24 hours
-	refreshTokenBytes   = 64
+	bcryptCost         = 12
+	accessTokenExpiry  = 24 * time.Hour
+	refreshTokenExpiry = 30 * 24 * time.Hour
+	accessTokenSeconds = 86400 // 24 hours
+	refreshTokenBytes  = 64
 )
 
 var emailRegexp = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`)
 
 type AuthService struct {
-	db              *pgxpool.Pool
-	generateToken   TokenGeneratorFunc
-	exchangeGitHub  GitHubExchangeFunc
+	db             *pgxpool.Pool
+	generateToken  TokenGeneratorFunc
+	exchangeGitHub GitHubExchangeFunc
 }
 
 func NewAuthService(db *pgxpool.Pool, tokenGen TokenGeneratorFunc, ghExchange GitHubExchangeFunc) *AuthService {

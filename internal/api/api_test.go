@@ -68,6 +68,7 @@ func TestAuthMeWithoutTokenReturns401(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", resp.StatusCode)
 	}
+	resp.Body.Close()
 }
 
 func TestAuthMeWithInvalidTokenReturns401(t *testing.T) {
@@ -83,6 +84,7 @@ func TestAuthMeWithInvalidTokenReturns401(t *testing.T) {
 	if resp.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expected 401, got %d", resp.StatusCode)
 	}
+	resp.Body.Close()
 }
 
 // ---------------------------------------------------------------------------
@@ -105,7 +107,7 @@ func TestTokenCreateListRevoke(t *testing.T) {
 		t.Fatalf("POST /api/tokens: %v", err)
 	}
 	if resp.StatusCode != http.StatusCreated {
-		body := parseJSON(resp)
+		body := parseJSONRaw(resp)
 		t.Fatalf("expected 201, got %d: %v", resp.StatusCode, body)
 	}
 	created := parseJSON(resp)
@@ -170,6 +172,7 @@ func TestTokenCreateListRevoke(t *testing.T) {
 	if resp.StatusCode != http.StatusNotFound {
 		t.Fatalf("expected 404 on double revoke, got %d", resp.StatusCode)
 	}
+	resp.Body.Close()
 }
 
 func TestTokenCreateValidation(t *testing.T) {
@@ -222,6 +225,7 @@ func TestTokenListScopes(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
+	// The scopes endpoint uses respondOK, so data is inside the envelope.
 	body := parseJSON(resp)
 	scopes, ok := body["scopes"].([]interface{})
 	if !ok || len(scopes) == 0 {
@@ -252,7 +256,7 @@ func TestFileTreeList(t *testing.T) {
 	}
 	body := parseJSON(resp)
 	if body["is_dir"] != true {
-		t.Error("expected root to be a directory")
+		t.Errorf("expected root to be a directory, got %v", body["is_dir"])
 	}
 }
 
@@ -306,6 +310,23 @@ func TestFileTreeWithoutAuth(t *testing.T) {
 		t.Fatalf("expected 401, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
+}
+
+func TestFileTreeDelete(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	resp, err := authDelete(ts, "/api/tree/test/file.md")
+	if err != nil {
+		t.Fatalf("DELETE /api/tree/test/file.md: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	body := parseJSON(resp)
+	if body["status"] != "deleted" {
+		t.Errorf("expected status=deleted, got %v", body["status"])
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -516,17 +537,34 @@ func TestInboxSendValidation(t *testing.T) {
 	ts, _ := newTestServer()
 	defer ts.Close()
 
-	// Missing required fields
+	// Missing required fields -- the handler uses respondValidationError (422)
 	resp, err := authPost(ts, "/api/inbox/send", map[string]string{
 		"subject": "no recipient or body",
 	})
 	if err != nil {
 		t.Fatalf("POST /api/inbox/send: %v", err)
 	}
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
+}
+
+func TestInboxArchive(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	resp, err := authPut(ts, "/api/inbox/some-msg-id/archive", nil)
+	if err != nil {
+		t.Fatalf("PUT /api/inbox/some-msg-id/archive: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	body := parseJSON(resp)
+	if body["status"] != "archived" {
+		t.Errorf("expected status=archived, got %v", body["status"])
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -575,12 +613,13 @@ func TestSearchWithoutQuery(t *testing.T) {
 	ts, _ := newTestServer()
 	defer ts.Close()
 
+	// The handler uses respondValidationError (422)
 	resp, err := authGet(ts, "/api/search")
 	if err != nil {
 		t.Fatalf("GET /api/search: %v", err)
 	}
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing query, got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422 for missing query, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -602,40 +641,6 @@ func TestSearchWithQuery(t *testing.T) {
 	}
 }
 
-func TestInboxArchive(t *testing.T) {
-	ts, _ := newTestServer()
-	defer ts.Close()
-
-	resp, err := authPut(ts, "/api/inbox/some-msg-id/archive", nil)
-	if err != nil {
-		t.Fatalf("PUT /api/inbox/some-msg-id/archive: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	body := parseJSON(resp)
-	if body["status"] != "archived" {
-		t.Errorf("expected status=archived, got %v", body["status"])
-	}
-}
-
-func TestFileTreeDelete(t *testing.T) {
-	ts, _ := newTestServer()
-	defer ts.Close()
-
-	resp, err := authDelete(ts, "/api/tree/test/file.md")
-	if err != nil {
-		t.Fatalf("DELETE /api/tree/test/file.md: %v", err)
-	}
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("expected 200, got %d", resp.StatusCode)
-	}
-	body := parseJSON(resp)
-	if body["status"] != "deleted" {
-		t.Errorf("expected status=deleted, got %v", body["status"])
-	}
-}
-
 func TestMalformedJSONBody(t *testing.T) {
 	ts, _ := newTestServer()
 	defer ts.Close()
@@ -650,6 +655,34 @@ func TestMalformedJSONBody(t *testing.T) {
 	}
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+func TestTokenGetInvalidID(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tokens/not-a-uuid")
+	if err != nil {
+		t.Fatalf("GET /api/tokens/not-a-uuid: %v", err)
+	}
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", resp.StatusCode)
+	}
+	resp.Body.Close()
+}
+
+func TestTokenGetNonExistent(t *testing.T) {
+	ts, _ := newTestServer()
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tokens/00000000-0000-0000-0000-000000000099")
+	if err != nil {
+		t.Fatalf("GET /api/tokens/{id}: %v", err)
+	}
+	if resp.StatusCode != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }

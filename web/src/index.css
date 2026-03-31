@@ -1045,6 +1045,126 @@ a:hover {
   color: var(--color-text);
 }
 
+/* === Additional Badge Styles === */
+.badge-l1 {
+  background: #f3f4f6;
+  color: var(--trust-l1);
+}
+
+.badge-l2 {
+  background: #fffbeb;
+  color: var(--trust-l2);
+}
+
+.badge-l3 {
+  background: #eff6ff;
+  color: var(--trust-l3);
+}
+
+.badge-l4 {
+  background: #f0fdf4;
+  color: var(--trust-l4);
+}
+
+.badge-active {
+  background: #f0fdf4;
+  color: var(--color-success);
+}
+
+.badge-archived {
+  background: #f3f4f6;
+  color: var(--color-text-muted);
+}
+
+.cell-key-prefix {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  margin-top: 2px;
+}
+
+.api-key-warning {
+  font-weight: 600;
+}
+
+.api-key-box {
+  display: flex;
+  align-items: center;
+  background: #fff;
+  border: 1px solid #bbf7d0;
+  border-radius: var(--radius);
+  padding: 8px 12px;
+}
+
+.api-key-box code {
+  flex: 1;
+  font-size: 13px;
+  font-family: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+  word-break: break-all;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+.btn-outline:hover {
+  background: var(--color-bg);
+  color: var(--color-text);
+}
+
+.project-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* === Timeline Items (Project Logs) === */
+.timeline-item {
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border-light);
+}
+
+.timeline-item:last-child {
+  border-bottom: none;
+}
+
+.timeline-item .time {
+  font-size: 11px;
+  color: var(--color-text-muted);
+}
+
+.timeline-item .source {
+  font-size: 11px;
+  color: var(--color-primary);
+  background: var(--color-primary-light);
+  padding: 0 6px;
+  border-radius: 4px;
+}
+
+.timeline-item .summary {
+  font-size: 13px;
+  color: var(--color-text);
+  margin-top: 2px;
+}
+
+.timeline-item .tags {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.timeline-item .tag {
+  font-size: 11px;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-light);
+}
+
 /* === Responsive === */
 @media (max-width: 768px) {
   .sidebar {

@@ -16,30 +16,38 @@ type Role struct {
 }
 
 type CreateRoleRequest struct {
-	Name        string   `json:"name"`
-	Description string   `json:"description"`
+	Name               string   `json:"name"`
+	Description        string   `json:"description"`
+	RoleType           string   `json:"role_type,omitempty"`
+	AllowedPaths       []string `json:"allowed_paths,omitempty"`
+	AllowedVaultScopes []string `json:"allowed_vault_scopes,omitempty"`
+	Lifecycle          string   `json:"lifecycle,omitempty"`
+	// Deprecated fields kept for backward compat
 	Permissions []string `json:"permissions"`
 	TrustLevel  int      `json:"trust_level"`
 }
 
-func HandleRolesList(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) handleRolesList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: query database for roles belonging to user
-	roles := []Role{}
+	roles, err := s.RoleService.List(r.Context(), userID)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
 
 	respondOK(w, map[string]interface{}{
 		"roles": roles,
 	})
 }
 
-func HandleRolesCreate(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) handleRolesCreate(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -55,28 +63,45 @@ func HandleRolesCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: insert role into database
-	_ = user
-	role := &Role{
-		Name:        req.Name,
-		Description: req.Description,
-		Permissions: req.Permissions,
-		TrustLevel:  req.TrustLevel,
+	roleType := req.RoleType
+	if roleType == "" {
+		roleType = "worker"
+	}
+	lifecycle := req.Lifecycle
+	if lifecycle == "" {
+		lifecycle = "permanent"
+	}
+	allowedPaths := req.AllowedPaths
+	if allowedPaths == nil {
+		allowedPaths = []string{"/"}
+	}
+	allowedVaultScopes := req.AllowedVaultScopes
+	if allowedVaultScopes == nil {
+		allowedVaultScopes = []string{}
+	}
+
+	role, err := s.RoleService.Create(r.Context(), userID, req.Name, roleType, allowedPaths, allowedVaultScopes, lifecycle)
+	if err != nil {
+		respondInternalError(w, err)
+		return
 	}
 
 	respondCreated(w, role)
 }
 
-func HandleRolesDelete(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRolesDelete(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: delete role from database
-	_ = user
+	if err := s.RoleService.Delete(r.Context(), userID, name); err != nil {
+		respondNotFound(w, "role")
+		return
+	}
+
 	respondOK(w, map[string]string{"status": "deleted", "name": name})
 }

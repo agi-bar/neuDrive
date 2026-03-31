@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -30,40 +32,62 @@ type SearchRequest struct {
 	Path  string `json:"path,omitempty"`
 }
 
-func HandleTreeRead(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
 		path = "/"
 	}
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: query database for file tree entries belonging to user
-	node := &FileNode{
-		Path:  path,
-		Name:  path,
-		IsDir: true,
-		Children: []*FileNode{
-			{Path: path + "/README.md", Name: "README.md", IsDir: false, MimeType: "text/markdown", Size: 0},
-		},
+	trustLevel := trustLevelFromCtx(r.Context())
+
+	// If path looks like a directory (ends with / or is root), list children
+	if strings.HasSuffix(path, "/") || path == "/" {
+		entries, err := s.FileTreeService.List(r.Context(), userID, path, trustLevel)
+		if err != nil {
+			respondInternalError(w, err)
+			return
+		}
+
+		children := make([]*FileNode, 0, len(entries))
+		for _, e := range entries {
+			children = append(children, fileTreeEntryToNode(&e))
+		}
+
+		node := &FileNode{
+			Path:     path,
+			Name:     path,
+			IsDir:    true,
+			Children: children,
+		}
+		respondOK(w, node)
+		return
 	}
 
-	respondOK(w, node)
+	// Otherwise, read a specific file
+	entry, err := s.FileTreeService.Read(r.Context(), userID, path, trustLevel)
+	if err != nil {
+		respondNotFound(w, "file")
+		return
+	}
+
+	respondOK(w, fileTreeEntryToNode(entry))
 }
 
-func HandleTreeWrite(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
 		respondValidationError(w, "path", "path is required")
 		return
 	}
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -74,54 +98,91 @@ func HandleTreeWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: insert or update file tree entry in database
-	node := &FileNode{
-		Path:     path,
-		Name:     path,
-		IsDir:    req.IsDir,
-		Content:  req.Content,
-		MimeType: req.MimeType,
-		Size:     int64(len(req.Content)),
+	if req.IsDir {
+		if err := s.FileTreeService.EnsureDirectory(r.Context(), userID, path); err != nil {
+			respondInternalError(w, err)
+			return
+		}
+		respondOK(w, &FileNode{Path: path, Name: path, IsDir: true})
+		return
 	}
 
-	respondOK(w, node)
+	mimeType := req.MimeType
+	if mimeType == "" {
+		mimeType = "text/plain"
+	}
+
+	entry, err := s.FileTreeService.Write(r.Context(), userID, path, req.Content, mimeType, models.TrustLevelFull)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, fileTreeEntryToNode(entry))
 }
 
-func HandleTreeDelete(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
 		respondValidationError(w, "path", "path is required")
 		return
 	}
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: delete file tree entry from database
+	if err := s.FileTreeService.Delete(r.Context(), userID, path); err != nil {
+		respondNotFound(w, "file")
+		return
+	}
+
 	respondOK(w, map[string]string{"status": "deleted", "path": path})
 }
 
-func HandleSearch(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		respondValidationError(w, "q", "query parameter 'q' is required")
 		return
 	}
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: full-text search in database
-	results := []FileNode{}
+	trustLevel := trustLevelFromCtx(r.Context())
+
+	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	results := make([]*FileNode, 0, len(entries))
+	for _, e := range entries {
+		results = append(results, fileTreeEntryToNode(&e))
+	}
 
 	respondOK(w, map[string]interface{}{
 		"query":   query,
 		"results": results,
 	})
+}
+
+func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
+	return &FileNode{
+		Path:      e.Path,
+		Name:      e.Path,
+		IsDir:     e.IsDirectory,
+		Content:   e.Content,
+		MimeType:  e.ContentType,
+		Size:      int64(len(e.Content)),
+		CreatedAt: e.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt: e.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+	}
 }

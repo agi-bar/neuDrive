@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -234,7 +235,9 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 
 	if time.Now().After(session.ExpiresAt) {
 		// Delete expired session
-		s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, session.ID)
+		if _, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, session.ID); err != nil {
+			slog.Warn("failed to delete expired session", "session_id", session.ID, "error", err)
+		}
 		return nil, fmt.Errorf("refresh token expired")
 	}
 

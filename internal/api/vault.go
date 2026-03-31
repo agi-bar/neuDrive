@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -15,48 +16,61 @@ type VaultEntry struct {
 }
 
 type VaultWriteRequest struct {
-	Data string `json:"data"`
+	Data          string `json:"data"`
+	Description   string `json:"description,omitempty"`
+	MinTrustLevel *int   `json:"min_trust_level,omitempty"`
 }
 
-func HandleVaultListScopes(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) HandleVaultListScopes(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: query database for vault scopes belonging to user
-	scopes := []string{}
+	trustLevel := trustLevelFromCtx(r.Context())
+
+	scopes, err := s.VaultService.ListScopes(r.Context(), userID, trustLevel)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
 
 	respondOK(w, map[string]interface{}{
 		"scopes": scopes,
 	})
 }
 
-func HandleVaultRead(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleVaultRead(w http.ResponseWriter, r *http.Request) {
 	scope := chi.URLParam(r, "scope")
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: read from database and decrypt using vault service
-	_ = user
+	trustLevel := trustLevelFromCtx(r.Context())
+
+	plaintext, err := s.VaultService.Read(r.Context(), userID, scope, trustLevel)
+	if err != nil {
+		respondNotFound(w, "vault entry")
+		return
+	}
+
 	entry := &VaultEntry{
 		Scope: scope,
-		Data:  "",
+		Data:  plaintext,
 	}
 
 	respondOK(w, entry)
 }
 
-func HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
 	scope := chi.URLParam(r, "scope")
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -67,8 +81,16 @@ func HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: encrypt and store in database
-	_ = user
+	minTrust := models.TrustLevelFull
+	if req.MinTrustLevel != nil {
+		minTrust = *req.MinTrustLevel
+	}
+
+	if err := s.VaultService.Write(r.Context(), userID, scope, req.Data, req.Description, minTrust); err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
 	entry := &VaultEntry{
 		Scope: scope,
 		Data:  req.Data,
@@ -77,16 +99,19 @@ func HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
 	respondOK(w, entry)
 }
 
-func HandleVaultDelete(w http.ResponseWriter, r *http.Request) {
+func (s *Server) HandleVaultDelete(w http.ResponseWriter, r *http.Request) {
 	scope := chi.URLParam(r, "scope")
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: delete vault entry from database
-	_ = user
+	if err := s.VaultService.Delete(r.Context(), userID, scope); err != nil {
+		respondNotFound(w, "vault entry")
+		return
+	}
+
 	respondOK(w, map[string]string{"status": "deleted", "scope": scope})
 }

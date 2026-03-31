@@ -58,6 +58,9 @@ func newTestServer() (*httptest.Server, *inMemoryTokenStore) {
 func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 	r := s.Router
 
+	// Add panic recovery for tests (services are nil, handlers may panic)
+	r.Use(PanicRecoveryMiddleware)
+
 	// Health (uses respondOK -- from the real handler)
 	r.Get("/api/health", s.healthCheck)
 
@@ -87,31 +90,31 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 			})
 		})
 
-		// File tree (real handlers from filetree.go)
-		r.Get("/api/tree/*", HandleTreeRead)
-		r.Put("/api/tree/*", HandleTreeWrite)
-		r.Delete("/api/tree/*", HandleTreeDelete)
-		r.Get("/api/search", HandleSearch)
+		// File tree
+		r.Get("/api/tree/*", s.handleTreeRead)
+		r.Put("/api/tree/*", s.handleTreeWrite)
+		r.Delete("/api/tree/*", s.handleTreeDelete)
+		r.Get("/api/search", s.handleSearch)
 
-		// Vault (real handlers from vault.go)
-		r.Get("/api/vault/scopes", HandleVaultListScopes)
-		r.Get("/api/vault/{scope}", HandleVaultRead)
-		r.Put("/api/vault/{scope}", HandleVaultWrite)
+		// Vault
+		r.Get("/api/vault/scopes", s.HandleVaultListScopes)
+		r.Get("/api/vault/{scope}", s.HandleVaultRead)
+		r.Put("/api/vault/{scope}", s.HandleVaultWrite)
 
-		// Memory (real handlers from memory.go)
-		r.Get("/api/memory/profile", HandleMemoryProfileGet)
-		r.Put("/api/memory/profile", HandleMemoryProfileUpdate)
+		// Memory
+		r.Get("/api/memory/profile", s.handleMemoryProfileGet)
+		r.Put("/api/memory/profile", s.handleMemoryProfileUpdate)
 
-		// Projects (stubs from router.go)
+		// Projects
 		r.Get("/api/projects", s.handleListProjects)
 		r.Post("/api/projects", s.handleCreateProject)
 		r.Get("/api/projects/{name}", s.handleGetProject)
 		r.Post("/api/projects/{name}/log", s.handleAppendProjectLog)
 
-		// Inbox (real handlers from inbox.go)
-		r.Get("/api/inbox/{role}", HandleInboxList)
-		r.Post("/api/inbox/send", HandleInboxSend)
-		r.Put("/api/inbox/{id}/archive", HandleInboxArchive)
+		// Inbox
+		r.Get("/api/inbox/{role}", s.handleInboxList)
+		r.Post("/api/inbox/send", s.handleInboxSend)
+		r.Put("/api/inbox/{id}/archive", s.handleInboxArchive)
 
 		// Dashboard (custom test handler using respondOK)
 		r.Get("/api/dashboard/stats", func(w http.ResponseWriter, req *http.Request) {
@@ -171,7 +174,7 @@ func (st *inMemoryTokenStore) handleCreateToken(w http.ResponseWriter, r *http.R
 		req.ExpiresInDays = 30
 	}
 
-	rawToken, tokenHash, tokenPrefix := services.GenerateAPIKey()
+	rawToken, tokenHash, tokenPrefix, _ := services.GenerateAPIKey()
 	rawToken = "aht_" + rawToken[4:]
 
 	id := uuid.New()

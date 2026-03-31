@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type Connection struct {
@@ -32,24 +33,27 @@ type UpdateConnectionRequest struct {
 	Config     string `json:"config,omitempty"`
 }
 
-func HandleConnectionsList(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) handleConnectionsList(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: query database for connections belonging to user
-	connections := []Connection{}
+	conns, err := s.ConnectionService.ListByUser(r.Context(), userID)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
 
 	respondOK(w, map[string]interface{}{
-		"connections": connections,
+		"connections": conns,
 	})
 }
 
-func HandleConnectionsCreate(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) handleConnectionsCreate(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -65,25 +69,27 @@ func HandleConnectionsCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: insert connection into database
-	_ = user
-	conn := &Connection{
-		ID:         "generated-id",
-		Name:       req.Name,
-		Type:       req.Type,
-		Status:     "active",
-		TrustLevel: req.TrustLevel,
-		Config:     req.Config,
+	conn, rawKey, err := s.ConnectionService.Create(r.Context(), userID, req.Name, req.Type, req.TrustLevel)
+	if err != nil {
+		respondInternalError(w, err)
+		return
 	}
 
-	respondCreated(w, conn)
+	respondCreated(w, map[string]interface{}{
+		"connection": conn,
+		"api_key":    rawKey,
+	})
 }
 
-func HandleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+func (s *Server) handleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	connID, err := uuid.Parse(idStr)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid connection ID")
+		return
+	}
 
-	user := GetUser(r.Context())
-	if user == nil {
+	if _, ok := userIDFromCtx(r.Context()); !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -94,29 +100,32 @@ func HandleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: update connection in database
-	_ = user
-	conn := &Connection{
-		ID:         id,
-		Name:       req.Name,
-		Status:     req.Status,
-		TrustLevel: req.TrustLevel,
-		Config:     req.Config,
+	conn, err := s.ConnectionService.Update(r.Context(), connID, req.Name, req.TrustLevel)
+	if err != nil {
+		respondNotFound(w, "connection")
+		return
 	}
 
 	respondOK(w, conn)
 }
 
-func HandleConnectionsDelete(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+func (s *Server) handleConnectionsDelete(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	connID, err := uuid.Parse(idStr)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid connection ID")
+		return
+	}
 
-	user := GetUser(r.Context())
-	if user == nil {
+	if _, ok := userIDFromCtx(r.Context()); !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: delete connection from database
-	_ = user
-	respondOK(w, map[string]string{"status": "deleted", "id": id})
+	if err := s.ConnectionService.Delete(r.Context(), connID); err != nil {
+		respondNotFound(w, "connection")
+		return
+	}
+
+	respondOK(w, map[string]string{"status": "deleted", "id": idStr})
 }

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"net/http"
 
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type Message struct {
@@ -23,18 +25,22 @@ type SendMessageRequest struct {
 	Body    string `json:"body"`
 }
 
-func HandleInboxList(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleInboxList(w http.ResponseWriter, r *http.Request) {
 	role := chi.URLParam(r, "role")
 
-	user := GetUser(r.Context())
-	if user == nil {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: query database for messages for this role
-	_ = user
-	messages := []Message{}
+	status := r.URL.Query().Get("status")
+
+	messages, err := s.InboxService.GetMessages(r.Context(), userID, role, status)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
 
 	respondOK(w, map[string]interface{}{
 		"role":     role,
@@ -42,9 +48,9 @@ func HandleInboxList(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func HandleInboxSend(w http.ResponseWriter, r *http.Request) {
-	user := GetUser(r.Context())
-	if user == nil {
+func (s *Server) handleInboxSend(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -60,28 +66,40 @@ func HandleInboxSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: insert message into database
-	msg := &Message{
-		ID:      "generated-id",
-		From:    user.Username,
-		To:      req.To,
-		Subject: req.Subject,
-		Body:    req.Body,
+	msg := models.InboxMessage{
+		FromAddress: "assistant@" + userID.String(),
+		ToAddress:   req.To,
+		Subject:     req.Subject,
+		Body:        req.Body,
+		Priority:    "normal",
 	}
 
-	respondCreated(w, msg)
+	sent, err := s.InboxService.Send(r.Context(), userID, msg)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondCreated(w, sent)
 }
 
-func HandleInboxArchive(w http.ResponseWriter, r *http.Request) {
-	id := chi.URLParam(r, "id")
+func (s *Server) handleInboxArchive(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	msgID, err := uuid.Parse(idStr)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid message ID")
+		return
+	}
 
-	user := GetUser(r.Context())
-	if user == nil {
+	if _, ok := userIDFromCtx(r.Context()); !ok {
 		respondUnauthorized(w)
 		return
 	}
 
-	// TODO: mark message as archived in database
-	_ = user
-	respondOK(w, map[string]string{"status": "archived", "id": id})
+	if err := s.InboxService.Archive(r.Context(), msgID); err != nil {
+		respondNotFound(w, "message")
+		return
+	}
+
+	respondOK(w, map[string]string{"status": "archived", "id": idStr})
 }

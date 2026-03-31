@@ -54,13 +54,16 @@ func (s *TokenService) CreateToken(ctx context.Context, userID uuid.UUID, req mo
 	}
 
 	// Generate random token: aht_ + 40 hex chars (20 bytes)
-	rawToken, tokenHash, tokenPrefix := generateToken()
+	rawToken, tokenHash, tokenPrefix, err := generateToken()
+	if err != nil {
+		return nil, fmt.Errorf("token.CreateToken: %w", err)
+	}
 
 	expiresAt := time.Now().UTC().Add(time.Duration(req.ExpiresInDays) * 24 * time.Hour)
 	now := time.Now().UTC()
 	id := uuid.New()
 
-	_, err := s.db.Exec(ctx,
+	_, err = s.db.Exec(ctx,
 		`INSERT INTO scoped_tokens (id, user_id, name, token_hash, token_prefix, scopes, max_trust_level, expires_at, rate_limit_reset_at, created_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
 		id, userID, req.Name, tokenHash, tokenPrefix, req.Scopes, req.MaxTrustLevel, expiresAt, now)
@@ -243,16 +246,16 @@ func (s *TokenService) DeactivateExpiredTokens(ctx context.Context) (int64, erro
 
 // generateToken produces a random token and returns (rawToken, sha256Hash, prefix).
 // Token format: "aht_" + 40 hex chars (20 random bytes).
-func generateToken() (rawToken, hashedToken, prefix string) {
+func generateToken() (rawToken, hashedToken, prefix string, err error) {
 	b := make([]byte, 20)
 	if _, err := rand.Read(b); err != nil {
-		panic("token: failed to generate random bytes: " + err.Error())
+		return "", "", "", fmt.Errorf("token: failed to generate random bytes: %w", err)
 	}
 	rawToken = "aht_" + hex.EncodeToString(b)
 	hash := sha256.Sum256([]byte(rawToken))
 	hashedToken = hex.EncodeToString(hash[:])
 	prefix = rawToken[:12]
-	return rawToken, hashedToken, prefix
+	return rawToken, hashedToken, prefix, nil
 }
 
 // hashToken hashes a raw token with SHA-256 for lookup.

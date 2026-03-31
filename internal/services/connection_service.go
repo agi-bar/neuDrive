@@ -73,12 +73,15 @@ func (s *ConnectionService) GetByAPIKey(ctx context.Context, apiKeyHash string) 
 
 // Create creates a new connection and returns it along with the raw API key (shown once).
 func (s *ConnectionService) Create(ctx context.Context, userID uuid.UUID, name, platform string, trustLevel int) (*models.Connection, string, error) {
-	rawKey, hashedKey, prefix := GenerateAPIKey()
+	rawKey, hashedKey, prefix, err := GenerateAPIKey()
+	if err != nil {
+		return nil, "", fmt.Errorf("connection.Create: %w", err)
+	}
 
 	now := time.Now().UTC()
 	id := uuid.New()
 
-	_, err := s.db.Exec(ctx,
+	_, err = s.db.Exec(ctx,
 		`INSERT INTO connections (id, user_id, name, platform, trust_level, api_key_hash, api_key_prefix, config, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, '{}', $8, $8)`,
 		id, userID, name, platform, trustLevel, hashedKey, prefix, now)
@@ -123,16 +126,16 @@ func (s *ConnectionService) UpdateLastUsed(ctx context.Context, id uuid.UUID) er
 // GenerateAPIKey produces a random 32-byte key and returns (rawKey, sha256Hash, prefix).
 // The raw key is hex-encoded and shown to the user once.
 // The prefix is the first 8 characters for display purposes.
-func GenerateAPIKey() (rawKey, hashedKey, prefix string) {
+func GenerateAPIKey() (rawKey, hashedKey, prefix string, err error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
-		panic("connection: failed to generate random bytes: " + err.Error())
+		return "", "", "", fmt.Errorf("connection: failed to generate random bytes: %w", err)
 	}
 	rawKey = "ahk_" + hex.EncodeToString(b)
 	hash := sha256.Sum256([]byte(rawKey))
 	hashedKey = hex.EncodeToString(hash[:])
 	prefix = rawKey[:12]
-	return rawKey, hashedKey, prefix
+	return rawKey, hashedKey, prefix, nil
 }
 
 // HashAPIKey hashes a raw API key with SHA-256 for lookup.

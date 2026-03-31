@@ -23,11 +23,11 @@ func (s *Server) handleGPTGetProfile(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromCtx(r.Context())
 	user, err := s.UserService.GetByID(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+		respondNotFound(w, "user")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"slug":         user.Slug,
 		"display_name": user.DisplayName,
 		"timezone":     user.Timezone,
@@ -44,11 +44,11 @@ func (s *Server) handleGPTGetPreferences(w http.ResponseWriter, r *http.Request)
 	userID, _ := userIDFromCtx(r.Context())
 	user, err := s.UserService.GetByID(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+		respondNotFound(w, "user")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"timezone": user.Timezone,
 		"language": user.Language,
 	})
@@ -64,11 +64,11 @@ func (s *Server) handleGPTSearch(w http.ResponseWriter, r *http.Request) {
 		Query string `json:"query"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing query"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing query")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"query":   body.Query,
 		"results": []interface{}{},
 	})
@@ -80,7 +80,7 @@ func (s *Server) handleGPTListProjects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"projects": []interface{}{},
 	})
 }
@@ -92,7 +92,7 @@ func (s *Server) handleGPTGetProject(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := chi.URLParam(r, "name")
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"name": name,
 		"logs": []interface{}{},
 	})
@@ -110,11 +110,11 @@ func (s *Server) handleGPTLog(w http.ResponseWriter, r *http.Request) {
 		Summary string `json:"summary"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Project == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing project"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing project")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "logged"})
+	respondOK(w, map[string]string{"status": "logged"})
 }
 
 // GET /gpt/skills
@@ -123,7 +123,7 @@ func (s *Server) handleGPTListSkills(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"skills": []interface{}{},
 	})
 }
@@ -135,7 +135,7 @@ func (s *Server) handleGPTGetSkill(w http.ResponseWriter, r *http.Request) {
 	}
 
 	name := chi.URLParam(r, "name")
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"name":    name,
 		"content": "",
 	})
@@ -147,7 +147,7 @@ func (s *Server) handleGPTListDevices(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"devices": []interface{}{},
 	})
 }
@@ -165,11 +165,11 @@ func (s *Server) handleGPTCallDevice(w http.ResponseWriter, r *http.Request) {
 		Params map[string]interface{} `json:"params"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Action == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing action"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing action")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"device": name,
 		"action": body.Action,
 		"status": "dispatched",
@@ -188,11 +188,11 @@ func (s *Server) handleGPTSendMessage(w http.ResponseWriter, r *http.Request) {
 		Body    string `json:"body"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.To == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing to"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing to")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
+	respondOK(w, map[string]string{"status": "sent"})
 }
 
 // GET /gpt/inbox
@@ -201,7 +201,7 @@ func (s *Server) handleGPTGetInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"messages": []interface{}{},
 	})
 }
@@ -212,7 +212,7 @@ func (s *Server) handleGPTListSecrets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"scopes": []interface{}{},
 	})
 }
@@ -224,7 +224,7 @@ func (s *Server) handleGPTGetSecret(w http.ResponseWriter, r *http.Request) {
 	}
 
 	scope := chi.URLParam(r, "scope")
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"scope": scope,
 		"data":  "",
 	})

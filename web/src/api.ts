@@ -215,6 +215,24 @@ export const api = {
   getProjects: () => request<any[]>('/projects'),
   getProject: (name: string) => request<any>(`/projects/${name}`),
 
+  // Memory conflicts
+  getConflicts: () => request<{ conflicts: MemoryConflict[] }>('/memory/conflicts').then(r => r.conflicts),
+  resolveConflict: (id: string, resolution: string) =>
+    request<{ status: string; resolution: string }>(`/memory/conflicts/${id}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ resolution }),
+    }),
+
+  // Collaborations
+  getCollaborations: () => request<{ owned: any[]; shared: any[] }>('/collaborations'),
+  createCollaboration: (data: any) =>
+    request<any>('/collaborations', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  revokeCollaboration: (id: string) =>
+    request<void>(`/collaborations/${id}`, { method: 'DELETE' }),
+
   // Vault
   getVaultScopes: () => request<any[]>('/vault/scopes'),
 
@@ -259,6 +277,28 @@ export const api = {
       body: JSON.stringify(data),
     }),
   exportFull: () => request<FullHubExport>('/export/full'),
+  exportZip: async () => {
+    const token = localStorage.getItem('token')
+    const res = await fetch(`${API_BASE}/export/zip`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.error || res.statusText)
+    }
+    const blob = await res.blob()
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `agenthub-export-${new Date().toISOString().slice(0, 10)}.zip`
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  },
+  exportJSON: () => request<any>('/export/json'),
 
   // Token management
   getTokens: (): Promise<ScopedTokenResponse[]> =>
@@ -390,4 +430,21 @@ export interface CreateTokenResponse {
   token: string
   token_prefix: string
   scoped_token: ScopedTokenResponse
+}
+
+// ---------------------------------------------------------------------------
+// Memory conflict types
+// ---------------------------------------------------------------------------
+
+export interface MemoryConflict {
+  id: string
+  user_id: string
+  category: string
+  source_a: string
+  content_a: string
+  source_b: string
+  content_b: string
+  status: string
+  resolved_at?: string
+  created_at: string
 }

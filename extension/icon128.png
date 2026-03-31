@@ -1,0 +1,10 @@
+PLACEHOLDER: Replace this file with a real 128x128 PNG icon.
+
+Suggested design:
+- Rounded square with #6366f1 (indigo) background
+- White "H" letter centered
+- Or a hub/node network icon in white
+
+Generate with any icon tool or use:
+  convert -size 128x128 xc:#6366f1 -fill white -font Helvetica-Bold \
+    -pointsize 72 -gravity center -annotate 0 "H" icon128.png

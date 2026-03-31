@@ -122,6 +122,7 @@ func main() {
 	// HTTP Server
 	// ---------------------------------------------------------------
 	srv := api.NewServer(
+		cfg,
 		userSvc,
 		authSvc,
 		connSvc,

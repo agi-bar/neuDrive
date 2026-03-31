@@ -101,9 +101,7 @@ func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
 
 		if !allowed {
 			w.Header().Set("Retry-After", strconv.Itoa(retryAfter))
-			writeJSON(w, http.StatusTooManyRequests, map[string]string{
-				"error": "rate limit exceeded",
-			})
+			respondError(w, http.StatusTooManyRequests, ErrCodeRateLimit, "rate limit exceeded")
 			return
 		}
 

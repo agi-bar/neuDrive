@@ -13,34 +13,34 @@ import (
 func (s *Server) handleListConflicts(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	conflicts, err := s.MemoryService.ListConflicts(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		respondInternalError(w, err)
 		return
 	}
 	if conflicts == nil {
 		conflicts = []models.MemoryConflict{}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"conflicts": conflicts})
+	respondOK(w, map[string]interface{}{"conflicts": conflicts})
 }
 
 // handleResolveConflict resolves a specific memory conflict.
 func (s *Server) handleResolveConflict(w http.ResponseWriter, r *http.Request) {
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	idStr := chi.URLParam(r, "id")
 	conflictID, err := uuid.Parse(idStr)
 	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid conflict id"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid conflict id")
 		return
 	}
 
@@ -48,14 +48,14 @@ func (s *Server) handleResolveConflict(w http.ResponseWriter, r *http.Request) {
 		Resolution string `json:"resolution"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
 
 	if err := s.MemoryService.ResolveConflict(r.Context(), conflictID, req.Resolution); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "resolved", "resolution": req.Resolution})
+	respondOK(w, map[string]string{"status": "resolved", "resolution": req.Resolution})
 }

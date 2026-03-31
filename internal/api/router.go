@@ -5,19 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
 	"github.com/agi-bar/agenthub/internal/auth"
+	"github.com/agi-bar/agenthub/internal/config"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	vaultpkg "github.com/agi-bar/agenthub/internal/vault"
 	"github.com/agi-bar/agenthub/internal/web"
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
@@ -53,6 +52,7 @@ type Server struct {
 	ExportService        *services.ExportService
 	CollaborationService *services.CollaborationService
 	WebhookService       *services.WebhookService
+	OAuthService         *services.OAuthService
 	Vault                *vaultpkg.Vault
 	AuthHandler        *auth.Handler
 	Config             *config.Config
@@ -63,6 +63,7 @@ type Server struct {
 
 // NewServer creates a fully wired Server with routes configured.
 func NewServer(
+	cfg *config.Config,
 	userSvc *services.UserService,
 	authSvc *services.AuthService,
 	connSvc *services.ConnectionService,
@@ -103,8 +104,10 @@ func NewServer(
 		ImportService:        importSvc,
 		CollaborationService: collabSvc,
 		WebhookService:       webhookSvc,
+		ExportService:        exportSvc,
 		Vault:                vault,
 		JWTSecret:          jwtSecret,
+		Config:             cfg,
 		GitHubClientID:     ghClientID,
 		GitHubClientSecret: ghClientSecret,
 	}
@@ -116,16 +119,17 @@ func NewServer(
 func (s *Server) setupRoutes() {
 	r := s.Router
 
-	// Global middleware
+	// Global middleware — applied in order:
+	// 1. PanicRecovery  2. SecurityHeaders  3. CORS  4. RateLimit
+	// 5. RequestID  6. Logging  7. MaxBodySize (default)
+	rl := NewRateLimiter(s.Config.RateLimit, time.Minute)
+	r.Use(PanicRecoveryMiddleware)
+	r.Use(SecurityHeadersMiddleware)
+	r.Use(CORSMiddleware(s.Config.CORSOrigins))
+	r.Use(rl.Middleware)
 	r.Use(RequestIDMiddleware)
 	r.Use(LoggingMiddleware)
-	r.Use(middleware.Recoverer)
-	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-API-Key"},
-		AllowCredentials: true,
-	}))
+	r.Use(MaxBodySizeMiddleware(s.Config.MaxBodySize))
 
 	// Health
 	r.Get("/api/health", s.healthCheck)
@@ -137,6 +141,17 @@ func (s *Server) setupRoutes() {
 	r.Post("/api/auth/logout", s.AuthHandler.HandleLogout)
 	r.Post("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
 	r.Post("/api/auth/token/dev", s.AuthHandler.HandleDevToken)
+
+	// OAuth 2.0 Provider (public endpoints)
+	r.Get("/oauth/authorize", s.handleOAuthAuthorizeGet)
+	r.Post("/oauth/token", s.handleOAuthToken)
+
+	// OAuth authorize POST and userinfo require authentication
+	r.Group(func(r chi.Router) {
+		r.Use(s.authMiddleware)
+		r.Post("/oauth/authorize", s.handleOAuthAuthorizePost)
+		r.Get("/oauth/userinfo", s.handleOAuthUserInfo)
+	})
 
 	// Authenticated routes (JWT Bearer)
 	r.Group(func(r chi.Router) {
@@ -175,6 +190,8 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/memory/profile", HandleMemoryProfileGet)
 		r.Put("/api/memory/profile", HandleMemoryProfileUpdate)
 		r.Get("/api/memory/scratch", s.handleGetScratch)
+		r.Get("/api/memory/conflicts", s.handleListConflicts)
+		r.Post("/api/memory/conflicts/{id}/resolve", s.handleResolveConflict)
 
 		// Projects
 		r.Get("/api/projects", s.handleListProjects)
@@ -182,6 +199,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/projects/{name}", s.handleGetProject)
 		r.Post("/api/projects/{name}/log", s.handleAppendProjectLog)
 		r.Put("/api/projects/{name}/archive", s.handleArchiveProject)
+		r.Post("/api/projects/{name}/summarize", s.handleSummarizeProject)
 
 		// Inbox
 		r.Get("/api/inbox/{role}", HandleInboxList)
@@ -196,19 +214,27 @@ func (s *Server) setupRoutes() {
 		// Dashboard
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
 
-		// Import / Export (legacy)
-		r.Post("/api/import/skills", s.HandleImportSkills)
-		r.Post("/api/import/vault", s.HandleImportVault)
-		r.Post("/api/import/devices", s.HandleImportDevices)
-		r.Post("/api/import/full", s.HandleImportFull)
+		// Import / Export (legacy) — 50MB body limit for imports
+		r.Group(func(r chi.Router) {
+			r.Use(MaxBodySizeMiddleware(50 << 20))
+			r.Post("/api/import/skills", s.HandleImportSkills)
+			r.Post("/api/import/vault", s.HandleImportVault)
+			r.Post("/api/import/devices", s.HandleImportDevices)
+			r.Post("/api/import/full", s.HandleImportFull)
+		})
 		r.Get("/api/export/full", s.HandleExportFull)
 
-		// Import / Export (bulk API)
-		r.Post("/api/import/skill", s.handleImportSkill)
-		r.Post("/api/import/claude-memory", s.handleImportClaudeMemoryV2)
-		r.Post("/api/import/profile", s.handleImportProfileV2)
-		r.Post("/api/import/bulk", s.handleImportBulk)
+		// Import / Export (bulk API) — 50MB body limit for imports
+		r.Group(func(r chi.Router) {
+			r.Use(MaxBodySizeMiddleware(50 << 20))
+			r.Post("/api/import/skill", s.handleImportSkill)
+			r.Post("/api/import/claude-memory", s.handleImportClaudeMemoryV2)
+			r.Post("/api/import/profile", s.handleImportProfileV2)
+			r.Post("/api/import/bulk", s.handleImportBulk)
+		})
 		r.Get("/api/export/all", s.handleExportAll)
+		r.Get("/api/export/zip", s.handleExportZip)
+		r.Get("/api/export/json", s.handleExportJSON)
 
 		// Collaborations
 		r.Get("/api/collaborations", s.handleListCollaborations)
@@ -228,6 +254,13 @@ func (s *Server) setupRoutes() {
 		r.Post("/api/webhooks", s.handleRegisterWebhook)
 		r.Delete("/api/webhooks/{id}", s.handleDeleteWebhook)
 		r.Post("/api/webhooks/{id}/test", s.handleTestWebhook)
+
+		// OAuth app management
+		r.Get("/api/oauth/apps", s.handleListOAuthApps)
+		r.Post("/api/oauth/apps", s.handleRegisterOAuthApp)
+		r.Delete("/api/oauth/apps/{id}", s.handleDeleteOAuthApp)
+		r.Get("/api/oauth/grants", s.handleListOAuthGrants)
+		r.Delete("/api/oauth/grants/{id}", s.handleRevokeOAuthGrant)
 	})
 
 	// GPT Actions API (authenticated via Bearer scoped token)
@@ -314,7 +347,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 				// Fire-and-forget last_used_at update.
 				go func() {
 					if err := s.ConnectionService.UpdateLastUsed(context.Background(), conn.ID); err != nil {
-						_ = err // best-effort update
+						slog.Warn("failed to update last_used_at", "error", err)
 					}
 				}()
 				next.ServeHTTP(w, r.WithContext(ctx))
@@ -371,7 +404,7 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		// Fire-and-forget last_used_at update.
 		go func() {
 			if err := s.ConnectionService.UpdateLastUsed(context.Background(), conn.ID); err != nil {
-				_ = err // best-effort update
+				slog.Warn("failed to update last_used_at", "error", err)
 			}
 		}()
 
@@ -384,13 +417,13 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 func (s *Server) handleScopedTokenAuth(w http.ResponseWriter, r *http.Request, next http.Handler, rawToken string) {
 	token, err := s.TokenService.ValidateToken(r.Context(), rawToken)
 	if err != nil {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid or expired token"})
+		respondError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "invalid or expired token")
 		return
 	}
 
 	// Check rate limit.
 	if err := s.TokenService.CheckRateLimit(r.Context(), token); err != nil {
-		writeJSON(w, http.StatusTooManyRequests, map[string]string{"error": err.Error()})
+		respondError(w, http.StatusTooManyRequests, ErrCodeRateLimit, err.Error())
 		return
 	}
 
@@ -413,9 +446,7 @@ func requireScope(scope string) func(http.Handler) http.Handler {
 			if token != nil {
 				// Scoped token: enforce scope check.
 				if !models.HasScope(token.Scopes, scope) {
-					writeJSON(w, http.StatusForbidden, map[string]string{
-						"error": "token missing required scope: " + scope,
-					})
+					respondForbidden(w, "token missing required scope: "+scope)
 					return
 				}
 			}
@@ -468,7 +499,7 @@ func scopesFromCtx(ctx context.Context) []string {
 // ---------------------------------------------------------------------------
 
 func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"status":  "ok",
 		"service": "agenthub",
 		"time":    time.Now().UTC().Format(time.RFC3339),
@@ -482,14 +513,14 @@ func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
 	// Basic stats - counts from connections for now.
 	conns, _ := s.ConnectionService.ListByUser(r.Context(), userID)
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"file_count":         0,
 		"vault_scopes":       0,
 		"connections":        len(conns),
@@ -507,64 +538,64 @@ func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetScratch(w http.ResponseWriter, r *http.Request) {
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"scratch": map[string]interface{}{}})
+	respondOK(w, map[string]interface{}{"scratch": map[string]interface{}{}})
 }
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"projects": []interface{}{}})
+	respondOK(w, map[string]interface{}{"projects": []interface{}{}})
 }
 
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"status": "created"})
+	respondCreated(w, map[string]string{"status": "created"})
 }
 
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"name": name, "logs": []interface{}{}})
+	respondOK(w, map[string]interface{}{"name": name, "logs": []interface{}{}})
 }
 
 func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) {
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"status": "appended"})
+	respondCreated(w, map[string]string{"status": "appended"})
 }
 
 func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"status": "archived", "name": name})
+	respondOK(w, map[string]string{"status": "archived", "name": name})
 }
 
 func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -590,7 +621,7 @@ func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"status":     "summarized",
 		"name":       name,
 		"context_md": md,
@@ -600,10 +631,10 @@ func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"status": "registered"})
+	respondCreated(w, map[string]string{"status": "registered"})
 }
 
 // ---------------------------------------------------------------------------
@@ -614,17 +645,17 @@ func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 // and that the trust level meets the minimum. For scoped tokens, also checks the required scope.
 func (s *Server) agentCheckAuth(w http.ResponseWriter, r *http.Request, minTrust int, requiredScope string) bool {
 	if _, ok := userIDFromCtx(r.Context()); !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return false
 	}
 	if trustLevelFromCtx(r.Context()) < minTrust {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+		respondForbidden(w, "insufficient trust level")
 		return false
 	}
 	// For scoped tokens, check the required scope.
 	if token := scopedTokenFromCtx(r.Context()); token != nil && requiredScope != "" {
 		if !models.HasScope(token.Scopes, requiredScope) {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "token missing required scope: " + requiredScope})
+			respondForbidden(w, "token missing required scope: "+requiredScope)
 			return false
 		}
 	}
@@ -639,7 +670,7 @@ func (s *Server) handleAgentTreeList(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{"path": path, "children": []interface{}{}})
+	respondOK(w, map[string]interface{}{"path": path, "children": []interface{}{}})
 }
 
 func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
@@ -647,7 +678,7 @@ func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	query := r.URL.Query().Get("q")
-	writeJSON(w, http.StatusOK, map[string]interface{}{"query": query, "results": []interface{}{}})
+	respondOK(w, map[string]interface{}{"query": query, "results": []interface{}{}})
 }
 
 func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
@@ -655,12 +686,12 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	path := chi.URLParam(r, "*")
-	writeJSON(w, http.StatusOK, map[string]interface{}{"path": path, "status": "written"})
+	respondOK(w, map[string]interface{}{"path": path, "status": "written"})
 }
 
 func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
 	if _, ok := userIDFromCtx(r.Context()); !ok {
-		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		respondUnauthorized(w)
 		return
 	}
 
@@ -669,11 +700,11 @@ func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
 
 	// Vault requires at least Work level; personal scope requires Full.
 	if trustLevel < models.TrustLevelWork {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level"})
+		respondForbidden(w, "insufficient trust level")
 		return
 	}
 	if strings.HasPrefix(scope, "personal") && trustLevel < models.TrustLevelFull {
-		writeJSON(w, http.StatusForbidden, map[string]string{"error": "insufficient trust level for personal vault"})
+		respondForbidden(w, "insufficient trust level for personal vault")
 		return
 	}
 
@@ -684,12 +715,12 @@ func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
 			requiredScope = models.ScopeReadVaultAuth
 		}
 		if !models.HasScope(token.Scopes, requiredScope) {
-			writeJSON(w, http.StatusForbidden, map[string]string{"error": "token missing required scope: " + requiredScope})
+			respondForbidden(w, "token missing required scope: "+requiredScope)
 			return
 		}
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{"scope": scope, "data": ""})
+	respondOK(w, map[string]interface{}{"scope": scope, "data": ""})
 }
 
 func (s *Server) handleAgentGetInbox(w http.ResponseWriter, r *http.Request) {
@@ -697,14 +728,14 @@ func (s *Server) handleAgentGetInbox(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	role := chi.URLParam(r, "role")
-	writeJSON(w, http.StatusOK, map[string]interface{}{"role": role, "messages": []interface{}{}})
+	respondOK(w, map[string]interface{}{"role": role, "messages": []interface{}{}})
 }
 
 func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteInbox) {
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]string{"status": "sent"})
+	respondCreated(w, map[string]string{"status": "sent"})
 }
 
 func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
@@ -712,7 +743,7 @@ func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := chi.URLParam(r, "name")
-	writeJSON(w, http.StatusOK, map[string]interface{}{"device": name, "status": "dispatched"})
+	respondOK(w, map[string]interface{}{"device": name, "status": "dispatched"})
 }
 
 func (s *Server) handleAgentGetProfile(w http.ResponseWriter, r *http.Request) {
@@ -723,11 +754,11 @@ func (s *Server) handleAgentGetProfile(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromCtx(r.Context())
 	user, err := s.UserService.GetByID(r.Context(), userID)
 	if err != nil {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": "user not found"})
+		respondNotFound(w, "user")
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"slug":         user.Slug,
 		"display_name": user.DisplayName,
 		"timezone":     user.Timezone,

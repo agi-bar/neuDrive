@@ -17,7 +17,7 @@ func (s *Server) handleGPTSetup(w http.ResponseWriter, r *http.Request) {
 		baseURL = scheme + "://" + fwd
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"schema_url": baseURL + "/docs/gpt-actions-schema.yaml",
 		"auth_type":  "bearer",
 		"token_prefix": "aht_",

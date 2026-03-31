@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { api } from '../api'
+import { api, MemoryConflict } from '../api'
 
 interface ProfileEntry {
   id?: string
@@ -32,9 +32,11 @@ const TRUST_LABELS: Record<number, string> = {
 export default function InfoPage() {
   const [profiles, setProfiles] = useState<ProfileEntry[]>([])
   const [vaultScopes, setVaultScopes] = useState<VaultScope[]>([])
+  const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [saving, setSaving] = useState('')
+  const [resolving, setResolving] = useState('')
   const [editValues, setEditValues] = useState<Record<string, string>>({})
   const [successMsg, setSuccessMsg] = useState('')
 
@@ -44,9 +46,10 @@ export default function InfoPage() {
 
   const loadData = async () => {
     try {
-      const [profileData, vaultData] = await Promise.allSettled([
+      const [profileData, vaultData, conflictData] = await Promise.allSettled([
         api.getProfile(),
         api.getVaultScopes(),
+        api.getConflicts(),
       ])
 
       if (profileData.status === 'fulfilled') {
@@ -65,10 +68,29 @@ export default function InfoPage() {
       if (vaultData.status === 'fulfilled') {
         setVaultScopes(vaultData.value || [])
       }
+
+      if (conflictData.status === 'fulfilled') {
+        setConflicts(conflictData.value || [])
+      }
     } catch (err: any) {
       setError(err.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleResolveConflict = async (conflictId: string, resolution: string) => {
+    setResolving(conflictId)
+    setError('')
+    try {
+      await api.resolveConflict(conflictId, resolution)
+      setConflicts((prev) => prev.filter((c) => c.id !== conflictId))
+      setSuccessMsg('冲突已解决')
+      setTimeout(() => setSuccessMsg(''), 2000)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setResolving('')
     }
   }
 
@@ -117,6 +139,70 @@ export default function InfoPage() {
 
       {error && <div className="alert alert-error">{error}</div>}
       {successMsg && <div className="alert alert-success">{successMsg}</div>}
+
+      {conflicts.length > 0 && (
+        <section className="section">
+          <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
+            <strong>检测到 {conflicts.length} 个记忆冲突</strong> —
+            不同 Agent 平台记录了矛盾的偏好，请选择保留哪个版本。
+          </div>
+          {conflicts.map((c) => (
+            <div key={c.id} className="card" style={{ marginBottom: '1rem' }}>
+              <div className="card-header">
+                <h4 className="card-title">
+                  冲突: {c.category}
+                </h4>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem' }}>
+                <div>
+                  <strong>来源 A: {c.source_a}</strong>
+                  <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: '0.5rem', borderRadius: '4px', marginTop: '0.5rem' }}>
+                    {c.content_a}
+                  </pre>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    style={{ marginTop: '0.5rem' }}
+                    disabled={resolving === c.id}
+                    onClick={() => handleResolveConflict(c.id, 'keep_a')}
+                  >
+                    保留 A
+                  </button>
+                </div>
+                <div>
+                  <strong>来源 B: {c.source_b}</strong>
+                  <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: '0.5rem', borderRadius: '4px', marginTop: '0.5rem' }}>
+                    {c.content_b}
+                  </pre>
+                  <button
+                    className="btn btn-sm btn-primary"
+                    style={{ marginTop: '0.5rem' }}
+                    disabled={resolving === c.id}
+                    onClick={() => handleResolveConflict(c.id, 'keep_b')}
+                  >
+                    保留 B
+                  </button>
+                </div>
+              </div>
+              <div style={{ padding: '0 1rem 1rem', display: 'flex', gap: '0.5rem' }}>
+                <button
+                  className="btn btn-sm"
+                  disabled={resolving === c.id}
+                  onClick={() => handleResolveConflict(c.id, 'keep_both')}
+                >
+                  两者都保留
+                </button>
+                <button
+                  className="btn btn-sm"
+                  disabled={resolving === c.id}
+                  onClick={() => handleResolveConflict(c.id, 'dismiss')}
+                >
+                  忽略
+                </button>
+              </div>
+            </div>
+          ))}
+        </section>
+      )}
 
       <section className="section">
         <h3 className="section-title">个人偏好</h3>

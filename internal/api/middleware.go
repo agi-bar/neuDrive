@@ -79,9 +79,7 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 					"path", r.URL.Path,
 					"stack", stack,
 				)
-				writeJSON(w, http.StatusInternalServerError, map[string]string{
-					"error": "internal server error",
-				})
+				respondError(w, http.StatusInternalServerError, ErrCodeInternal, "internal server error")
 			}
 		}()
 		next.ServeHTTP(w, r)
@@ -135,9 +133,7 @@ func TrustLevelMiddleware(requiredLevel int) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			trustLevel := trustLevelFromCtx(r.Context())
 			if trustLevel < requiredLevel {
-				writeJSON(w, http.StatusForbidden, map[string]string{
-					"error": "insufficient trust level",
-				})
+				respondForbidden(w, "insufficient trust level")
 				return
 			}
 			next.ServeHTTP(w, r)

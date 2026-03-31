@@ -7,6 +7,7 @@ import ConnectionsPage from './pages/ConnectionsPage'
 import InfoPage from './pages/InfoPage'
 import ProjectsPage from './pages/ProjectsPage'
 import SetupPage from './pages/SetupPage'
+import CollaborationsPage from './pages/CollaborationsPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -91,6 +92,10 @@ function App() {
           <NavLink to="/projects" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9654;</span>
             <span>项目</span>
+          </NavLink>
+          <NavLink to="/collaborations" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <span className="nav-icon">&#9830;</span>
+            <span>协作</span>
           </NavLink>
         </nav>
 

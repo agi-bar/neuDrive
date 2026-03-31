@@ -277,6 +277,44 @@ Authorization: Bearer ${displayToken}`
         </div>
       </div>
 
+      {/* ── GPT Actions section ── */}
+      <div className="setup-section">
+        <div className="setup-section-header">
+          <span className="setup-section-icon">&#129302;</span>
+          <div>
+            <h3>ChatGPT GPT Actions <span className="badge badge-platform" style={{ marginLeft: 8, fontSize: 11 }}>GPT</span></h3>
+            <p className="setup-section-desc">在自定义 GPT 中通过 Actions 连接 Agent Hub</p>
+          </div>
+        </div>
+
+        <div className="code-block">
+          <div className="code-block-label">1. OpenAPI Schema URL（粘贴到 Actions 配置中）:</div>
+          <pre>{`${baseUrl}/docs/gpt-actions-schema.yaml`}</pre>
+          <button
+            className="copy-btn"
+            onClick={() => copyToClipboard(`${baseUrl}/docs/gpt-actions-schema.yaml`, 'gpt-schema')}
+          >
+            {copied === 'gpt-schema' ? '已复制' : '复制'}
+          </button>
+        </div>
+
+        <div className="code-block">
+          <div className="code-block-label">2. Authentication 配置:</div>
+          <pre>{`Type: API Key\nAuth Type: Bearer\nToken: ${displayToken}`}</pre>
+          <button
+            className="copy-btn"
+            onClick={() => copyToClipboard(displayToken, 'gpt-token')}
+          >
+            {copied === 'gpt-token' ? '已复制 Token' : '复制 Token'}
+          </button>
+        </div>
+
+        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
+          打开 ChatGPT &rarr; 创建 GPT &rarr; 配置 &rarr; Actions &rarr; Import from URL &rarr; 粘贴上面的 Schema URL &rarr;
+          设置 Authentication 为 Bearer Token。
+        </p>
+      </div>
+
       {/* ── Create Token ── */}
       <div className="setup-section">
         <div className="setup-section-header">

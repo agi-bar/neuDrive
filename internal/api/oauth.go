@@ -204,7 +204,7 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
-	writeJSON(w, http.StatusOK, resp)
+	respondOK(w, resp)
 }
 
 // handleOAuthUserInfo handles GET /oauth/userinfo.
@@ -231,7 +231,7 @@ func (s *Server) handleOAuthUserInfo(w http.ResponseWriter, r *http.Request) {
 		Language:  user.Language,
 	}
 
-	writeJSON(w, http.StatusOK, resp)
+	respondOK(w, resp)
 }
 
 // ---------------------------------------------------------------------------

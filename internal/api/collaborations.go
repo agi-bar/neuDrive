@@ -38,7 +38,7 @@ func (s *Server) handleListCollaborations(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"owned":  owned,
 		"shared": shared,
 	})
@@ -82,7 +82,7 @@ func (s *Server) handleCreateCollaboration(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, collab)
+	respondCreated(w, collab)
 }
 
 func (s *Server) handleRevokeCollaboration(w http.ResponseWriter, r *http.Request) {
@@ -104,7 +104,7 @@ func (s *Server) handleRevokeCollaboration(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	writeJSON(w, http.StatusOK, map[string]string{"status": "revoked"})
+	respondOK(w, map[string]string{"status": "revoked"})
 }
 
 // ---------------------------------------------------------------------------
@@ -139,7 +139,7 @@ func (s *Server) handleAgentSharedTree(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Return the shared file tree content (stub — real implementation would read from file_tree).
-	writeJSON(w, http.StatusOK, map[string]interface{}{
+	respondOK(w, map[string]interface{}{
 		"owner":    ownerSlug,
 		"path":     path,
 		"children": []interface{}{},

@@ -1,42 +1,8 @@
 import { test, expect } from '@playwright/test'
+import { registerUser, loginViaUI, setupUser } from './helpers'
 
-// ---------------------------------------------------------------------------
-// Helper: register a unique user and return JWT for authenticated requests.
-// ---------------------------------------------------------------------------
-
-async function registerAndLogin(request: any) {
-  const slug = `pw-${Date.now()}`
-  const email = `${slug}@test.local`
-  const password = 'playwright1234'
-
-  const res = await request.post('/api/auth/register', {
-    data: { slug, email, password },
-  })
-  const body = await res.json()
-  return {
-    slug,
-    email,
-    password,
-    token: body.access_token,
-    userId: body.user?.id,
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Login helper — fills and submits the login form.
-// ---------------------------------------------------------------------------
-
-async function loginViaUI(page: any, email: string, password: string) {
-  await page.goto('/login')
-  await page.waitForLoadState('networkidle')
-  // Fill credentials
-  await page.getByPlaceholder('your@email.com').fill(email)
-  await page.getByPlaceholder('输入密码').fill(password)
-  // Click the submit button (not the tab)
-  await page.locator('button[type="submit"]').click()
-  // Wait for navigation away from /login
-  await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
-}
+// Alias for backward compatibility with existing tests
+const registerAndLogin = registerUser
 
 // ===========================================================================
 // Tests

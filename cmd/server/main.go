@@ -112,6 +112,7 @@ func main() {
 	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
 	collabSvc := services.NewCollaborationService(pool)
 	webhookSvc := services.NewWebhookService(pool)
+	oauthSvc := services.NewOAuthService(pool, cfg.JWTSecret)
 
 	// ---------------------------------------------------------------
 	// Seed default user if database is empty
@@ -140,6 +141,7 @@ func main() {
 		exportSvc,
 		collabSvc,
 		webhookSvc,
+		oauthSvc,
 		v,
 		cfg.JWTSecret,
 		cfg.GithubClientID,

@@ -49,7 +49,12 @@ export default function ProjectsPage() {
     setDetailLoading(true)
     try {
       const data = await api.getProject(name)
-      setSelectedProject(data)
+      // API returns {project: {...}, logs: [...]} — flatten into a single Project object
+      const proj = data.project || data
+      setSelectedProject({
+        ...proj,
+        logs: data.logs || [],
+      })
     } catch (err: any) {
       setError(err.message)
     } finally {

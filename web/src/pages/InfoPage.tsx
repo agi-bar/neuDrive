@@ -106,24 +106,10 @@ export default function InfoPage() {
     setError('')
 
     try {
-      // Parse text lines into key-value pairs
-      const entries = text
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0)
-        .map((line) => {
-          const colonIdx = line.indexOf(':')
-          if (colonIdx > 0) {
-            return {
-              category,
-              key: line.substring(0, colonIdx).trim(),
-              value: line.substring(colonIdx + 1).trim(),
-            }
-          }
-          return { category, key: line, value: '' }
-        })
-
-      await api.upsertProfile({ category, entries })
+      // Send as {preferences: {category: content}} — backend expects this format
+      await api.upsertProfile({
+        preferences: { [category]: text },
+      })
       setSuccessMsg(`${PROFILE_CATEGORIES.find((c) => c.key === category)?.label || category} 已保存`)
       setTimeout(() => setSuccessMsg(''), 2000)
     } catch (err: any) {

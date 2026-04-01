@@ -156,22 +156,56 @@ test.describe('Info Page', () => {
     await loginViaUI(page, user.email, user.password)
 
     await page.goto('/info')
+    await page.waitForLoadState('networkidle')
 
-    // Type in preferences textarea
-    const textarea = page.locator('textarea').first()
-    await textarea.fill('writing_style: concise and direct')
+    // Type in preferences textarea (first one = 个人偏好)
+    const prefTextarea = page.locator('textarea').first()
+    await prefTextarea.fill('写作风格简洁直接，不用句号结尾')
 
-    // Click save
+    // Click save for preferences
     await page.getByRole('button', { name: '保存' }).first().click()
 
     // Success message
     await expect(page.getByText('已保存')).toBeVisible({ timeout: 5000 })
 
-    // Reload and verify page loads without error
+    // Reload and verify data persisted
     await page.reload()
     await page.waitForLoadState('networkidle')
-    // Verify no error banner
-    await expect(page.locator('.alert-error')).not.toBeVisible({ timeout: 3000 }).catch(() => {})
+
+    // The textarea should contain what we saved
+    const reloadedValue = await page.locator('textarea').first().inputValue()
+    expect(reloadedValue).toContain('写作风格简洁直接')
+  })
+
+  test('save all three categories and verify', async ({ page, request }) => {
+    const user = await registerAndLogin(request)
+    await loginViaUI(page, user.email, user.password)
+
+    await page.goto('/info')
+    await page.waitForLoadState('networkidle')
+
+    // Fill all three categories
+    const textareas = page.locator('textarea')
+    await textareas.nth(0).fill('偏好 Go 和 TypeScript')
+    await textareas.nth(1).fill('Alice 是产品经理')
+    await textareas.nth(2).fill('先做再说')
+
+    // Save each one
+    const saveButtons = page.getByRole('button', { name: '保存' })
+    await saveButtons.nth(0).click()
+    await page.waitForTimeout(500)
+    await saveButtons.nth(1).click()
+    await page.waitForTimeout(500)
+    await saveButtons.nth(2).click()
+    await expect(page.getByText('已保存')).toBeVisible({ timeout: 5000 })
+
+    // Reload and verify all three persisted
+    await page.reload()
+    await page.waitForLoadState('networkidle')
+
+    expect(await textareas.nth(0).inputValue()).toContain('偏好 Go')
+    expect(await textareas.nth(1).inputValue()).toContain('Alice')
+    expect(await textareas.nth(2).inputValue()).toContain('先做再说')
   })
 })
 

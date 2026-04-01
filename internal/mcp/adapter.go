@@ -60,7 +60,7 @@ type ResourceReadParams struct {
 
 type ContentBlock struct {
 	Type string `json:"type"`
-	Text string `json:"text,omitempty"`
+	Text string `json:"text"`
 }
 
 // MCPServer handles MCP protocol for Agent Hub

@@ -28,7 +28,7 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 	}
 
 	rows, err := s.db.Query(ctx,
-		`SELECT id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at
+		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
 		 FROM file_tree
 		 WHERE user_id = $1
 		   AND path LIKE $2
@@ -58,7 +58,7 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
 	var e models.FileTreeEntry
 	err := s.db.QueryRow(ctx,
-		`SELECT id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at
+		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
 		 FROM file_tree
 		 WHERE user_id = $1 AND path = $2`,
 		userID, path).
@@ -93,7 +93,7 @@ func (s *FileTreeService) Write(ctx context.Context, userID uuid.UUID, path, con
 
 	var e models.FileTreeEntry
 	err = s.db.QueryRow(ctx,
-		`SELECT id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at
+		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
 		 FROM file_tree WHERE user_id = $1 AND path = $2`, userID, path).
 		Scan(&e.ID, &e.UserID, &e.Path, &e.IsDirectory, &e.Content,
 			&e.ContentType, &e.Metadata, &e.MinTrustLevel, &e.CreatedAt, &e.UpdatedAt)
@@ -116,7 +116,7 @@ func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path str
 // Search performs full-text search on file content using PostgreSQL tsvector.
 func (s *FileTreeService) Search(ctx context.Context, userID uuid.UUID, query string, trustLevel int) ([]models.FileTreeEntry, error) {
 	rows, err := s.db.Query(ctx,
-		`SELECT id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at
+		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
 		 FROM file_tree
 		 WHERE user_id = $1
 		   AND min_trust_level <= $2

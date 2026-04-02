@@ -341,27 +341,51 @@ agenthub/
 - [x] 数据导出 (ZIP + JSON)
 - [x] CI/CD + Docker
 
-**代码成熟化**
+**代码成熟化 + 测试**
 
 - [x] API Handler 全部接通 Service 层 (消除 26 个 TODO stub)
 - [x] Agent API 端点全部接通真实数据 (tree/vault/inbox/device 7 个端点)
 - [x] 消除 crypto 操作中的 panic，改为 error 返回
 - [x] 输入验证 (slug 格式、内容长度限制)
 - [x] 错误处理完善 (fire-and-forget 日志、transaction rollback)
-- [x] Service 层纯函数测试 (crypto 生成、hash 一致性、diffRatio、验证器)
-- [x] 死代码清理 (未使用的 auth.go legacy handler)
+- [x] OAuthService 初始化修复 (之前 nil pointer crash)
+- [x] 前端 API envelope 自动 unwrap + 数据格式对齐
+- [x] InfoPage 保存格式修复 + 持久化验证
+- [x] ProjectsPage 详情展开修复
+- [x] FileTree COALESCE nullable 列修复
+- [x] MCP ContentBlock.Text omitempty 修复
+- [x] 264 个自动化测试全部通过：
+  - 40 个 Playwright 浏览器交互测试 (真实 DB，7 个页面全覆盖)
+  - 50 个功能集成测试 (OAuth、信任等级、摘要、协作、Webhook 等)
+  - 53 个 API 集成测试 (完整 CRUD 生命周期)
+  - 21 个 GPT Actions 测试
+  - 14 个 MCP 协议测试 (20 个工具)
+  - 其余为单元测试和 E2E 页面测试
+
+### 已知缺失 (需要开发)
+
+- [ ] **共享树端点返回空数组** — `/agent/shared/{owner}/tree/` 是 stub，guest agent 无法读到共享文件 (P0)
+- [ ] **设备调用返回 mock** — `DeviceService.Call()` 不对接真实协议 (P1)
+- [ ] **Webhook 未自动触发** — `Trigger()` 方法存在但未接入任何事件 (P1)
+- [ ] **Inbox Search 无 HTTP 端点** — service 层实现了但未暴露 API (P2)
+- [ ] **Scratch 无写入端点** — 只有 MCP 和 scheduler 可写 (P2)
+- [ ] **冲突检测未自动触发** — `DetectConflict()` 需要手动调用 (P2)
 
 ### 下一步 (P1)
 
-- [ ] 设备 Adapter 真实对接 (HTTP/MQTT/米家/HomeAssistant) — 当前 `DeviceService.Call()` 返回 mock 响应
-- [ ] 向量搜索 (pgvector 语义检索) — 当前仅支持 PostgreSQL GIN 全文检索
-- [ ] Claude Memory 自动导入 — 当前支持手动批量导入，缺少自动拉取
-- [ ] 邮件通知 (注册验证/密码重置) — 当前无 SMTP 集成
-- [ ] 国际化 (中/英) — 前端和扩展当前仅中文
-- [ ] 测试覆盖率提升 — API 层需要 mock service 实现完整集成测试
+- [ ] 共享树端点实现 — 调用 FileTreeService.List() 读取 owner 的文件树
+- [ ] 设备 Adapter 真实对接 (HTTP/MQTT/米家/HomeAssistant)
+- [ ] Webhook 事件自动触发 (inbox.new, project.update 等)
+- [ ] 向量搜索 (pgvector 语义检索)
+- [ ] Claude Memory 自动导入
+- [ ] 邮件通知 (注册验证/密码重置)
+- [ ] 国际化 (中/英)
 
 ### 未来 (P2-P3)
 
+- [ ] Inbox Search HTTP 端点
+- [ ] Scratch 写入端点
+- [ ] 冲突自动检测 (跨 source 写入时触发)
 - [ ] Redis 缓存层
 - [ ] 飞书/钉钉 Adapter
 - [ ] Agent 市场 (.skill 共享)
@@ -369,6 +393,8 @@ agenthub/
 - [ ] 端到端加密
 - [ ] 支付鉴权
 - [ ] SMTP/IMAP 桥接
+- [ ] 浏览器扩展完善 + 测试
+- [ ] JS/Python SDK 测试
 
 ---
 

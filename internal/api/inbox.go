@@ -103,3 +103,30 @@ func (s *Server) handleInboxArchive(w http.ResponseWriter, r *http.Request) {
 
 	respondOK(w, map[string]string{"status": "archived", "id": idStr})
 }
+
+func (s *Server) handleInboxSearch(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		respondValidationError(w, "q", "search query is required")
+		return
+	}
+
+	scope := r.URL.Query().Get("scope")
+
+	messages, err := s.InboxService.Search(r.Context(), userID, query, scope)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, map[string]interface{}{
+		"query":   query,
+		"results": messages,
+	})
+}

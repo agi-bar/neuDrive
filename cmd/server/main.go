@@ -114,6 +114,9 @@ func main() {
 	webhookSvc := services.NewWebhookService(pool)
 	oauthSvc := services.NewOAuthService(pool, cfg.JWTSecret)
 
+	// Wire webhook triggers into services that emit events.
+	inboxSvc.Webhook = webhookSvc
+
 	// ---------------------------------------------------------------
 	// Seed default user if database is empty
 	// ---------------------------------------------------------------

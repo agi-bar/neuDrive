@@ -108,3 +108,35 @@ func (s *Server) handleMemoryProfileUpdate(w http.ResponseWriter, r *http.Reques
 
 	respondOK(w, profile)
 }
+
+func (s *Server) handleWriteScratch(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	var req struct {
+		Content string `json:"content"`
+		Source  string `json:"source"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+
+	if req.Content == "" {
+		respondValidationError(w, "content", "content is required")
+		return
+	}
+	if req.Source == "" {
+		req.Source = "web"
+	}
+
+	if err := s.MemoryService.WriteScratch(r.Context(), userID, req.Content, req.Source); err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondCreated(w, map[string]string{"status": "written"})
+}

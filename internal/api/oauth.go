@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -39,8 +40,13 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	// Look up the app.
+	// Look up the app. If client_id is a URL (MCP Client ID Metadata Document),
+	// auto-register it on first use.
 	app, err := s.OAuthService.GetAppByClientID(r.Context(), clientID)
+	if err != nil && strings.HasPrefix(clientID, "https://") {
+		// MCP Client ID Metadata Document: auto-register the client
+		app, err = s.autoRegisterOAuthClient(r.Context(), clientID, redirectURI)
+	}
 	if err != nil {
 		auth.RenderConsentPage(w, auth.ConsentPageData{
 			Error: "Unknown application. The client_id is not registered.",
@@ -71,6 +77,9 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 
 	scopes := auth.SplitScopes(scope)
 
+	// Show login form if user is not authenticated (common for MCP connectors)
+	_, isAuthed := userIDFromCtx(r.Context())
+
 	auth.RenderConsentPage(w, auth.ConsentPageData{
 		AppName:     app.Name,
 		AppLogoURL:  app.LogoURL,
@@ -79,6 +88,7 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 		RedirectURI: redirectURI,
 		Scope:       scope,
 		State:       state,
+		ShowLogin:   !isAuthed,
 	})
 }
 
@@ -120,14 +130,42 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Get the authenticated user.
+	// Authenticate the user — try JWT from context first, then form login.
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
-		auth.RenderConsentPage(w, auth.ConsentPageData{
-			Error: "You must be logged in to authorize applications. Please log in first.",
-		})
-		return
+		// No JWT — try form-based login (email + password in the form)
+		email := r.FormValue("email")
+		password := r.FormValue("password")
+		if email == "" || password == "" {
+			auth.RenderConsentPage(w, auth.ConsentPageData{
+				Error:       "Please enter your email and password to authorize.",
+				AppName:     clientID,
+				ClientID:    clientID,
+				RedirectURI: redirectURI,
+				Scope:       scope,
+				State:       state,
+				ShowLogin:   true,
+			})
+			return
+		}
+		// Authenticate via AuthService
+		loginResp, err := s.AuthService.Login(r.Context(), models.LoginRequest{Email: email, Password: password}, r.UserAgent(), r.RemoteAddr)
+		if err != nil {
+			auth.RenderConsentPage(w, auth.ConsentPageData{
+				Error:       "Login failed: " + err.Error(),
+				AppName:     clientID,
+				ClientID:    clientID,
+				RedirectURI: redirectURI,
+				Scope:       scope,
+				State:       state,
+				ShowLogin:   true,
+			})
+			return
+		}
+		userID = loginResp.User.ID
+		ok = true
 	}
+	_ = ok
 
 	// Look up the app.
 	app, err := s.OAuthService.GetAppByClientID(r.Context(), clientID)
@@ -191,8 +229,8 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.Code == "" || req.ClientID == "" || req.ClientSecret == "" || req.RedirectURI == "" {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Missing required parameters: code, client_id, client_secret, redirect_uri.")
+	if req.Code == "" || req.ClientID == "" || req.RedirectURI == "" {
+		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Missing required parameters: code, client_id, redirect_uri.")
 		return
 	}
 
@@ -202,9 +240,11 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// OAuth token response MUST be flat JSON (no envelope) per RFC 6749
+	w.Header().Set("Content-Type", "application/json")
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
-	respondOK(w, resp)
+	json.NewEncoder(w).Encode(resp)
 }
 
 // handleOAuthUserInfo handles GET /oauth/userinfo.
@@ -362,6 +402,32 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+// autoRegisterOAuthClient auto-registers an MCP client using Client ID Metadata Document.
+// When client_id is an HTTPS URL, we register it as an OAuth app with that URL as the client_id.
+func (s *Server) autoRegisterOAuthClient(ctx context.Context, clientIDURL, redirectURI string) (*models.OAuthApp, error) {
+	parsed, _ := url.Parse(clientIDURL)
+	appName := "MCP Client"
+	if parsed != nil {
+		appName = parsed.Host
+	}
+
+	redirectURIs := []string{}
+	if redirectURI != "" {
+		redirectURIs = append(redirectURIs, redirectURI)
+	}
+	redirectURIs = append(redirectURIs,
+		"https://claude.ai/api/mcp/auth_callback",
+		"https://claude.com/api/mcp/auth_callback",
+	)
+
+	// Use the demo user as the system owner for auto-registered apps.
+	// In production this should be a dedicated system user.
+	systemUserID := uuid.MustParse("a0000000-0000-0000-0000-000000000001")
+
+	return s.OAuthService.RegisterAppWithClientID(ctx, systemUserID,
+		clientIDURL, appName, redirectURIs, []string{"admin"})
+}
 
 // writeOAuthError writes an OAuth 2.0 compliant error response.
 func writeOAuthError(w http.ResponseWriter, status int, errCode, description string) {

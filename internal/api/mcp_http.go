@@ -11,19 +11,14 @@ import (
 	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/mcp"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/google/uuid"
 )
 
 // ---------------------------------------------------------------------------
 // Remote MCP endpoint — Streamable HTTP transport for Claude.ai Connectors
-//
-// Spec: https://modelcontextprotocol.io/docs/concepts/transports#streamable-http
-//
-// POST /mcp — Client sends JSON-RPC request, server returns JSON response
-// GET  /mcp — Server-initiated SSE stream (optional, returns 405 for now)
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleMCPEndpoint(w http.ResponseWriter, r *http.Request) {
-	// CORS headers for Claude.ai
 	origin := r.Header.Get("Origin")
 	if origin != "" {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
@@ -41,10 +36,8 @@ func (s *Server) handleMCPEndpoint(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		s.handleMCPPost(w, r)
 	case http.MethodGet:
-		// SSE stream for server-initiated messages (optional)
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	case http.MethodDelete:
-		// Session termination
 		w.WriteHeader(http.StatusOK)
 	default:
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -52,43 +45,57 @@ func (s *Server) handleMCPEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
-	// 1. Extract and validate Bearer token
+	baseURL := getBaseURL(r)
+	resourceMetadataURL := baseURL + "/.well-known/oauth-protected-resource"
+
+	// 1. Extract token
 	tokenStr, err := auth.ExtractTokenFromHeader(r)
 	if err != nil {
-		// Also try X-API-Key header
 		tokenStr = r.Header.Get("X-API-Key")
 	}
 
-	if tokenStr == "" || !strings.HasPrefix(tokenStr, "aht_") {
+	if tokenStr == "" {
 		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+resourceMetadataURL+`"`)
 		w.WriteHeader(http.StatusUnauthorized)
 		json.NewEncoder(w).Encode(map[string]any{
 			"jsonrpc": "2.0",
-			"error":   map[string]any{"code": -32000, "message": "authentication required: provide Authorization: Bearer aht_xxx"},
+			"error":   map[string]any{"code": -32000, "message": "authentication required"},
 		})
 		return
 	}
 
-	scopedToken, err := s.TokenService.ValidateToken(r.Context(), tokenStr)
-	if err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		json.NewEncoder(w).Encode(map[string]any{
-			"jsonrpc": "2.0",
-			"error":   map[string]any{"code": -32000, "message": "invalid or expired token"},
-		})
-		return
-	}
+	// 2. Authenticate — try scoped token first, then OAuth JWT
+	var userID uuid.UUID
+	var trustLevel int
+	var scopes []string
 
-	// 2. Check rate limit
-	if err := s.TokenService.CheckRateLimit(r.Context(), scopedToken); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusTooManyRequests)
-		json.NewEncoder(w).Encode(map[string]any{
-			"jsonrpc": "2.0",
-			"error":   map[string]any{"code": -32000, "message": err.Error()},
-		})
-		return
+	if strings.HasPrefix(tokenStr, "aht_") {
+		// Scoped token (from Hub dashboard)
+		st, err := s.TokenService.ValidateToken(r.Context(), tokenStr)
+		if err != nil {
+			mcpUnauthorized(w, resourceMetadataURL, "invalid or expired scoped token")
+			return
+		}
+		if err := s.TokenService.CheckRateLimit(r.Context(), st); err != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "error": map[string]any{"code": -32000, "message": err.Error()}})
+			return
+		}
+		userID = st.UserID
+		trustLevel = st.MaxTrustLevel
+		scopes = st.Scopes
+	} else {
+		// OAuth JWT (from Claude.ai Custom Connector)
+		claims, err := auth.ValidateToken(tokenStr, s.JWTSecret)
+		if err != nil {
+			mcpUnauthorized(w, resourceMetadataURL, "invalid or expired OAuth token")
+			return
+		}
+		userID = claims.UserID
+		trustLevel = models.TrustLevelFull
+		scopes = []string{models.ScopeAdmin}
 	}
 
 	// 3. Decode JSON-RPC request
@@ -103,35 +110,17 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 4. Create MCPServer instance for this request
-	mcpServer := s.createMCPServer(scopedToken)
-
-	// 5. Handle notification (no response needed)
-	if req.Method == "notifications/initialized" || strings.HasPrefix(req.Method, "notifications/") {
+	// 4. Handle notifications (no response)
+	if strings.HasPrefix(req.Method, "notifications/") {
 		w.WriteHeader(http.StatusAccepted)
 		return
 	}
 
-	// 6. Process JSON-RPC request
-	resp := mcpServer.HandleJSONRPC(req)
-
-	// 7. Add session ID on initialize
-	if req.Method == "initialize" {
-		sessionID := generateMCPSessionID()
-		w.Header().Set("Mcp-Session-Id", sessionID)
-	}
-
-	// 8. Return JSON response
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-// createMCPServer builds an MCPServer with all service dependencies injected.
-func (s *Server) createMCPServer(token *models.ScopedToken) *mcp.MCPServer {
-	return &mcp.MCPServer{
-		UserID:      token.UserID,
-		TrustLevel:  token.MaxTrustLevel,
-		Scopes:      token.Scopes,
+	// 5. Create MCPServer and handle request
+	mcpServer := &mcp.MCPServer{
+		UserID:      userID,
+		TrustLevel:  trustLevel,
+		Scopes:      scopes,
 		FileTree:    s.FileTreeService,
 		Vault:       s.VaultService,
 		VaultCrypto: s.Vault,
@@ -142,6 +131,27 @@ func (s *Server) createMCPServer(token *models.ScopedToken) *mcp.MCPServer {
 		Dashboard:   s.DashboardService,
 		Import:      s.ImportService,
 	}
+
+	resp := mcpServer.HandleJSONRPC(req)
+
+	// 6. Session ID on initialize
+	if req.Method == "initialize" {
+		w.Header().Set("Mcp-Session-Id", generateMCPSessionID())
+	}
+
+	// 7. Return response
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resp)
+}
+
+func mcpUnauthorized(w http.ResponseWriter, resourceMetadataURL, msg string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+resourceMetadataURL+`", error="invalid_token"`)
+	w.WriteHeader(http.StatusUnauthorized)
+	json.NewEncoder(w).Encode(map[string]any{
+		"jsonrpc": "2.0",
+		"error":   map[string]any{"code": -32000, "message": msg},
+	})
 }
 
 func generateMCPSessionID() string {

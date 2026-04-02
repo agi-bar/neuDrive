@@ -17,6 +17,7 @@ type ConsentPageData struct {
 	Scope       string
 	State       string
 	Error       string
+	ShowLogin   bool
 }
 
 // consentTemplate is the HTML template for the OAuth consent screen.
@@ -255,24 +256,34 @@ const consentHTML = `<!DOCTYPE html>
         </div>
         {{end}}
 
-        <div class="actions">
-            <form method="POST" action="/oauth/authorize" style="flex:1; display:flex;">
-                <input type="hidden" name="client_id" value="{{.ClientID}}">
-                <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
-                <input type="hidden" name="scope" value="{{.Scope}}">
-                <input type="hidden" name="state" value="{{.State}}">
-                <input type="hidden" name="action" value="deny">
-                <button type="submit" class="btn btn-deny" style="width:100%">Deny</button>
-            </form>
-            <form method="POST" action="/oauth/authorize" style="flex:1; display:flex;">
-                <input type="hidden" name="client_id" value="{{.ClientID}}">
-                <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
-                <input type="hidden" name="scope" value="{{.Scope}}">
-                <input type="hidden" name="state" value="{{.State}}">
-                <input type="hidden" name="action" value="approve">
-                <button type="submit" class="btn btn-approve" style="width:100%">Authorize</button>
-            </form>
-        </div>
+        <form method="POST" action="/oauth/authorize">
+            <input type="hidden" name="client_id" value="{{.ClientID}}">
+            <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
+            <input type="hidden" name="scope" value="{{.Scope}}">
+            <input type="hidden" name="state" value="{{.State}}">
+            <input type="hidden" name="action" value="approve">
+
+            {{if .ShowLogin}}
+            <div style="margin-bottom:16px;">
+                <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Email</label>
+                <input type="email" name="email" placeholder="your@email.com" required
+                    style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;">
+            </div>
+            <div style="margin-bottom:16px;">
+                <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Password</label>
+                <input type="password" name="password" placeholder="Password" required
+                    style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;">
+            </div>
+            {{end}}
+
+            <div class="actions">
+                <button type="button" class="btn btn-deny" style="flex:1;"
+                    onclick="window.location='{{.RedirectURI}}?error=access_denied&state={{.State}}'">Deny</button>
+                <button type="submit" class="btn btn-approve" style="flex:1;">
+                    {{if .ShowLogin}}Login & Authorize{{else}}Authorize{{end}}
+                </button>
+            </div>
+        </form>
 
         {{end}}
     </div>

@@ -8,7 +8,7 @@ test.describe('Info Page — Profile Persistence', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('textarea').nth(0).fill('偏好简洁代码，Go 优先')
-    await page.getByRole('button', { name: '保存' }).nth(0).click()
+    await page.getByRole('button', { name: '保存所有配置' }).click()
     await expect(page.getByText('已保存')).toBeVisible({ timeout: 5000 })
 
     await page.reload()
@@ -22,7 +22,7 @@ test.describe('Info Page — Profile Persistence', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('textarea').nth(1).fill('Alice 是产品经理')
-    await page.getByRole('button', { name: '保存' }).nth(1).click()
+    await page.getByRole('button', { name: '保存所有配置' }).click()
     await expect(page.getByText('已保存')).toBeVisible({ timeout: 5000 })
 
     await page.reload()
@@ -36,7 +36,7 @@ test.describe('Info Page — Profile Persistence', () => {
     await page.waitForLoadState('networkidle')
 
     await page.locator('textarea').nth(2).fill('先做再说，最小可行')
-    await page.getByRole('button', { name: '保存' }).nth(2).click()
+    await page.getByRole('button', { name: '保存所有配置' }).click()
     await expect(page.getByText('已保存')).toBeVisible({ timeout: 5000 })
 
     await page.reload()
@@ -44,7 +44,7 @@ test.describe('Info Page — Profile Persistence', () => {
     expect(await page.locator('textarea').nth(2).inputValue()).toContain('先做再说')
   })
 
-  test('save all three categories and verify', async ({ page, request }) => {
+  test('save all three with single button', async ({ page, request }) => {
     await setupUser(page, request)
     await page.goto('/info')
     await page.waitForLoadState('networkidle')
@@ -53,12 +53,8 @@ test.describe('Info Page — Profile Persistence', () => {
     await page.locator('textarea').nth(1).fill('Bob 是设计师')
     await page.locator('textarea').nth(2).fill('代码即文档')
 
-    const saves = page.getByRole('button', { name: '保存' })
-    await saves.nth(0).click()
-    await page.waitForTimeout(500)
-    await saves.nth(1).click()
-    await page.waitForTimeout(500)
-    await saves.nth(2).click()
+    // Single save-all button
+    await page.getByRole('button', { name: '保存所有配置' }).click()
     await expect(page.getByText('已保存')).toBeVisible({ timeout: 5000 })
 
     await page.reload()

@@ -156,13 +156,8 @@ test.describe('Info Page', () => {
     await textareas.nth(1).fill('Alice 是产品经理')
     await textareas.nth(2).fill('先做再说')
 
-    // Save each one
-    const saveButtons = page.getByRole('button', { name: '保存' })
-    await saveButtons.nth(0).click()
-    await page.waitForTimeout(500)
-    await saveButtons.nth(1).click()
-    await page.waitForTimeout(500)
-    await saveButtons.nth(2).click()
+    // Save all with single button
+    await page.getByRole('button', { name: '保存所有配置' }).click()
     await expect(page.getByText('已保存')).toBeVisible({ timeout: 5000 })
 
     // Reload and verify all three persisted

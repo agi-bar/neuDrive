@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../api'
 
 interface LoginPageProps {
@@ -15,6 +15,19 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   // Login form state
   const [loginEmail, setLoginEmail] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
+
+  // GitHub OAuth
+  const [githubClientId, setGithubClientId] = useState('')
+
+  useEffect(() => {
+    fetch('/api/config')
+      .then(r => r.json())
+      .then(d => {
+        const data = d?.data || d
+        if (data?.github_client_id) setGithubClientId(data.github_client_id)
+      })
+      .catch(() => {})
+  }, [])
 
   // Register form state
   const [regDisplayName, setRegDisplayName] = useState('')
@@ -84,13 +97,12 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   }
 
   const handleGitHubLogin = () => {
-    const clientId = (window as any).__GITHUB_CLIENT_ID__
-    if (!clientId) {
+    if (!githubClientId) {
       setError('GitHub OAuth 未配置')
       return
     }
     const redirectUri = `${window.location.origin}/api/auth/github/callback`
-    window.location.href = `https://github.com/login/oauth/authorize?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user user:email`
+    window.location.href = `https://github.com/login/oauth/authorize?client_id=${githubClientId}&redirect_uri=${encodeURIComponent(redirectUri)}&scope=read:user user:email`
   }
 
   return (

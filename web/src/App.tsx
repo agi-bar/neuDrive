@@ -15,6 +15,17 @@ function App() {
   const navigate = useNavigate()
 
   const checkAuth = useCallback(async () => {
+    // Check for GitHub OAuth redirect tokens in URL
+    const params = new URLSearchParams(window.location.search)
+    const ghToken = params.get('github_token')
+    const ghRefresh = params.get('github_refresh')
+    if (ghToken) {
+      localStorage.setItem('token', ghToken)
+      if (ghRefresh) localStorage.setItem('refresh_token', ghRefresh)
+      // Clean URL
+      window.history.replaceState({}, '', '/')
+    }
+
     const token = localStorage.getItem('token')
     if (!token) {
       setLoading(false)

@@ -138,6 +138,17 @@ func (s *Server) setupRoutes() {
 	r.Get("/api/health", s.healthCheck)
 	r.Get("/api/config", s.handlePublicConfig)
 
+	// Remote MCP endpoint — Streamable HTTP transport for Claude.ai Connectors
+	r.HandleFunc("/mcp", s.handleMCPEndpoint)
+
+	// OAuth 2.0 discovery for MCP (RFC 9728 + RFC 8414)
+	r.Get("/.well-known/oauth-protected-resource", s.handleProtectedResourceMetadata)
+	r.Get("/.well-known/oauth-protected-resource/*", s.handleProtectedResourceMetadata)
+	r.Get("/.well-known/oauth-authorization-server", s.handleAuthorizationServerMetadata)
+	r.Get("/.well-known/oauth-authorization-server/*", s.handleAuthorizationServerMetadata)
+	r.Get("/.well-known/openid-configuration", s.handleAuthorizationServerMetadata)
+	r.HandleFunc("/oauth/register", s.handleOAuthDynamicRegister)
+
 	// Auth (public)
 	r.Post("/api/auth/register", s.AuthHandler.HandleRegister)
 	r.Post("/api/auth/login", s.AuthHandler.HandleLogin)
@@ -149,12 +160,12 @@ func (s *Server) setupRoutes() {
 
 	// OAuth 2.0 Provider (public endpoints)
 	r.Get("/oauth/authorize", s.handleOAuthAuthorizeGet)
+	r.Post("/oauth/authorize", s.handleOAuthAuthorizePost) // handles login + approve in one step
 	r.Post("/oauth/token", s.handleOAuthToken)
 
-	// OAuth authorize POST and userinfo require authentication
+	// OAuth userinfo requires authentication
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
-		r.Post("/oauth/authorize", s.handleOAuthAuthorizePost)
 		r.Get("/oauth/userinfo", s.handleOAuthUserInfo)
 	})
 

@@ -69,6 +69,35 @@ func (s *OAuthService) RegisterApp(ctx context.Context, userID uuid.UUID, name s
 	}, nil
 }
 
+// RegisterAppWithClientID creates an OAuth app with a specific client_id (for MCP Client ID Metadata Documents).
+func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.UUID, clientID, name string, redirectURIs, scopes []string) (*models.OAuthApp, error) {
+	// Check if already registered
+	existing, err := s.GetAppByClientID(ctx, clientID)
+	if err == nil {
+		return existing, nil
+	}
+
+	clientSecret, err := generateClientSecret()
+	if err != nil {
+		return nil, err
+	}
+	secretHash := hashString(clientSecret)
+
+	id := uuid.New()
+	now := time.Now().UTC()
+
+	_, err = s.db.Exec(ctx,
+		`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, logo_url, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '', $9)
+		 ON CONFLICT (client_id) DO NOTHING`,
+		id, userID, name, clientID, secretHash, redirectURIs, scopes, "Auto-registered MCP client", now)
+	if err != nil {
+		return nil, fmt.Errorf("oauth.RegisterAppWithClientID: %w", err)
+	}
+
+	return s.GetAppByClientID(ctx, clientID)
+}
+
 // Authorize creates an authorization code for the given app and user.
 // It also creates or updates the grant record.
 func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, scopes []string, redirectURI string) (string, error) {
@@ -108,7 +137,10 @@ func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret,
 		return nil, fmt.Errorf("oauth.ExchangeCode: invalid client_id")
 	}
 
-	if hashString(clientSecret) != app.ClientSecretHash {
+	// Public clients (URL-based client_ids per MCP spec) don't have secrets.
+	// Only validate secret for confidential clients (non-URL client_ids).
+	isPublicClient := strings.HasPrefix(clientID, "https://")
+	if !isPublicClient && hashString(clientSecret) != app.ClientSecretHash {
 		return nil, fmt.Errorf("oauth.ExchangeCode: invalid client_secret")
 	}
 

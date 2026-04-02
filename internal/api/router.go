@@ -158,9 +158,12 @@ func (s *Server) setupRoutes() {
 	r.Post("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
 	r.Post("/api/auth/token/dev", s.AuthHandler.HandleDevToken)
 
-	// OAuth 2.0 Provider (public endpoints)
-	r.Get("/oauth/authorize", s.handleOAuthAuthorizeGet)
-	r.Post("/oauth/authorize", s.handleOAuthAuthorizePost) // handles login + approve in one step
+	// OAuth 2.0 Provider (public endpoints, optional auth detection)
+	r.Group(func(r chi.Router) {
+		r.Use(s.optionalAuthMiddleware) // injects userID if JWT present, doesn't block
+		r.Get("/oauth/authorize", s.handleOAuthAuthorizeGet)
+		r.Post("/oauth/authorize", s.handleOAuthAuthorizePost)
+	})
 	r.Post("/oauth/token", s.handleOAuthToken)
 
 	// OAuth userinfo requires authentication
@@ -336,6 +339,26 @@ func (s *Server) setupRoutes() {
 // ---------------------------------------------------------------------------
 // Middleware
 // ---------------------------------------------------------------------------
+
+// optionalAuthMiddleware tries to extract JWT but doesn't block if missing.
+// Used for OAuth authorize page — if user is logged in, skip password prompt.
+func (s *Server) optionalAuthMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tokenStr, err := auth.ExtractTokenFromHeader(r)
+		if err == nil {
+			claims, err := auth.ValidateToken(tokenStr, s.JWTSecret)
+			if err == nil {
+				ctx := context.WithValue(r.Context(), ctxKeyUserID, claims.UserID)
+				ctx = context.WithValue(ctx, ctxKeyUserSlug, claims.Slug)
+				ctx = context.WithValue(ctx, ctxKeyTrustLevel, models.TrustLevelFull)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+		}
+		// No valid JWT — continue without auth (don't block)
+		next.ServeHTTP(w, r)
+	})
+}
 
 // authMiddleware checks for a Bearer JWT token first, then falls back to
 // X-API-Key. On success it stores user_id and user_slug in the context.

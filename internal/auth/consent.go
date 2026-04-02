@@ -287,6 +287,61 @@ const consentHTML = `<!DOCTYPE html>
 
         {{end}}
     </div>
+
+    <script>
+    (function() {
+        // Hide consent card until we know what to show
+        var card = document.querySelector('.consent-card');
+        if (card) card.style.display = 'none';
+
+        var token = localStorage.getItem('token');
+        if (!token) {
+            // Not logged in — redirect to login immediately (no flash)
+            window.location.href = '/login?redirect=' + encodeURIComponent(window.location.href);
+            return;
+        }
+
+        // Verify token then auto-authorize (no form shown)
+        fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(resp) {
+            if (resp.status !== 200) {
+                localStorage.removeItem('token');
+                window.location.href = '/login?redirect=' + encodeURIComponent(window.location.href);
+                return null;
+            }
+            return resp.json();
+        }).then(function(data) {
+            if (!data) return;
+
+            // Auto-submit authorize
+            var form = document.querySelector('form');
+            if (!form) return;
+
+            var formData = new FormData(form);
+            formData.set('action', 'approve');
+            formData.delete('email');
+            formData.delete('password');
+
+            fetch('/oauth/authorize', {
+                method: 'POST',
+                headers: { 'Authorization': 'Bearer ' + token },
+                body: new URLSearchParams(formData)
+            }).then(function(resp) {
+                if (resp.redirected) {
+                    window.location.href = resp.url;
+                } else {
+                    // Fallback: show the form
+                    if (card) card.style.display = '';
+                }
+            }).catch(function() {
+                if (card) card.style.display = '';
+            });
+        }).catch(function() {
+            if (card) card.style.display = '';
+        });
+    })();
+    </script>
 </body>
 </html>
 `

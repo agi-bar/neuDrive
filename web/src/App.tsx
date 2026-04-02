@@ -48,6 +48,15 @@ function App() {
   const handleLogin = (token: string, userData: any) => {
     localStorage.setItem('token', token)
     setUser(userData)
+
+    // Check if there's a redirect URL (from OAuth authorize flow)
+    const params = new URLSearchParams(window.location.search)
+    const redirect = params.get('redirect')
+    if (redirect) {
+      // Redirect back to OAuth authorize page (now with token in localStorage)
+      window.location.href = redirect
+      return
+    }
     navigate('/')
   }
 

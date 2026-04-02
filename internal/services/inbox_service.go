@@ -26,13 +26,13 @@ func (s *InboxService) GetMessages(ctx context.Context, userID uuid.UUID, role, 
 	                 subject, body, structured_payload, attachments,
 	                 status, created_at, archived_at
 	          FROM inbox_messages
-	          WHERE to_address LIKE $1 || '%'`
-	args := []interface{}{userID.String()}
+	          WHERE user_id = $1`
+	args := []interface{}{userID}
 	argIdx := 2
 
 	if role != "" {
 		query += fmt.Sprintf(` AND to_address = $%d`, argIdx)
-		args = append(args, role+"@"+userID.String())
+		args = append(args, role)
 		argIdx++
 	}
 	if status != "" {

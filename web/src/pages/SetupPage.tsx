@@ -210,18 +210,6 @@ Authorization: Bearer ${displayToken}`
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {newToken && (
-        <div className="alert alert-success" style={{ marginBottom: 20 }}>
-          <strong>Token 已生成!</strong> 请立即保存，此 Token 仅显示一次。
-          <div className="key-value" style={{ marginTop: 8 }}>
-            <code>{newToken}</code>
-            <button className="btn btn-sm" onClick={() => { copyToClipboard(newToken, 'new-token'); }}>
-              {copied === 'new-token' ? '已复制' : '复制'}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ── Claude Code section ── */}
       <div className="setup-section">
         <div className="setup-section-header">
@@ -438,6 +426,18 @@ Authorization: Bearer ${displayToken}`
           >
             {creating ? '生成中...' : '生成 Token'}
           </button>
+
+          {newToken && (
+            <div className="alert alert-success" style={{ marginTop: 16 }}>
+              <strong>Token 已生成!</strong> 请立即保存，此 Token 仅显示一次。
+              <div className="key-value" style={{ marginTop: 8 }}>
+                <code>{newToken}</code>
+                <button className="btn btn-sm" onClick={() => { copyToClipboard(newToken, 'new-token'); }}>
+                  {copied === 'new-token' ? '已复制' : '复制'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

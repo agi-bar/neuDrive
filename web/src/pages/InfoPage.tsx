@@ -119,6 +119,25 @@ export default function InfoPage() {
     }
   }
 
+  const handleSaveAll = async () => {
+    setSaving('all')
+    setError('')
+
+    try {
+      const prefs: Record<string, string> = {}
+      for (const cat of PROFILE_CATEGORIES) {
+        prefs[cat.key] = editValues[cat.key] || ''
+      }
+      await api.upsertProfile({ preferences: prefs })
+      setSuccessMsg('所有配置已保存')
+      setTimeout(() => setSuccessMsg(''), 2000)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSaving('')
+    }
+  }
+
   if (loading) {
     return <div className="page-loading">加载中...</div>
   }
@@ -207,13 +226,6 @@ export default function InfoPage() {
             <div key={cat.key} className="card">
               <div className="card-header">
                 <h4 className="card-title">{cat.label}</h4>
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={() => handleSaveProfile(cat.key)}
-                  disabled={saving === cat.key}
-                >
-                  {saving === cat.key ? '保存中...' : '保存'}
-                </button>
               </div>
               <textarea
                 className="profile-textarea"
@@ -226,6 +238,16 @@ export default function InfoPage() {
               />
             </div>
           ))}
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <button
+            className="btn btn-primary"
+            onClick={handleSaveAll}
+            disabled={saving === 'all'}
+          >
+            {saving === 'all' ? '保存中...' : '保存所有配置'}
+          </button>
         </div>
       </section>
 

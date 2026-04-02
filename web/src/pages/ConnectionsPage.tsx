@@ -60,7 +60,9 @@ export default function ConnectionsPage() {
       if (result.api_key) {
         setCreatedKey(result.api_key)
       }
-      setConnections((prev) => [...prev, result])
+      // API returns {connection: {...}, api_key: "..."} — extract connection object
+      const conn = result.connection || result
+      setConnections((prev) => [...prev, conn])
       setNewConn({ name: '', platform: '', trust_level: 2 })
       if (!result.api_key) {
         setShowForm(false)

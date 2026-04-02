@@ -22,10 +22,19 @@ func NewFileTreeService(db *pgxpool.Pool) *FileTreeService {
 // List returns file tree entries under the given path, filtered by trust level.
 // It lists immediate children (one level deep) of the specified directory path.
 func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
-	// Normalize: ensure path ends with /
+	// Normalize: ensure path starts with / and ends with /
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
 	if !strings.HasSuffix(path, "/") {
 		path = path + "/"
 	}
+
+	// List immediate children: entries whose path starts with the parent path
+	// and has exactly one more path segment (no deeper nesting).
+	// For path="/": match "/notes/" and "/file.md" but not "/notes/file.md"
+	// We use array_length on string_to_array to count path depth.
+	parentDepth := strings.Count(path, "/")
 
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
@@ -34,9 +43,15 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 		   AND path LIKE $2
 		   AND path != $3
 		   AND min_trust_level <= $4
-		   AND path NOT LIKE $5
+		   AND (
+		     -- Direct child files: parent depth + 1 segments
+		     (NOT is_directory AND array_length(string_to_array(path, '/'), 1) = $5 + 1)
+		     OR
+		     -- Direct child directories: parent depth + 1 segments (trailing / adds one more)
+		     (is_directory AND array_length(string_to_array(path, '/'), 1) = $5 + 2)
+		   )
 		 ORDER BY is_directory DESC, path ASC`,
-		userID, path+"%", path, trustLevel, path+"%/%")
+		userID, path+"%", path, trustLevel, parentDepth)
 	if err != nil {
 		return nil, fmt.Errorf("filetree.List: %w", err)
 	}
@@ -56,6 +71,9 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 
 // Read returns a single file entry, checking trust level access.
 func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
 	var e models.FileTreeEntry
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
@@ -74,7 +92,22 @@ func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path strin
 }
 
 // Write upserts a file entry at the given path.
+// Automatically creates all intermediate directories.
 func (s *FileTreeService) Write(ctx context.Context, userID uuid.UUID, path, content, contentType string, minTrustLevel int) (*models.FileTreeEntry, error) {
+	// Ensure path has leading /
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	// Auto-create parent directories (e.g., /notes/sub/file.md → create /notes/ and /notes/sub/)
+	parts := strings.Split(path, "/")
+	for i := 2; i < len(parts); i++ {
+		dirPath := strings.Join(parts[:i], "/") + "/"
+		if err := s.EnsureDirectory(ctx, userID, dirPath); err != nil {
+			return nil, fmt.Errorf("filetree.Write: ensure parent dir %q: %w", dirPath, err)
+		}
+	}
+
 	now := time.Now().UTC()
 	id := uuid.New()
 
@@ -105,6 +138,9 @@ func (s *FileTreeService) Write(ctx context.Context, userID uuid.UUID, path, con
 
 // Delete removes a file tree entry by path.
 func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path string) error {
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
 	_, err := s.db.Exec(ctx,
 		`DELETE FROM file_tree WHERE user_id = $1 AND path = $2`, userID, path)
 	if err != nil {

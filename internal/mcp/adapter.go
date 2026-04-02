@@ -169,6 +169,13 @@ func (s *MCPServer) getTools() []MCPTool {
 			InputSchema: jsonSchema(map[string]interface{}{}),
 		},
 		{
+			Name:        "create_project",
+			Description: "创建新项目",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"name": prop("string", "项目名称 (只允许字母、数字、横杠、下划线)"),
+			}, "name"),
+		},
+		{
 			Name:        "get_project",
 			Description: "获取项目上下文和最近日志",
 			InputSchema: jsonSchema(map[string]interface{}{
@@ -307,6 +314,7 @@ func (s *MCPServer) toolAllowed(name string) bool {
 		"update_profile":       models.ScopeWriteProfile,
 		"search_memory":        models.ScopeReadMemory,
 		"list_projects":        models.ScopeReadProjects,
+		"create_project":       models.ScopeWriteProjects,
 		"get_project":          models.ScopeReadProjects,
 		"log_action":           models.ScopeWriteProjects,
 		"list_directory":       models.ScopeReadTree,
@@ -379,6 +387,18 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		result, _ := json.MarshalIndent(projects, "", "  ")
+		return string(result), false
+
+	case "create_project":
+		name, _ := args["name"].(string)
+		if name == "" {
+			return "error: project name is required", true
+		}
+		project, err := s.Project.Create(ctx, s.UserID, name)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err), true
+		}
+		result, _ := json.MarshalIndent(project, "", "  ")
 		return string(result), false
 
 	case "get_project":

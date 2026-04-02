@@ -113,14 +113,26 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// HandleGitHubCallback handles POST /api/auth/github/callback.
+// HandleGitHubCallback handles GET/POST /api/auth/github/callback.
+// GET: GitHub redirects here with ?code=xxx → exchange code → redirect to frontend with token.
+// POST: Frontend sends {code: "xxx"} in body → exchange code → return JSON response.
 func (h *Handler) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
-	var req githubCallbackRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
-		return
+	var code string
+
+	if r.Method == http.MethodGet {
+		// GitHub OAuth redirect — code in query string
+		code = r.URL.Query().Get("code")
+	} else {
+		// Frontend POST — code in body
+		var req githubCallbackRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+		code = req.Code
 	}
-	if req.Code == "" {
+
+	if code == "" {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "code is required"})
 		return
 	}
@@ -128,9 +140,16 @@ func (h *Handler) HandleGitHubCallback(w http.ResponseWriter, r *http.Request) {
 	userAgent := r.UserAgent()
 	ipAddress := r.RemoteAddr
 
-	resp, err := h.AuthService.GitHubLogin(r.Context(), req.Code, userAgent, ipAddress)
+	resp, err := h.AuthService.GitHubLogin(r.Context(), code, userAgent, ipAddress)
 	if err != nil {
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("github login failed: %v", err)})
+		return
+	}
+
+	if r.Method == http.MethodGet {
+		// Redirect to frontend with token in query params
+		redirectURL := fmt.Sprintf("/?github_token=%s&github_refresh=%s", resp.AccessToken, resp.RefreshToken)
+		http.Redirect(w, r, redirectURL, http.StatusFound)
 		return
 	}
 

@@ -134,14 +134,16 @@ func (s *Server) setupRoutes() {
 	r.Use(LoggingMiddleware)
 	r.Use(MaxBodySizeMiddleware(s.Config.MaxBodySize))
 
-	// Health
+	// Health + public config
 	r.Get("/api/health", s.healthCheck)
+	r.Get("/api/config", s.handlePublicConfig)
 
 	// Auth (public)
 	r.Post("/api/auth/register", s.AuthHandler.HandleRegister)
 	r.Post("/api/auth/login", s.AuthHandler.HandleLogin)
 	r.Post("/api/auth/refresh", s.AuthHandler.HandleRefresh)
 	r.Post("/api/auth/logout", s.AuthHandler.HandleLogout)
+	r.Get("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
 	r.Post("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
 	r.Post("/api/auth/token/dev", s.AuthHandler.HandleDevToken)
 
@@ -508,6 +510,14 @@ func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 		"status":  "ok",
 		"service": "agenthub",
 		"time":    time.Now().UTC().Format(time.RFC3339),
+	})
+}
+
+// handlePublicConfig returns non-sensitive configuration for the frontend.
+func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
+	respondOK(w, map[string]interface{}{
+		"github_client_id": s.GitHubClientID,
+		"github_enabled":   s.GitHubClientID != "",
 	})
 }
 

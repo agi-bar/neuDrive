@@ -1,8 +1,11 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
@@ -59,8 +62,8 @@ func (s *DeviceService) Register(ctx context.Context, userID uuid.UUID, device m
 	return &device, nil
 }
 
-// Call sends an action to a device. For now, returns a mock response.
-// Real device protocol dispatching will be implemented later.
+// Call sends an action to a device. Dispatches via protocol-specific handler.
+// Supports: "http" (real HTTP call), others fall back to mock.
 func (s *DeviceService) Call(ctx context.Context, userID uuid.UUID, deviceName, action string, params map[string]interface{}) (map[string]interface{}, error) {
 	// Verify the device exists and belongs to the user.
 	var deviceID uuid.UUID
@@ -73,15 +76,63 @@ func (s *DeviceService) Call(ctx context.Context, userID uuid.UUID, deviceName, 
 		return nil, fmt.Errorf("device.Call: device not found: %w", err)
 	}
 
-	// Mock response until real device protocol dispatching is implemented.
-	result := map[string]interface{}{
-		"device_id": deviceID.String(),
-		"device":    deviceName,
-		"action":    action,
-		"params":    params,
-		"status":    "ok",
-		"message":   "mock response - real device calls not yet implemented",
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	switch protocol {
+	case "http":
+		if endpoint == "" {
+			return nil, fmt.Errorf("device.Call: HTTP device %q has no endpoint configured", deviceName)
+		}
+		return s.callHTTP(ctx, deviceID, deviceName, endpoint, action, params)
+	case "mqtt":
+		return nil, fmt.Errorf("device.Call: MQTT protocol not yet supported")
+	default:
+		// Fall back to mock for unconfigured protocols.
+		return map[string]interface{}{
+			"device_id": deviceID.String(),
+			"device":    deviceName,
+			"action":    action,
+			"params":    params,
+			"status":    "ok",
+			"message":   "mock response - protocol not configured",
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		}, nil
 	}
+}
+
+// callHTTP dispatches a device action via HTTP POST to the device endpoint.
+func (s *DeviceService) callHTTP(ctx context.Context, deviceID uuid.UUID, deviceName, endpoint, action string, params map[string]interface{}) (map[string]interface{}, error) {
+	body, err := json.Marshal(map[string]interface{}{
+		"action": action,
+		"params": params,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("device.callHTTP: marshal: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", endpoint, bytes.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("device.callHTTP: create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 10 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("device.callHTTP: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		// Non-JSON response — wrap status
+		result = map[string]interface{}{
+			"status_code": resp.StatusCode,
+			"status":      resp.Status,
+		}
+	}
+
+	result["device_id"] = deviceID.String()
+	result["device"] = deviceName
+	result["action"] = action
+	result["timestamp"] = time.Now().UTC().Format(time.RFC3339)
 	return result, nil
 }

@@ -3,7 +3,9 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strings"
 
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -138,10 +140,27 @@ func (s *Server) handleAgentSharedTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return the shared file tree content (stub — real implementation would read from file_tree).
-	respondOK(w, map[string]interface{}{
-		"owner":    ownerSlug,
-		"path":     path,
-		"children": []interface{}{},
-	})
+	// Read from owner's file tree at the shared path.
+	if strings.HasSuffix(path, "/") || path == "/" {
+		entries, err := s.FileTreeService.List(r.Context(), owner.ID, path, models.TrustLevelCollaborate)
+		if err != nil {
+			respondOK(w, map[string]interface{}{
+				"owner": ownerSlug, "path": path, "children": []interface{}{},
+			})
+			return
+		}
+		respondOK(w, map[string]interface{}{
+			"owner": ownerSlug, "path": path, "children": entries,
+		})
+	} else {
+		entry, err := s.FileTreeService.Read(r.Context(), owner.ID, path, models.TrustLevelCollaborate)
+		if err != nil {
+			respondNotFound(w, "file")
+			return
+		}
+		respondOK(w, map[string]interface{}{
+			"owner": ownerSlug, "path": entry.Path, "content": entry.Content,
+			"content_type": entry.ContentType,
+		})
+	}
 }

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
@@ -44,6 +45,13 @@ func (s *MemoryService) UpsertProfile(ctx context.Context, userID uuid.UUID, cat
 	if err := validateContentLength(content, maxContentBytes); err != nil {
 		return fmt.Errorf("memory.UpsertProfile: %w", err)
 	}
+
+	// Detect cross-source conflicts before upsert (non-blocking).
+	if conflict, _ := s.DetectConflict(ctx, userID, category, content, source); conflict != nil {
+		slog.Info("memory conflict detected",
+			"category", category, "sourceA", conflict.SourceA, "sourceB", conflict.SourceB)
+	}
+
 	now := time.Now().UTC()
 	_, err := s.db.Exec(ctx,
 		`INSERT INTO memory_profile (id, user_id, category, content, source, created_at, updated_at)

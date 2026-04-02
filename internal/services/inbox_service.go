@@ -11,7 +11,8 @@ import (
 )
 
 type InboxService struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	Webhook *WebhookService // optional — triggers inbox.new events
 }
 
 func NewInboxService(db *pgxpool.Pool) *InboxService {
@@ -70,6 +71,14 @@ func (s *InboxService) Send(ctx context.Context, userID uuid.UUID, msg models.In
 	if err != nil {
 		return nil, fmt.Errorf("inbox.Send: %w", err)
 	}
+
+	// Trigger webhook (async, non-blocking)
+	if s.Webhook != nil {
+		go s.Webhook.Trigger(context.Background(), userID, "inbox.new", map[string]interface{}{
+			"message_id": msg.ID.String(), "subject": msg.Subject, "from": msg.FromAddress, "to": msg.ToAddress,
+		})
+	}
+
 	return &msg, nil
 }
 

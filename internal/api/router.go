@@ -193,6 +193,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/memory/profile", s.handleMemoryProfileGet)
 		r.Put("/api/memory/profile", s.handleMemoryProfileUpdate)
 		r.Get("/api/memory/scratch", s.handleGetScratch)
+		r.Post("/api/memory/scratch", s.handleWriteScratch)
 		r.Get("/api/memory/conflicts", s.handleListConflicts)
 		r.Post("/api/memory/conflicts/{id}/resolve", s.handleResolveConflict)
 
@@ -204,7 +205,8 @@ func (s *Server) setupRoutes() {
 		r.Put("/api/projects/{name}/archive", s.handleArchiveProject)
 		r.Post("/api/projects/{name}/summarize", s.handleSummarizeProject)
 
-		// Inbox
+		// Inbox (search must be before {role} to avoid matching "search" as role)
+		r.Get("/api/inbox/search", s.handleInboxSearch)
 		r.Get("/api/inbox/{role}", s.handleInboxList)
 		r.Post("/api/inbox/send", s.handleInboxSend)
 		r.Put("/api/inbox/{id}/archive", s.handleInboxArchive)

@@ -130,8 +130,20 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Authenticate the user — try JWT from context first, then form login.
+	// Authenticate the user — try JWT from context first, then hidden token, then form login.
 	userID, ok := userIDFromCtx(r.Context())
+
+	// Try hidden _token field (auto-submitted by JS when user is already logged in)
+	if !ok {
+		if hiddenToken := r.FormValue("_token"); hiddenToken != "" {
+			claims, err := auth.ValidateToken(hiddenToken, s.JWTSecret)
+			if err == nil {
+				userID = claims.UserID
+				ok = true
+			}
+		}
+	}
+
 	if !ok {
 		// No JWT — try form-based login (email + password in the form)
 		email := r.FormValue("email")

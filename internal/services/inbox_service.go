@@ -121,9 +121,9 @@ func (s *InboxService) Search(ctx context.Context, userID uuid.UUID, query, scop
 	                    subject, body, structured_payload, attachments,
 	                    status, created_at, archived_at
 	             FROM inbox_messages
-	             WHERE to_address LIKE $1 || '%'
+	             WHERE user_id = $1
 	               AND (to_tsvector('english', subject || ' ' || body) @@ plainto_tsquery('english', $2))`
-	args := []interface{}{userID.String(), query}
+	args := []interface{}{userID, query}
 	argIdx := 3
 
 	if scope != "" {

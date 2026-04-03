@@ -29,22 +29,6 @@ export default function DashboardPage() {
       setStats(data)
     } catch (err: any) {
       setError(err.message)
-      // Fall back to loading individual counts
-      try {
-        const [connections, projects, devices] = await Promise.allSettled([
-          api.getConnections(),
-          api.getProjects(),
-          api.getDevices(),
-        ])
-        setStats({
-          connections: connections.status === 'fulfilled' ? connections.value.length : 0,
-          projects: projects.status === 'fulfilled' ? projects.value.length : 0,
-          devices: devices.status === 'fulfilled' ? devices.value.length : 0,
-        })
-        setError('')
-      } catch {
-        // Keep the original error
-      }
     } finally {
       setLoading(false)
     }

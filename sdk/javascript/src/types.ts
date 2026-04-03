@@ -118,30 +118,31 @@ export interface FileTreeEntry {
   name: string
   path: string
   is_dir: boolean
+  content?: string
+  mime_type?: string
+  children?: FileTreeEntry[]
   size?: number
   updated_at?: string
 }
 
 export interface SearchResult {
   path: string
-  content: string
+  snippet: string
   score?: number
 }
 
 export interface Skill {
   name: string
-  path: string
   description?: string
 }
 
 export interface DashboardStats {
-  file_count: number
-  vault_scopes: number
   connections: number
-  roles: number
+  skills: number
+  devices: number
   projects: number
-  unread_messages: number
-  registered_devices: number
+  weekly_activity: { platform: string; count: number }[]
+  pending: { type: string; count: number; message: string }[]
 }
 
 // ---------------------------------------------------------------------------

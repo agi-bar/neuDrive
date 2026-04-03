@@ -57,6 +57,12 @@ func (s *Server) HandleVaultRead(w http.ResponseWriter, r *http.Request) {
 		respondNotFound(w, "vault entry")
 		return
 	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(r.Context(), userID, models.EventVaultAccess, map[string]interface{}{
+			"scope":       scope,
+			"trust_level": trustLevel,
+		})
+	}
 
 	entry := &VaultEntry{
 		Scope: scope,

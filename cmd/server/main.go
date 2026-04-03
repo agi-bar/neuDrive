@@ -116,6 +116,7 @@ func main() {
 
 	// Wire webhook triggers into services that emit events.
 	inboxSvc.Webhook = webhookSvc
+	memorySvc.Webhook = webhookSvc
 
 	// ---------------------------------------------------------------
 	// Seed default user if database is empty

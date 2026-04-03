@@ -3,8 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -67,6 +67,9 @@ func (s *Server) handleCreateCollaboration(w http.ResponseWriter, r *http.Reques
 		respondValidationError(w, "shared_paths", "shared_paths must not be empty")
 		return
 	}
+	for i, sharedPath := range req.SharedPaths {
+		req.SharedPaths[i] = hubpath.NormalizePublic(sharedPath)
+	}
 
 	// Look up guest user by slug.
 	guest, err := s.UserService.GetBySlug(r.Context(), req.GuestSlug)
@@ -82,6 +85,15 @@ func (s *Server) handleCreateCollaboration(w http.ResponseWriter, r *http.Reques
 	if err != nil {
 		respondError(w, http.StatusConflict, ErrCodeConflict, err.Error())
 		return
+	}
+
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(r.Context(), userID, models.EventCollabNew, map[string]interface{}{
+			"collaboration_id": collab.ID.String(),
+			"guest_user_id":    collab.GuestUserID.String(),
+			"shared_paths":     collab.SharedPaths,
+			"permissions":      collab.Permissions,
+		})
 	}
 
 	respondCreated(w, collab)
@@ -125,6 +137,7 @@ func (s *Server) handleAgentSharedTree(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
+	path = hubpath.NormalizePublic(path)
 
 	// Resolve the owner user.
 	owner, err := s.UserService.GetBySlug(r.Context(), ownerSlug)
@@ -140,27 +153,22 @@ func (s *Server) handleAgentSharedTree(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Read from owner's file tree at the shared path.
-	if strings.HasSuffix(path, "/") || path == "/" {
-		entries, err := s.FileTreeService.List(r.Context(), owner.ID, path, models.TrustLevelCollaborate)
-		if err != nil {
-			respondOK(w, map[string]interface{}{
-				"owner": ownerSlug, "path": path, "children": []interface{}{},
-			})
-			return
-		}
-		respondOK(w, map[string]interface{}{
-			"owner": ownerSlug, "path": path, "children": entries,
-		})
-	} else {
-		entry, err := s.FileTreeService.Read(r.Context(), owner.ID, path, models.TrustLevelCollaborate)
-		if err != nil {
-			respondNotFound(w, "file")
-			return
-		}
-		respondOK(w, map[string]interface{}{
-			"owner": ownerSlug, "path": entry.Path, "content": entry.Content,
-			"content_type": entry.ContentType,
-		})
+	node, err := s.readOrListTreePath(r.Context(), owner.ID, models.TrustLevelCollaborate, path)
+	if err != nil {
+		respondNotFound(w, "file")
+		return
 	}
+
+	body := map[string]interface{}{
+		"owner": ownerSlug,
+		"path":  node.Path,
+		"node":  node,
+	}
+	if node.IsDir {
+		body["children"] = node.Children
+	} else {
+		body["content"] = node.Content
+		body["content_type"] = node.MimeType
+	}
+	respondOK(w, body)
 }

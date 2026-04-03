@@ -12,7 +12,8 @@ import (
 )
 
 type MemoryService struct {
-	db *pgxpool.Pool
+	db      *pgxpool.Pool
+	Webhook *WebhookService
 }
 
 func NewMemoryService(db *pgxpool.Pool) *MemoryService {
@@ -199,6 +200,15 @@ func (s *MemoryService) DetectConflict(ctx context.Context, userID uuid.UUID, ca
 		conflict.Status, conflict.CreatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("memory.DetectConflict: insert: %w", err)
+	}
+
+	if s.Webhook != nil {
+		go s.Webhook.Trigger(context.Background(), userID, models.EventConflictNew, map[string]interface{}{
+			"conflict_id": conflict.ID.String(),
+			"category":    conflict.Category,
+			"source_a":    conflict.SourceA,
+			"source_b":    conflict.SourceB,
+		})
 	}
 
 	return &conflict, nil

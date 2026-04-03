@@ -44,8 +44,8 @@ func TestE2E_DashboardPage_Stats(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 	body := parseJSON(resp)
-	// Dashboard should return numeric stats
-	for _, key := range []string{"connections", "file_count", "vault_scopes", "roles", "projects"} {
+	// Dashboard should return publish-facing stats
+	for _, key := range []string{"connections", "skills", "devices", "projects", "weekly_activity", "pending"} {
 		if _, ok := body[key]; !ok {
 			t.Errorf("missing key %q in dashboard stats", key)
 		}

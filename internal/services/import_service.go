@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -225,8 +226,11 @@ func (s *ImportService) ImportBulkFiles(ctx context.Context, userID uuid.UUID, f
 
 	// Collect all parent directories that need to be created.
 	dirs := map[string]bool{}
-	for path := range files {
-		dir := filepath.Dir(path)
+	normalizedFiles := make(map[string]string, len(files))
+	for path, content := range files {
+		normalizedPath := hubpath.NormalizeStorage(path)
+		normalizedFiles[normalizedPath] = content
+		dir := filepath.Dir(normalizedPath)
 		for dir != "." && dir != "" && dir != "/" {
 			if !dirs[dir] {
 				dirs[dir] = true
@@ -252,7 +256,7 @@ func (s *ImportService) ImportBulkFiles(ctx context.Context, userID uuid.UUID, f
 	}
 
 	// Insert files.
-	for path, content := range files {
+	for path, content := range normalizedFiles {
 		if path == "" || content == "" {
 			continue
 		}

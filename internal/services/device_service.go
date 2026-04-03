@@ -4,13 +4,24 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	ErrDeviceNotFound       = errors.New("device not found")
+	ErrDeviceUnsupported    = errors.New("device protocol not supported")
+	ErrDeviceInvalidRequest = errors.New("invalid device request")
+	ErrDeviceUpstreamFailed = errors.New("device upstream failed")
 )
 
 type DeviceService struct {
@@ -63,8 +74,12 @@ func (s *DeviceService) Register(ctx context.Context, userID uuid.UUID, device m
 }
 
 // Call sends an action to a device. Dispatches via protocol-specific handler.
-// Supports: "http" (real HTTP call), others fall back to mock.
+// Supports: "http" and "homeassistant" (real HTTP calls).
 func (s *DeviceService) Call(ctx context.Context, userID uuid.UUID, deviceName, action string, params map[string]interface{}) (map[string]interface{}, error) {
+	if strings.TrimSpace(action) == "" {
+		return nil, fmt.Errorf("%w: action is required", ErrDeviceInvalidRequest)
+	}
+
 	// Verify the device exists and belongs to the user.
 	var deviceID uuid.UUID
 	var protocol, endpoint string
@@ -73,28 +88,20 @@ func (s *DeviceService) Call(ctx context.Context, userID uuid.UUID, deviceName, 
 		userID, deviceName).
 		Scan(&deviceID, &protocol, &endpoint)
 	if err != nil {
-		return nil, fmt.Errorf("device.Call: device not found: %w", err)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("%w: %s", ErrDeviceNotFound, deviceName)
+		}
+		return nil, fmt.Errorf("device.Call: lookup: %w", err)
 	}
 
-	switch protocol {
-	case "http":
+	switch strings.ToLower(strings.TrimSpace(protocol)) {
+	case "http", "homeassistant":
 		if endpoint == "" {
-			return nil, fmt.Errorf("device.Call: HTTP device %q has no endpoint configured", deviceName)
+			return nil, fmt.Errorf("%w: device %q has no endpoint configured", ErrDeviceUpstreamFailed, deviceName)
 		}
 		return s.callHTTP(ctx, deviceID, deviceName, endpoint, action, params)
-	case "mqtt":
-		return nil, fmt.Errorf("device.Call: MQTT protocol not yet supported")
 	default:
-		// Fall back to mock for unconfigured protocols.
-		return map[string]interface{}{
-			"device_id": deviceID.String(),
-			"device":    deviceName,
-			"action":    action,
-			"params":    params,
-			"status":    "ok",
-			"message":   "mock response - protocol not configured",
-			"timestamp": time.Now().UTC().Format(time.RFC3339),
-		}, nil
+		return nil, fmt.Errorf("%w: %s", ErrDeviceUnsupported, protocol)
 	}
 }
 
@@ -117,17 +124,22 @@ func (s *DeviceService) callHTTP(ctx context.Context, deviceID uuid.UUID, device
 	client := &http.Client{Timeout: 10 * time.Second}
 	resp, err := client.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("device.callHTTP: request failed: %w", err)
+		return nil, fmt.Errorf("%w: request failed: %v", ErrDeviceUpstreamFailed, err)
 	}
 	defer resp.Body.Close()
 
+	bodyBytes, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := json.Unmarshal(bodyBytes, &result); err != nil {
 		// Non-JSON response — wrap status
 		result = map[string]interface{}{
 			"status_code": resp.StatusCode,
 			"status":      resp.Status,
+			"body":        strings.TrimSpace(string(bodyBytes)),
 		}
+	}
+	if resp.StatusCode >= 400 {
+		return nil, fmt.Errorf("%w: status=%d body=%s", ErrDeviceUpstreamFailed, resp.StatusCode, strings.TrimSpace(string(bodyBytes)))
 	}
 
 	result["device_id"] = deviceID.String()

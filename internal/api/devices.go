@@ -2,9 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -86,7 +88,7 @@ func (s *Server) handleDeviceCall(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.DeviceService.Call(r.Context(), userID, name, req.Action, params)
 	if err != nil {
-		respondNotFound(w, "device")
+		respondDeviceCallError(w, err)
 		return
 	}
 
@@ -128,4 +130,19 @@ func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondCreated(w, registered)
+}
+
+func respondDeviceCallError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, services.ErrDeviceInvalidRequest):
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
+	case errors.Is(err, services.ErrDeviceNotFound):
+		respondError(w, http.StatusNotFound, ErrCodeNotFound, err.Error())
+	case errors.Is(err, services.ErrDeviceUnsupported):
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, err.Error())
+	case errors.Is(err, services.ErrDeviceUpstreamFailed):
+		respondError(w, http.StatusBadGateway, ErrCodeInternal, err.Error())
+	default:
+		respondInternalError(w, err)
+	}
 }

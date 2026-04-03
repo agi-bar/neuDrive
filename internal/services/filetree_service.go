@@ -3,9 +3,11 @@ package services
 import (
 	"context"
 	"fmt"
+	pathpkg "path"
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -22,10 +24,7 @@ func NewFileTreeService(db *pgxpool.Pool) *FileTreeService {
 // List returns file tree entries under the given path, filtered by trust level.
 // It lists immediate children (one level deep) of the specified directory path.
 func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
-	// Normalize: ensure path starts with / and ends with /
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
+	path = hubpath.NormalizeStorage(path)
 	if !strings.HasSuffix(path, "/") {
 		path = path + "/"
 	}
@@ -71,9 +70,7 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 
 // Read returns a single file entry, checking trust level access.
 func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
+	path = hubpath.NormalizeStorage(path)
 	var e models.FileTreeEntry
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
@@ -94,17 +91,14 @@ func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path strin
 // Write upserts a file entry at the given path.
 // Automatically creates all intermediate directories.
 func (s *FileTreeService) Write(ctx context.Context, userID uuid.UUID, path, content, contentType string, minTrustLevel int) (*models.FileTreeEntry, error) {
-	// Ensure path has leading /
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
+	path = hubpath.NormalizeStorage(path)
+	parentDirs := make([]string, 0, 4)
+	for dir := pathpkg.Dir(strings.TrimSuffix(path, "/")); dir != "." && dir != "/" && dir != ""; dir = pathpkg.Dir(dir) {
+		parentDirs = append(parentDirs, dir)
 	}
-
-	// Auto-create parent directories (e.g., /notes/sub/file.md → create /notes/ and /notes/sub/)
-	parts := strings.Split(path, "/")
-	for i := 2; i < len(parts); i++ {
-		dirPath := strings.Join(parts[:i], "/") + "/"
-		if err := s.EnsureDirectory(ctx, userID, dirPath); err != nil {
-			return nil, fmt.Errorf("filetree.Write: ensure parent dir %q: %w", dirPath, err)
+	for i := len(parentDirs) - 1; i >= 0; i-- {
+		if err := s.EnsureDirectory(ctx, userID, parentDirs[i]); err != nil {
+			return nil, fmt.Errorf("filetree.Write: ensure parent dir %q: %w", parentDirs[i], err)
 		}
 	}
 
@@ -138,9 +132,7 @@ func (s *FileTreeService) Write(ctx context.Context, userID uuid.UUID, path, con
 
 // Delete removes a file tree entry by path.
 func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path string) error {
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
+	path = hubpath.NormalizeStorage(path)
 	_, err := s.db.Exec(ctx,
 		`DELETE FROM file_tree WHERE user_id = $1 AND path = $2`, userID, path)
 	if err != nil {
@@ -164,6 +156,10 @@ func (s *FileTreeService) Search(ctx context.Context, userID uuid.UUID, query st
 	argIdx := 3
 
 	if pathPrefix != "" {
+		pathPrefix = hubpath.NormalizeStorage(pathPrefix)
+		if pathPrefix != "/" && !strings.HasSuffix(pathPrefix, "/") {
+			pathPrefix += "/"
+		}
 		sqlBase += fmt.Sprintf(` AND path LIKE $%d`, argIdx)
 		args = append(args, pathPrefix+"%")
 		argIdx++
@@ -198,6 +194,7 @@ func (s *FileTreeService) Search(ctx context.Context, userID uuid.UUID, query st
 
 // EnsureDirectory creates a directory entry if it does not already exist.
 func (s *FileTreeService) EnsureDirectory(ctx context.Context, userID uuid.UUID, path string) error {
+	path = hubpath.NormalizeStorage(path)
 	if !strings.HasSuffix(path, "/") {
 		path = path + "/"
 	}

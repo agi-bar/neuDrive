@@ -235,6 +235,9 @@ func (s *Server) setupRoutes() {
 		// Dashboard
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
 
+		// GPT Setup
+		r.Get("/api/gpt/setup", s.handleGPTSetup)
+
 		// Import / Export (legacy) — 50MB body limit for imports
 		r.Group(func(r chi.Router) {
 			r.Use(MaxBodySizeMiddleware(50 << 20))
@@ -285,44 +288,21 @@ func (s *Server) setupRoutes() {
 		r.Delete("/api/oauth/grants/{id}", s.handleRevokeOAuthGrant)
 	})
 
-	// GPT Actions API (authenticated via Bearer scoped token)
-	r.Group(func(r chi.Router) {
-		r.Use(s.apiKeyMiddleware)
-
-		r.Get("/gpt/profile", s.handleGPTGetProfile)
-		r.Get("/gpt/preferences", s.handleGPTGetPreferences)
-		r.Post("/gpt/search", s.handleGPTSearch)
-		r.Get("/gpt/projects", s.handleGPTListProjects)
-		r.Get("/gpt/project/{name}", s.handleGPTGetProject)
-		r.Post("/gpt/log", s.handleGPTLog)
-		r.Get("/gpt/skills", s.handleGPTListSkills)
-		r.Get("/gpt/skill/{name}", s.handleGPTGetSkill)
-		r.Get("/gpt/devices", s.handleGPTListDevices)
-		r.Post("/gpt/device/{name}", s.handleGPTCallDevice)
-		r.Post("/gpt/message", s.handleGPTSendMessage)
-		r.Get("/gpt/inbox", s.handleGPTGetInbox)
-		r.Get("/gpt/secrets", s.handleGPTListSecrets)
-		r.Get("/gpt/secret/{scope}", s.handleGPTGetSecret)
-	})
-
-	// GPT Setup (authenticated via JWT -- accessed from the web UI)
-	r.Group(func(r chi.Router) {
-		r.Use(s.authMiddleware)
-		r.Get("/api/gpt/setup", s.handleGPTSetup)
-	})
-
-	// Agent API (authenticated via X-API-Key)
+	// Agent API (authenticated via X-API-Key or Bearer scoped token)
+	// ChatGPT GPT Actions also use these endpoints — schema at /gpt/openapi.json
 	r.Group(func(r chi.Router) {
 		r.Use(s.apiKeyMiddleware)
 
 		r.Get("/agent/tree/*", s.handleAgentTreeList)
 		r.Get("/agent/search", s.handleAgentSearch)
+		r.Post("/agent/search", s.handleAgentSearch)
 		r.Get("/agent/skills", s.handleAgentListSkills)
 		r.Put("/agent/tree/*", s.handleAgentTreeWrite)
 		r.Get("/agent/vault/scopes", s.handleAgentVaultListScopes)
 		r.Get("/agent/vault/{scope}", s.handleAgentVaultRead)
 		r.Put("/agent/vault/{scope}", s.handleAgentVaultWrite)
 		r.Put("/agent/memory/profile", s.handleAgentUpdateProfile)
+		r.Get("/agent/inbox", s.handleAgentGetInbox)
 		r.Get("/agent/inbox/{role}", s.handleAgentGetInbox)
 		r.Post("/agent/inbox/send", s.handleAgentSendMessage)
 		r.Put("/agent/inbox/{id}/archive", s.handleAgentArchiveInbox)
@@ -868,8 +848,24 @@ func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
 	}
 	userID, _ := userIDFromCtx(r.Context())
 	trustLevel := trustLevelFromCtx(r.Context())
+
+	// Support both GET ?q= and POST {"query": "..."} for ChatGPT Actions compatibility.
 	query := r.URL.Query().Get("q")
 	scope := r.URL.Query().Get("scope")
+	if r.Method == http.MethodPost {
+		var body struct {
+			Query string `json:"query"`
+			Scope string `json:"scope"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+			if body.Query != "" {
+				query = body.Query
+			}
+			if body.Scope != "" {
+				scope = body.Scope
+			}
+		}
+	}
 	if strings.TrimSpace(query) == "" {
 		respondValidationError(w, "q", "query parameter 'q' is required")
 		return

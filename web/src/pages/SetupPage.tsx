@@ -277,10 +277,10 @@ Authorization: Bearer ${displayToken}`
 
         <div className="code-block">
           <div className="code-block-label">1. OpenAPI Schema URL（粘贴到 Actions 配置中）:</div>
-          <pre>{`${baseUrl}/docs/gpt-actions-schema.yaml`}</pre>
+          <pre>{`${baseUrl}/gpt/openapi.json`}</pre>
           <button
             className="copy-btn"
-            onClick={() => copyToClipboard(`${baseUrl}/docs/gpt-actions-schema.yaml`, 'gpt-schema')}
+            onClick={() => copyToClipboard(`${baseUrl}/gpt/openapi.json`, 'gpt-schema')}
           >
             {copied === 'gpt-schema' ? '已复制' : '复制'}
           </button>

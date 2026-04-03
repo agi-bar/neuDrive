@@ -2,23 +2,19 @@ package api
 
 import (
 	"net/http"
+	"strings"
 )
 
 // GET /api/gpt/setup — returns GPT Actions setup instructions and schema URL.
 func (s *Server) handleGPTSetup(w http.ResponseWriter, r *http.Request) {
-	baseURL := "https://hub.agibar.ai"
-
-	// Allow override via X-Forwarded-Host or Host header for dev environments.
-	if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
-		scheme := r.Header.Get("X-Forwarded-Proto")
-		if scheme == "" {
-			scheme = "https"
-		}
-		baseURL = scheme + "://" + fwd
+	scheme := "https"
+	if r.TLS == nil && !strings.HasPrefix(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "http"
 	}
+	baseURL := scheme + "://" + r.Host
 
 	respondOK(w, map[string]interface{}{
-		"schema_url":   baseURL + "/docs/gpt-actions-schema.yaml",
+		"schema_url":   baseURL + "/gpt/openapi.json",
 		"auth_type":    "bearer",
 		"token_prefix": "aht_",
 		"instructions": map[string]string{
@@ -28,6 +24,6 @@ func (s *Server) handleGPTSetup(w http.ResponseWriter, r *http.Request) {
 			"step_4": "在 Authentication 选择 'API Key'，Auth Type 选 'Bearer'，粘贴你的 Token",
 			"step_5": "保存并测试",
 		},
-		"endpoints_base": baseURL + "/gpt",
+		"endpoints_base": baseURL + "/agent",
 	})
 }

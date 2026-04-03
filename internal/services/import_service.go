@@ -103,9 +103,15 @@ func (s *ImportService) ImportClaudeMemory(ctx context.Context, userID uuid.UUID
 		return 0, fmt.Errorf("import.ImportClaudeMemory: memory service not configured")
 	}
 
+	// Accept both wrapped {memories: [...]} and bare array [...]
 	var export claudeMemoryExport
-	if err := json.Unmarshal(memoryJSON, &export); err != nil {
-		return 0, fmt.Errorf("import.ImportClaudeMemory: parse JSON: %w", err)
+	if err := json.Unmarshal(memoryJSON, &export); err != nil || len(export.Memories) == 0 {
+		// Try bare array
+		var items []claudeMemoryItem
+		if err2 := json.Unmarshal(memoryJSON, &items); err2 != nil {
+			return 0, fmt.Errorf("import.ImportClaudeMemory: parse JSON: expected {memories:[...]} or [...]: %w", err)
+		}
+		export.Memories = items
 	}
 
 	if len(export.Memories) == 0 {

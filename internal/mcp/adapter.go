@@ -281,11 +281,10 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "save_memory",
-			Description: "记住一条信息。当用户说「记住」「记一下」「别忘了」或需要保存任何信息供将来使用时，使用此工具。内容自动按日期归档到记忆库，可通过 search_memory 检索",
+			Description: "记住信息。当用户说「记住」「记一下」「别忘了」或需要保存任何信息供将来使用时，使用此工具。支持单条或多条批量保存。内容自动按日期归档到记忆库，可通过 search_memory 检索",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"content": prop("string", "要记住的内容（支持 Markdown）"),
-				"title":   prop("string", "简短标题（可选，用于分类，如 meeting-notes, todo, idea）"),
-			}, "content"),
+				"memories": propArray("object", "要记住的条目数组 [{content: '内容', title: '标题(可选)'}]，也可只传一条"),
+			}, "memories"),
 		},
 		{
 			Name:        "import_skill",
@@ -295,13 +294,7 @@ func (s *MCPServer) getTools() []MCPTool {
 				"files": propObject("文件内容 map: {路径: 内容}"),
 			}, "name", "files"),
 		},
-		{
-			Name:        "import_claude_memory",
-			Description: "批量导入 Claude 记忆导出文件（仅用于从 Claude 平台迁移历史记忆，日常记忆请用 save_memory）",
-			InputSchema: jsonSchema(map[string]interface{}{
-				"memories": propArray("object", "记忆条目 [{content, type, created_at}]"),
-			}, "memories"),
-		},
+		// import_claude_memory removed from MCP tools — available via admin HTTP API only
 	}
 
 	// Filter by scopes if token has limited scopes
@@ -319,28 +312,27 @@ func (s *MCPServer) getTools() []MCPTool {
 
 func (s *MCPServer) toolAllowed(name string) bool {
 	scopeMap := map[string]string{
-		"read_profile":         models.ScopeReadProfile,
-		"update_profile":       models.ScopeWriteProfile,
-		"search_memory":        models.ScopeReadMemory,
-		"list_projects":        models.ScopeReadProjects,
-		"create_project":       models.ScopeWriteProjects,
-		"get_project":          models.ScopeReadProjects,
-		"log_action":           models.ScopeWriteProjects,
-		"list_directory":       models.ScopeReadTree,
-		"read_file":            models.ScopeReadTree,
-		"write_file":           models.ScopeWriteTree,
-		"list_secrets":         models.ScopeReadVault,
-		"read_secret":          models.ScopeReadVault,
-		"list_skills":          models.ScopeReadSkills,
-		"read_skill":           models.ScopeReadSkills,
-		"list_devices":         models.ScopeReadDevices,
-		"call_device":          models.ScopeCallDevices,
-		"send_message":         models.ScopeWriteInbox,
-		"read_inbox":           models.ScopeReadInbox,
-		"get_stats":            models.ScopeReadProfile,
-		"save_memory":          models.ScopeWriteMemory,
-		"import_skill":         models.ScopeWriteSkills,
-		"import_claude_memory": models.ScopeWriteMemory,
+		"read_profile":   models.ScopeReadProfile,
+		"update_profile": models.ScopeWriteProfile,
+		"search_memory":  models.ScopeReadMemory,
+		"list_projects":  models.ScopeReadProjects,
+		"create_project": models.ScopeWriteProjects,
+		"get_project":    models.ScopeReadProjects,
+		"log_action":     models.ScopeWriteProjects,
+		"list_directory": models.ScopeReadTree,
+		"read_file":      models.ScopeReadTree,
+		"write_file":     models.ScopeWriteTree,
+		"list_secrets":   models.ScopeReadVault,
+		"read_secret":    models.ScopeReadVault,
+		"list_skills":    models.ScopeReadSkills,
+		"read_skill":     models.ScopeReadSkills,
+		"list_devices":   models.ScopeReadDevices,
+		"call_device":    models.ScopeCallDevices,
+		"send_message":   models.ScopeWriteInbox,
+		"read_inbox":     models.ScopeReadInbox,
+		"get_stats":      models.ScopeReadProfile,
+		"save_memory":    models.ScopeWriteMemory,
+		"import_skill":   models.ScopeWriteSkills,
 	}
 	required, ok := scopeMap[name]
 	if !ok {
@@ -608,40 +600,58 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return string(result), false
 
 	case "save_memory":
-		content, _ := args["content"].(string)
-		if content == "" {
-			return "error: content is required", true
+		// Accept array of {content, title?} objects
+		memoriesRaw, ok := args["memories"].([]interface{})
+		if !ok || len(memoriesRaw) == 0 {
+			return "error: memories array is required (at least one {content, title?} object)", true
 		}
-		title, _ := args["title"].(string)
 
-		// Generate path: /memory/scratch/{date}-{title}.md
 		now := time.Now()
-		filename := now.Format("2006-01-02")
-		if title != "" {
-			// Sanitize title for filename
-			safe := strings.Map(func(r rune) rune {
-				if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
-					return r
-				}
-				if r >= 0x4e00 && r <= 0x9fff { // CJK characters
-					return r
-				}
-				return '-'
-			}, title)
-			filename += "-" + safe
-		}
-		path := fmt.Sprintf("/memory/scratch/%s.md", filename)
+		var saved []string
 
-		// If file already exists for today, append instead of overwrite
-		existing, err := s.FileTree.Read(ctx, s.UserID, path, s.TrustLevel)
-		if err == nil && existing.Content != "" {
-			content = existing.Content + "\n\n---\n\n" + content
+		for _, item := range memoriesRaw {
+			m, ok := item.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			content, _ := m["content"].(string)
+			if content == "" {
+				continue
+			}
+			title, _ := m["title"].(string)
+
+			// Generate path: /memory/scratch/{date}-{title}.md
+			filename := now.Format("2006-01-02")
+			if title != "" {
+				safe := strings.Map(func(r rune) rune {
+					if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+						return r
+					}
+					if r >= 0x4e00 && r <= 0x9fff {
+						return r
+					}
+					return '-'
+				}, title)
+				filename += "-" + safe
+			}
+			path := fmt.Sprintf("/memory/scratch/%s.md", filename)
+
+			// Append if file already exists for today
+			existing, err := s.FileTree.Read(ctx, s.UserID, path, s.TrustLevel)
+			if err == nil && existing.Content != "" {
+				content = existing.Content + "\n\n---\n\n" + content
+			}
+
+			if _, err := s.FileTree.Write(ctx, s.UserID, path, content, "text/markdown", models.TrustLevelFull); err != nil {
+				return fmt.Sprintf("error writing %s: %v", path, err), true
+			}
+			saved = append(saved, path)
 		}
 
-		if _, err := s.FileTree.Write(ctx, s.UserID, path, content, "text/markdown", models.TrustLevelFull); err != nil {
-			return fmt.Sprintf("error: %v", err), true
+		if len(saved) == 0 {
+			return "error: no valid memory items to save", true
 		}
-		return fmt.Sprintf("memory saved to %s", path), false
+		return fmt.Sprintf("saved %d memories: %s", len(saved), strings.Join(saved, ", ")), false
 
 	case "import_skill":
 		name, _ := args["name"].(string)

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/agi-bar/agenthub/internal/vault"
@@ -392,7 +393,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			for _, e := range entries {
 				results = append(results, map[string]interface{}{
 					"type":    "memory",
-					"path":    e.Path,
+					"path":    hubpath.StorageToPublic(e.Path),
 					"content": e.Content,
 				})
 			}
@@ -484,6 +485,10 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
+		// Normalize storage paths to public paths (e.g. .skills/ → /skills/).
+		for i := range entries {
+			entries[i].Path = hubpath.StorageToPublic(entries[i].Path)
+		}
 		result, _ := json.MarshalIndent(entries, "", "  ")
 		return string(result), false
 
@@ -523,6 +528,9 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		entries, err := s.FileTree.List(ctx, s.UserID, "/skills", s.TrustLevel)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
+		}
+		for i := range entries {
+			entries[i].Path = hubpath.StorageToPublic(entries[i].Path)
 		}
 		result, _ := json.MarshalIndent(entries, "", "  ")
 		return string(result), false

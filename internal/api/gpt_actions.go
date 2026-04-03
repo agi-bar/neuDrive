@@ -402,3 +402,103 @@ func writeGPTDeviceError(w http.ResponseWriter, err error) {
 }
 
 const timeLayoutRFC3339 = time.RFC3339
+
+// handleGPTOpenAPISchema serves the GPT Actions OpenAPI schema as JSON,
+// dynamically setting the server URL to match the incoming request host.
+func (s *Server) handleGPTOpenAPISchema(w http.ResponseWriter, r *http.Request) {
+	scheme := "https"
+	if r.TLS == nil && !strings.HasPrefix(r.Header.Get("X-Forwarded-Proto"), "https") {
+		scheme = "http"
+	}
+	baseURL := scheme + "://" + r.Host
+
+	schema := map[string]interface{}{
+		"openapi": "3.1.0",
+		"info": map[string]string{
+			"title":       "Agent Hub",
+			"description": "连接你的 AI 身份和记忆到 ChatGPT",
+			"version":     "1.0.0",
+		},
+		"servers": []map[string]string{{"url": baseURL}},
+		"paths":   gptOpenAPIPaths(),
+		"components": map[string]interface{}{
+			"schemas": map[string]interface{}{},
+			"securitySchemes": map[string]interface{}{
+				"BearerAuth": map[string]string{
+					"type":        "http",
+					"scheme":      "bearer",
+					"description": "Agent Hub Token (aht_...)",
+				},
+			},
+		},
+		"security": []map[string][]string{{"BearerAuth": {}}},
+	}
+
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	json.NewEncoder(w).Encode(schema)
+}
+
+func gptOpenAPIPaths() map[string]interface{} {
+	type M = map[string]interface{}
+	str := M{"type": "string"}
+	num := M{"type": "number"}
+	obj := func(props M) M { return M{"type": "object", "properties": props} }
+	arr := func(items M) M { return M{"type": "array", "items": items} }
+	rsp := func(schema M) M {
+		return M{"200": M{"description": "ok", "content": M{"application/json": M{"schema": schema}}}}
+	}
+	get := func(id, summary string, schema M) M {
+		return M{"get": M{"operationId": id, "summary": summary, "responses": rsp(schema)}}
+	}
+	pp := func(name string) M { return M{"name": name, "in": "path", "required": true, "schema": str} }
+	body := func(required []string, props M) M {
+		return M{"required": true, "content": M{"application/json": M{"schema": M{"type": "object", "required": required, "properties": props}}}}
+	}
+
+	return M{
+		"/gpt/profile":     get("getProfile", "获取用户身份信息", obj(M{"slug": str, "display_name": str, "timezone": str, "language": str})),
+		"/gpt/preferences": get("getPreferences", "获取用户偏好", obj(M{"timezone": str, "language": str})),
+		"/gpt/projects":    get("listProjects", "列出所有项目", obj(M{"projects": arr(obj(M{"name": str, "status": str, "updated_at": str}))})),
+		"/gpt/skills":      get("listSkills", "列出所有技能", obj(M{"skills": arr(obj(M{"name": str, "description": str}))})),
+		"/gpt/devices":     get("listDevices", "列出设备", obj(M{"devices": arr(obj(M{"name": str, "type": str, "status": str}))})),
+		"/gpt/inbox":       get("getInbox", "读取收件箱", obj(M{"messages": arr(obj(M{"from": str, "subject": str, "body": str, "timestamp": str}))})),
+		"/gpt/secrets":     get("listSecrets", "列出保险库范围", obj(M{"scopes": arr(str)})),
+		"/gpt/project/{name}": M{"get": M{
+			"operationId": "getProject", "summary": "获取项目详情",
+			"parameters": []M{pp("name")},
+			"responses":  rsp(obj(M{"name": str, "logs": arr(obj(M{"action": str, "summary": str, "timestamp": str}))})),
+		}},
+		"/gpt/skill/{name}": M{"get": M{
+			"operationId": "getSkill", "summary": "读取技能内容",
+			"parameters": []M{pp("name")},
+			"responses":  rsp(obj(M{"name": str, "content": str})),
+		}},
+		"/gpt/secret/{scope}": M{"get": M{
+			"operationId": "getSecret", "summary": "读取保险库条目",
+			"parameters": []M{pp("scope")},
+			"responses":  rsp(obj(M{"scope": str, "data": str})),
+		}},
+		"/gpt/device/{name}": M{"post": M{
+			"operationId": "callDevice", "summary": "调用设备",
+			"parameters":  []M{pp("name")},
+			"requestBody": body([]string{"action"}, M{"action": str, "params": M{"type": "object"}}),
+			"responses":   rsp(obj(M{"device": str, "action": str, "status": str})),
+		}},
+		"/gpt/search": M{"post": M{
+			"operationId": "searchMemory", "summary": "搜索记忆和知识库",
+			"requestBody": body([]string{"query"}, M{"query": str}),
+			"responses":   rsp(obj(M{"query": str, "results": arr(obj(M{"path": str, "snippet": str, "score": num}))})),
+		}},
+		"/gpt/log": M{"post": M{
+			"operationId": "logAction", "summary": "记录项目日志",
+			"requestBody": body([]string{"project"}, M{"project": str, "action": str, "summary": str}),
+			"responses":   rsp(obj(M{"status": str})),
+		}},
+		"/gpt/message": M{"post": M{
+			"operationId": "sendMessage", "summary": "发送消息",
+			"requestBody": body([]string{"to"}, M{"to": str, "subject": str, "body": str}),
+			"responses":   rsp(obj(M{"status": str})),
+		}},
+	}
+}

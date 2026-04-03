@@ -192,7 +192,7 @@ func TestToolsList(t *testing.T) {
 		"list_devices", "call_device",
 		"send_message", "read_inbox",
 		"get_stats",
-		"import_skill", "import_claude_memory",
+		"import_skill", "save_memory", "create_project",
 	}
 
 	toolNames := make(map[string]bool)

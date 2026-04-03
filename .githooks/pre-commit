@@ -1,6 +1,6 @@
 #!/bin/sh
 # Pre-commit hook — mirrors GitHub CI checks locally
-# Go: goimports + go vet + go build
+# Go: goimports + go vet + go build + go test
 # Frontend: tsc type check
 
 set -e
@@ -27,6 +27,9 @@ if [ -n "$STAGED_GO" ]; then
 
   echo "==> go: build"
   go build ./cmd/server/ ./cmd/mcp/
+
+  echo "==> go: test"
+  go test ./... -short -count=1
 fi
 
 # --- Frontend checks ---

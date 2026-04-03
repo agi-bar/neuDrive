@@ -634,7 +634,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventProjectUpdate, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
 			"project": project.Name,
 			"action":  "created",
 		})
@@ -712,7 +712,7 @@ func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventProjectUpdate, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
 			"project": project.Name,
 			"action":  req.Action,
 			"summary": req.Summary,
@@ -735,7 +735,7 @@ func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventProjectUpdate, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
 			"project": name,
 			"action":  "archived",
 		})
@@ -774,7 +774,7 @@ func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventProjectUpdate, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
 			"project": name,
 			"action":  "summarized",
 		})
@@ -799,7 +799,15 @@ func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.DashboardService == nil {
-		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "dashboard service not configured")
+		// Graceful fallback: return basic stats from connection count when
+		// the full dashboard service is not configured (e.g. minimal deploys).
+		count := 0
+		if s.ConnectionService != nil {
+			if conns, err := s.ConnectionService.ListByUser(r.Context(), userID); err == nil {
+				count = len(conns)
+			}
+		}
+		respondOK(w, &models.DashboardStats{TotalConnections: count})
 		return
 	}
 
@@ -943,7 +951,7 @@ func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventVaultAccess, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventVaultAccess, map[string]interface{}{
 			"scope":       scope,
 			"trust_level": trustLevel,
 		})

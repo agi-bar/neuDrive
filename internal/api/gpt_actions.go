@@ -1,11 +1,12 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
@@ -175,7 +176,7 @@ func (s *Server) handleGPTLog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventProjectUpdate, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
 			"project": project.Name,
 			"action":  body.Action,
 			"summary": body.Summary,
@@ -369,7 +370,7 @@ func (s *Server) handleGPTGetSecret(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventVaultAccess, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventVaultAccess, map[string]interface{}{
 			"scope":       scope,
 			"trust_level": trustLevel,
 		})
@@ -396,8 +397,8 @@ func writeGPTDeviceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, services.ErrDeviceUpstreamFailed):
 		writeGPTError(w, http.StatusBadGateway, err.Error())
 	default:
-		writeGPTError(w, http.StatusInternalServerError, fmt.Sprintf("device call failed: %v", err))
+		writeGPTError(w, http.StatusInternalServerError, "device call failed")
 	}
 }
 
-const timeLayoutRFC3339 = "2006-01-02T15:04:05Z"
+const timeLayoutRFC3339 = time.RFC3339

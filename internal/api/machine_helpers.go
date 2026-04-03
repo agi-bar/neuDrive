@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
@@ -137,5 +138,10 @@ func snippetText(raw string) string {
 	if len(raw) <= 180 {
 		return raw
 	}
-	return strings.TrimSpace(raw[:177]) + "..."
+	// Truncate at a valid UTF-8 rune boundary to avoid corrupting multi-byte characters.
+	truncated := raw[:177]
+	for !utf8.ValidString(truncated) && len(truncated) > 0 {
+		truncated = truncated[:len(truncated)-1]
+	}
+	return strings.TrimSpace(truncated) + "..."
 }

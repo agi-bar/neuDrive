@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -88,7 +89,7 @@ func (s *Server) handleCreateCollaboration(w http.ResponseWriter, r *http.Reques
 	}
 
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventCollabNew, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventCollabNew, map[string]interface{}{
 			"collaboration_id": collab.ID.String(),
 			"guest_user_id":    collab.GuestUserID.String(),
 			"shared_paths":     collab.SharedPaths,

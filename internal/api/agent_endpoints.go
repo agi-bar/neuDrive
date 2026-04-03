@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -40,7 +41,7 @@ func (s *Server) handleAgentVaultWrite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	minTrust := trustLevelFromCtx(r.Context())
-	if req.MinTrustLevel != nil && *req.MinTrustLevel < minTrust {
+	if req.MinTrustLevel != nil && *req.MinTrustLevel > minTrust {
 		minTrust = *req.MinTrustLevel
 	}
 	if err := s.VaultService.Write(r.Context(), userID, scope, req.Data, req.Description, minTrust); err != nil {
@@ -139,7 +140,7 @@ func (s *Server) handleAgentCreateProject(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventProjectUpdate, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
 			"project": project.Name,
 			"action":  "created",
 		})
@@ -222,7 +223,7 @@ func (s *Server) handleAgentAppendProjectLog(w http.ResponseWriter, r *http.Requ
 		return
 	}
 	if s.WebhookService != nil {
-		go s.WebhookService.Trigger(r.Context(), userID, models.EventProjectUpdate, map[string]interface{}{
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
 			"project": project.Name,
 			"action":  req.Action,
 			"summary": req.Summary,
@@ -251,11 +252,31 @@ func (s *Server) handleAgentArchiveInbox(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
+	userID, _ := userIDFromCtx(r.Context())
 	msgID, err := uuid.Parse(chi.URLParam(r, "id"))
 	if err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid message ID")
 		return
 	}
+
+	// Verify the message belongs to the authenticated user.
+	messages, err := s.InboxService.GetMessages(r.Context(), userID, "", "")
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+	owned := false
+	for _, m := range messages {
+		if m.ID == msgID {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		respondNotFound(w, "message")
+		return
+	}
+
 	if err := s.InboxService.Archive(r.Context(), msgID); err != nil {
 		respondNotFound(w, "message")
 		return

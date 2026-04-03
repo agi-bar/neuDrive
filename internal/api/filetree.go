@@ -181,7 +181,14 @@ func (s *Server) readOrListTreePath(ctx context.Context, userID uuid.UUID, trust
 		return fileTreeEntryToNode(entry), nil
 	}
 
-	return s.listTreeNode(ctx, userID, trustLevel, storagePath)
+	// Only fall through to directory listing if the read error indicates "not found".
+	// For other errors (database, permission, etc.), propagate the real error.
+	node, listErr := s.listTreeNode(ctx, userID, trustLevel, storagePath)
+	if listErr != nil {
+		// If listing also fails, return the original read error for better diagnostics.
+		return nil, err
+	}
+	return node, nil
 }
 
 func (s *Server) listTreeNode(ctx context.Context, userID uuid.UUID, trustLevel int, storagePath string) (*FileNode, error) {

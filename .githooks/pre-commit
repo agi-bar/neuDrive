@@ -1,0 +1,25 @@
+#!/bin/sh
+# Pre-commit hook: run goimports + go vet on staged Go files
+
+STAGED_GO=$(git diff --cached --name-only --diff-filter=ACM | grep '\.go$' || true)
+
+if [ -n "$STAGED_GO" ]; then
+  # Check goimports
+  if command -v goimports >/dev/null 2>&1; then
+    BAD=$(echo "$STAGED_GO" | xargs goimports -l 2>/dev/null)
+    if [ -n "$BAD" ]; then
+      echo "goimports formatting needed:"
+      echo "$BAD"
+      echo ""
+      echo "Run: goimports -w \$files"
+      exit 1
+    fi
+  fi
+
+  # Run go vet
+  go vet ./... 2>&1
+  if [ $? -ne 0 ]; then
+    echo "go vet failed"
+    exit 1
+  fi
+fi

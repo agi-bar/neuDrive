@@ -48,7 +48,7 @@ func (s *ImportService) ImportSkill(ctx context.Context, userID uuid.UUID, skill
 		return 0, fmt.Errorf("import.ImportSkill: file tree service not configured")
 	}
 
-	baseDir := ".skills/" + skillName
+	baseDir := "/skills/" + skillName
 
 	// Ensure the skill directory exists.
 	if err := s.fileTree.EnsureDirectory(ctx, userID, baseDir); err != nil {

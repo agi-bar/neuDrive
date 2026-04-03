@@ -1592,3 +1592,143 @@ a:hover {
     grid-template-columns: 1fr;
   }
 }
+
+/* === OAuth Authorize Page === */
+.oauth-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: var(--color-bg);
+  padding: 20px;
+}
+
+.oauth-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  max-width: 480px;
+  width: 100%;
+  padding: 32px;
+}
+
+.oauth-title {
+  font-size: 20px;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.oauth-subtitle {
+  text-align: center;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+.oauth-app-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px;
+  background: var(--color-bg);
+  border-radius: var(--radius-md);
+  margin-bottom: 24px;
+}
+
+.oauth-app-logo {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-md);
+  background: var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.oauth-app-logo img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.oauth-app-name {
+  font-weight: 600;
+  font-size: 16px;
+}
+
+.oauth-app-sub {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.oauth-scopes {
+  margin-bottom: 24px;
+}
+
+.oauth-scopes h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 12px;
+  color: var(--color-text-secondary);
+}
+
+.oauth-scope-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 14px;
+}
+
+.oauth-scope-item:last-child {
+  border-bottom: none;
+}
+
+.oauth-scope-check {
+  color: var(--color-success, #4CAF50);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.oauth-user-status {
+  text-align: center;
+  padding: 12px 0;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  margin-bottom: 16px;
+}
+
+.oauth-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.oauth-btn-deny,
+.oauth-btn-approve {
+  flex: 1;
+  padding: 12px 24px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.oauth-error {
+  background: #fff3f3;
+  border: 1px solid #ffcdd2;
+  border-radius: var(--radius-md);
+  padding: 16px;
+  color: #c62828;
+  font-size: 14px;
+  margin-top: 16px;
+}
+
+.oauth-loading {
+  text-align: center;
+  padding: 40px 0;
+  color: var(--color-text-secondary);
+}

@@ -158,12 +158,11 @@ func (s *Server) setupRoutes() {
 	r.Post("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
 	r.Post("/api/auth/token/dev", s.AuthHandler.HandleDevToken)
 
-	// OAuth 2.0 Provider (public endpoints, optional auth detection)
-	r.Group(func(r chi.Router) {
-		r.Use(s.optionalAuthMiddleware) // injects userID if JWT present, doesn't block
-		r.Get("/oauth/authorize", s.handleOAuthAuthorizeGet)
-		r.Post("/oauth/authorize", s.handleOAuthAuthorizePost)
-	})
+	// OAuth 2.0 Provider (public endpoints)
+	// GET /oauth/authorize serves the SPA which renders the consent UI
+	r.Get("/oauth/authorize", web.Handler().ServeHTTP)
+	r.Post("/oauth/authorize", s.handleOAuthAuthorizePost)
+	r.Get("/api/oauth/authorize-info", s.handleOAuthAuthorizeInfo)
 	r.Post("/oauth/token", s.handleOAuthToken)
 
 	// OAuth userinfo requires authentication

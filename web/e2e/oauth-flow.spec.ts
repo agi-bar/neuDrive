@@ -18,7 +18,7 @@ test.describe('OAuth Authorization Flow', () => {
     expect(url).toContain('redirect=')
   })
 
-  test('login then auto-authorize without password prompt', async ({ page, request }) => {
+  test('login then shows consent page with Authorize button', async ({ page, request }) => {
     // Register a user via API
     const slug = `oauth-test-${Date.now()}`
     const email = `${slug}@test.local`
@@ -39,25 +39,24 @@ test.describe('OAuth Authorization Flow', () => {
     await page.locator('button[type="submit"]').click()
 
     // After login, should redirect back to authorize page
-    // Then JS should auto-submit (since token is now in localStorage)
-    await page.waitForTimeout(5000)
+    await page.waitForTimeout(3000)
 
     const finalURL = page.url()
-    // Either: auto-redirected to claude.ai callback, OR on authorize page with auto-submit pending
-    const autoAuthorized = finalURL.includes('claude.ai') || finalURL.includes('auth_callback') || finalURL.includes('code=')
-    const onAuthorizePage = finalURL.includes('/oauth/authorize')
-
-    // The consent form should NOT be visible (auto-submitted or hidden)
-    if (onAuthorizePage) {
-      const formVisible = await page.locator('.consent-card').isVisible().catch(() => false)
-      if (formVisible) {
-        // Check if email/password fields are visible (they shouldn't be after auto-login)
-        const emailField = await page.locator('input[name="email"]').isVisible().catch(() => false)
-        expect(emailField).toBe(false) // Should NOT show email/password form
-      }
-    }
-
     console.log('Final URL:', finalURL)
-    console.log('Auto-authorized:', autoAuthorized)
+
+    // Should be on the authorize page showing consent
+    if (finalURL.includes('/oauth/authorize')) {
+      // Consent card should be visible with Authorize button
+      const consentCard = await page.locator('.consent-card').isVisible().catch(() => false)
+      expect(consentCard).toBe(true)
+
+      // Email/password fields should NOT be visible
+      const emailField = await page.locator('input[name="email"]').isVisible().catch(() => false)
+      expect(emailField).toBe(false)
+
+      // Authorize button should be visible
+      const authorizeBtn = await page.locator('button.btn-approve').isVisible().catch(() => false)
+      expect(authorizeBtn).toBe(true)
+    }
   })
 })

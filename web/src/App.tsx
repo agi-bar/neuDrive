@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
 import { api } from './api'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -8,11 +8,13 @@ import InfoPage from './pages/InfoPage'
 import ProjectsPage from './pages/ProjectsPage'
 import SetupPage from './pages/SetupPage'
 import CollaborationsPage from './pages/CollaborationsPage'
+import OAuthAuthorizePage from './pages/OAuthAuthorizePage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
+  const location = useLocation()
 
   const checkAuth = useCallback(async () => {
     // Check for GitHub OAuth redirect tokens in URL
@@ -47,9 +49,9 @@ function App() {
 
   const handleLogin = (token: string, userData: any) => {
     localStorage.setItem('token', token)
-    setUser(userData)
 
     // Check if there's a redirect URL (from OAuth authorize flow)
+    // Do this BEFORE setUser to avoid flashing dashboard
     const params = new URLSearchParams(window.location.search)
     const redirect = params.get('redirect')
     if (redirect) {
@@ -57,6 +59,8 @@ function App() {
       window.location.href = redirect
       return
     }
+
+    setUser(userData)
     navigate('/')
   }
 
@@ -73,6 +77,11 @@ function App() {
         <p>加载中...</p>
       </div>
     )
+  }
+
+  // OAuth authorize is a standalone page (no sidebar), regardless of login state
+  if (location.pathname === '/oauth/authorize') {
+    return <OAuthAuthorizePage />
   }
 
   if (!user) {

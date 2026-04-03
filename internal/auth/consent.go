@@ -263,7 +263,12 @@ const consentHTML = `<!DOCTYPE html>
             <input type="hidden" name="state" value="{{.State}}">
             <input type="hidden" name="action" value="approve">
 
+            <div id="auto-status" style="display:none; text-align:center; padding:16px 0; color:#666;">
+                <p style="font-size:15px;">&#10003; 已登录，正在自动授权...</p>
+            </div>
+
             {{if .ShowLogin}}
+            <div id="login-section">
             <div style="margin-bottom:16px;">
                 <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Email</label>
                 <input type="email" name="email" placeholder="your@email.com" required
@@ -273,6 +278,7 @@ const consentHTML = `<!DOCTYPE html>
                 <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Password</label>
                 <input type="password" name="password" placeholder="Password" required
                     style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;">
+            </div>
             </div>
             {{end}}
 
@@ -290,16 +296,21 @@ const consentHTML = `<!DOCTYPE html>
 
     <script>
     (function() {
-        var card = document.querySelector('.consent-card');
-        if (card) card.style.display = 'none';
-
+        var loginSection = document.getElementById('login-section');
+        var autoStatus = document.getElementById('auto-status');
         var token = localStorage.getItem('token');
+
         if (!token) {
+            // Not logged in — redirect to login
             window.location.href = '/login?redirect=' + encodeURIComponent(window.location.href);
             return;
         }
 
-        // Verify token is valid
+        // Has token — hide login form, show auto-authorize status
+        if (loginSection) loginSection.style.display = 'none';
+        if (autoStatus) autoStatus.style.display = 'block';
+
+        // Verify token then auto-submit
         fetch('/api/auth/me', {
             headers: { 'Authorization': 'Bearer ' + token }
         }).then(function(resp) {
@@ -308,27 +319,27 @@ const consentHTML = `<!DOCTYPE html>
                 window.location.href = '/login?redirect=' + encodeURIComponent(window.location.href);
                 return;
             }
-            // Token valid — auto-submit form with hidden token field
+
+            // Auto-submit the form
             var form = document.querySelector('form');
             if (!form) return;
 
-            // Add token as hidden field so POST handler can authenticate
             var tokenInput = document.createElement('input');
             tokenInput.type = 'hidden';
             tokenInput.name = '_token';
             tokenInput.value = token;
             form.appendChild(tokenInput);
 
-            // Remove email/password required attrs
             var emailInput = form.querySelector('input[name="email"]');
             var passInput = form.querySelector('input[name="password"]');
             if (emailInput) emailInput.removeAttribute('required');
             if (passInput) passInput.removeAttribute('required');
 
-            // Submit as regular form POST (browser follows 302 redirect)
             form.submit();
         }).catch(function() {
-            if (card) card.style.display = '';
+            // Token check failed — show login form
+            if (loginSection) loginSection.style.display = '';
+            if (autoStatus) autoStatus.style.display = 'none';
         });
     })();
     </script>

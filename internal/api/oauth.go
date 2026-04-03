@@ -463,10 +463,10 @@ func (s *Server) handleOAuthAuthorizeInfo(w http.ResponseWriter, r *http.Request
 	}
 
 	respondOK(w, map[string]interface{}{
-		"app_name":    app.Name,
-		"app_logo":    app.LogoURL,
-		"scopes":      scopeLabels,
-		"client_id":   clientID,
+		"app_name":     app.Name,
+		"app_logo":     app.LogoURL,
+		"scopes":       scopeLabels,
+		"client_id":    clientID,
 		"redirect_uri": redirectURI,
 	})
 }

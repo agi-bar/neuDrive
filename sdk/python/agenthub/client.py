@@ -61,7 +61,7 @@ class AgentHub:
         if category is not None:
             params["category"] = category
         data = self._request("GET", "/agent/memory/profile", params=params)
-        raw = data.get("profiles", [])
+        raw = data.get("profiles") or []
         return [
             Profile(
                 category=item.get("category", ""),
@@ -82,7 +82,7 @@ class AgentHub:
     def search_memory(self, query: str, scope: str = "all") -> list[dict]:
         """Full-text search across memory / file tree."""
         data = self._request("GET", "/agent/search", params={"q": query, "scope": scope})
-        return data.get("results", [])
+        return data.get("results") or []
 
     # ------------------------------------------------------------------
     # Projects
@@ -97,7 +97,7 @@ class AgentHub:
                 status=p.get("status", ""),
                 context_md=p.get("context_md", ""),
             )
-            for p in data.get("projects", [])
+            for p in data.get("projects") or []
         ]
 
     def get_project(self, name: str) -> dict:
@@ -128,7 +128,7 @@ class AgentHub:
     def list_directory(self, path: str = "/") -> list[dict]:
         """List entries under *path* in the virtual file tree."""
         data = self._request("GET", f"/agent/tree{self._dir_path(path)}")
-        return data.get("children", [])
+        return data.get("children") or []
 
     def read_file(self, path: str) -> str:
         """Read a single file from the file tree and return its content."""
@@ -150,7 +150,7 @@ class AgentHub:
     def list_secrets(self) -> list[VaultScope]:
         """List available vault scopes (names only, not values)."""
         data = self._request("GET", "/agent/vault/scopes")
-        scopes = data.get("scopes", [])
+        scopes = data.get("scopes") or []
         return [
             VaultScope(scope=s, description="") if isinstance(s, str)
             else VaultScope(
@@ -177,7 +177,7 @@ class AgentHub:
     def list_skills(self) -> list[dict]:
         """List skill directories from the file tree."""
         data = self._request("GET", "/agent/skills")
-        return data.get("skills", [])
+        return data.get("skills") or []
 
     def read_skill(self, name: str) -> str:
         """Read the primary skill markdown file."""
@@ -199,7 +199,7 @@ class AgentHub:
                 protocol=d.get("protocol", ""),
                 status=d.get("status", "online"),
             )
-            for d in data.get("devices", [])
+            for d in data.get("devices") or []
         ]
 
     def call_device(
@@ -238,10 +238,10 @@ class AgentHub:
                 body=m.get("body", ""),
                 domain=m.get("domain", ""),
                 action_type=m.get("action_type", ""),
-                tags=m.get("tags", []),
+                tags=m.get("tags") or [],
                 status=m.get("status", "incoming"),
             )
-            for m in data.get("messages", [])
+            for m in data.get("messages") or []
         ]
 
     def archive_message(self, message_id: str) -> None:
@@ -281,7 +281,7 @@ class AgentHub:
         # v2 format: {"ok": true, "data": {"imported_count": N, ...}}
         inner = data.get("data", data)
         imported = inner.get("imported_count", inner.get("imported", 0))
-        errors = inner.get("errors", [])
+        errors = inner.get("errors") or []
         return ImportResult(imported=imported, errors=errors or [])
 
     # ------------------------------------------------------------------
@@ -364,7 +364,7 @@ class AsyncAgentHub:
         if category is not None:
             params["category"] = category
         data = await self._request("GET", "/agent/memory/profile", params=params)
-        raw = data.get("profiles", [])
+        raw = data.get("profiles") or []
         return [
             Profile(
                 category=item.get("category", ""),
@@ -385,7 +385,7 @@ class AsyncAgentHub:
         data = await self._request(
             "GET", "/agent/search", params={"q": query, "scope": scope}
         )
-        return data.get("results", [])
+        return data.get("results") or []
 
     # ------------------------------------------------------------------
     # Projects
@@ -399,7 +399,7 @@ class AsyncAgentHub:
                 status=p.get("status", ""),
                 context_md=p.get("context_md", ""),
             )
-            for p in data.get("projects", [])
+            for p in data.get("projects") or []
         ]
 
     async def get_project(self, name: str) -> dict:
@@ -426,7 +426,7 @@ class AsyncAgentHub:
 
     async def list_directory(self, path: str = "/") -> list[dict]:
         data = await self._request("GET", f"/agent/tree{self._dir_path(path)}")
-        return data.get("children", [])
+        return data.get("children") or []
 
     async def read_file(self, path: str) -> str:
         data = await self._request("GET", f"/agent/tree{self._file_path(path)}")
@@ -445,7 +445,7 @@ class AsyncAgentHub:
 
     async def list_secrets(self) -> list[VaultScope]:
         data = await self._request("GET", "/agent/vault/scopes")
-        scopes = data.get("scopes", [])
+        scopes = data.get("scopes") or []
         return [
             VaultScope(scope=s, description="") if isinstance(s, str)
             else VaultScope(
@@ -469,7 +469,7 @@ class AsyncAgentHub:
 
     async def list_skills(self) -> list[dict]:
         data = await self._request("GET", "/agent/skills")
-        return data.get("skills", [])
+        return data.get("skills") or []
 
     async def read_skill(self, name: str) -> str:
         data = await self._request("GET", f"/agent/tree/skills/{name}/SKILL.md")
@@ -489,7 +489,7 @@ class AsyncAgentHub:
                 protocol=d.get("protocol", ""),
                 status=d.get("status", "online"),
             )
-            for d in data.get("devices", [])
+            for d in data.get("devices") or []
         ]
 
     async def call_device(
@@ -529,10 +529,10 @@ class AsyncAgentHub:
                 body=m.get("body", ""),
                 domain=m.get("domain", ""),
                 action_type=m.get("action_type", ""),
-                tags=m.get("tags", []),
+                tags=m.get("tags") or [],
                 status=m.get("status", "incoming"),
             )
-            for m in data.get("messages", [])
+            for m in data.get("messages") or []
         ]
 
     async def archive_message(self, message_id: str) -> None:
@@ -565,7 +565,7 @@ class AsyncAgentHub:
     def _parse_import_result(data: dict) -> ImportResult:
         inner = data.get("data", data)
         imported = inner.get("imported_count", inner.get("imported", 0))
-        errors = inner.get("errors", [])
+        errors = inner.get("errors") or []
         return ImportResult(imported=imported, errors=errors or [])
 
     # ------------------------------------------------------------------

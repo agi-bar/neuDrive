@@ -833,7 +833,7 @@ func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
 	trustLevel := trustLevelFromCtx(r.Context())
 	query := r.URL.Query().Get("q")
 
-	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel)
+	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel, "")
 	if err != nil {
 		respondInternalError(w, err)
 		return

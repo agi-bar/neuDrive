@@ -157,7 +157,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	trustLevel := trustLevelFromCtx(r.Context())
 
-	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel)
+	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel, "")
 	if err != nil {
 		respondInternalError(w, err)
 		return

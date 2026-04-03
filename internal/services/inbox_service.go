@@ -26,13 +26,13 @@ func (s *InboxService) GetMessages(ctx context.Context, userID uuid.UUID, role, 
 	                 subject, body, structured_payload, attachments,
 	                 status, created_at, archived_at
 	          FROM inbox_messages
-	          WHERE to_address LIKE $1 || '%'`
-	args := []interface{}{userID.String()}
+	          WHERE user_id = $1`
+	args := []interface{}{userID}
 	argIdx := 2
 
 	if role != "" {
 		query += fmt.Sprintf(` AND to_address = $%d`, argIdx)
-		args = append(args, role+"@"+userID.String())
+		args = append(args, role)
 		argIdx++
 	}
 	if status != "" {
@@ -122,7 +122,9 @@ func (s *InboxService) Search(ctx context.Context, userID uuid.UUID, query, scop
 	                    status, created_at, archived_at
 	             FROM inbox_messages
 	             WHERE user_id = $1
-	               AND (to_tsvector('english', subject || ' ' || body) @@ plainto_tsquery('english', $2))`
+	               AND (to_tsvector('simple', subject || ' ' || body) @@ plainto_tsquery('simple', $2)
+	                    OR subject ILIKE '%' || $2 || '%'
+	                    OR body ILIKE '%' || $2 || '%')`
 	args := []interface{}{userID, query}
 	argIdx := 3
 

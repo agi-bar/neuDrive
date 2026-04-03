@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
@@ -169,6 +170,13 @@ func (s *MCPServer) getTools() []MCPTool {
 			InputSchema: jsonSchema(map[string]interface{}{}),
 		},
 		{
+			Name:        "create_project",
+			Description: "创建新项目",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"name": prop("string", "项目名称 (只允许字母、数字、横杠、下划线)"),
+			}, "name"),
+		},
+		{
 			Name:        "get_project",
 			Description: "获取项目上下文和最近日志",
 			InputSchema: jsonSchema(map[string]interface{}{
@@ -272,6 +280,14 @@ func (s *MCPServer) getTools() []MCPTool {
 			InputSchema: jsonSchema(map[string]interface{}{}),
 		},
 		{
+			Name:        "save_memory",
+			Description: "保存一条记忆到 scratch 层（短期工作记忆），自动按日期归档",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"content": prop("string", "记忆内容（支持 Markdown）"),
+				"title":   prop("string", "简短标题（用于文件名，可选）"),
+			}, "content"),
+		},
+		{
 			Name:        "import_skill",
 			Description: "导入 .skill 目录",
 			InputSchema: jsonSchema(map[string]interface{}{
@@ -307,6 +323,7 @@ func (s *MCPServer) toolAllowed(name string) bool {
 		"update_profile":       models.ScopeWriteProfile,
 		"search_memory":        models.ScopeReadMemory,
 		"list_projects":        models.ScopeReadProjects,
+		"create_project":       models.ScopeWriteProjects,
 		"get_project":          models.ScopeReadProjects,
 		"log_action":           models.ScopeWriteProjects,
 		"list_directory":       models.ScopeReadTree,
@@ -321,6 +338,7 @@ func (s *MCPServer) toolAllowed(name string) bool {
 		"send_message":         models.ScopeWriteInbox,
 		"read_inbox":           models.ScopeReadInbox,
 		"get_stats":            models.ScopeReadProfile,
+		"save_memory":          models.ScopeWriteMemory,
 		"import_skill":         models.ScopeWriteSkills,
 		"import_claude_memory": models.ScopeWriteMemory,
 	}
@@ -366,11 +384,49 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 
 	case "search_memory":
 		query, _ := args["query"].(string)
-		entries, err := s.FileTree.Search(ctx, s.UserID, query, s.TrustLevel)
-		if err != nil {
-			return fmt.Sprintf("error: %v", err), true
+		scope, _ := args["scope"].(string)
+		if scope == "" {
+			scope = "all"
 		}
-		result, _ := json.MarshalIndent(entries, "", "  ")
+
+		var results []interface{}
+
+		// Search file_tree (memory files)
+		if scope == "memory" || scope == "all" {
+			entries, err := s.FileTree.Search(ctx, s.UserID, query, s.TrustLevel, "/memory/")
+			if err != nil {
+				return fmt.Sprintf("error searching files: %v", err), true
+			}
+			for _, e := range entries {
+				results = append(results, map[string]interface{}{
+					"type":    "memory",
+					"path":    e.Path,
+					"content": e.Content,
+				})
+			}
+		}
+
+		// Search inbox messages
+		if scope == "inbox" || scope == "all" {
+			msgs, err := s.Inbox.Search(ctx, s.UserID, query, "")
+			if err != nil {
+				return fmt.Sprintf("error searching inbox: %v", err), true
+			}
+			for _, m := range msgs {
+				results = append(results, map[string]interface{}{
+					"type":    "inbox",
+					"subject": m.Subject,
+					"body":    m.Body,
+					"from":    m.FromAddress,
+					"date":    m.CreatedAt,
+				})
+			}
+		}
+
+		if len(results) == 0 {
+			return "no results found", false
+		}
+		result, _ := json.MarshalIndent(results, "", "  ")
 		return string(result), false
 
 	case "list_projects":
@@ -379,6 +435,18 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		result, _ := json.MarshalIndent(projects, "", "  ")
+		return string(result), false
+
+	case "create_project":
+		name, _ := args["name"].(string)
+		if name == "" {
+			return "error: project name is required", true
+		}
+		project, err := s.Project.Create(ctx, s.UserID, name)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err), true
+		}
+		result, _ := json.MarshalIndent(project, "", "  ")
 		return string(result), false
 
 	case "get_project":
@@ -538,6 +606,42 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		}
 		result, _ := json.MarshalIndent(stats, "", "  ")
 		return string(result), false
+
+	case "save_memory":
+		content, _ := args["content"].(string)
+		if content == "" {
+			return "error: content is required", true
+		}
+		title, _ := args["title"].(string)
+
+		// Generate path: /memory/scratch/{date}-{title}.md
+		now := time.Now()
+		filename := now.Format("2006-01-02")
+		if title != "" {
+			// Sanitize title for filename
+			safe := strings.Map(func(r rune) rune {
+				if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+					return r
+				}
+				if r >= 0x4e00 && r <= 0x9fff { // CJK characters
+					return r
+				}
+				return '-'
+			}, title)
+			filename += "-" + safe
+		}
+		path := fmt.Sprintf("/memory/scratch/%s.md", filename)
+
+		// If file already exists for today, append instead of overwrite
+		existing, err := s.FileTree.Read(ctx, s.UserID, path, s.TrustLevel)
+		if err == nil && existing.Content != "" {
+			content = existing.Content + "\n\n---\n\n" + content
+		}
+
+		if _, err := s.FileTree.Write(ctx, s.UserID, path, content, "text/markdown", models.TrustLevelFull); err != nil {
+			return fmt.Sprintf("error: %v", err), true
+		}
+		return fmt.Sprintf("memory saved to %s", path), false
 
 	case "import_skill":
 		name, _ := args["name"].(string)

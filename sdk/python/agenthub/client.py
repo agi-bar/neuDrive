@@ -35,7 +35,21 @@ class AgentHub:
     def _request(self, method: str, path: str, **kwargs: Any) -> dict:
         resp = self._client.request(method, path, **kwargs)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        if isinstance(data, dict) and data.get("ok") is True and "data" in data:
+            return data["data"]
+        return data
+
+    @staticmethod
+    def _file_path(path: str) -> str:
+        return path if path.startswith("/") else f"/{path}"
+
+    @classmethod
+    def _dir_path(cls, path: str) -> str:
+        safe_path = cls._file_path(path)
+        if safe_path == "/":
+            return safe_path
+        return safe_path if safe_path.endswith("/") else f"{safe_path}/"
 
     # ------------------------------------------------------------------
     # Profile / Memory
@@ -46,10 +60,8 @@ class AgentHub:
         params: dict[str, str] = {}
         if category is not None:
             params["category"] = category
-        data = self._request("GET", "/api/memory/profile", params=params)
-        # The API may return a single profile dict or a list depending on
-        # whether a category filter was applied.  Normalise to a list.
-        raw = data if isinstance(data, list) else data.get("profiles", [data])
+        data = self._request("GET", "/agent/memory/profile", params=params)
+        raw = data.get("profiles", [])
         return [
             Profile(
                 category=item.get("category", ""),
@@ -63,13 +75,13 @@ class AgentHub:
         """Create or update a profile entry for *category*."""
         self._request(
             "PUT",
-            "/api/memory/profile",
-            json={"display_name": category, "preferences": {category: content}},
+            "/agent/memory/profile",
+            json={"category": category, "content": content},
         )
 
     def search_memory(self, query: str, scope: str = "all") -> list[dict]:
         """Full-text search across memory / file tree."""
-        data = self._request("GET", "/api/search", params={"q": query, "scope": scope})
+        data = self._request("GET", "/agent/search", params={"q": query, "scope": scope})
         return data.get("results", [])
 
     # ------------------------------------------------------------------
@@ -78,7 +90,7 @@ class AgentHub:
 
     def list_projects(self) -> list[Project]:
         """Return all projects for the authenticated user."""
-        data = self._request("GET", "/api/projects")
+        data = self._request("GET", "/agent/projects")
         return [
             Project(
                 name=p.get("name", ""),
@@ -90,11 +102,11 @@ class AgentHub:
 
     def get_project(self, name: str) -> dict:
         """Get full project details including logs."""
-        return self._request("GET", f"/api/projects/{name}")
+        return self._request("GET", f"/agent/projects/{name}")
 
     def create_project(self, name: str) -> dict:
         """Create a new project."""
-        return self._request("POST", "/api/projects", json={"name": name})
+        return self._request("POST", "/agent/projects", json={"name": name})
 
     def log_action(
         self,
@@ -104,13 +116,10 @@ class AgentHub:
         tags: Optional[list[str]] = None,
     ) -> None:
         """Append a log entry to a project."""
-        payload: dict[str, Any] = {
-            "message": summary,
-            "level": action,
-        }
+        payload: dict[str, Any] = {"action": action, "summary": summary}
         if tags:
-            payload["metadata"] = ",".join(tags)
-        self._request("POST", f"/api/projects/{project}/log", json=payload)
+            payload["tags"] = tags
+        self._request("POST", f"/agent/projects/{project}/log", json=payload)
 
     # ------------------------------------------------------------------
     # File Tree
@@ -118,19 +127,19 @@ class AgentHub:
 
     def list_directory(self, path: str = "/") -> list[dict]:
         """List entries under *path* in the virtual file tree."""
-        data = self._request("GET", f"/api/tree/{path.lstrip('/')}")
+        data = self._request("GET", f"/agent/tree{self._dir_path(path)}")
         return data.get("children", [])
 
     def read_file(self, path: str) -> str:
         """Read a single file from the file tree and return its content."""
-        data = self._request("GET", f"/api/tree/{path.lstrip('/')}")
+        data = self._request("GET", f"/agent/tree{self._file_path(path)}")
         return data.get("content", "")
 
     def write_file(self, path: str, content: str) -> None:
         """Create or overwrite a file in the file tree."""
         self._request(
             "PUT",
-            f"/api/tree/{path.lstrip('/')}",
+            f"/agent/tree{self._file_path(path)}",
             json={"content": content},
         )
 
@@ -140,7 +149,7 @@ class AgentHub:
 
     def list_secrets(self) -> list[VaultScope]:
         """List available vault scopes (names only, not values)."""
-        data = self._request("GET", "/api/vault/scopes")
+        data = self._request("GET", "/agent/vault/scopes")
         scopes = data.get("scopes", [])
         return [
             VaultScope(scope=s, description="") if isinstance(s, str)
@@ -154,25 +163,25 @@ class AgentHub:
 
     def read_secret(self, scope: str) -> str:
         """Read and decrypt a vault secret by scope name."""
-        data = self._request("GET", f"/api/vault/{scope}")
+        data = self._request("GET", f"/agent/vault/{scope}")
         return data.get("data", "")
 
     def write_secret(self, scope: str, value: str) -> None:
         """Write (encrypt and store) a vault secret."""
-        self._request("PUT", f"/api/vault/{scope}", json={"data": value})
+        self._request("PUT", f"/agent/vault/{scope}", json={"data": value})
 
     # ------------------------------------------------------------------
-    # Skills (stored under .skills/ in the file tree)
+    # Skills
     # ------------------------------------------------------------------
 
     def list_skills(self) -> list[dict]:
         """List skill directories from the file tree."""
-        data = self._request("GET", "/api/tree/.skills")
-        return data.get("children", [])
+        data = self._request("GET", "/agent/skills")
+        return data.get("skills", [])
 
     def read_skill(self, name: str) -> str:
         """Read the primary skill markdown file."""
-        data = self._request("GET", f"/api/tree/.skills/{name}/SKILL.md")
+        data = self._request("GET", f"/agent/tree/skills/{name}/SKILL.md")
         return data.get("content", "")
 
     # ------------------------------------------------------------------
@@ -181,7 +190,7 @@ class AgentHub:
 
     def list_devices(self) -> list[Device]:
         """List all registered devices."""
-        data = self._request("GET", "/api/devices")
+        data = self._request("GET", "/agent/devices")
         return [
             Device(
                 name=d.get("name", ""),
@@ -200,7 +209,7 @@ class AgentHub:
         payload: dict[str, Any] = {"action": action}
         if params:
             payload["params"] = params
-        return self._request("POST", f"/api/devices/{device}/call", json=payload)
+        return self._request("POST", f"/agent/devices/{device}/call", json=payload)
 
     # ------------------------------------------------------------------
     # Inbox
@@ -210,7 +219,7 @@ class AgentHub:
         """Send a message through the Hub inbox."""
         payload: dict[str, Any] = {"to": to, "subject": subject, "body": body}
         payload.update(kwargs)
-        self._request("POST", "/api/inbox/send", json=payload)
+        self._request("POST", "/agent/inbox/send", json=payload)
 
     def read_inbox(
         self, role: Optional[str] = None, status: str = "incoming"
@@ -218,13 +227,13 @@ class AgentHub:
         """Retrieve inbox messages for a given *role*."""
         role_path = role or "default"
         data = self._request(
-            "GET", f"/api/inbox/{role_path}", params={"status": status}
+            "GET", f"/agent/inbox/{role_path}", params={"status": status}
         )
         return [
             InboxMessage(
                 id=m.get("id", ""),
-                from_address=m.get("from", ""),
-                to_address=m.get("to", ""),
+                from_address=m.get("from_address", m.get("from", "")),
+                to_address=m.get("to_address", m.get("to", "")),
                 subject=m.get("subject", ""),
                 body=m.get("body", ""),
                 domain=m.get("domain", ""),
@@ -237,7 +246,7 @@ class AgentHub:
 
     def archive_message(self, message_id: str) -> None:
         """Archive an inbox message by ID."""
-        self._request("PUT", f"/api/inbox/{message_id}/archive")
+        self._request("PUT", f"/agent/inbox/{message_id}/archive")
 
     # ------------------------------------------------------------------
     # Import / Export
@@ -246,25 +255,25 @@ class AgentHub:
     def import_skill(self, name: str, files: dict[str, str]) -> ImportResult:
         """Import a skill as a set of files (relative_path -> content)."""
         data = self._request(
-            "POST", "/api/import/skill", json={"name": name, "files": files}
+            "POST", "/agent/import/skill", json={"name": name, "files": files}
         )
         return self._parse_import_result(data)
 
     def import_claude_memory(self, memories: list[dict]) -> ImportResult:
         """Import memory entries from a Claude memory export."""
         data = self._request(
-            "POST", "/api/import/claude-memory", json={"memories": memories}
+            "POST", "/agent/import/claude-memory", json={"memories": memories}
         )
         return self._parse_import_result(data)
 
     def import_profile(self, **kwargs: str) -> ImportResult:
         """Bulk-update profile categories (preferences, relationships, principles)."""
-        data = self._request("POST", "/api/import/profile", json=kwargs)
+        data = self._request("POST", "/agent/import/profile", json=kwargs)
         return self._parse_import_result(data)
 
     def export_all(self) -> dict:
         """Export all Hub data as a JSON dict."""
-        return self._request("GET", "/api/export/all")
+        return self._request("GET", "/agent/export/all")
 
     @staticmethod
     def _parse_import_result(data: dict) -> ImportResult:
@@ -281,7 +290,7 @@ class AgentHub:
 
     def get_stats(self) -> dict:
         """Retrieve dashboard statistics."""
-        return self._request("GET", "/api/dashboard/stats")
+        return self._request("GET", "/agent/dashboard/stats")
 
     # ------------------------------------------------------------------
     # Context manager
@@ -330,7 +339,21 @@ class AsyncAgentHub:
     async def _request(self, method: str, path: str, **kwargs: Any) -> dict:
         resp = await self._client.request(method, path, **kwargs)
         resp.raise_for_status()
-        return resp.json()
+        data = resp.json()
+        if isinstance(data, dict) and data.get("ok") is True and "data" in data:
+            return data["data"]
+        return data
+
+    @staticmethod
+    def _file_path(path: str) -> str:
+        return path if path.startswith("/") else f"/{path}"
+
+    @classmethod
+    def _dir_path(cls, path: str) -> str:
+        safe_path = cls._file_path(path)
+        if safe_path == "/":
+            return safe_path
+        return safe_path if safe_path.endswith("/") else f"{safe_path}/"
 
     # ------------------------------------------------------------------
     # Profile / Memory
@@ -340,8 +363,8 @@ class AsyncAgentHub:
         params: dict[str, str] = {}
         if category is not None:
             params["category"] = category
-        data = await self._request("GET", "/api/memory/profile", params=params)
-        raw = data if isinstance(data, list) else data.get("profiles", [data])
+        data = await self._request("GET", "/agent/memory/profile", params=params)
+        raw = data.get("profiles", [])
         return [
             Profile(
                 category=item.get("category", ""),
@@ -354,13 +377,13 @@ class AsyncAgentHub:
     async def update_profile(self, category: str, content: str) -> None:
         await self._request(
             "PUT",
-            "/api/memory/profile",
-            json={"display_name": category, "preferences": {category: content}},
+            "/agent/memory/profile",
+            json={"category": category, "content": content},
         )
 
     async def search_memory(self, query: str, scope: str = "all") -> list[dict]:
         data = await self._request(
-            "GET", "/api/search", params={"q": query, "scope": scope}
+            "GET", "/agent/search", params={"q": query, "scope": scope}
         )
         return data.get("results", [])
 
@@ -369,7 +392,7 @@ class AsyncAgentHub:
     # ------------------------------------------------------------------
 
     async def list_projects(self) -> list[Project]:
-        data = await self._request("GET", "/api/projects")
+        data = await self._request("GET", "/agent/projects")
         return [
             Project(
                 name=p.get("name", ""),
@@ -380,10 +403,10 @@ class AsyncAgentHub:
         ]
 
     async def get_project(self, name: str) -> dict:
-        return await self._request("GET", f"/api/projects/{name}")
+        return await self._request("GET", f"/agent/projects/{name}")
 
     async def create_project(self, name: str) -> dict:
-        return await self._request("POST", "/api/projects", json={"name": name})
+        return await self._request("POST", "/agent/projects", json={"name": name})
 
     async def log_action(
         self,
@@ -392,27 +415,27 @@ class AsyncAgentHub:
         summary: str,
         tags: Optional[list[str]] = None,
     ) -> None:
-        payload: dict[str, Any] = {"message": summary, "level": action}
+        payload: dict[str, Any] = {"action": action, "summary": summary}
         if tags:
-            payload["metadata"] = ",".join(tags)
-        await self._request("POST", f"/api/projects/{project}/log", json=payload)
+            payload["tags"] = tags
+        await self._request("POST", f"/agent/projects/{project}/log", json=payload)
 
     # ------------------------------------------------------------------
     # File Tree
     # ------------------------------------------------------------------
 
     async def list_directory(self, path: str = "/") -> list[dict]:
-        data = await self._request("GET", f"/api/tree/{path.lstrip('/')}")
+        data = await self._request("GET", f"/agent/tree{self._dir_path(path)}")
         return data.get("children", [])
 
     async def read_file(self, path: str) -> str:
-        data = await self._request("GET", f"/api/tree/{path.lstrip('/')}")
+        data = await self._request("GET", f"/agent/tree{self._file_path(path)}")
         return data.get("content", "")
 
     async def write_file(self, path: str, content: str) -> None:
         await self._request(
             "PUT",
-            f"/api/tree/{path.lstrip('/')}",
+            f"/agent/tree{self._file_path(path)}",
             json={"content": content},
         )
 
@@ -421,7 +444,7 @@ class AsyncAgentHub:
     # ------------------------------------------------------------------
 
     async def list_secrets(self) -> list[VaultScope]:
-        data = await self._request("GET", "/api/vault/scopes")
+        data = await self._request("GET", "/agent/vault/scopes")
         scopes = data.get("scopes", [])
         return [
             VaultScope(scope=s, description="") if isinstance(s, str)
@@ -434,22 +457,22 @@ class AsyncAgentHub:
         ]
 
     async def read_secret(self, scope: str) -> str:
-        data = await self._request("GET", f"/api/vault/{scope}")
+        data = await self._request("GET", f"/agent/vault/{scope}")
         return data.get("data", "")
 
     async def write_secret(self, scope: str, value: str) -> None:
-        await self._request("PUT", f"/api/vault/{scope}", json={"data": value})
+        await self._request("PUT", f"/agent/vault/{scope}", json={"data": value})
 
     # ------------------------------------------------------------------
     # Skills
     # ------------------------------------------------------------------
 
     async def list_skills(self) -> list[dict]:
-        data = await self._request("GET", "/api/tree/.skills")
-        return data.get("children", [])
+        data = await self._request("GET", "/agent/skills")
+        return data.get("skills", [])
 
     async def read_skill(self, name: str) -> str:
-        data = await self._request("GET", f"/api/tree/.skills/{name}/SKILL.md")
+        data = await self._request("GET", f"/agent/tree/skills/{name}/SKILL.md")
         return data.get("content", "")
 
     # ------------------------------------------------------------------
@@ -457,7 +480,7 @@ class AsyncAgentHub:
     # ------------------------------------------------------------------
 
     async def list_devices(self) -> list[Device]:
-        data = await self._request("GET", "/api/devices")
+        data = await self._request("GET", "/agent/devices")
         return [
             Device(
                 name=d.get("name", ""),
@@ -476,7 +499,7 @@ class AsyncAgentHub:
         if params:
             payload["params"] = params
         return await self._request(
-            "POST", f"/api/devices/{device}/call", json=payload
+            "POST", f"/agent/devices/{device}/call", json=payload
         )
 
     # ------------------------------------------------------------------
@@ -488,20 +511,20 @@ class AsyncAgentHub:
     ) -> None:
         payload: dict[str, Any] = {"to": to, "subject": subject, "body": body}
         payload.update(kwargs)
-        await self._request("POST", "/api/inbox/send", json=payload)
+        await self._request("POST", "/agent/inbox/send", json=payload)
 
     async def read_inbox(
         self, role: Optional[str] = None, status: str = "incoming"
     ) -> list[InboxMessage]:
         role_path = role or "default"
         data = await self._request(
-            "GET", f"/api/inbox/{role_path}", params={"status": status}
+            "GET", f"/agent/inbox/{role_path}", params={"status": status}
         )
         return [
             InboxMessage(
                 id=m.get("id", ""),
-                from_address=m.get("from", ""),
-                to_address=m.get("to", ""),
+                from_address=m.get("from_address", m.get("from", "")),
+                to_address=m.get("to_address", m.get("to", "")),
                 subject=m.get("subject", ""),
                 body=m.get("body", ""),
                 domain=m.get("domain", ""),
@@ -513,7 +536,7 @@ class AsyncAgentHub:
         ]
 
     async def archive_message(self, message_id: str) -> None:
-        await self._request("PUT", f"/api/inbox/{message_id}/archive")
+        await self._request("PUT", f"/agent/inbox/{message_id}/archive")
 
     # ------------------------------------------------------------------
     # Import / Export
@@ -521,22 +544,22 @@ class AsyncAgentHub:
 
     async def import_skill(self, name: str, files: dict[str, str]) -> ImportResult:
         data = await self._request(
-            "POST", "/api/import/skill", json={"name": name, "files": files}
+            "POST", "/agent/import/skill", json={"name": name, "files": files}
         )
         return self._parse_import_result(data)
 
     async def import_claude_memory(self, memories: list[dict]) -> ImportResult:
         data = await self._request(
-            "POST", "/api/import/claude-memory", json={"memories": memories}
+            "POST", "/agent/import/claude-memory", json={"memories": memories}
         )
         return self._parse_import_result(data)
 
     async def import_profile(self, **kwargs: str) -> ImportResult:
-        data = await self._request("POST", "/api/import/profile", json=kwargs)
+        data = await self._request("POST", "/agent/import/profile", json=kwargs)
         return self._parse_import_result(data)
 
     async def export_all(self) -> dict:
-        return await self._request("GET", "/api/export/all")
+        return await self._request("GET", "/agent/export/all")
 
     @staticmethod
     def _parse_import_result(data: dict) -> ImportResult:
@@ -550,7 +573,7 @@ class AsyncAgentHub:
     # ------------------------------------------------------------------
 
     async def get_stats(self) -> dict:
-        return await self._request("GET", "/api/dashboard/stats")
+        return await self._request("GET", "/agent/dashboard/stats")
 
     # ------------------------------------------------------------------
     # Context manager

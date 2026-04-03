@@ -1,20 +1,23 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
+	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/go-chi/chi/v5"
 )
 
 // ---------------------------------------------------------------------------
 // GPT Actions handlers — optimized for OpenAI Custom GPT action calling.
-// All responses are flat JSON (no wrapping envelope) for simpler schemas.
-// Auth: Bearer aht_xxxxx scoped token via apiKeyMiddleware.
+// All responses are flat JSON objects so they match the published schema.
 // ---------------------------------------------------------------------------
 
-// GET /gpt/profile
 func (s *Server) handleGPTGetProfile(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelGuest, models.ScopeReadProfile) {
 		return
@@ -23,11 +26,11 @@ func (s *Server) handleGPTGetProfile(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromCtx(r.Context())
 	user, err := s.UserService.GetByID(r.Context(), userID)
 	if err != nil {
-		respondNotFound(w, "user")
+		writeGPTError(w, http.StatusNotFound, "user not found")
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"slug":         user.Slug,
 		"display_name": user.DisplayName,
 		"timezone":     user.Timezone,
@@ -35,7 +38,6 @@ func (s *Server) handleGPTGetProfile(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GET /gpt/preferences
 func (s *Server) handleGPTGetPreferences(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelGuest, models.ScopeReadProfile) {
 		return
@@ -44,17 +46,16 @@ func (s *Server) handleGPTGetPreferences(w http.ResponseWriter, r *http.Request)
 	userID, _ := userIDFromCtx(r.Context())
 	user, err := s.UserService.GetByID(r.Context(), userID)
 	if err != nil {
-		respondNotFound(w, "user")
+		writeGPTError(w, http.StatusNotFound, "user not found")
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"timezone": user.Timezone,
 		"language": user.Language,
 	})
 }
 
-// POST /gpt/search — { "query": "..." }
 func (s *Server) handleGPTSearch(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeSearch) {
 		return
@@ -63,42 +64,82 @@ func (s *Server) handleGPTSearch(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Query string `json:"query"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Query == "" {
-		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing query")
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Query) == "" {
+		writeGPTError(w, http.StatusBadRequest, "missing query")
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	userID, _ := userIDFromCtx(r.Context())
+	trustLevel := trustLevelFromCtx(r.Context())
+	results, err := s.searchHub(r.Context(), userID, trustLevel, body.Query, "all")
+	if err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "search failed")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"query":   body.Query,
-		"results": []interface{}{},
+		"results": results,
 	})
 }
 
-// GET /gpt/projects
 func (s *Server) handleGPTListProjects(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadProjects) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
-		"projects": []interface{}{},
-	})
+	userID, _ := userIDFromCtx(r.Context())
+	projects, err := s.ProjectService.List(r.Context(), userID)
+	if err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to list projects")
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(projects))
+	for _, project := range projects {
+		items = append(items, map[string]interface{}{
+			"name":       project.Name,
+			"status":     project.Status,
+			"updated_at": project.UpdatedAt.Format(timeLayoutRFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"projects": items})
 }
 
-// GET /gpt/project/{name}
 func (s *Server) handleGPTGetProject(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadProjects) {
 		return
 	}
 
+	userID, _ := userIDFromCtx(r.Context())
 	name := chi.URLParam(r, "name")
-	respondOK(w, map[string]interface{}{
-		"name": name,
-		"logs": []interface{}{},
+	project, err := s.ProjectService.Get(r.Context(), userID, name)
+	if err != nil {
+		writeGPTError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	logs, err := s.ProjectService.GetLogs(r.Context(), project.ID, 50)
+	if err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to load project logs")
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(logs))
+	for _, logEntry := range logs {
+		items = append(items, map[string]interface{}{
+			"action":    logEntry.Action,
+			"summary":   logEntry.Summary,
+			"timestamp": logEntry.CreatedAt.Format(timeLayoutRFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"name": project.Name,
+		"logs": items,
 	})
 }
 
-// POST /gpt/log — { "project": "...", "action": "...", "summary": "..." }
 func (s *Server) handleGPTLog(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteProjects) {
 		return
@@ -109,74 +150,135 @@ func (s *Server) handleGPTLog(w http.ResponseWriter, r *http.Request) {
 		Action  string `json:"action"`
 		Summary string `json:"summary"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Project == "" {
-		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing project")
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Project) == "" {
+		writeGPTError(w, http.StatusBadRequest, "missing project")
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "logged"})
+	userID, _ := userIDFromCtx(r.Context())
+	project, err := s.ProjectService.Get(r.Context(), userID, body.Project)
+	if err != nil {
+		project, err = s.ProjectService.Create(r.Context(), userID, body.Project)
+		if err != nil {
+			writeGPTError(w, http.StatusInternalServerError, "failed to create project")
+			return
+		}
+	}
+
+	logEntry := models.ProjectLog{
+		ProjectID: project.ID,
+		Source:    "gpt",
+		Action:    body.Action,
+		Summary:   body.Summary,
+	}
+	if err := s.ProjectService.AppendLog(r.Context(), project.ID, logEntry); err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to write log")
+		return
+	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
+			"project": project.Name,
+			"action":  body.Action,
+			"summary": body.Summary,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged"})
 }
 
-// GET /gpt/skills
 func (s *Server) handleGPTListSkills(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadSkills) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
-		"skills": []interface{}{},
-	})
+	userID, _ := userIDFromCtx(r.Context())
+	trustLevel := trustLevelFromCtx(r.Context())
+	skills, err := s.listSkills(r.Context(), userID, trustLevel)
+	if err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to list skills")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"skills": skills})
 }
 
-// GET /gpt/skill/{name}
 func (s *Server) handleGPTGetSkill(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadSkills) {
 		return
 	}
 
+	userID, _ := userIDFromCtx(r.Context())
+	trustLevel := trustLevelFromCtx(r.Context())
 	name := chi.URLParam(r, "name")
-	respondOK(w, map[string]interface{}{
+	entry, err := s.FileTreeService.Read(r.Context(), userID, "/skills/"+name+"/SKILL.md", trustLevel)
+	if err != nil {
+		writeGPTError(w, http.StatusNotFound, "skill not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"name":    name,
-		"content": "",
+		"content": entry.Content,
 	})
 }
 
-// GET /gpt/devices
 func (s *Server) handleGPTListDevices(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadDevices) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
-		"devices": []interface{}{},
-	})
+	userID, _ := userIDFromCtx(r.Context())
+	devices, err := s.DeviceService.List(r.Context(), userID)
+	if err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to list devices")
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(devices))
+	for _, device := range devices {
+		items = append(items, map[string]interface{}{
+			"name":   device.Name,
+			"type":   device.DeviceType,
+			"status": device.Status,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"devices": items})
 }
 
-// POST /gpt/device/{name} — { "action": "...", "params": {...} }
 func (s *Server) handleGPTCallDevice(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeCallDevices) {
 		return
 	}
 
 	name := chi.URLParam(r, "name")
-
 	var body struct {
 		Action string                 `json:"action"`
 		Params map[string]interface{} `json:"params"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.Action == "" {
-		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing action")
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.Action) == "" {
+		writeGPTError(w, http.StatusBadRequest, "missing action")
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
+	userID, _ := userIDFromCtx(r.Context())
+	result, err := s.DeviceService.Call(r.Context(), userID, name, body.Action, body.Params)
+	if err != nil {
+		writeGPTDeviceError(w, err)
+		return
+	}
+
+	status, _ := result["status"].(string)
+	if status == "" {
+		status = "ok"
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"device": name,
 		"action": body.Action,
-		"status": "dispatched",
+		"status": status,
 	})
 }
 
-// POST /gpt/message — { "to": "...", "subject": "...", "body": "..." }
 func (s *Server) handleGPTSendMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteInbox) {
 		return
@@ -187,45 +289,116 @@ func (s *Server) handleGPTSendMessage(w http.ResponseWriter, r *http.Request) {
 		Subject string `json:"subject"`
 		Body    string `json:"body"`
 	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || body.To == "" {
-		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing to")
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil || strings.TrimSpace(body.To) == "" {
+		writeGPTError(w, http.StatusBadRequest, "missing to")
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "sent"})
+	userID, _ := userIDFromCtx(r.Context())
+	msg := models.InboxMessage{
+		FromAddress: "assistant@" + userID.String(),
+		ToAddress:   body.To,
+		Subject:     body.Subject,
+		Body:        body.Body,
+		Priority:    "normal",
+	}
+	if _, err := s.InboxService.Send(r.Context(), userID, msg); err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to send message")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "sent"})
 }
 
-// GET /gpt/inbox
 func (s *Server) handleGPTGetInbox(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadInbox) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
-		"messages": []interface{}{},
-	})
+	userID, _ := userIDFromCtx(r.Context())
+	messages, err := s.InboxService.GetMessages(r.Context(), userID, "", "incoming")
+	if err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to load inbox")
+		return
+	}
+
+	items := make([]map[string]interface{}, 0, len(messages))
+	for _, message := range messages {
+		items = append(items, map[string]interface{}{
+			"from":      message.FromAddress,
+			"subject":   message.Subject,
+			"body":      message.Body,
+			"timestamp": message.CreatedAt.Format(timeLayoutRFC3339),
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"messages": items})
 }
 
-// GET /gpt/secrets
 func (s *Server) handleGPTListSecrets(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeReadVault) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
-		"scopes": []interface{}{},
-	})
+	userID, _ := userIDFromCtx(r.Context())
+	trustLevel := trustLevelFromCtx(r.Context())
+	scopes, err := s.VaultService.ListScopes(r.Context(), userID, trustLevel)
+	if err != nil {
+		writeGPTError(w, http.StatusInternalServerError, "failed to list secrets")
+		return
+	}
+
+	items := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		items = append(items, scope.Scope)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{"scopes": items})
 }
 
-// GET /gpt/secret/{scope}
 func (s *Server) handleGPTGetSecret(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeReadVault) {
 		return
 	}
 
+	userID, _ := userIDFromCtx(r.Context())
+	trustLevel := trustLevelFromCtx(r.Context())
 	scope := chi.URLParam(r, "scope")
-	respondOK(w, map[string]interface{}{
+	data, err := s.VaultService.Read(r.Context(), userID, scope, trustLevel)
+	if err != nil {
+		writeGPTError(w, http.StatusNotFound, "secret not found")
+		return
+	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventVaultAccess, map[string]interface{}{
+			"scope":       scope,
+			"trust_level": trustLevel,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"scope": scope,
-		"data":  "",
+		"data":  data,
 	})
 }
+
+func writeGPTError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func writeGPTDeviceError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, services.ErrDeviceInvalidRequest):
+		writeGPTError(w, http.StatusBadRequest, err.Error())
+	case errors.Is(err, services.ErrDeviceNotFound):
+		writeGPTError(w, http.StatusNotFound, err.Error())
+	case errors.Is(err, services.ErrDeviceUnsupported):
+		writeGPTError(w, http.StatusNotImplemented, err.Error())
+	case errors.Is(err, services.ErrDeviceUpstreamFailed):
+		writeGPTError(w, http.StatusBadGateway, err.Error())
+	default:
+		writeGPTError(w, http.StatusInternalServerError, "device call failed")
+	}
+}
+
+const timeLayoutRFC3339 = time.RFC3339

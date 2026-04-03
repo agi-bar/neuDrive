@@ -90,7 +90,11 @@ export class AgentHub {
     }
     // Some endpoints return 204 No Content
     if (res.status === 204) return undefined as T
-    return (await res.json()) as T
+    const data = (await res.json()) as T | { ok?: boolean; data?: T }
+    if (data && typeof data === 'object' && 'ok' in data && 'data' in data) {
+      return (data as { data: T }).data
+    }
+    return data as T
   }
 
   private get<T = unknown>(path: string): Promise<T> {
@@ -114,22 +118,15 @@ export class AgentHub {
    */
   async getProfile(category?: string): Promise<Profile[]> {
     const qs = category ? `?category=${encodeURIComponent(category)}` : ''
-    const res = await this.get<
-      Record<string, unknown> | Profile[]
-    >(`/agent/memory/profile${qs}`)
-    // The API may wrap the result; normalise to array.
-    if (Array.isArray(res)) return res
-    if (res && typeof res === 'object' && 'profiles' in res) {
-      return (res as { profiles: Profile[] }).profiles
-    }
-    return [res as unknown as Profile]
+    const res = await this.get<{ profiles?: Profile[] }>(`/agent/memory/profile${qs}`)
+    return res.profiles ?? []
   }
 
   /**
    * Update (upsert) a profile category.
    */
   async updateProfile(category: string, content: string): Promise<void> {
-    await this.put('/api/memory/profile', { category, content })
+    await this.put('/agent/memory/profile', { category, content })
   }
 
   // -------------------------------------------------------------------------
@@ -158,7 +155,7 @@ export class AgentHub {
    * List all projects for the authenticated user.
    */
   async listProjects(): Promise<Project[]> {
-    const res = await this.get<{ projects: Project[] }>('/api/projects')
+    const res = await this.get<{ projects: Project[] }>('/agent/projects')
     return res.projects ?? []
   }
 
@@ -168,9 +165,7 @@ export class AgentHub {
   async getProject(
     name: string,
   ): Promise<{ project: Project; logs: ProjectLog[] }> {
-    return this.get<{ project: Project; logs: ProjectLog[] }>(
-      `/api/projects/${encodeURIComponent(name)}`,
-    )
+    return this.get<{ project: Project; logs: ProjectLog[] }>(`/agent/projects/${encodeURIComponent(name)}`)
   }
 
   /**
@@ -182,7 +177,7 @@ export class AgentHub {
     summary: string,
     tags?: string[],
   ): Promise<void> {
-    await this.post(`/api/projects/${encodeURIComponent(project)}/log`, {
+    await this.post(`/agent/projects/${encodeURIComponent(project)}/log`, {
       action,
       summary,
       tags,
@@ -197,10 +192,8 @@ export class AgentHub {
    * List directory contents at the given path.
    */
   async listDirectory(path: string): Promise<FileTreeEntry[]> {
-    const safePath = path.startsWith('/') ? path : `/${path}`
-    const res = await this.get<{ children: FileTreeEntry[] }>(
-      `/agent/tree${safePath}`,
-    )
+    const safePath = this.directoryPath(path)
+    const res = await this.get<{ children: FileTreeEntry[] }>(`/agent/tree${safePath}`)
     return res.children ?? []
   }
 
@@ -208,7 +201,7 @@ export class AgentHub {
    * Read a file's content from the file tree.
    */
   async readFile(path: string): Promise<string> {
-    const safePath = path.startsWith('/') ? path : `/${path}`
+    const safePath = this.filePath(path)
     const res = await this.get<{ content: string }>(`/agent/tree${safePath}`)
     return res.content ?? ''
   }
@@ -217,7 +210,7 @@ export class AgentHub {
    * Write (create or overwrite) a file in the file tree.
    */
   async writeFile(path: string, content: string): Promise<void> {
-    const safePath = path.startsWith('/') ? path : `/${path}`
+    const safePath = this.filePath(path)
     await this.put(`/agent/tree${safePath}`, { content })
   }
 
@@ -229,7 +222,7 @@ export class AgentHub {
    * List all vault scopes visible to the current trust level.
    */
   async listSecrets(): Promise<VaultScope[]> {
-    const res = await this.get<{ scopes: VaultScope[] }>('/api/vault/scopes')
+    const res = await this.get<{ scopes: VaultScope[] }>('/agent/vault/scopes')
     return res.scopes ?? []
   }
 
@@ -251,8 +244,8 @@ export class AgentHub {
    * List available skills.
    */
   async listSkills(): Promise<Skill[]> {
-    const res = await this.get<{ children: Skill[] }>('/agent/tree/.skills')
-    return res.children ?? []
+    const res = await this.get<{ skills: Skill[] }>('/agent/skills')
+    return res.skills ?? []
   }
 
   /**
@@ -260,7 +253,7 @@ export class AgentHub {
    */
   async readSkill(name: string): Promise<string> {
     const res = await this.get<{ content: string }>(
-      `/agent/tree/.skills/${encodeURIComponent(name)}`,
+      `/agent/tree/skills/${encodeURIComponent(name)}/SKILL.md`,
     )
     return res.content ?? ''
   }
@@ -273,11 +266,8 @@ export class AgentHub {
    * List registered devices.
    */
   async listDevices(): Promise<Device[]> {
-    const res = await this.get<{ devices: Device[] } | Device[]>(
-      '/api/devices',
-    )
-    if (Array.isArray(res)) return res
-    return (res as { devices: Device[] }).devices ?? []
+    const res = await this.get<{ devices: Device[] }>('/agent/devices')
+    return res.devices ?? []
   }
 
   /**
@@ -308,7 +298,7 @@ export class AgentHub {
     opts?: { domain?: string; tags?: string[] },
   ): Promise<void> {
     await this.post('/agent/inbox/send', {
-      to_address: to,
+      to,
       subject,
       body,
       domain: opts?.domain,
@@ -370,7 +360,7 @@ export class AgentHub {
     principles?: string
   }): Promise<ImportResult> {
     const res = await this.post<{ ok: boolean; data: ImportResult }>(
-      '/api/import/profile',
+      '/agent/import/profile',
       profile,
     )
     return res.data
@@ -380,10 +370,7 @@ export class AgentHub {
    * Export all user data.
    */
   async exportAll(): Promise<unknown> {
-    const res = await this.get<{ ok: boolean; data: unknown }>(
-      '/api/export/all',
-    )
-    return res.data
+    return this.get<unknown>('/agent/export/all')
   }
 
   // -------------------------------------------------------------------------
@@ -394,6 +381,16 @@ export class AgentHub {
    * Get dashboard statistics.
    */
   async getStats(): Promise<DashboardStats> {
-    return this.get<DashboardStats>('/api/dashboard/stats')
+    return this.get<DashboardStats>('/agent/dashboard/stats')
+  }
+
+  private filePath(path: string): string {
+    return path.startsWith('/') ? path : `/${path}`
+  }
+
+  private directoryPath(path: string): string {
+    const safePath = this.filePath(path)
+    if (safePath === '/') return safePath
+    return safePath.endsWith('/') ? safePath : `${safePath}/`
   }
 }

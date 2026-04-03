@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -32,6 +33,9 @@ func (s *CollaborationService) Create(ctx context.Context, ownerUserID, guestUse
 	}
 	if permissions != "read" && permissions != "readwrite" {
 		return nil, fmt.Errorf("collaboration.Create: permissions must be 'read' or 'readwrite'")
+	}
+	for i, sharedPath := range sharedPaths {
+		sharedPaths[i] = hubpath.NormalizePublic(sharedPath)
 	}
 
 	id := uuid.New()
@@ -136,11 +140,10 @@ func (s *CollaborationService) CanAccess(ctx context.Context, guestUserID, owner
 		return false, nil // no collaboration found = no access
 	}
 
-	// Normalize the requested path.
-	path = "/" + strings.TrimLeft(path, "/")
+	path = hubpath.NormalizePublic(path)
 
 	for _, shared := range paths {
-		shared = "/" + strings.TrimLeft(shared, "/")
+		shared = hubpath.NormalizePublic(shared)
 		// Exact match or the requested path is under the shared path.
 		if path == shared || strings.HasPrefix(path, shared+"/") {
 			return true, nil

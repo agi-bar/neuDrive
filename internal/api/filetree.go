@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 type FileNode struct {
@@ -33,11 +36,6 @@ type SearchRequest struct {
 }
 
 func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
-	path := chi.URLParam(r, "*")
-	if path == "" {
-		path = "/"
-	}
-
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -45,38 +43,14 @@ func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	trustLevel := trustLevelFromCtx(r.Context())
-
-	// If path looks like a directory (ends with / or is root), list children
-	if strings.HasSuffix(path, "/") || path == "/" {
-		entries, err := s.FileTreeService.List(r.Context(), userID, path, trustLevel)
-		if err != nil {
-			respondInternalError(w, err)
-			return
-		}
-
-		children := make([]*FileNode, 0, len(entries))
-		for _, e := range entries {
-			children = append(children, fileTreeEntryToNode(&e))
-		}
-
-		node := &FileNode{
-			Path:     path,
-			Name:     path,
-			IsDir:    true,
-			Children: children,
-		}
-		respondOK(w, node)
-		return
-	}
-
-	// Otherwise, read a specific file
-	entry, err := s.FileTreeService.Read(r.Context(), userID, path, trustLevel)
+	path := chi.URLParam(r, "*")
+	node, err := s.readOrListTreePath(r.Context(), userID, trustLevel, path)
 	if err != nil {
 		respondNotFound(w, "file")
 		return
 	}
 
-	respondOK(w, fileTreeEntryToNode(entry))
+	respondOK(w, node)
 }
 
 func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
@@ -103,7 +77,11 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 			respondInternalError(w, err)
 			return
 		}
-		respondOK(w, &FileNode{Path: path, Name: path, IsDir: true})
+		publicPath := hubpath.NormalizePublic(path)
+		if !strings.HasSuffix(publicPath, "/") && publicPath != "/" {
+			publicPath += "/"
+		}
+		respondOK(w, &FileNode{Path: publicPath, Name: hubpath.BaseName(publicPath), IsDir: true})
 		return
 	}
 
@@ -139,7 +117,7 @@ func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "deleted", "path": path})
+	respondOK(w, map[string]string{"status": "deleted", "path": hubpath.NormalizePublic(path)})
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
@@ -175,9 +153,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 }
 
 func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
+	publicPath := hubpath.StorageToPublic(e.Path)
 	return &FileNode{
-		Path:      e.Path,
-		Name:      e.Path,
+		Path:      publicPath,
+		Name:      hubpath.BaseName(publicPath),
 		IsDir:     e.IsDirectory,
 		Content:   e.Content,
 		MimeType:  e.ContentType,
@@ -185,4 +164,53 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 		CreatedAt: e.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: e.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
+}
+
+func (s *Server) readOrListTreePath(ctx context.Context, userID uuid.UUID, trustLevel int, rawPath string) (*FileNode, error) {
+	if rawPath == "" {
+		rawPath = "/"
+	}
+
+	storagePath := hubpath.NormalizeStorage(rawPath)
+	if storagePath == "/" || strings.HasSuffix(rawPath, "/") || strings.HasSuffix(storagePath, "/") {
+		return s.listTreeNode(ctx, userID, trustLevel, storagePath)
+	}
+
+	entry, err := s.FileTreeService.Read(ctx, userID, storagePath, trustLevel)
+	if err == nil {
+		return fileTreeEntryToNode(entry), nil
+	}
+
+	// Only fall through to directory listing if the read error indicates "not found".
+	// For other errors (database, permission, etc.), propagate the real error.
+	node, listErr := s.listTreeNode(ctx, userID, trustLevel, storagePath)
+	if listErr != nil {
+		// If listing also fails, return the original read error for better diagnostics.
+		return nil, err
+	}
+	return node, nil
+}
+
+func (s *Server) listTreeNode(ctx context.Context, userID uuid.UUID, trustLevel int, storagePath string) (*FileNode, error) {
+	entries, err := s.FileTreeService.List(ctx, userID, storagePath, trustLevel)
+	if err != nil {
+		return nil, err
+	}
+
+	publicPath := hubpath.StorageToPublic(storagePath)
+	if publicPath != "/" && !strings.HasSuffix(publicPath, "/") {
+		publicPath += "/"
+	}
+
+	children := make([]*FileNode, 0, len(entries))
+	for _, e := range entries {
+		children = append(children, fileTreeEntryToNode(&e))
+	}
+
+	return &FileNode{
+		Path:     publicPath,
+		Name:     hubpath.BaseName(publicPath),
+		IsDir:    true,
+		Children: children,
+	}, nil
 }

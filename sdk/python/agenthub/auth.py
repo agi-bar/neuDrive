@@ -74,7 +74,7 @@ class AgentHubAuth:
         }
         if scopes:
             params["scope"] = " ".join(scopes)
-        return f"{self.base_url}/api/auth/authorize?{urlencode(params)}"
+        return f"{self.base_url}/oauth/authorize?{urlencode(params)}"
 
     def exchange_code(self, code: str, redirect_uri: str) -> dict[str, Any]:
         """Exchange an authorization *code* for an access token (and optional
@@ -85,7 +85,7 @@ class AgentHubAuth:
         ``refresh_token``.
         """
         resp = self._client.post(
-            "/api/auth/token",
+            "/oauth/token",
             json={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -99,17 +99,9 @@ class AgentHubAuth:
 
     def refresh_token(self, refresh_token: str) -> dict[str, Any]:
         """Use a *refresh_token* to obtain a new access token."""
-        resp = self._client.post(
-            "/api/auth/refresh",
-            json={
-                "grant_type": "refresh_token",
-                "refresh_token": refresh_token,
-                "client_id": self.client_id,
-                "client_secret": self.client_secret,
-            },
+        raise NotImplementedError(
+            "Agent Hub OAuth currently supports authorization_code exchange only."
         )
-        resp.raise_for_status()
-        return resp.json()
 
     def get_user_info(self, access_token: str) -> dict[str, Any]:
         """Retrieve the authenticated user's profile from Agent Hub.
@@ -118,7 +110,7 @@ class AgentHubAuth:
         ``timezone``, and ``language``.
         """
         resp = self._client.get(
-            "/api/auth/me",
+            "/oauth/userinfo",
             headers={"Authorization": f"Bearer {access_token}"},
         )
         resp.raise_for_status()

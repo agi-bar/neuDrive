@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 )
@@ -97,7 +98,7 @@ func (s *Server) handleImportSkill(w http.ResponseWriter, r *http.Request) {
 	// Collect imported paths.
 	paths := make([]string, 0, len(req.Files))
 	for relPath := range req.Files {
-		paths = append(paths, ".skills/"+req.Name+"/"+relPath)
+		paths = append(paths, hubpath.NormalizePublic(".skills/"+req.Name+"/"+relPath))
 	}
 
 	respondOK(w, ImportResponse{
@@ -268,7 +269,7 @@ func (s *Server) handleImportBulk(w http.ResponseWriter, r *http.Request) {
 
 	paths := make([]string, 0, len(req.Files))
 	for p := range req.Files {
-		paths = append(paths, p)
+		paths = append(paths, hubpath.NormalizePublic(p))
 	}
 
 	respondOK(w, ImportResponse{
@@ -348,7 +349,7 @@ func (s *Server) handleAgentImportSkill(w http.ResponseWriter, r *http.Request) 
 
 	paths := make([]string, 0, len(req.Files))
 	for relPath := range req.Files {
-		paths = append(paths, ".skills/"+req.Name+"/"+relPath)
+		paths = append(paths, hubpath.NormalizePublic(".skills/"+req.Name+"/"+relPath))
 	}
 
 	respondOK(w, ImportResponse{
@@ -441,7 +442,7 @@ func (s *Server) handleAgentImportBulk(w http.ResponseWriter, r *http.Request) {
 
 	paths := make([]string, 0, len(req.Files))
 	for p := range req.Files {
-		paths = append(paths, p)
+		paths = append(paths, hubpath.NormalizePublic(p))
 	}
 
 	respondOK(w, ImportResponse{

@@ -56,7 +56,7 @@ export class AgentHubAuth {
       redirect_uri: redirectURI,
       scope: scopes.join(' '),
     })
-    return `${this.baseURL}/api/auth/authorize?${params.toString()}`
+    return `${this.baseURL}/oauth/authorize?${params.toString()}`
   }
 
   /**
@@ -69,7 +69,7 @@ export class AgentHubAuth {
     code: string,
     redirectURI: string,
   ): Promise<AuthTokenResponse> {
-    const res = await fetch(`${this.baseURL}/api/auth/token`, {
+    const res = await fetch(`${this.baseURL}/oauth/token`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -104,7 +104,7 @@ export class AgentHubAuth {
    * @param accessToken - A valid access token (JWT or scoped token).
    */
   async getUserInfo(accessToken: string): Promise<User> {
-    const res = await fetch(`${this.baseURL}/api/auth/me`, {
+    const res = await fetch(`${this.baseURL}/oauth/userinfo`, {
       method: 'GET',
       headers: {
         Authorization: `Bearer ${accessToken}`,

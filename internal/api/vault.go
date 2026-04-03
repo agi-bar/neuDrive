@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 
@@ -56,6 +57,12 @@ func (s *Server) HandleVaultRead(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		respondNotFound(w, "vault entry")
 		return
+	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventVaultAccess, map[string]interface{}{
+			"scope":       scope,
+			"trust_level": trustLevel,
+		})
 	}
 
 	entry := &VaultEntry{

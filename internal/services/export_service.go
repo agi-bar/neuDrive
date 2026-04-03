@@ -290,18 +290,8 @@ func (s *ExportService) gatherExportData(ctx context.Context, userID uuid.UUID) 
 
 	// Skills from file tree (everything under .skills/).
 	if s.FileTree != nil {
-		entries, err := s.FileTree.List(ctx, userID, ".skills/", models.TrustLevelFull)
-		if err == nil {
-			for _, e := range entries {
-				if e.IsDirectory {
-					continue
-				}
-				full, err := s.FileTree.Read(ctx, userID, e.Path, models.TrustLevelFull)
-				if err != nil {
-					continue
-				}
-				data.SkillFiles[full.Path] = full.Content
-			}
+		if err := s.collectSkillFiles(ctx, userID, ".skills/", data.SkillFiles); err != nil {
+			return nil, err
 		}
 	}
 
@@ -354,6 +344,30 @@ func (s *ExportService) gatherExportData(ctx context.Context, userID uuid.UUID) 
 	}
 
 	return data, nil
+}
+
+func (s *ExportService) collectSkillFiles(ctx context.Context, userID uuid.UUID, root string, out map[string]string) error {
+	entries, err := s.FileTree.List(ctx, userID, root, models.TrustLevelFull)
+	if err != nil {
+		return fmt.Errorf("export.collectSkillFiles: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDirectory {
+			if err := s.collectSkillFiles(ctx, userID, entry.Path, out); err != nil {
+				return err
+			}
+			continue
+		}
+
+		full, err := s.FileTree.Read(ctx, userID, entry.Path, models.TrustLevelFull)
+		if err != nil {
+			continue
+		}
+		out[full.Path] = full.Content
+	}
+
+	return nil
 }
 
 // writeZipJSON marshals v as indented JSON and writes it to the zip as a file.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -19,9 +20,7 @@ func NewDashboardService(db *pgxpool.Pool) *DashboardService {
 
 // GetStats aggregates dashboard statistics for a user.
 func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*models.DashboardStats, error) {
-	stats := &models.DashboardStats{
-		WeeklyActivity: make(map[string]int),
-	}
+	stats := &models.DashboardStats{}
 
 	// Count connections.
 	err := s.db.QueryRow(ctx,
@@ -33,7 +32,7 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 
 	// Count skills (non-directory file_tree entries under /skills/).
 	err = s.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND path LIKE '/skills/%'`, userID).
+		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND path LIKE $2`, userID, hubpath.NormalizeStorage("/skills/")+"%").
 		Scan(&stats.TotalSkills)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: skills count: %w", err)
@@ -67,25 +66,49 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 	defer rows.Close()
 
 	for rows.Next() {
-		var day string
-		var count int
-		if err := rows.Scan(&day, &count); err != nil {
+		var activity models.DashboardActivity
+		if err := rows.Scan(&activity.Platform, &activity.Count); err != nil {
 			return nil, fmt.Errorf("dashboard.GetStats: weekly activity scan: %w", err)
 		}
-		stats.WeeklyActivity[day] = count
+		stats.WeeklyActivity = append(stats.WeeklyActivity, activity)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: weekly activity rows: %w", err)
 	}
 
-	// Pending conflicts: count inbox messages with action_required=true and status='incoming'.
+	var pendingInbox int
 	err = s.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM inbox_messages
-		 WHERE to_address LIKE $1 || '%' AND action_required = true AND status = 'incoming'`,
-		userID.String()).
-		Scan(&stats.PendingConflicts)
+		 WHERE user_id = $1 AND action_required = true AND status = 'incoming'`,
+		userID).
+		Scan(&pendingInbox)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard.GetStats: pending inbox: %w", err)
+	}
+
+	if pendingInbox > 0 {
+		stats.Pending = append(stats.Pending, models.DashboardPending{
+			Type:    "inbox",
+			Count:   pendingInbox,
+			Message: "待处理收件箱消息",
+		})
+	}
+
+	var pendingConflicts int
+	err = s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM memory_conflicts WHERE user_id = $1 AND status = 'pending'`,
+		userID).
+		Scan(&pendingConflicts)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: pending conflicts: %w", err)
+	}
+
+	if pendingConflicts > 0 {
+		stats.Pending = append(stats.Pending, models.DashboardPending{
+			Type:    "conflict",
+			Count:   pendingConflicts,
+			Message: "待解决记忆冲突",
+		})
 	}
 
 	return stats, nil

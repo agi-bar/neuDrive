@@ -120,7 +120,7 @@ data = hub.export_all()
 
 ```python
 stats = hub.get_stats()
-print(stats)  # {"file_count": 42, "connections": 3, ...}
+print(stats)  # {"connections": 3, "skills": 12, "devices": 2, "projects": 4, ...}
 ```
 
 ## OAuth for Third-Party Apps

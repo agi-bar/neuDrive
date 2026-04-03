@@ -13,6 +13,7 @@ const (
 	ErrCodeNotFound     = "not_found"
 	ErrCodeConflict     = "conflict"
 	ErrCodeInternal     = "internal_error"
+	ErrCodeUnsupported  = "unsupported"
 	ErrCodeRateLimit    = "rate_limit_exceeded"
 	ErrCodeValidation   = "validation_error"
 )

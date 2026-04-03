@@ -16,11 +16,22 @@ type ActivityLog struct {
 	CreatedAt    time.Time              `json:"created_at" db:"created_at"`
 }
 
+type DashboardActivity struct {
+	Platform string `json:"platform"`
+	Count    int    `json:"count"`
+}
+
+type DashboardPending struct {
+	Type    string `json:"type"`
+	Count   int    `json:"count"`
+	Message string `json:"message"`
+}
+
 type DashboardStats struct {
-	TotalConnections int            `json:"connections"`
-	TotalSkills      int            `json:"skills"`
-	TotalDevices     int            `json:"devices"`
-	TotalProjects    int            `json:"projects"`
-	WeeklyActivity   map[string]int `json:"weekly_activity"`
-	PendingConflicts int            `json:"pending_conflicts"`
+	TotalConnections int                 `json:"connections"`
+	TotalSkills      int                 `json:"skills"`
+	TotalDevices     int                 `json:"devices"`
+	TotalProjects    int                 `json:"projects"`
+	WeeklyActivity   []DashboardActivity `json:"weekly_activity"`
+	Pending          []DashboardPending  `json:"pending"`
 }

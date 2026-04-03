@@ -149,13 +149,12 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 				return
 			}
 			respondOK(w, map[string]interface{}{
-				"file_count":         0,
-				"vault_scopes":       0,
-				"connections":        0,
-				"roles":              0,
-				"projects":           0,
-				"unread_messages":    0,
-				"registered_devices": 0,
+				"connections":     0,
+				"skills":          0,
+				"devices":         0,
+				"projects":        0,
+				"weekly_activity": []interface{}{},
+				"pending":         []interface{}{},
 			})
 		})
 

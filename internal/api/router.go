@@ -316,10 +316,21 @@ func (s *Server) setupRoutes() {
 
 		r.Get("/agent/tree/*", s.handleAgentTreeList)
 		r.Get("/agent/search", s.handleAgentSearch)
+		r.Get("/agent/skills", s.handleAgentListSkills)
 		r.Put("/agent/tree/*", s.handleAgentTreeWrite)
+		r.Get("/agent/vault/scopes", s.handleAgentVaultListScopes)
 		r.Get("/agent/vault/{scope}", s.handleAgentVaultRead)
+		r.Put("/agent/vault/{scope}", s.handleAgentVaultWrite)
+		r.Put("/agent/memory/profile", s.handleAgentUpdateProfile)
 		r.Get("/agent/inbox/{role}", s.handleAgentGetInbox)
 		r.Post("/agent/inbox/send", s.handleAgentSendMessage)
+		r.Put("/agent/inbox/{id}/archive", s.handleAgentArchiveInbox)
+		r.Post("/agent/projects", s.handleAgentCreateProject)
+		r.Get("/agent/projects", s.handleAgentListProjects)
+		r.Get("/agent/projects/{name}", s.handleAgentGetProject)
+		r.Post("/agent/projects/{name}/log", s.handleAgentAppendProjectLog)
+		r.Get("/agent/devices", s.handleAgentDevicesList)
+		r.Get("/agent/dashboard/stats", s.handleDashboardStats)
 		r.Post("/agent/devices/{name}/call", s.handleAgentCallDevice)
 		r.Get("/agent/memory/profile", s.handleAgentGetProfile)
 
@@ -327,9 +338,11 @@ func (s *Server) setupRoutes() {
 		r.Get("/agent/shared/{owner_slug}/tree/*", s.handleAgentSharedTree)
 
 		// Agent Import (bulk API)
+		r.Post("/agent/import/profile", s.handleAgentImportProfile)
 		r.Post("/agent/import/skill", s.handleAgentImportSkill)
 		r.Post("/agent/import/claude-memory", s.handleAgentImportClaudeMemory)
 		r.Post("/agent/import/bulk", s.handleAgentImportBulk)
+		r.Get("/agent/export/all", s.handleAgentExportAll)
 	})
 
 	// Embedded frontend (SPA) — catch-all for non-API routes.
@@ -620,6 +633,12 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		respondInternalError(w, err)
 		return
 	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
+			"project": project.Name,
+			"action":  "created",
+		})
+	}
 
 	respondCreated(w, project)
 }
@@ -692,6 +711,13 @@ func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) 
 		respondInternalError(w, err)
 		return
 	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
+			"project": project.Name,
+			"action":  req.Action,
+			"summary": req.Summary,
+		})
+	}
 
 	respondCreated(w, map[string]string{"status": "appended", "project": name})
 }
@@ -707,6 +733,12 @@ func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 	if err := s.ProjectService.Archive(r.Context(), userID, name); err != nil {
 		respondNotFound(w, "project")
 		return
+	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
+			"project": name,
+			"action":  "archived",
+		})
 	}
 
 	respondOK(w, map[string]string{"status": "archived", "name": name})
@@ -741,6 +773,12 @@ func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) 
 		respondInternalError(w, err)
 		return
 	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventProjectUpdate, map[string]interface{}{
+			"project": name,
+			"action":  "summarized",
+		})
+	}
 
 	respondOK(w, map[string]interface{}{
 		"status":     "summarized",
@@ -760,25 +798,26 @@ func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if s.DashboardService != nil {
-		stats, err := s.DashboardService.GetStats(r.Context(), userID)
-		if err == nil {
-			respondOK(w, stats)
-			return
+	if s.DashboardService == nil {
+		// Graceful fallback: return basic stats from connection count when
+		// the full dashboard service is not configured (e.g. minimal deploys).
+		count := 0
+		if s.ConnectionService != nil {
+			if conns, err := s.ConnectionService.ListByUser(r.Context(), userID); err == nil {
+				count = len(conns)
+			}
 		}
+		respondOK(w, &models.DashboardStats{TotalConnections: count})
+		return
 	}
 
-	// Fallback: basic stats
-	conns, _ := s.ConnectionService.ListByUser(r.Context(), userID)
-	respondOK(w, map[string]interface{}{
-		"file_count":         0,
-		"vault_scopes":       0,
-		"connections":        len(conns),
-		"roles":              0,
-		"projects":           0,
-		"unread_messages":    0,
-		"registered_devices": 0,
-	})
+	stats, err := s.DashboardService.GetStats(r.Context(), userID)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	respondOK(w, stats)
 }
 
 // ---------------------------------------------------------------------------
@@ -813,17 +852,13 @@ func (s *Server) handleAgentTreeList(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromCtx(r.Context())
 	trustLevel := trustLevelFromCtx(r.Context())
 	path := chi.URLParam(r, "*")
-	if path == "" {
-		path = "/"
-	}
-
-	entries, err := s.FileTreeService.List(r.Context(), userID, path, trustLevel)
+	node, err := s.readOrListTreePath(r.Context(), userID, trustLevel, path)
 	if err != nil {
-		respondInternalError(w, err)
+		respondNotFound(w, "file")
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"path": path, "children": entries})
+	respondOK(w, node)
 }
 
 func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
@@ -833,14 +868,19 @@ func (s *Server) handleAgentSearch(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromCtx(r.Context())
 	trustLevel := trustLevelFromCtx(r.Context())
 	query := r.URL.Query().Get("q")
+	scope := r.URL.Query().Get("scope")
+	if strings.TrimSpace(query) == "" {
+		respondValidationError(w, "q", "query parameter 'q' is required")
+		return
+	}
 
-	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel, "")
+	results, err := s.searchHub(r.Context(), userID, trustLevel, query, scope)
 	if err != nil {
 		respondInternalError(w, err)
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"query": query, "results": entries})
+	respondOK(w, map[string]interface{}{"query": query, "results": results})
 }
 
 func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
@@ -910,6 +950,12 @@ func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
 		respondNotFound(w, "vault entry")
 		return
 	}
+	if s.WebhookService != nil {
+		go s.WebhookService.Trigger(context.Background(), userID, models.EventVaultAccess, map[string]interface{}{
+			"scope":       scope,
+			"trust_level": trustLevel,
+		})
+	}
 
 	respondOK(w, map[string]interface{}{"scope": scope, "data": plaintext})
 }
@@ -943,6 +989,10 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.To) == "" || strings.TrimSpace(req.Body) == "" {
+		respondValidationError(w, "to,body", "to and body are required")
 		return
 	}
 
@@ -981,7 +1031,7 @@ func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.DeviceService.Call(r.Context(), userID, name, req.Action, req.Params)
 	if err != nil {
-		respondNotFound(w, "device")
+		respondDeviceCallError(w, err)
 		return
 	}
 
@@ -994,16 +1044,12 @@ func (s *Server) handleAgentGetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	userID, _ := userIDFromCtx(r.Context())
-	user, err := s.UserService.GetByID(r.Context(), userID)
+	category := r.URL.Query().Get("category")
+	profile, err := s.buildAgentProfile(r.Context(), userID, category)
 	if err != nil {
 		respondNotFound(w, "user")
 		return
 	}
 
-	respondOK(w, map[string]interface{}{
-		"slug":         user.Slug,
-		"display_name": user.DisplayName,
-		"timezone":     user.Timezone,
-		"language":     user.Language,
-	})
+	respondOK(w, profile)
 }

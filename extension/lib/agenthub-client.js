@@ -47,7 +47,7 @@ class AgentHubClient {
 
   /**
    * Core fetch wrapper. Adds auth header, handles errors.
-   * @param {string} path - API path (e.g. "/api/v1/profile")
+   * @param {string} path - API path (e.g. "/agent/memory/profile")
    * @param {object} options - fetch options
    * @returns {Promise<object>} parsed JSON response
    */
@@ -81,7 +81,11 @@ class AgentHubClient {
       return null;
     }
 
-    return response.json();
+    const data = await response.json();
+    if (data && typeof data === 'object' && data.ok === true && 'data' in data) {
+      return data.data;
+    }
+    return data;
   }
 
   /**
@@ -94,10 +98,11 @@ class AgentHubClient {
       return this._profileCache;
     }
 
-    const profile = await this._request('/api/v1/profile');
-    this._profileCache = profile;
+    const profile = await this._request('/agent/memory/profile');
+    const normalized = this._normalizeProfile(profile);
+    this._profileCache = normalized;
     this._profileCacheTime = now;
-    return profile;
+    return normalized;
   }
 
   /**
@@ -105,12 +110,8 @@ class AgentHubClient {
    * @param {object} params - query params { limit, offset, tag }
    */
   async listSkills(params = {}) {
-    const query = new URLSearchParams();
-    if (params.limit) query.set('limit', params.limit);
-    if (params.offset) query.set('offset', params.offset);
-    if (params.tag) query.set('tag', params.tag);
-    const qs = query.toString();
-    return this._request(`/api/v1/skills${qs ? '?' + qs : ''}`);
+    const data = await this._request('/agent/skills');
+    return data.skills || [];
   }
 
   /**
@@ -118,14 +119,15 @@ class AgentHubClient {
    * @param {string} projectId
    */
   async getProject(projectId) {
-    return this._request(`/api/v1/projects/${encodeURIComponent(projectId)}`);
+    return this._request(`/agent/projects/${encodeURIComponent(projectId)}`);
   }
 
   /**
    * List all projects.
    */
   async listProjects() {
-    return this._request('/api/v1/projects');
+    const data = await this._request('/agent/projects');
+    return data.projects || [];
   }
 
   /**
@@ -134,18 +136,42 @@ class AgentHubClient {
    * @param {object} params - { limit, type }
    */
   async searchMemory(query, params = {}) {
-    const body = { query, ...params };
-    return this._request('/api/v1/memory/search', {
-      method: 'POST',
-      body: JSON.stringify(body),
-    });
+    const search = new URLSearchParams({ q: query });
+    if (params.scope) search.set('scope', params.scope);
+    const data = await this._request(`/agent/search?${search.toString()}`);
+    return data.results || [];
   }
 
   /**
    * Get user preferences.
    */
   async getPreferences() {
-    return this._request('/api/v1/preferences');
+    const profile = await this.getProfile();
+    return {
+      language: profile.language,
+      timezone: profile.timezone,
+      ...profile.preferences,
+    };
+  }
+
+  _normalizeProfile(profile) {
+    const profiles = Array.isArray(profile?.profiles) ? profile.profiles : [];
+    const preferences = {};
+    profiles.forEach(item => {
+      if (item && item.category) {
+        preferences[item.category] = item.content || '';
+      }
+    });
+
+    return {
+      slug: profile?.slug || '',
+      username: profile?.slug || '',
+      name: profile?.display_name || profile?.slug || 'User',
+      display_name: profile?.display_name || '',
+      timezone: profile?.timezone || '',
+      language: profile?.language || '',
+      preferences,
+    };
   }
 
   /**

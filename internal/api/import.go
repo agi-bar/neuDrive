@@ -650,3 +650,44 @@ func (s *Server) HandleExportFull(w http.ResponseWriter, r *http.Request) {
 
 	respondOK(w, export)
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/import/claude-data
+// ---------------------------------------------------------------------------
+
+// HandleImportClaudeData imports a full Claude data export zip file.
+// Accepts multipart/form-data with a "file" field containing the zip.
+func (s *Server) HandleImportClaudeData(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	// Parse multipart form (max 50MB)
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "failed to parse multipart form: "+err.Error())
+		return
+	}
+
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "missing 'file' field in form data")
+		return
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "failed to read file: "+err.Error())
+		return
+	}
+
+	result, err := s.ImportService.ImportClaudeData(r.Context(), userID, data)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "import failed: "+err.Error())
+		return
+	}
+
+	respondOK(w, result)
+}

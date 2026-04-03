@@ -249,6 +249,7 @@ func (s *Server) setupRoutes() {
 			r.Use(MaxBodySizeMiddleware(50 << 20))
 			r.Post("/api/import/skill", s.handleImportSkill)
 			r.Post("/api/import/claude-memory", s.handleImportClaudeMemoryV2)
+			r.Post("/api/import/claude-data", s.HandleImportClaudeData)
 			r.Post("/api/import/profile", s.handleImportProfileV2)
 			r.Post("/api/import/bulk", s.handleImportBulk)
 		})

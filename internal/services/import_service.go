@@ -1,9 +1,12 @@
 package services
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"path/filepath"
 	"strings"
 	"time"
@@ -277,6 +280,191 @@ func (s *ImportService) ImportBulkFiles(ctx context.Context, userID uuid.UUID, f
 	}
 
 	return imported, nil
+}
+
+// ---------------------------------------------------------------------------
+// Claude Data Import (full export zip)
+// ---------------------------------------------------------------------------
+
+// ClaudeDataImportResult holds the result of importing a Claude data export.
+type ClaudeDataImportResult struct {
+	MemoriesImported      int `json:"memories_imported"`
+	ConversationsImported int `json:"conversations_imported"`
+	ProjectsImported      int `json:"projects_imported"`
+	FilesWritten          int `json:"files_written"`
+}
+
+// Claude export JSON structures
+type claudeUser struct {
+	UUID     string `json:"uuid"`
+	FullName string `json:"full_name"`
+	Email    string `json:"email_address"`
+}
+
+type claudeConversation struct {
+	UUID         string              `json:"uuid"`
+	Name         string              `json:"name"`
+	Summary      string              `json:"summary"`
+	CreatedAt    string              `json:"created_at"`
+	ChatMessages []claudeChatMessage `json:"chat_messages"`
+}
+
+type claudeChatMessage struct {
+	Text      string `json:"text"`
+	Sender    string `json:"sender"`
+	CreatedAt string `json:"created_at"`
+}
+
+type claudeProject struct {
+	UUID        string      `json:"uuid"`
+	Name        string      `json:"name"`
+	Description string      `json:"description"`
+	IsStarter   bool        `json:"is_starter_project"`
+	Docs        []claudeDoc `json:"docs"`
+	CreatedAt   string      `json:"created_at"`
+}
+
+type claudeDoc struct {
+	Filename string `json:"filename"`
+	Content  string `json:"content"`
+}
+
+type claudeMemoryFile struct {
+	ConversationsMemory string `json:"conversations_memory"`
+	AccountUUID         string `json:"account_uuid"`
+}
+
+// ImportClaudeData imports a full Claude data export zip file.
+// The zip contains: users.json, memories.json, projects.json, conversations.json
+func (s *ImportService) ImportClaudeData(ctx context.Context, userID uuid.UUID, zipData []byte) (*ClaudeDataImportResult, error) {
+	result := &ClaudeDataImportResult{}
+
+	reader, err := zip.NewReader(bytes.NewReader(zipData), int64(len(zipData)))
+	if err != nil {
+		return nil, fmt.Errorf("import.ClaudeData: open zip: %w", err)
+	}
+
+	// Read all files from zip
+	fileMap := map[string][]byte{}
+	for _, f := range reader.File {
+		rc, err := f.Open()
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			continue
+		}
+		fileMap[f.Name] = data
+	}
+
+	// 1. Import memories.json → /memory/claude/memory.md
+	if data, ok := fileMap["memories.json"]; ok {
+		var memories []claudeMemoryFile
+		if err := json.Unmarshal(data, &memories); err == nil && len(memories) > 0 {
+			content := memories[0].ConversationsMemory
+			if content != "" {
+				path := "/memory/claude/memory.md"
+				if _, err := s.fileTree.Write(ctx, userID, path, content, "text/markdown", models.TrustLevelFull); err == nil {
+					result.MemoriesImported = 1
+					result.FilesWritten++
+				}
+			}
+		}
+	}
+
+	// 2. Import conversations.json → /memory/conversations/{name}.md
+	if data, ok := fileMap["conversations.json"]; ok {
+		var convos []claudeConversation
+		if err := json.Unmarshal(data, &convos); err == nil {
+			for _, c := range convos {
+				if len(c.ChatMessages) == 0 {
+					continue
+				}
+
+				// Build conversation markdown
+				var sb strings.Builder
+				sb.WriteString(fmt.Sprintf("# %s\n\n", c.Name))
+				sb.WriteString(fmt.Sprintf("Date: %s\n\n", c.CreatedAt[:10]))
+				if c.Summary != "" {
+					sb.WriteString(fmt.Sprintf("Summary: %s\n\n", c.Summary))
+				}
+				sb.WriteString("---\n\n")
+
+				for _, msg := range c.ChatMessages {
+					role := "User"
+					if msg.Sender == "assistant" {
+						role = "Claude"
+					}
+					text := msg.Text
+					if len(text) > 500 {
+						text = text[:500] + "..."
+					}
+					sb.WriteString(fmt.Sprintf("**%s**: %s\n\n", role, text))
+				}
+
+				// Sanitize filename
+				safeName := strings.Map(func(r rune) rune {
+					if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+						return r
+					}
+					if r >= 0x4e00 && r <= 0x9fff {
+						return r
+					}
+					return '-'
+				}, c.Name)
+				if len(safeName) > 50 {
+					safeName = safeName[:50]
+				}
+
+				date := "unknown"
+				if len(c.CreatedAt) >= 10 {
+					date = c.CreatedAt[:10]
+				}
+				path := fmt.Sprintf("/memory/conversations/%s-%s.md", date, safeName)
+
+				if _, err := s.fileTree.Write(ctx, userID, path, sb.String(), "text/markdown", models.TrustLevelFull); err == nil {
+					result.ConversationsImported++
+					result.FilesWritten++
+				}
+			}
+		}
+	}
+
+	// 3. Import projects.json → projects + /skills/{name}/
+	if data, ok := fileMap["projects.json"]; ok {
+		var projects []claudeProject
+		if err := json.Unmarshal(data, &projects); err == nil {
+			for _, p := range projects {
+				if p.IsStarter {
+					continue // Skip starter/template projects
+				}
+
+				// Create project in DB
+				safeName := strings.Map(func(r rune) rune {
+					if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
+						return r
+					}
+					return '-'
+				}, strings.ToLower(p.Name))
+				if safeName == "" {
+					safeName = "claude-project"
+				}
+
+				// Import docs as skills
+				for _, doc := range p.Docs {
+					path := fmt.Sprintf("/skills/claude-%s/%s", safeName, doc.Filename)
+					if _, err := s.fileTree.Write(ctx, userID, path, doc.Content, contentTypeFromExt(doc.Filename), models.TrustLevelWork); err == nil {
+						result.FilesWritten++
+					}
+				}
+				result.ProjectsImported++
+			}
+		}
+	}
+
+	return result, nil
 }
 
 // ExportAll exports the entire user data as a structured map for data portability.

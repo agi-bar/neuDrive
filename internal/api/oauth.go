@@ -130,8 +130,20 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Authenticate the user — try JWT from context first, then form login.
+	// Authenticate the user — try JWT from context first, then hidden token, then form login.
 	userID, ok := userIDFromCtx(r.Context())
+
+	// Try hidden _token field (auto-submitted by JS when user is already logged in)
+	if !ok {
+		if hiddenToken := r.FormValue("_token"); hiddenToken != "" {
+			claims, err := auth.ValidateToken(hiddenToken, s.JWTSecret)
+			if err == nil {
+				userID = claims.UserID
+				ok = true
+			}
+		}
+	}
+
 	if !ok {
 		// No JWT — try form-based login (email + password in the form)
 		email := r.FormValue("email")
@@ -397,6 +409,66 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondOK(w, map[string]string{"status": "revoked"})
+}
+
+// handleOAuthAuthorizeInfo returns app info for the SPA consent page.
+// GET /api/oauth/authorize-info?client_id=...&redirect_uri=...&scope=...&state=...&response_type=code
+func (s *Server) handleOAuthAuthorizeInfo(w http.ResponseWriter, r *http.Request) {
+	clientID := r.URL.Query().Get("client_id")
+	redirectURI := r.URL.Query().Get("redirect_uri")
+	scope := r.URL.Query().Get("scope")
+	responseType := r.URL.Query().Get("response_type")
+
+	if responseType != "code" {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid response_type. Only 'code' is supported.")
+		return
+	}
+
+	if clientID == "" {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "Missing required parameter: client_id")
+		return
+	}
+
+	// Look up the app. Auto-register URL-based client_ids.
+	app, err := s.OAuthService.GetAppByClientID(r.Context(), clientID)
+	if err != nil && strings.HasPrefix(clientID, "https://") {
+		app, err = s.autoRegisterOAuthClient(r.Context(), clientID, redirectURI)
+	}
+	if err != nil {
+		respondError(w, http.StatusNotFound, ErrCodeNotFound, "Unknown application. The client_id is not registered.")
+		return
+	}
+
+	if !app.IsActive {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "This application has been deactivated.")
+		return
+	}
+
+	if redirectURI == "" {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "Missing required parameter: redirect_uri")
+		return
+	}
+	if !s.OAuthService.ValidateRedirectURI(app, redirectURI) {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "Invalid redirect_uri.")
+		return
+	}
+
+	scopes := auth.SplitScopes(scope)
+	scopeLabels := make([]map[string]string, 0, len(scopes))
+	for _, sc := range scopes {
+		scopeLabels = append(scopeLabels, map[string]string{
+			"scope": sc,
+			"label": auth.ScopeLabel(sc),
+		})
+	}
+
+	respondOK(w, map[string]interface{}{
+		"app_name":    app.Name,
+		"app_logo":    app.LogoURL,
+		"scopes":      scopeLabels,
+		"client_id":   clientID,
+		"redirect_uri": redirectURI,
+	})
 }
 
 // ---------------------------------------------------------------------------

@@ -22,7 +22,7 @@ type ConsentPageData struct {
 
 // consentTemplate is the HTML template for the OAuth consent screen.
 var consentTemplate = template.Must(template.New("consent").Funcs(template.FuncMap{
-	"scopeLabel": scopeLabel,
+	"scopeLabel": ScopeLabel,
 }).Parse(consentHTML))
 
 // RenderConsentPage renders the OAuth consent screen.
@@ -38,8 +38,8 @@ func RenderConsentPage(w http.ResponseWriter, data ConsentPageData) {
 	}
 }
 
-// scopeLabel returns a human-readable label for a scope string.
-func scopeLabel(scope string) string {
+// ScopeLabel returns a human-readable label for a scope string.
+func ScopeLabel(scope string) string {
 	labels := map[string]string{
 		"read:profile":    "View your profile information",
 		"write:profile":   "Update your profile information",
@@ -224,7 +224,7 @@ const consentHTML = `<!DOCTYPE html>
     </style>
 </head>
 <body>
-    <div class="consent-card">
+    <div class="consent-card" id="consent-card" style="display:none;">
         <div class="header">
             <h1>Agent Hub</h1>
             <p>An application is requesting access to your account</p>
@@ -232,6 +232,7 @@ const consentHTML = `<!DOCTYPE html>
 
         {{if .Error}}
         <div class="error-box">{{.Error}}</div>
+        <script>document.getElementById('consent-card').style.display='';</script>
         {{else}}
 
         <div class="app-info">
@@ -263,7 +264,12 @@ const consentHTML = `<!DOCTYPE html>
             <input type="hidden" name="state" value="{{.State}}">
             <input type="hidden" name="action" value="approve">
 
+            <div id="auto-status" style="display:none; text-align:center; padding:16px 0; color:#666;">
+                <p id="auto-status-text" style="font-size:15px;">&#10003; 已登录</p>
+            </div>
+
             {{if .ShowLogin}}
+            <div id="login-section">
             <div style="margin-bottom:16px;">
                 <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Email</label>
                 <input type="email" name="email" placeholder="your@email.com" required
@@ -273,6 +279,7 @@ const consentHTML = `<!DOCTYPE html>
                 <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Password</label>
                 <input type="password" name="password" placeholder="Password" required
                     style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;">
+            </div>
             </div>
             {{end}}
 
@@ -287,6 +294,71 @@ const consentHTML = `<!DOCTYPE html>
 
         {{end}}
     </div>
+
+    <script>
+    (function() {
+        var card = document.getElementById('consent-card');
+        var loginSection = document.getElementById('login-section');
+        var autoStatus = document.getElementById('auto-status');
+        var token = localStorage.getItem('token');
+
+        if (!token) {
+            // Not logged in — redirect to login immediately, card stays hidden (no flash)
+            window.location.href = '/login?redirect=' + encodeURIComponent(window.location.href);
+            return;
+        }
+
+        // Has token — verify it before showing anything
+        fetch('/api/auth/me', {
+            headers: { 'Authorization': 'Bearer ' + token }
+        }).then(function(resp) {
+            if (resp.status !== 200) {
+                localStorage.removeItem('token');
+                window.location.href = '/login?redirect=' + encodeURIComponent(window.location.href);
+                return;
+            }
+            return resp.json();
+        }).then(function(data) {
+            if (!data) return;
+
+            // Token valid — now show the consent card
+            if (card) card.style.display = '';
+
+            // Hide login form, show logged-in status
+            if (loginSection) loginSection.style.display = 'none';
+            if (autoStatus) autoStatus.style.display = 'block';
+
+            // Show user identity
+            var statusText = document.getElementById('auto-status-text');
+            var userName = data.display_name || data.name || data.slug || data.email || '';
+            if (statusText && userName) {
+                statusText.innerHTML = '&#10003; 已登录为 ' + userName;
+            }
+
+            // Inject hidden token so POST handler can authenticate
+            var form = document.querySelector('form');
+            if (!form) return;
+
+            var tokenInput = document.createElement('input');
+            tokenInput.type = 'hidden';
+            tokenInput.name = '_token';
+            tokenInput.value = token;
+            form.appendChild(tokenInput);
+
+            // Remove required from hidden login fields
+            var emailInput = form.querySelector('input[name="email"]');
+            var passInput = form.querySelector('input[name="password"]');
+            if (emailInput) emailInput.removeAttribute('required');
+            if (passInput) passInput.removeAttribute('required');
+
+            // User clicks Authorize button to submit
+        }).catch(function() {
+            // Token check failed — redirect to login
+            localStorage.removeItem('token');
+            window.location.href = '/login?redirect=' + encodeURIComponent(window.location.href);
+        });
+    })();
+    </script>
 </body>
 </html>
 `

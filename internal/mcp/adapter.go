@@ -150,7 +150,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "update_profile",
-			Description: "更新用户偏好",
+			Description: "更新用户的长期稳定偏好（极少变化的信息，如写作风格、沟通习惯、做事原则）。注意：日常交互中产生的信息应使用 save_memory 而非此工具",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"category": prop("string", "分类: preferences, relationships, principles"),
 				"content":  prop("string", "内容"),
@@ -281,10 +281,10 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "save_memory",
-			Description: "保存一条记忆到 scratch 层（短期工作记忆），自动按日期归档",
+			Description: "记住一条信息。当用户说「记住」「记一下」「别忘了」或需要保存任何信息供将来使用时，使用此工具。内容自动按日期归档到记忆库，可通过 search_memory 检索",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"content": prop("string", "记忆内容（支持 Markdown）"),
-				"title":   prop("string", "简短标题（用于文件名，可选）"),
+				"content": prop("string", "要记住的内容（支持 Markdown）"),
+				"title":   prop("string", "简短标题（可选，用于分类，如 meeting-notes, todo, idea）"),
 			}, "content"),
 		},
 		{
@@ -297,7 +297,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "import_claude_memory",
-			Description: "导入 Claude 记忆导出",
+			Description: "批量导入 Claude 记忆导出文件（仅用于从 Claude 平台迁移历史记忆，日常记忆请用 save_memory）",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"memories": propArray("object", "记忆条目 [{content, type, created_at}]"),
 			}, "memories"),

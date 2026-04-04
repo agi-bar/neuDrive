@@ -1367,6 +1367,55 @@ a:hover {
   margin-bottom: 14px;
 }
 
+.setup-tabs {
+  display: inline-flex;
+  gap: 8px;
+  padding: 4px;
+  background: rgba(32, 88, 188, 0.08);
+  border: 1px solid #d7e5ff;
+  border-radius: 999px;
+  margin-bottom: 16px;
+}
+
+.setup-tab {
+  border: none;
+  background: transparent;
+  color: var(--color-text-secondary);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.setup-tab:hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.setup-tab-active {
+  background: #fff;
+  color: #2058bc;
+  box-shadow: 0 3px 10px rgba(32, 88, 188, 0.12);
+}
+
+.setup-tab-panel {
+  border-top: 1px solid rgba(32, 88, 188, 0.14);
+  padding-top: 18px;
+}
+
+.setup-platform-title {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.setup-note-first {
+  margin-top: 0;
+}
+
 /* Code Block with copy button */
 .code-block {
   position: relative;

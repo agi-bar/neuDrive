@@ -171,20 +171,16 @@ test.describe('Info Page', () => {
 })
 
 test.describe('Setup Page', () => {
-  test('shows token and MCP config', async ({ page, request }) => {
+  test('shows three setup entrypoints', async ({ page, request }) => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
     await page.goto('/setup')
 
-    // Should auto-generate a token or show token section
-    await expect(page.getByText('aht_').first()).toBeVisible({ timeout: 10000 })
-
-    // MCP config should be visible
-    await expect(page.getByText('claude mcp add')).toBeVisible()
-
-    // JSON config block should exist
-    await expect(page.getByText('mcpServers')).toBeVisible()
+    await expect(page.getByText('Claude Code 云端模式')).toBeVisible()
+    await expect(page.getByText('Claude Code 本地模式')).toBeVisible()
+    await expect(page.getByText('高级模式（HTTP + 手动 Bearer Token）')).toBeVisible()
+    await expect(page.getByText('ChatGPT GPT Actions')).toBeVisible()
   })
 })
 

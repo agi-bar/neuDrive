@@ -2,6 +2,9 @@
 
 Agent Hub SDK for JavaScript/TypeScript.
 
+The SDK targets the scoped-token `/agent/*` surface and supports both typed APIs
+and the canonical virtual tree sync primitives (`snapshot` / `changes`).
+
 ## Quick Start
 
 ### With Scoped Token (Agent/MCP use)
@@ -18,6 +21,10 @@ const profile = await hub.getProfile('preferences')
 
 // Search memory
 const results = await hub.searchMemory('海淀算力券')
+
+// Sync a subtree
+const snapshot = await hub.snapshot('/projects/my-project')
+const delta = await hub.changes(snapshot.cursor, '/projects/my-project')
 
 // Control a device
 await hub.callDevice('living-room-light', 'off')
@@ -60,10 +67,12 @@ npm install @agenthub/sdk
 | `logAction(project, action, summary, tags?)` | Append project log |
 | `listDirectory(path)` | List file tree directory |
 | `readFile(path)` | Read a file |
-| `writeFile(path, content)` | Write a file |
+| `writeFile(path, content, options?)` | Write a file with optional metadata / optimistic lock fields |
+| `snapshot(path?)` | Fetch a subtree snapshot (`entries + cursor + root_checksum`) |
+| `changes(cursor, path?)` | Fetch incremental subtree changes |
 | `listSecrets()` | List vault scopes |
 | `readSecret(scope)` | Read a vault secret |
-| `listSkills()` | List available skills |
+| `listSkills()` | List indexed skill summaries from `SKILL.md` metadata |
 | `readSkill(name)` | Read skill content |
 | `listDevices()` | List registered devices |
 | `callDevice(device, action, params?)` | Call a device action |

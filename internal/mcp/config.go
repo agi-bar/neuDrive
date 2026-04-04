@@ -12,8 +12,22 @@ func GenerateStdioConfig(binaryPath, token string) map[string]interface{} {
 	}
 }
 
-// GenerateHTTPConfig returns the Claude Code MCP config for HTTP transport
-func GenerateHTTPConfig(baseURL, token string) map[string]interface{} {
+// GenerateHTTPOAuthConfig returns remote HTTP MCP config that relies on OAuth
+// discovery and browser-based authorization instead of a static bearer token.
+func GenerateHTTPOAuthConfig(baseURL string) map[string]interface{} {
+	return map[string]interface{}{
+		"mcpServers": map[string]interface{}{
+			"agenthub": map[string]interface{}{
+				"type": "http",
+				"url":  baseURL + "/mcp",
+			},
+		},
+	}
+}
+
+// GenerateHTTPBearerConfig returns remote HTTP MCP config using a static bearer
+// token in the Authorization header.
+func GenerateHTTPBearerConfig(baseURL, token string) map[string]interface{} {
 	return map[string]interface{}{
 		"mcpServers": map[string]interface{}{
 			"agenthub": map[string]interface{}{
@@ -25,6 +39,12 @@ func GenerateHTTPConfig(baseURL, token string) map[string]interface{} {
 			},
 		},
 	}
+}
+
+// GenerateHTTPConfig is kept as a backwards-compatible alias for the bearer
+// token variant of remote HTTP MCP config.
+func GenerateHTTPConfig(baseURL, token string) map[string]interface{} {
+	return GenerateHTTPBearerConfig(baseURL, token)
 }
 
 // GenerateCLICommand returns the `claude mcp add` command string

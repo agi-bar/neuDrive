@@ -1304,6 +1304,12 @@ a:hover {
   box-shadow: var(--shadow-sm);
 }
 
+.setup-section-highlight {
+  background: linear-gradient(180deg, #f8fbff 0%, var(--color-surface) 100%);
+  border-color: #c7dcff;
+  box-shadow: 0 10px 30px rgba(32, 88, 188, 0.08);
+}
+
 .setup-section-header {
   display: flex;
   align-items: flex-start;
@@ -1333,6 +1339,32 @@ a:hover {
   font-size: 13px;
   color: var(--color-text-secondary);
   margin: 12px 0 8px;
+}
+
+.setup-steps {
+  margin: 14px 0 10px;
+  padding-left: 20px;
+  color: var(--color-text);
+}
+
+.setup-steps li {
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 6px;
+}
+
+.setup-note {
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--color-text-secondary);
+  margin: 12px 0 0;
+}
+
+.setup-mode-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
 }
 
 /* Code Block with copy button */

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import { api, ScopedTokenResponse, CreateTokenRequest } from '../api'
+import { useCallback, useEffect, useState } from 'react'
+import { api, CreateTokenRequest, ScopedTokenResponse } from '../api'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -21,6 +21,7 @@ const EXPIRY_OPTIONS = [
 ]
 
 type Preset = 'agent' | 'readonly' | 'custom'
+type ModeKey = 'local' | 'advanced'
 
 interface ScopeInfo {
   scopes: string[]
@@ -28,33 +29,54 @@ interface ScopeInfo {
   bundles: Record<string, string[]>
 }
 
+interface ModeTokenState {
+  id: string
+  token: string
+}
+
+const MODE_DEFAULTS: Record<ModeKey, { name: string; preset: Preset; trustLevel: number; expiryDays: number }> = {
+  local: {
+    name: 'Claude Code',
+    preset: 'agent',
+    trustLevel: 4,
+    expiryDays: 90,
+  },
+  advanced: {
+    name: 'MCP HTTP',
+    preset: 'agent',
+    trustLevel: 4,
+    expiryDays: 90,
+  },
+}
+
+const EMPTY_MODE_STATE: Record<ModeKey, boolean> = {
+  local: false,
+  advanced: false,
+}
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
 export default function SetupPage() {
-  // Token list
   const [tokens, setTokens] = useState<ScopedTokenResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
-  // Scope metadata from server
   const [scopeInfo, setScopeInfo] = useState<ScopeInfo | null>(null)
 
-  // Currently active token (for display in config snippets)
-  const [activeToken, setActiveToken] = useState<string | null>(null)
-
-  // Token creation form
   const [name, setName] = useState('Claude Code')
   const [preset, setPreset] = useState<Preset>('agent')
   const [trustLevel, setTrustLevel] = useState(4)
   const [expiryDays, setExpiryDays] = useState(90)
   const [customScopes, setCustomScopes] = useState<string[]>([])
-  const [creating, setCreating] = useState(false)
+  const [manualCreating, setManualCreating] = useState(false)
   const [newToken, setNewToken] = useState<string | null>(null)
 
-  // Copy feedback
   const [copied, setCopied] = useState<string | null>(null)
+  const [openModes, setOpenModes] = useState<Record<ModeKey, boolean>>(EMPTY_MODE_STATE)
+  const [modeTokens, setModeTokens] = useState<Partial<Record<ModeKey, ModeTokenState>>>({})
+  const [provisioningMode, setProvisioningMode] = useState<ModeKey | null>(null)
 
   // ---------------------------------------------------------------------------
   // Data loading
@@ -82,87 +104,39 @@ export default function SetupPage() {
     Promise.all([loadTokens(), loadScopes()]).finally(() => setLoading(false))
   }, [loadTokens, loadScopes])
 
-  // Auto-generate a token on first visit if none exist
-  useEffect(() => {
-    if (!loading && tokens.length === 0 && !activeToken && !creating) {
-      handleCreateToken(true)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, tokens.length])
-
-  // ---------------------------------------------------------------------------
-  // Actions
-  // ---------------------------------------------------------------------------
-
-  const handleCreateToken = async (auto = false) => {
-    setCreating(true)
-    setError('')
-
-    const scopes = getSelectedScopes()
-    const req: CreateTokenRequest = {
-      name: auto ? 'Claude Code (auto)' : name,
-      scopes,
-      max_trust_level: auto ? 4 : trustLevel,
-      expires_in_days: auto ? 90 : (expiryDays === 0 ? 36500 : expiryDays),
-    }
-
-    try {
-      const resp = await api.createToken(req)
-      setNewToken(resp.token)
-      setActiveToken(resp.token)
-      await loadTokens()
-    } catch (e: any) {
-      setError(e.message)
-    }
-    setCreating(false)
-  }
-
-  const handleRevoke = async (id: string) => {
-    try {
-      await api.revokeToken(id)
-      await loadTokens()
-      setError('')
-    } catch (e: any) {
-      setError(e.message)
-    }
-  }
-
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
 
-  const getSelectedScopes = (): string[] => {
-    if (preset === 'agent') return scopeInfo?.bundles?.agent ?? ['read:profile', 'read:memory', 'write:memory', 'read:skills', 'read:vault.auth', 'read:devices', 'call:devices', 'read:inbox', 'write:inbox', 'read:projects', 'write:projects', 'read:tree', 'write:tree', 'search']
-    if (preset === 'readonly') return scopeInfo?.bundles?.read_only ?? ['read:profile', 'read:memory', 'read:skills', 'read:projects', 'read:tree', 'search']
-    return customScopes
+  const getSelectedScopes = (
+    selectedPreset: Preset = preset,
+    selectedCustomScopes: string[] = customScopes,
+  ): string[] => {
+    if (selectedPreset === 'agent') {
+      return scopeInfo?.bundles?.agent ?? [
+        'read:profile', 'read:memory', 'write:memory',
+        'read:skills', 'read:vault.auth',
+        'read:devices', 'call:devices',
+        'read:inbox', 'write:inbox',
+        'read:projects', 'write:projects',
+        'read:tree', 'write:tree',
+        'search',
+      ]
+    }
+    if (selectedPreset === 'readonly') {
+      return scopeInfo?.bundles?.read_only ?? [
+        'read:profile', 'read:memory', 'read:skills',
+        'read:projects', 'read:tree', 'search',
+      ]
+    }
+    return selectedCustomScopes
   }
 
   const toggleScope = (scope: string) => {
-    setCustomScopes(prev =>
-      prev.includes(scope) ? prev.filter(s => s !== scope) : [...prev, scope]
+    setCustomScopes((prev) =>
+      prev.includes(scope) ? prev.filter((s) => s !== scope) : [...prev, scope],
     )
   }
-
-  const displayToken = activeToken || newToken || 'aht_xxxxx'
-
-  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080'
-
-  const claudeCommand = `claude mcp add agenthub \\
-  --transport stdio \\
-  -- agenthub-mcp \\
-  --token ${displayToken}`
-
-  const mcpConfig = JSON.stringify({
-    mcpServers: {
-      agenthub: {
-        command: 'agenthub-mcp',
-        args: ['--token', displayToken],
-      },
-    },
-  }, null, 2)
-
-  const httpConfig = `Base URL: ${baseUrl}/agent
-Authorization: Bearer ${displayToken}`
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -180,16 +154,147 @@ Authorization: Bearer ${displayToken}`
   }
 
   const trustLabel = (level: number): string => {
-    const found = TRUST_LEVELS.find(t => t.value === level)
+    const found = TRUST_LEVELS.find((item) => item.value === level)
     return found ? found.label : `L${level}`
   }
 
   const presetLabel = (token: ScopedTokenResponse): string => {
-    const s = token.scopes
-    if (s.includes('admin')) return 'Full'
-    if (s.length >= 13) return 'Agent完整'
-    if (s.length <= 6 && s.every(sc => sc.startsWith('read:') || sc === 'search')) return '只读'
-    return `${s.length}项权限`
+    const scopes = token.scopes
+    if (scopes.includes('admin')) return 'Full'
+    if (scopes.length >= 13) return 'Agent完整'
+    if (scopes.length <= 6 && scopes.every((scope) => scope.startsWith('read:') || scope === 'search')) return '只读'
+    return `${scopes.length}项权限`
+  }
+
+  const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080'
+  const hostName = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
+  const isLocalOrigin = /^(localhost|127\.0\.0\.1|0\.0\.0\.0)$/.test(hostName) || hostName.endsWith('.local')
+  const isSecureOrigin = baseUrl.startsWith('https://')
+  const cloudModeNeedsPublicUrl = !isSecureOrigin || isLocalOrigin
+
+  const cloudCommand = `claude mcp add --transport http agenthub \\
+  ${baseUrl}/mcp`
+
+  const buildModeTokenRequest = (mode: ModeKey): CreateTokenRequest => {
+    const defaults = MODE_DEFAULTS[mode]
+    return {
+      name: defaults.name,
+      scopes: getSelectedScopes(defaults.preset),
+      max_trust_level: defaults.trustLevel,
+      expires_in_days: defaults.expiryDays,
+    }
+  }
+
+  const ensureModeToken = async (mode: ModeKey): Promise<ModeTokenState | null> => {
+    const existing = modeTokens[mode]
+    if (existing) return existing
+
+    setProvisioningMode(mode)
+    setError('')
+
+    try {
+      const resp = await api.createToken(buildModeTokenRequest(mode))
+      const createdToken = {
+        id: resp.scoped_token.id,
+        token: resp.token,
+      }
+      setModeTokens((prev) => ({ ...prev, [mode]: createdToken }))
+      await loadTokens()
+      return createdToken
+    } catch (e: any) {
+      setError(e.message)
+      return null
+    } finally {
+      setProvisioningMode((current) => (current === mode ? null : current))
+    }
+  }
+
+  const toggleMode = async (mode: ModeKey) => {
+    const shouldOpen = !openModes[mode]
+    setOpenModes((prev) => ({ ...prev, [mode]: shouldOpen }))
+    if (shouldOpen) {
+      await ensureModeToken(mode)
+    }
+  }
+
+  const localCommand = modeTokens.local
+    ? `claude mcp add agenthub \\
+  --transport stdio \\
+  -- agenthub-mcp \\
+  --token ${modeTokens.local.token}`
+    : ''
+
+  const localConfig = modeTokens.local
+    ? JSON.stringify({
+        mcpServers: {
+          agenthub: {
+            command: 'agenthub-mcp',
+            args: ['--token', modeTokens.local.token],
+          },
+        },
+      }, null, 2)
+    : ''
+
+  const advancedConfig = modeTokens.advanced
+    ? JSON.stringify({
+        mcpServers: {
+          agenthub: {
+            type: 'http',
+            url: `${baseUrl}/mcp`,
+            headers: {
+              Authorization: `Bearer ${modeTokens.advanced.token}`,
+            },
+          },
+        },
+      }, null, 2)
+    : ''
+
+  const gptTokenText = newToken || '在下方创建一个新的 Bearer Token 后填入这里'
+
+  const scrollToTokenCreator = () => {
+    document.getElementById('token-creator')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  // ---------------------------------------------------------------------------
+  // Actions
+  // ---------------------------------------------------------------------------
+
+  const handleCreateToken = async () => {
+    setManualCreating(true)
+    setError('')
+
+    const req: CreateTokenRequest = {
+      name,
+      scopes: getSelectedScopes(),
+      max_trust_level: trustLevel,
+      expires_in_days: expiryDays === 0 ? 36500 : expiryDays,
+    }
+
+    try {
+      const resp = await api.createToken(req)
+      setNewToken(resp.token)
+      await loadTokens()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setManualCreating(false)
+    }
+  }
+
+  const handleRevoke = async (id: string) => {
+    try {
+      await api.revokeToken(id)
+      setModeTokens((prev) => {
+        const next = { ...prev }
+        if (next.local?.id === id) delete next.local
+        if (next.advanced?.id === id) delete next.advanced
+        return next
+      })
+      await loadTokens()
+      setError('')
+    } catch (e: any) {
+      setError(e.message)
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -200,7 +305,7 @@ Authorization: Bearer ${displayToken}`
     return <div className="page"><div className="page-loading">加载中...</div></div>
   }
 
-  const activeTokens = tokens.filter(t => !t.is_revoked && !t.is_expired)
+  const activeTokens = tokens.filter((token) => !token.is_revoked && !token.is_expired)
 
   return (
     <div className="page">
@@ -210,62 +315,151 @@ Authorization: Bearer ${displayToken}`
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {/* ── Claude Code section ── */}
-      <div className="setup-section">
+      <div className="setup-section setup-section-highlight">
         <div className="setup-section-header">
-          <span className="setup-section-icon">&#128279;</span>
+          <span className="setup-section-icon">&#9729;</span>
           <div>
-            <h3>Claude Code <span className="badge badge-platform" style={{ marginLeft: 8, fontSize: 11 }}>推荐</span></h3>
-            <p className="setup-section-desc">通过 MCP 协议连接，一键配置即可使用</p>
+            <h3>Claude Code 云端模式 <span className="badge badge-platform" style={{ marginLeft: 8, fontSize: 11 }}>推荐</span></h3>
+            <p className="setup-section-desc">直接连接远程 HTTP MCP server，在 Claude Code 中用浏览器完成 OAuth 授权</p>
           </div>
         </div>
 
+        {cloudModeNeedsPublicUrl && (
+          <div className="alert alert-warn">
+            当前地址是 <code>{baseUrl}</code>。云端模式更适合可从 Claude Code 访问的 HTTPS Hub URL；如果你现在在本地开发，建议先用本地模式，或通过公网域名 / 隧道暴露这个 Hub。
+          </div>
+        )}
+
         <div className="code-block">
-          <div className="code-block-label">一键配置:</div>
-          <pre>{claudeCommand}</pre>
+          <div className="code-block-label">步骤 1：添加远程 MCP server</div>
+          <pre>{cloudCommand}</pre>
           <button
             className="copy-btn"
-            onClick={() => copyToClipboard(claudeCommand, 'claude-cmd')}
+            onClick={() => copyToClipboard(cloudCommand, 'cloud-cmd')}
           >
-            {copied === 'claude-cmd' ? '已复制' : '复制'}
+            {copied === 'cloud-cmd' ? '已复制' : '复制'}
           </button>
         </div>
 
-        <p className="setup-or">或者手动配置 claude_code_config:</p>
-
         <div className="code-block">
-          <pre>{mcpConfig}</pre>
+          <div className="code-block-label">步骤 2：在 Claude Code 中发起浏览器授权</div>
+          <pre>/mcp</pre>
           <button
             className="copy-btn"
-            onClick={() => copyToClipboard(mcpConfig, 'mcp-json')}
+            onClick={() => copyToClipboard('/mcp', 'cloud-auth')}
           >
-            {copied === 'mcp-json' ? '已复制' : '复制'}
+            {copied === 'cloud-auth' ? '已复制' : '复制'}
           </button>
         </div>
+
+        <ol className="setup-steps">
+          <li>运行上面的 `claude mcp add --transport http ...` 命令，把 Agent Hub 注册成远程 MCP server。</li>
+          <li>打开 Claude Code，执行 `/mcp`，按提示选择 `agenthub` 并开始认证。</li>
+          <li>浏览器会打开授权页；完成登录和批准后，Claude Code 会保存并刷新 OAuth 凭证。</li>
+          <li>如果浏览器没有自动打开，就手动复制 Claude Code 提供的 URL；如果回调完成后 CLI 里仍提示等待，把浏览器地址栏中的完整 callback URL 粘回 Claude Code。</li>
+        </ol>
+
+        <p className="setup-note">
+          授权完成后，可在 Claude Code 的 `/mcp` 菜单里重新认证或清除认证；Agent Hub 侧的 OAuth 连接会出现在“连接管理”中。
+        </p>
       </div>
 
-      {/* ── HTTP API section ── */}
       <div className="setup-section">
         <div className="setup-section-header">
-          <span className="setup-section-icon">&#128225;</span>
+          <span className="setup-section-icon">&#128187;</span>
           <div>
-            <h3>HTTP API <span className="badge badge-platform" style={{ marginLeft: 8, fontSize: 11 }}>通用</span></h3>
-            <p className="setup-section-desc">适用于 GPT、Gemini 等其他平台</p>
+            <h3>Claude Code 本地模式</h3>
+            <p className="setup-section-desc">使用本地 `agenthub-mcp` binary + scoped token，适合本地开发或内网环境</p>
           </div>
         </div>
 
-        <div className="code-block">
-          <pre>{httpConfig}</pre>
+        <p className="setup-note">
+          首次展开会自动创建一个名为 <code>Claude Code</code> 的 Agent 权限 token，并把它加入下方的 Token 列表。
+        </p>
+
+        <div className="setup-mode-actions">
           <button
-            className="copy-btn"
-            onClick={() => copyToClipboard(httpConfig, 'http-cfg')}
+            className="btn btn-primary"
+            onClick={() => toggleMode('local')}
+            disabled={provisioningMode === 'local'}
           >
-            {copied === 'http-cfg' ? '已复制' : '复制'}
+            {provisioningMode === 'local'
+              ? '生成中...'
+              : openModes.local
+                ? '隐藏本地模式配置'
+                : '生成并显示本地模式配置'}
           </button>
         </div>
+
+        {openModes.local && modeTokens.local && (
+          <>
+            <div className="code-block">
+              <div className="code-block-label">一键配置</div>
+              <pre>{localCommand}</pre>
+              <button
+                className="copy-btn"
+                onClick={() => copyToClipboard(localCommand, 'local-cmd')}
+              >
+                {copied === 'local-cmd' ? '已复制' : '复制'}
+              </button>
+            </div>
+
+            <p className="setup-or">或者手动写入 Claude Code 的 MCP 配置：</p>
+
+            <div className="code-block">
+              <pre>{localConfig}</pre>
+              <button
+                className="copy-btn"
+                onClick={() => copyToClipboard(localConfig, 'local-json')}
+              >
+                {copied === 'local-json' ? '已复制' : '复制'}
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* ── GPT Actions section ── */}
+      <div className="setup-section">
+        <div className="setup-section-header">
+          <span className="setup-section-icon">&#128736;</span>
+          <div>
+            <h3>高级模式（HTTP + 手动 Bearer Token）</h3>
+            <p className="setup-section-desc">面向支持 HTTP MCP 的通用客户端，使用静态 Bearer Token 直连 `/mcp`</p>
+          </div>
+        </div>
+
+        <p className="setup-note">
+          首次展开会自动创建一个名为 <code>MCP HTTP</code> 的 Agent 权限 token。这个模式不会触发浏览器 OAuth，而是由客户端直接携带 Bearer Token 发起请求。
+        </p>
+
+        <div className="setup-mode-actions">
+          <button
+            className="btn btn-primary"
+            onClick={() => toggleMode('advanced')}
+            disabled={provisioningMode === 'advanced'}
+          >
+            {provisioningMode === 'advanced'
+              ? '生成中...'
+              : openModes.advanced
+                ? '隐藏高级模式配置'
+                : '生成并显示高级模式配置'}
+          </button>
+        </div>
+
+        {openModes.advanced && modeTokens.advanced && (
+          <div className="code-block">
+            <div className="code-block-label">通用 MCP HTTP 配置（Bearer）</div>
+            <pre>{advancedConfig}</pre>
+            <button
+              className="copy-btn"
+              onClick={() => copyToClipboard(advancedConfig, 'advanced-json')}
+            >
+              {copied === 'advanced-json' ? '已复制' : '复制'}
+            </button>
+          </div>
+        )}
+      </div>
+
       <div className="setup-section">
         <div className="setup-section-header">
           <span className="setup-section-icon">&#129302;</span>
@@ -276,7 +470,7 @@ Authorization: Bearer ${displayToken}`
         </div>
 
         <div className="code-block">
-          <div className="code-block-label">1. OpenAPI Schema URL（粘贴到 Actions 配置中）:</div>
+          <div className="code-block-label">1. OpenAPI Schema URL（粘贴到 Actions 配置中）</div>
           <pre>{`${baseUrl}/gpt/openapi.json`}</pre>
           <button
             className="copy-btn"
@@ -287,29 +481,36 @@ Authorization: Bearer ${displayToken}`
         </div>
 
         <div className="code-block">
-          <div className="code-block-label">2. Authentication 配置:</div>
-          <pre>{`Type: API Key\nAuth Type: Bearer\nToken: ${displayToken}`}</pre>
-          <button
-            className="copy-btn"
-            onClick={() => copyToClipboard(displayToken, 'gpt-token')}
-          >
-            {copied === 'gpt-token' ? '已复制 Token' : '复制 Token'}
-          </button>
+          <div className="code-block-label">2. Authentication 配置</div>
+          <pre>{`Type: API Key\nAuth Type: Bearer\nToken: ${gptTokenText}`}</pre>
+          {newToken ? (
+            <button
+              className="copy-btn"
+              onClick={() => copyToClipboard(newToken, 'gpt-token')}
+            >
+              {copied === 'gpt-token' ? '已复制 Token' : '复制 Token'}
+            </button>
+          ) : (
+            <button
+              className="copy-btn"
+              onClick={scrollToTokenCreator}
+            >
+              去创建
+            </button>
+          )}
         </div>
 
-        <p style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 8 }}>
-          打开 ChatGPT &rarr; 创建 GPT &rarr; 配置 &rarr; Actions &rarr; Import from URL &rarr; 粘贴上面的 Schema URL &rarr;
-          设置 Authentication 为 Bearer Token。
+        <p className="setup-note">
+          本页不会自动为 GPT Actions 生成 token。需要新的 Bearer Token 时，请在下方“创建新 Token”中手动创建，再把它填到 Actions 的认证配置里。
         </p>
       </div>
 
-      {/* ── Create Token ── */}
-      <div className="setup-section">
+      <div className="setup-section" id="token-creator">
         <div className="setup-section-header">
           <span className="setup-section-icon">&#128273;</span>
           <div>
             <h3>创建新 Token</h3>
-            <p className="setup-section-desc">为不同平台或用途创建独立的 Token</p>
+            <p className="setup-section-desc">为 GPT Actions、脚本或其他自定义用途创建独立的 Token</p>
           </div>
         </div>
 
@@ -318,7 +519,7 @@ Authorization: Bearer ${displayToken}`
             <label>名称</label>
             <input
               value={name}
-              onChange={e => setName(e.target.value)}
+              onChange={(e) => setName(e.target.value)}
               placeholder="例如: Claude Desktop"
             />
           </div>
@@ -331,7 +532,7 @@ Authorization: Bearer ${displayToken}`
                   type="radio"
                   name="preset"
                   checked={preset === 'agent'}
-                  onChange={() => { setPreset('agent'); setTrustLevel(4); setExpiryDays(90); }}
+                  onChange={() => { setPreset('agent'); setTrustLevel(4); setExpiryDays(90) }}
                 />
                 <span className="preset-radio-dot" />
                 <div>
@@ -344,7 +545,7 @@ Authorization: Bearer ${displayToken}`
                   type="radio"
                   name="preset"
                   checked={preset === 'readonly'}
-                  onChange={() => { setPreset('readonly'); setTrustLevel(3); setExpiryDays(30); }}
+                  onChange={() => { setPreset('readonly'); setTrustLevel(3); setExpiryDays(30) }}
                 />
                 <span className="preset-radio-dot" />
                 <div>
@@ -375,7 +576,7 @@ Authorization: Bearer ${displayToken}`
                 {Object.entries(scopeInfo.categories).map(([category, scopes]) => (
                   <div key={category} className="scope-grid-category">
                     <div className="scope-grid-category-name">{category}</div>
-                    {scopes.map(scope => (
+                    {scopes.map((scope) => (
                       <label key={scope} className="scope-grid-item">
                         <input
                           type="checkbox"
@@ -397,10 +598,10 @@ Authorization: Bearer ${displayToken}`
               <select
                 className={`trust-select trust-l${trustLevel}`}
                 value={trustLevel}
-                onChange={e => setTrustLevel(Number(e.target.value))}
+                onChange={(e) => setTrustLevel(Number(e.target.value))}
               >
-                {TRUST_LEVELS.map(t => (
-                  <option key={t.value} value={t.value}>{t.label} - {t.desc}</option>
+                {TRUST_LEVELS.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label} - {item.desc}</option>
                 ))}
               </select>
             </div>
@@ -410,10 +611,10 @@ Authorization: Bearer ${displayToken}`
               <select
                 className="expiry-select"
                 value={expiryDays}
-                onChange={e => setExpiryDays(Number(e.target.value))}
+                onChange={(e) => setExpiryDays(Number(e.target.value))}
               >
-                {EXPIRY_OPTIONS.map(o => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
+                {EXPIRY_OPTIONS.map((item) => (
+                  <option key={item.value} value={item.value}>{item.label}</option>
                 ))}
               </select>
             </div>
@@ -421,10 +622,10 @@ Authorization: Bearer ${displayToken}`
 
           <button
             className="btn btn-primary"
-            onClick={() => handleCreateToken(false)}
-            disabled={creating || (preset === 'custom' && customScopes.length === 0) || !name.trim()}
+            onClick={handleCreateToken}
+            disabled={manualCreating || (preset === 'custom' && customScopes.length === 0) || !name.trim()}
           >
-            {creating ? '生成中...' : '生成 Token'}
+            {manualCreating ? '生成中...' : '生成 Token'}
           </button>
 
           {newToken && (
@@ -432,7 +633,7 @@ Authorization: Bearer ${displayToken}`
               <strong>Token 已生成!</strong> 请立即保存，此 Token 仅显示一次。
               <div className="key-value" style={{ marginTop: 8 }}>
                 <code>{newToken}</code>
-                <button className="btn btn-sm" onClick={() => { copyToClipboard(newToken, 'new-token'); }}>
+                <button className="btn btn-sm" onClick={() => { copyToClipboard(newToken, 'new-token') }}>
                   {copied === 'new-token' ? '已复制' : '复制'}
                 </button>
               </div>
@@ -441,7 +642,6 @@ Authorization: Bearer ${displayToken}`
         </div>
       </div>
 
-      {/* ── Existing Tokens ── */}
       <div className="setup-section">
         <div className="setup-section-header">
           <span className="setup-section-icon">&#128218;</span>
@@ -456,11 +656,11 @@ Authorization: Bearer ${displayToken}`
         {tokens.length === 0 ? (
           <div className="empty-state">
             <p>暂无 Token</p>
-            <p className="empty-hint">使用上方表单创建你的第一个 Token</p>
+            <p className="empty-hint">展开上方本地模式 / 高级模式会自动创建，或在这里手动创建一个新的 Token</p>
           </div>
         ) : (
           <div className="token-list">
-            {tokens.map(token => (
+            {tokens.map((token) => (
               <div
                 key={token.id}
                 className={`token-list-item ${token.is_revoked || token.is_expired ? 'token-list-item-inactive' : ''}`}

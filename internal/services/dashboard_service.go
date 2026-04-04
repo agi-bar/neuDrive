@@ -22,9 +22,12 @@ func NewDashboardService(db *pgxpool.Pool) *DashboardService {
 func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*models.DashboardStats, error) {
 	stats := &models.DashboardStats{}
 
-	// Count connections.
+	// Count connected entries across manual API-key connections and OAuth/MCP grants.
 	err := s.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM connections WHERE user_id = $1`, userID).
+		`SELECT
+		   (SELECT COUNT(*) FROM connections WHERE user_id = $1) +
+		   (SELECT COUNT(*) FROM oauth_grants WHERE user_id = $1)`,
+		userID).
 		Scan(&stats.TotalConnections)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: connections count: %w", err)

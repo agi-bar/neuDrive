@@ -780,12 +780,17 @@ func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if s.DashboardService == nil {
-		// Graceful fallback: return basic stats from connection count when
-		// the full dashboard service is not configured (e.g. minimal deploys).
+		// Graceful fallback: return basic stats from manual connections plus
+		// OAuth/MCP grants when the full dashboard service is not configured.
 		count := 0
 		if s.ConnectionService != nil {
 			if conns, err := s.ConnectionService.ListByUser(r.Context(), userID); err == nil {
 				count = len(conns)
+			}
+		}
+		if s.OAuthService != nil {
+			if grants, err := s.OAuthService.ListGrants(r.Context(), userID); err == nil {
+				count += len(grants)
 			}
 		}
 		respondOK(w, &models.DashboardStats{TotalConnections: count})

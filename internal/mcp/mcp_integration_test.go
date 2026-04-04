@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,6 +115,9 @@ func mcpToolCall(t *testing.T, s *MCPServer, tool string, args map[string]interf
 		text, _ := block["text"].(string)
 		return text, isErr
 	}
+	if blocks, ok := result["content"].([]ContentBlock); ok && len(blocks) > 0 {
+		return blocks[0].Text, isErr
+	}
 	return "", isErr
 }
 
@@ -209,6 +213,53 @@ func TestMCPInteg_SearchMemory(t *testing.T) {
 	})
 	if isErr {
 		t.Fatalf("search_memory error: %s", text)
+	}
+}
+
+func TestMCPInteg_SaveMemory_AllowsRepeatedSourceSameDay(t *testing.T) {
+	s := setupIntegrationMCP(t)
+
+	firstMarker := "mcprepeata" + uuid.NewString()[:8]
+	secondMarker := "mcprepeatb" + uuid.NewString()[:8]
+
+	text, isErr := mcpToolCall(t, s, "save_memory", map[string]interface{}{
+		"memories": []map[string]interface{}{
+			{"title": "repeat-source", "content": "first " + firstMarker},
+		},
+	})
+	if isErr {
+		t.Fatalf("first save_memory error: %s", text)
+	}
+
+	text, isErr = mcpToolCall(t, s, "save_memory", map[string]interface{}{
+		"memories": []map[string]interface{}{
+			{"title": "repeat-source", "content": "second " + secondMarker},
+		},
+	})
+	if isErr {
+		t.Fatalf("second save_memory error: %s", text)
+	}
+
+	text, isErr = mcpToolCall(t, s, "search_memory", map[string]interface{}{
+		"query": firstMarker,
+		"scope": "memory",
+	})
+	if isErr {
+		t.Fatalf("search_memory for first marker error: %s", text)
+	}
+	if !strings.Contains(text, firstMarker) {
+		t.Fatalf("search_memory missing first marker: %s", text)
+	}
+
+	text, isErr = mcpToolCall(t, s, "search_memory", map[string]interface{}{
+		"query": secondMarker,
+		"scope": "memory",
+	})
+	if isErr {
+		t.Fatalf("search_memory for second marker error: %s", text)
+	}
+	if !strings.Contains(text, secondMarker) {
+		t.Fatalf("search_memory missing second marker: %s", text)
 	}
 }
 

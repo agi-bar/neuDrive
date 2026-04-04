@@ -66,11 +66,11 @@ func setupIntegrationMCP(t *testing.T) *MCPServer {
 	// Create services
 	fileTreeSvc := services.NewFileTreeService(pool)
 	vaultSvc := services.NewVaultService(pool, v)
-	memorySvc := services.NewMemoryService(pool)
-	roleSvc := services.NewRoleService(pool)
-	projectSvc := services.NewProjectService(pool, roleSvc)
-	inboxSvc := services.NewInboxService(pool)
-	deviceSvc := services.NewDeviceService(pool)
+	memorySvc := services.NewMemoryService(pool, fileTreeSvc)
+	roleSvc := services.NewRoleService(pool, fileTreeSvc)
+	projectSvc := services.NewProjectService(pool, roleSvc, fileTreeSvc)
+	inboxSvc := services.NewInboxService(pool, fileTreeSvc)
+	deviceSvc := services.NewDeviceService(pool, fileTreeSvc)
 	dashboardSvc := services.NewDashboardService(pool)
 	importSvc := services.NewImportService(pool, fileTreeSvc, memorySvc, vaultSvc)
 

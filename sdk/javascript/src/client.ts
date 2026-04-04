@@ -11,6 +11,9 @@ import type {
   SearchResult,
   Skill,
   DashboardStats,
+  TreeSnapshot,
+  TreeChanges,
+  WriteFileOptions,
 } from './types'
 
 /**
@@ -209,9 +212,32 @@ export class AgentHub {
   /**
    * Write (create or overwrite) a file in the file tree.
    */
-  async writeFile(path: string, content: string): Promise<void> {
+  async writeFile(path: string, content: string, options?: WriteFileOptions): Promise<void> {
     const safePath = this.filePath(path)
-    await this.put(`/agent/tree${safePath}`, { content })
+    await this.put(`/agent/tree${safePath}`, {
+      content,
+      content_type: options?.mime_type,
+      metadata: options?.metadata,
+      min_trust_level: options?.min_trust_level,
+      expected_version: options?.expected_version,
+      expected_checksum: options?.expected_checksum,
+    })
+  }
+
+  /**
+   * Snapshot a subtree for sync/bootstrap.
+   */
+  async snapshot(path: string = '/'): Promise<TreeSnapshot> {
+    const qs = `?path=${encodeURIComponent(path)}`
+    return this.get<TreeSnapshot>(`/agent/tree/snapshot${qs}`)
+  }
+
+  /**
+   * Fetch incremental changes after a cursor.
+   */
+  async changes(cursor: number, path: string = '/'): Promise<TreeChanges> {
+    const qs = `?cursor=${encodeURIComponent(String(cursor))}&path=${encodeURIComponent(path)}`
+    return this.get<TreeChanges>(`/agent/tree/changes${qs}`)
   }
 
   // -------------------------------------------------------------------------

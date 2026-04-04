@@ -183,6 +183,8 @@ func (s *Server) setupRoutes() {
 		r.Delete("/api/auth/sessions/{id}", s.AuthHandler.HandleRevokeSession)
 
 		// File tree
+		r.Get("/api/tree/snapshot", s.handleTreeSnapshot)
+		r.Get("/api/tree/changes", s.handleTreeChanges)
 		r.Get("/api/tree/*", s.handleTreeRead)
 		r.Put("/api/tree/*", s.handleTreeWrite)
 		r.Delete("/api/tree/*", s.handleTreeDelete)
@@ -293,6 +295,8 @@ func (s *Server) setupRoutes() {
 	r.Group(func(r chi.Router) {
 		r.Use(s.apiKeyMiddleware)
 
+		r.Get("/agent/tree/snapshot", s.handleAgentTreeSnapshot)
+		r.Get("/agent/tree/changes", s.handleAgentTreeChanges)
 		r.Get("/agent/tree/*", s.handleAgentTreeList)
 		r.Get("/agent/search", s.handleAgentSearch)
 		r.Post("/agent/search", s.handleAgentSearch)
@@ -893,8 +897,12 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 
 	var req struct {
-		Content     string `json:"content"`
-		ContentType string `json:"content_type,omitempty"`
+		Content          string                 `json:"content"`
+		ContentType      string                 `json:"content_type,omitempty"`
+		Metadata         map[string]interface{} `json:"metadata,omitempty"`
+		MinTrustLevel    int                    `json:"min_trust_level,omitempty"`
+		ExpectedVersion  *int64                 `json:"expected_version,omitempty"`
+		ExpectedChecksum string                 `json:"expected_checksum,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
@@ -906,13 +914,40 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 		contentType = "text/plain"
 	}
 
-	entry, err := s.FileTreeService.Write(r.Context(), userID, path, req.Content, contentType, models.TrustLevelFull)
+	minTrustLevel := req.MinTrustLevel
+	if minTrustLevel <= 0 {
+		minTrustLevel = models.TrustLevelFull
+	}
+	entry, err := s.FileTreeService.WriteEntry(r.Context(), userID, path, req.Content, contentType, models.FileTreeWriteOptions{
+		Metadata:         req.Metadata,
+		MinTrustLevel:    minTrustLevel,
+		ExpectedVersion:  req.ExpectedVersion,
+		ExpectedChecksum: req.ExpectedChecksum,
+	})
 	if err != nil {
+		if err == services.ErrOptimisticLockConflict {
+			respondError(w, http.StatusConflict, ErrCodeConflict, err.Error())
+			return
+		}
 		respondInternalError(w, err)
 		return
 	}
 
 	respondOK(w, entry)
+}
+
+func (s *Server) handleAgentTreeSnapshot(w http.ResponseWriter, r *http.Request) {
+	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadTree) {
+		return
+	}
+	s.handleTreeSnapshot(w, r)
+}
+
+func (s *Server) handleAgentTreeChanges(w http.ResponseWriter, r *http.Request) {
+	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadTree) {
+		return
+	}
+	s.handleTreeChanges(w, r)
 }
 
 func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {

@@ -3,18 +3,13 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 )
 
 // handleGPTOpenAPISchema serves the GPT Actions OpenAPI schema as JSON,
 // dynamically setting the server URL to match the incoming request host.
 // All actions point to /agent/* endpoints — no separate /gpt/* handlers needed.
 func (s *Server) handleGPTOpenAPISchema(w http.ResponseWriter, r *http.Request) {
-	scheme := "https"
-	if r.TLS == nil && !strings.HasPrefix(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "http"
-	}
-	baseURL := scheme + "://" + r.Host
+	baseURL := s.baseURL(r)
 
 	schema := map[string]interface{}{
 		"openapi": "3.1.0",

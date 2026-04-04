@@ -15,7 +15,8 @@ import (
 )
 
 // ---------------------------------------------------------------------------
-// Remote MCP endpoint — Streamable HTTP transport for Claude.ai Connectors
+// Remote MCP endpoint — Streamable HTTP transport for MCP clients such as
+// Claude and ChatGPT apps/connectors.
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleMCPEndpoint(w http.ResponseWriter, r *http.Request) {
@@ -45,7 +46,7 @@ func (s *Server) handleMCPEndpoint(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
-	baseURL := getBaseURL(r)
+	baseURL := s.baseURL(r)
 	resourceMetadataURL := baseURL + "/.well-known/oauth-protected-resource"
 
 	// 1. Extract token

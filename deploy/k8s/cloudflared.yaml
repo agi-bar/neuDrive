@@ -1,0 +1,104 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agenthub-cloudflared-token
+  namespace: agenthub
+type: Opaque
+stringData:
+  TUNNEL_TOKEN: "REPLACE_WITH_ACTUAL_TUNNEL_TOKEN"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agenthub-cloudflared
+  namespace: agenthub
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: agenthub-cloudflared
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  template:
+    metadata:
+      labels:
+        app: agenthub-cloudflared
+    spec:
+      automountServiceAccountToken: false
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: agenthub-cloudflared
+                topologyKey: kubernetes.io/hostname
+      containers:
+        - name: cloudflared
+          image: cloudflare/cloudflared:2026.3.0
+          imagePullPolicy: IfNotPresent
+          args:
+            - tunnel
+            - --no-autoupdate
+            - --loglevel
+            - info
+            - --metrics
+            - 0.0.0.0:2000
+            - --protocol
+            - auto
+            - run
+          env:
+            - name: HOME
+              value: /tmp
+            - name: TUNNEL_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: agenthub-cloudflared-token
+                  key: TUNNEL_TOKEN
+          ports:
+            - containerPort: 2000
+              name: metrics
+              protocol: TCP
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          startupProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            periodSeconds: 5
+            failureThreshold: 12
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 2000
+            periodSeconds: 10
+            failureThreshold: 3
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 2000
+            periodSeconds: 10
+            failureThreshold: 6
+            timeoutSeconds: 5
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      terminationGracePeriodSeconds: 60
+      volumes:
+        - name: tmp
+          emptyDir: {}

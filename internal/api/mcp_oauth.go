@@ -21,7 +21,7 @@ import (
 // handleProtectedResourceMetadata serves RFC 9728 Protected Resource Metadata.
 // This tells Claude.ai where to find the authorization server.
 func (s *Server) handleProtectedResourceMetadata(w http.ResponseWriter, r *http.Request) {
-	baseURL := getBaseURL(r)
+	baseURL := s.baseURL(r)
 
 	metadata := map[string]interface{}{
 		"resource":              baseURL + "/mcp",
@@ -35,7 +35,7 @@ func (s *Server) handleProtectedResourceMetadata(w http.ResponseWriter, r *http.
 			"read:inbox", "write:inbox",
 			"read:projects", "write:projects",
 			"read:tree", "write:tree",
-			"search", "admin",
+			"search", "admin", "offline_access",
 		},
 		"bearer_methods_supported": []string{"header"},
 	}
@@ -47,7 +47,7 @@ func (s *Server) handleProtectedResourceMetadata(w http.ResponseWriter, r *http.
 
 // handleAuthorizationServerMetadata serves OAuth 2.0 Authorization Server Metadata (RFC 8414).
 func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *http.Request) {
-	baseURL := getBaseURL(r)
+	baseURL := s.baseURL(r)
 
 	metadata := map[string]interface{}{
 		"issuer":                 baseURL,
@@ -63,7 +63,7 @@ func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *htt
 			"read:inbox", "write:inbox",
 			"read:projects", "write:projects",
 			"read:tree", "write:tree",
-			"search", "admin",
+			"search", "admin", "offline_access",
 		},
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
@@ -134,21 +134,36 @@ func (s *Server) handleOAuthDynamicRegister(w http.ResponseWriter, r *http.Reque
 	})
 }
 
-// getBaseURL extracts the base URL from the request.
-func getBaseURL(r *http.Request) string {
+func (s *Server) baseURL(r *http.Request) string {
+	if s != nil && s.Config != nil && s.Config.PublicBaseURL != "" {
+		return strings.TrimRight(s.Config.PublicBaseURL, "/")
+	}
+
 	scheme := "https"
-	if r.TLS == nil {
-		if fwd := r.Header.Get("X-Forwarded-Proto"); fwd != "" {
-			scheme = fwd
-		} else {
-			scheme = "http"
-		}
+	if r.TLS == nil && !requestWasHTTPS(r) {
+		scheme = "http"
 	}
 	host := r.Host
 	if fwd := r.Header.Get("X-Forwarded-Host"); fwd != "" {
-		host = fwd
+		host = strings.TrimSpace(strings.Split(fwd, ",")[0])
 	}
 	return scheme + "://" + host
+}
+
+func requestWasHTTPS(r *http.Request) bool {
+	if r.TLS != nil {
+		return true
+	}
+	if strings.Contains(r.Header.Get("CF-Visitor"), `"scheme":"https"`) {
+		return true
+	}
+	if proto := strings.TrimSpace(strings.Split(r.Header.Get("X-Forwarded-Proto"), ",")[0]); strings.EqualFold(proto, "https") {
+		return true
+	}
+	if fwd := r.Header.Get("Forwarded"); fwd != "" {
+		return strings.Contains(strings.ToLower(fwd), "proto=https")
+	}
+	return false
 }
 
 // getSystemUserID returns a system user ID for dynamic client registration.

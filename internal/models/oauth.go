@@ -23,15 +23,17 @@ type OAuthApp struct {
 
 // OAuthCode represents a short-lived authorization code.
 type OAuthCode struct {
-	ID          uuid.UUID `json:"id"`
-	AppID       uuid.UUID `json:"app_id"`
-	UserID      uuid.UUID `json:"user_id"`
-	CodeHash    string    `json:"-"`
-	Scopes      []string  `json:"scopes"`
-	RedirectURI string    `json:"redirect_uri"`
-	ExpiresAt   time.Time `json:"expires_at"`
-	Used        bool      `json:"used"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID                  uuid.UUID `json:"id"`
+	AppID               uuid.UUID `json:"app_id"`
+	UserID              uuid.UUID `json:"user_id"`
+	CodeHash            string    `json:"-"`
+	Scopes              []string  `json:"scopes"`
+	RedirectURI         string    `json:"redirect_uri"`
+	CodeChallenge       string    `json:"-"`
+	CodeChallengeMethod string    `json:"code_challenge_method,omitempty"`
+	ExpiresAt           time.Time `json:"expires_at"`
+	Used                bool      `json:"used"`
+	CreatedAt           time.Time `json:"created_at"`
 }
 
 // OAuthGrant represents a user's authorization of a third-party app.
@@ -95,14 +97,17 @@ type OAuthTokenRequest struct {
 	ClientID     string `json:"client_id"`
 	ClientSecret string `json:"client_secret"`
 	RedirectURI  string `json:"redirect_uri"`
+	CodeVerifier string `json:"code_verifier"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 // OAuthTokenResponse is returned from the /oauth/token endpoint.
 type OAuthTokenResponse struct {
-	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	ExpiresIn   int    `json:"expires_in"`
-	Scope       string `json:"scope"`
+	AccessToken  string `json:"access_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+	Scope        string `json:"scope"`
+	RefreshToken string `json:"refresh_token,omitempty"`
 }
 
 // OAuthUserInfoResponse is returned from the /oauth/userinfo endpoint.

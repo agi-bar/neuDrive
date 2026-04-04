@@ -1,17 +1,10 @@
 package api
 
-import (
-	"net/http"
-	"strings"
-)
+import "net/http"
 
 // GET /api/gpt/setup — returns GPT Actions setup instructions and schema URL.
 func (s *Server) handleGPTSetup(w http.ResponseWriter, r *http.Request) {
-	scheme := "https"
-	if r.TLS == nil && !strings.HasPrefix(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "http"
-	}
-	baseURL := scheme + "://" + r.Host
+	baseURL := s.baseURL(r)
 
 	respondOK(w, map[string]interface{}{
 		"schema_url":   baseURL + "/gpt/openapi.json",

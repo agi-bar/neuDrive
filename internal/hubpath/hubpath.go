@@ -37,6 +37,23 @@ func IsSkillsStoragePath(raw string) bool {
 	return p == storageSkillsRoot || strings.HasPrefix(p, storageSkillsRoot+"/")
 }
 
+// AlternateSkillsPath returns the other path variant for skills paths.
+// If the path starts with .skills/, it returns /skills/ and vice versa.
+// For non-skills paths, returns the input unchanged (query will just match twice, harmless).
+func AlternateSkillsPath(path string) string {
+	// storageSkillsRoot = ".skills", publicSkillsRoot = "/skills"
+	switch {
+	case path == storageSkillsRoot || strings.HasPrefix(path, storageSkillsRoot+"/"):
+		// .skills/foo → /skills/foo
+		return publicSkillsRoot + strings.TrimPrefix(path, storageSkillsRoot)
+	case path == publicSkillsRoot || strings.HasPrefix(path, publicSkillsRoot+"/"):
+		// /skills/foo → .skills/foo
+		return storageSkillsRoot + strings.TrimPrefix(path, publicSkillsRoot)
+	default:
+		return path
+	}
+}
+
 // BaseName returns the final visible path segment.
 func BaseName(raw string) string {
 	p := NormalizePublic(raw)

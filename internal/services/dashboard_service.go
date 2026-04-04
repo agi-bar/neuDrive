@@ -30,14 +30,13 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 		return nil, fmt.Errorf("dashboard.GetStats: connections count: %w", err)
 	}
 
-	// Count skills (non-directory file_tree entries under any skills path variant).
-	// Data may be stored as .skills/*, /.skills/*, or /skills/* depending on the
-	// import path, so match all canonical forms.
+	// Count skills (non-directory file_tree entries under skills paths).
 	storagePat := hubpath.NormalizeStorage("/skills/") + "%"
+	altPat := hubpath.AlternateSkillsPath(hubpath.NormalizeStorage("/skills/")) + "%"
 	err = s.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false
-		   AND (path LIKE $2 OR path LIKE '/skills/%')`,
-		userID, storagePat).
+		   AND (path LIKE $2 OR path LIKE $3)`,
+		userID, storagePat, altPat).
 		Scan(&stats.TotalSkills)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: skills count: %w", err)

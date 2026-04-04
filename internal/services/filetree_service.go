@@ -29,28 +29,27 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 		path = path + "/"
 	}
 
-	// List immediate children: entries whose path starts with the parent path
-	// and has exactly one more path segment (no deeper nesting).
-	// For path="/": match "/notes/" and "/file.md" but not "/notes/file.md"
-	// We use array_length on string_to_array to count path depth.
+	// Skills may be stored under /skills/ (import path) or .skills/ (legacy).
+	// Query both variants so callers always get consistent results.
+	altPath := hubpath.AlternateSkillsPath(path)
+
 	parentDepth := strings.Count(path, "/")
+	altDepth := strings.Count(altPath, "/")
 
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
 		 FROM file_tree
 		 WHERE user_id = $1
-		   AND path LIKE $2
-		   AND path != $3
+		   AND (path LIKE $2 OR path LIKE $6)
+		   AND path != $3 AND path != $7
 		   AND min_trust_level <= $4
 		   AND (
-		     -- Direct child files: parent depth + 1 segments
-		     (NOT is_directory AND array_length(string_to_array(path, '/'), 1) = $5 + 1)
+		     (NOT is_directory AND (array_length(string_to_array(path, '/'), 1) = $5 + 1 OR array_length(string_to_array(path, '/'), 1) = $8 + 1))
 		     OR
-		     -- Direct child directories: parent depth + 1 segments (trailing / adds one more)
-		     (is_directory AND array_length(string_to_array(path, '/'), 1) = $5 + 2)
+		     (is_directory AND (array_length(string_to_array(path, '/'), 1) = $5 + 2 OR array_length(string_to_array(path, '/'), 1) = $8 + 2))
 		   )
 		 ORDER BY is_directory DESC, path ASC`,
-		userID, path+"%", path, trustLevel, parentDepth)
+		userID, path+"%", path, trustLevel, parentDepth, altPath+"%", altPath, altDepth)
 	if err != nil {
 		return nil, fmt.Errorf("filetree.List: %w", err)
 	}
@@ -71,12 +70,13 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 // Read returns a single file entry, checking trust level access.
 func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
 	path = hubpath.NormalizeStorage(path)
+	altPath := hubpath.AlternateSkillsPath(path)
 	var e models.FileTreeEntry
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
 		 FROM file_tree
-		 WHERE user_id = $1 AND path = $2`,
-		userID, path).
+		 WHERE user_id = $1 AND (path = $2 OR path = $3)`,
+		userID, path, altPath).
 		Scan(&e.ID, &e.UserID, &e.Path, &e.IsDirectory, &e.Content,
 			&e.ContentType, &e.Metadata, &e.MinTrustLevel, &e.CreatedAt, &e.UpdatedAt)
 	if err != nil {

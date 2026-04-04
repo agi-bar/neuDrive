@@ -1529,6 +1529,29 @@ a:hover {
   min-width: 0;
 }
 
+.token-inline-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.token-inline-input {
+  width: min(280px, 100%);
+  padding: 7px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-family: inherit;
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.token-inline-input:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.1);
+}
+
 .token-list-name {
   font-size: 13px;
   font-weight: 500;
@@ -1554,6 +1577,10 @@ a:hover {
 }
 
 .token-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
   flex-shrink: 0;
 }
 

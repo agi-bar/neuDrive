@@ -26,11 +26,20 @@ spec:
             - containerPort: 8080
           env:
             - name: PORT
-              value: "8080"
+              valueFrom:
+                configMapKeyRef:
+                  name: agenthub-config
+                  key: PORT
             - name: CORS_ORIGINS
-              value: "https://agenthub.agi.bar,http://localhost:3000,http://localhost:5173"
+              valueFrom:
+                configMapKeyRef:
+                  name: agenthub-config
+                  key: CORS_ORIGINS
             - name: PUBLIC_BASE_URL
-              value: "https://agenthub.agi.bar"
+              valueFrom:
+                configMapKeyRef:
+                  name: agenthub-config
+                  key: PUBLIC_BASE_URL
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:

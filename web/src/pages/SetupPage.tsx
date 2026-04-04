@@ -22,7 +22,7 @@ const EXPIRY_OPTIONS = [
 
 type Preset = 'agent' | 'readonly' | 'custom'
 type ModeKey = 'local' | 'advanced'
-type CloudPlatform = 'claude' | 'codex'
+type PlatformTab = 'claude' | 'codex'
 
 interface ScopeInfo {
   scopes: string[]
@@ -78,7 +78,11 @@ export default function SetupPage() {
   const [openModes, setOpenModes] = useState<Record<ModeKey, boolean>>(EMPTY_MODE_STATE)
   const [modeTokens, setModeTokens] = useState<Partial<Record<ModeKey, ModeTokenState>>>({})
   const [provisioningMode, setProvisioningMode] = useState<ModeKey | null>(null)
-  const [cloudPlatform, setCloudPlatform] = useState<CloudPlatform>('claude')
+  const [cloudPlatform, setCloudPlatform] = useState<PlatformTab>('claude')
+  const [localPlatform, setLocalPlatform] = useState<PlatformTab>('claude')
+  const [editingTokenId, setEditingTokenId] = useState<string | null>(null)
+  const [editingTokenName, setEditingTokenName] = useState('')
+  const [renamingTokenId, setRenamingTokenId] = useState<string | null>(null)
 
   // ---------------------------------------------------------------------------
   // Data loading
@@ -179,11 +183,25 @@ export default function SetupPage() {
   const codexCloudCommand = `codex mcp add agenthub --url ${baseUrl}/mcp`
   const codexLoginCommand = 'codex mcp login agenthub'
   const codexStatusCommand = 'codex mcp list'
+  const localClaudeCommand = modeTokens.local
+    ? `claude mcp add -s user agenthub \\
+  --transport stdio \\
+  -- agenthub-mcp \\
+  --token ${modeTokens.local.token}`
+    : ''
+  const localCodexCommand = modeTokens.local
+    ? `codex mcp add agenthub -- agenthub-mcp --token ${modeTokens.local.token}`
+    : ''
 
   const buildModeTokenRequest = (mode: ModeKey): CreateTokenRequest => {
     const defaults = MODE_DEFAULTS[mode]
+    const resolvedName = mode === 'local'
+      ? localPlatform === 'codex'
+        ? 'Codex CLI'
+        : 'Claude Code'
+      : defaults.name
     return {
-      name: defaults.name,
+      name: resolvedName,
       scopes: getSelectedScopes(defaults.preset),
       max_trust_level: defaults.trustLevel,
       expires_in_days: defaults.expiryDays,
@@ -221,13 +239,6 @@ export default function SetupPage() {
       await ensureModeToken(mode)
     }
   }
-
-  const localCommand = modeTokens.local
-    ? `claude mcp add agenthub \\
-  --transport stdio \\
-  -- agenthub-mcp \\
-  --token ${modeTokens.local.token}`
-    : ''
 
   const localConfig = modeTokens.local
     ? JSON.stringify({
@@ -289,6 +300,10 @@ export default function SetupPage() {
   const handleRevoke = async (id: string) => {
     try {
       await api.revokeToken(id)
+      if (editingTokenId === id) {
+        setEditingTokenId(null)
+        setEditingTokenName('')
+      }
       setModeTokens((prev) => {
         const next = { ...prev }
         if (next.local?.id === id) delete next.local
@@ -299,6 +314,42 @@ export default function SetupPage() {
       setError('')
     } catch (e: any) {
       setError(e.message)
+    }
+  }
+
+  const startRenameToken = (token: ScopedTokenResponse) => {
+    setEditingTokenId(token.id)
+    setEditingTokenName(token.name)
+    setError('')
+  }
+
+  const cancelRenameToken = () => {
+    setEditingTokenId(null)
+    setEditingTokenName('')
+    setRenamingTokenId(null)
+  }
+
+  const handleRenameToken = async (token: ScopedTokenResponse) => {
+    const trimmedName = editingTokenName.trim()
+    if (!trimmedName) {
+      setError('Token 名称不能为空')
+      return
+    }
+    if (trimmedName === token.name) {
+      cancelRenameToken()
+      return
+    }
+
+    setRenamingTokenId(token.id)
+    setError('')
+    try {
+      await api.updateToken(token.id, { name: trimmedName })
+      await loadTokens()
+      cancelRenameToken()
+    } catch (e: any) {
+      setError(e.message)
+    } finally {
+      setRenamingTokenId((current) => (current === token.id ? null : current))
     }
   }
 
@@ -460,14 +511,35 @@ export default function SetupPage() {
         <div className="setup-section-header">
           <span className="setup-section-icon">&#128187;</span>
           <div>
-            <h3>Claude Code 本地模式</h3>
-            <p className="setup-section-desc">使用本地 `agenthub-mcp` binary + scoped token，适合本地开发或内网环境</p>
+            <h3>本地模式（stdio + Token）</h3>
+            <p className="setup-section-desc">通过本地 `agenthub-mcp` binary + scoped token 连接，适合本地开发或内网环境</p>
           </div>
         </div>
 
         <p className="setup-note">
-          首次展开会自动创建一个名为 <code>Claude Code</code> 的 Agent 权限 token，并把它加入下方的 Token 列表。
+          首次展开会自动创建一个本地 MCP token，并把它加入下方的 Token 列表；同一个 token 可以在 Claude Code 和 Codex CLI 之间复用，也可以稍后在列表里改名。
         </p>
+
+        <div className="setup-tabs" role="tablist" aria-label="本地模式平台">
+          <button
+            type="button"
+            role="tab"
+            className={`setup-tab ${localPlatform === 'claude' ? 'setup-tab-active' : ''}`}
+            aria-selected={localPlatform === 'claude'}
+            onClick={() => setLocalPlatform('claude')}
+          >
+            Claude
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`setup-tab ${localPlatform === 'codex' ? 'setup-tab-active' : ''}`}
+            aria-selected={localPlatform === 'codex'}
+            onClick={() => setLocalPlatform('codex')}
+          >
+            Codex
+          </button>
+        </div>
 
         <div className="setup-mode-actions">
           <button
@@ -484,30 +556,61 @@ export default function SetupPage() {
         </div>
 
         {openModes.local && modeTokens.local && (
-          <>
-            <div className="code-block">
-              <div className="code-block-label">一键配置</div>
-              <pre>{localCommand}</pre>
-              <button
-                className="copy-btn"
-                onClick={() => copyToClipboard(localCommand, 'local-cmd')}
-              >
-                {copied === 'local-cmd' ? '已复制' : '复制'}
-              </button>
-            </div>
+          <div className="setup-tab-panel">
+            {localPlatform === 'claude' ? (
+              <>
+                <h4 className="setup-platform-title">Claude Code</h4>
+                <p className="setup-note setup-note-first">
+                  把 Agent Hub 添加到 Claude Code 的全局 MCP 配置中，命令会通过本地 <code>agenthub-mcp</code> binary 启动服务，并使用下方自动创建的 token。
+                </p>
 
-            <p className="setup-or">或者手动写入 Claude Code 的 MCP 配置：</p>
+                <div className="code-block">
+                  <div className="code-block-label">一键配置（全局）</div>
+                  <pre>{localClaudeCommand}</pre>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyToClipboard(localClaudeCommand, 'local-claude-cmd')}
+                  >
+                    {copied === 'local-claude-cmd' ? '已复制' : '复制'}
+                  </button>
+                </div>
 
-            <div className="code-block">
-              <pre>{localConfig}</pre>
-              <button
-                className="copy-btn"
-                onClick={() => copyToClipboard(localConfig, 'local-json')}
-              >
-                {copied === 'local-json' ? '已复制' : '复制'}
-              </button>
-            </div>
-          </>
+                <p className="setup-or">或者手动写入 Claude Code 的 MCP 配置：</p>
+
+                <div className="code-block">
+                  <pre>{localConfig}</pre>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyToClipboard(localConfig, 'local-claude-json')}
+                  >
+                    {copied === 'local-claude-json' ? '已复制' : '复制'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <h4 className="setup-platform-title">Codex CLI</h4>
+                <p className="setup-note setup-note-first">
+                  把 Agent Hub 添加到 Codex 的 stdio MCP 配置中。Codex 会直接通过本地 <code>agenthub-mcp</code> binary 启动服务，并复用同一个 scoped token。
+                </p>
+
+                <div className="code-block">
+                  <div className="code-block-label">一键配置</div>
+                  <pre>{localCodexCommand}</pre>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyToClipboard(localCodexCommand, 'local-codex-cmd')}
+                  >
+                    {copied === 'local-codex-cmd' ? '已复制' : '复制'}
+                  </button>
+                </div>
+
+                <p className="setup-note">
+                  Codex 推荐直接使用上面的 <code>codex mcp add ...</code> 命令完成配置，无需手动编辑配置文件。
+                </p>
+              </>
+            )}
+          </div>
         )}
       </div>
 
@@ -758,8 +861,32 @@ export default function SetupPage() {
                 className={`token-list-item ${token.is_revoked || token.is_expired ? 'token-list-item-inactive' : ''}`}
               >
                 <div className="token-list-main">
-                  <div className="token-list-name">{token.name}</div>
-                  <code className="token-list-prefix">{token.token_prefix}...</code>
+                  {editingTokenId === token.id ? (
+                    <div className="token-inline-edit">
+                      <input
+                        className="token-inline-input"
+                        value={editingTokenName}
+                        onChange={(e) => setEditingTokenName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            void handleRenameToken(token)
+                          }
+                          if (e.key === 'Escape') {
+                            e.preventDefault()
+                            cancelRenameToken()
+                          }
+                        }}
+                        autoFocus
+                      />
+                      <code className="token-list-prefix">{token.token_prefix}...</code>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="token-list-name">{token.name}</div>
+                      <code className="token-list-prefix">{token.token_prefix}...</code>
+                    </>
+                  )}
                 </div>
                 <div className="token-list-meta">
                   <span className={`trust-badge trust-l${token.max_trust_level}`}>
@@ -771,13 +898,40 @@ export default function SetupPage() {
                   <span>{formatExpiry(token)}</span>
                 </div>
                 <div className="token-list-actions">
-                  {!token.is_revoked && !token.is_expired && (
-                    <button
-                      className="btn btn-sm btn-danger"
-                      onClick={() => handleRevoke(token.id)}
-                    >
-                      吊销
-                    </button>
+                  {editingTokenId === token.id ? (
+                    <>
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={() => handleRenameToken(token)}
+                        disabled={renamingTokenId === token.id || !editingTokenName.trim()}
+                      >
+                        {renamingTokenId === token.id ? '保存中...' : '保存'}
+                      </button>
+                      <button
+                        className="btn btn-sm btn-outline"
+                        onClick={cancelRenameToken}
+                        disabled={renamingTokenId === token.id}
+                      >
+                        取消
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        className="btn btn-sm btn-outline"
+                        onClick={() => startRenameToken(token)}
+                      >
+                        改名
+                      </button>
+                      {!token.is_revoked && !token.is_expired && (
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleRevoke(token.id)}
+                        >
+                          吊销
+                        </button>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

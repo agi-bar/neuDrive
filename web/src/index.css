@@ -1596,11 +1596,12 @@ a:hover {
 /* === OAuth Authorize Page === */
 .oauth-page {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   min-height: 100vh;
   background: var(--color-bg);
-  padding: 20px;
+  padding: 40px 20px;
+  overflow-y: auto;
 }
 
 .oauth-card {

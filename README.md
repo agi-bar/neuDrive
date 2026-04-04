@@ -28,9 +28,9 @@ Agent Hub 是一个独立的中间层服务。每个人拥有一个 Hub，所有
 ### Docker 一键启动
 
 ```bash
-cp .env.example .env
-# 编辑 .env，填入你的 GitHub OAuth 和密钥配置
-docker compose up
+cp agenthub.env.example agenthub.env
+# 编辑 agenthub.env，填入你的 GitHub OAuth 和密钥配置
+docker compose --env-file agenthub.env up
 ```
 
 服务启动在 `http://localhost:8080`，管理后台直接访问即可。

@@ -32,6 +32,35 @@ export interface Session {
   created_at: string
 }
 
+export interface ConnectionResponse {
+  id: string
+  name: string
+  platform: string
+  trust_level: number
+  api_key_prefix?: string
+  last_used_at?: string
+  created_at?: string
+}
+
+export interface OAuthAppResponse {
+  id: string
+  name: string
+  client_id: string
+  redirect_uris: string[]
+  scopes: string[]
+  description: string
+  logo_url?: string
+  is_active: boolean
+  created_at: string
+}
+
+export interface OAuthGrantResponse {
+  id: string
+  app: OAuthAppResponse
+  scopes: string[]
+  created_at: string
+}
+
 // ---------------------------------------------------------------------------
 // Token refresh logic
 // ---------------------------------------------------------------------------
@@ -198,7 +227,7 @@ export const api = {
   getStats: () => request<any>('/dashboard/stats'),
 
   // Connections
-  getConnections: () => request<{ connections: any[] }>('/connections').then(r => r.connections || []),
+  getConnections: () => request<{ connections: ConnectionResponse[] }>('/connections').then(r => r.connections || []),
   createConnection: (data: any) =>
     request<any>('/connections', {
       method: 'POST',
@@ -211,6 +240,10 @@ export const api = {
     }),
   deleteConnection: (id: string) =>
     request<void>(`/connections/${id}`, { method: 'DELETE' }),
+
+  getOAuthGrants: () => request<{ grants: OAuthGrantResponse[] }>('/oauth/grants').then(r => r.grants || []),
+  revokeOAuthGrant: (id: string) =>
+    request<void>(`/oauth/grants/${id}`, { method: 'DELETE' }),
 
   // Memory
   getProfile: () => request<any>('/memory/profile'),

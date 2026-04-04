@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react'
-import { api } from '../api'
+import { useEffect, useState } from 'react'
+import { api, ConnectionResponse, OAuthGrantResponse } from '../api'
 
 const TRUST_LEVELS = [
   { value: 1, label: 'L1 访客', className: 'trust-l1' },
@@ -8,19 +8,44 @@ const TRUST_LEVELS = [
   { value: 4, label: 'L4 完全信任', className: 'trust-l4' },
 ]
 
-interface Connection {
-  id: string
-  name: string
-  platform: string
-  trust_level: number
-  last_used?: string
-  api_key?: string
-  api_key_prefix?: string
-  created_at?: string
+type ConnectionRow =
+  | {
+      id: string
+      kind: 'manual'
+      name: string
+      platform: string
+      platformDetail?: string
+      trustLevel: number
+      activityAt?: string
+      activityLabel: string
+      badgeDetail: string
+      secondaryDetail?: string
+      apiKeyPrefix?: string
+    }
+  | {
+      id: string
+      kind: 'oauth'
+      name: string
+      platform: string
+      platformDetail?: string
+      trustLevel: number
+      activityAt?: string
+      activityLabel: string
+      badgeDetail: string
+      secondaryDetail?: string
+      scopes: string[]
+    }
+
+const PLATFORM_LABELS: Record<string, string> = {
+  claude: 'Claude',
+  gpt: 'GPT',
+  feishu: '飞书',
+  other: '其他',
 }
 
 export default function ConnectionsPage() {
-  const [connections, setConnections] = useState<Connection[]>([])
+  const [connections, setConnections] = useState<ConnectionResponse[]>([])
+  const [oauthGrants, setOAuthGrants] = useState<OAuthGrantResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
@@ -34,12 +59,33 @@ export default function ConnectionsPage() {
   }, [])
 
   const loadConnections = async () => {
+    setError('')
+
+    const errors: string[] = []
+
     try {
-      const data = await api.getConnections()
-      setConnections(data || [])
-    } catch (err: any) {
-      setError(err.message)
+      const [manualResult, grantResult] = await Promise.allSettled([
+        api.getConnections(),
+        api.getOAuthGrants(),
+      ])
+
+      if (manualResult.status === 'fulfilled') {
+        setConnections(manualResult.value || [])
+      } else {
+        setConnections([])
+        errors.push(manualResult.reason?.message || '连接列表加载失败')
+      }
+
+      if (grantResult.status === 'fulfilled') {
+        setOAuthGrants(grantResult.value || [])
+      } else {
+        setOAuthGrants([])
+        errors.push(grantResult.reason?.message || 'OAuth 授权列表加载失败')
+      }
     } finally {
+      if (errors.length > 0) {
+        setError(errors.join('；'))
+      }
       setLoading(false)
     }
   }
@@ -96,6 +142,17 @@ export default function ConnectionsPage() {
     }
   }
 
+  const handleRevokeGrant = async (id: string, name: string) => {
+    if (!window.confirm(`确认撤销 "${name}" 的授权？连接器将无法继续访问 Agent Hub。`)) return
+
+    try {
+      await api.revokeOAuthGrant(id)
+      setOAuthGrants((prev) => prev.filter((grant) => grant.id !== id))
+    } catch (err: any) {
+      setError(err.message)
+    }
+  }
+
   const copyKey = async () => {
     try {
       await navigator.clipboard.writeText(createdKey)
@@ -133,6 +190,89 @@ export default function ConnectionsPage() {
     return TRUST_LEVELS.find((t) => t.value === level) || TRUST_LEVELS[0]
   }
 
+  const parseHost = (value?: string) => {
+    if (!value) return ''
+    try {
+      return new URL(value).host.replace(/^www\./, '')
+    } catch {
+      return ''
+    }
+  }
+
+  const getPlatformLabel = (platform: string) => {
+    return PLATFORM_LABELS[platform] || platform || '未知'
+  }
+
+  const summarizeScopes = (scopes: string[]) => {
+    if (scopes.includes('admin')) return 'admin'
+    if (scopes.length === 0) return '未声明 scope'
+    return `${scopes.length} 项 scope`
+  }
+
+  const inferOAuthPlatform = (grant: OAuthGrantResponse) => {
+    const clientHost = parseHost(grant.app.client_id)
+    const redirectHosts = grant.app.redirect_uris.map(parseHost).filter(Boolean)
+    const knownHosts = [clientHost, ...redirectHosts]
+    const primaryHost = knownHosts[0]
+
+    if (knownHosts.some((host) => host === 'claude.ai' || host === 'claude.com')) {
+      return {
+        platform: 'Claude',
+        name: 'Claude Connector',
+        detail: primaryHost || grant.app.client_id,
+      }
+    }
+
+    if (knownHosts.some((host) => host.includes('openai.com') || host.includes('chatgpt.com'))) {
+      return {
+        platform: 'GPT',
+        name: grant.app.name || 'ChatGPT Connector',
+        detail: primaryHost || grant.app.client_id,
+      }
+    }
+
+    return {
+      platform: primaryHost || 'OAuth',
+      name: grant.app.name || primaryHost || 'OAuth App',
+      detail: primaryHost || grant.app.client_id,
+    }
+  }
+
+  const rows: ConnectionRow[] = [
+    ...connections.map((conn) => ({
+      id: conn.id,
+      kind: 'manual' as const,
+      name: conn.name,
+      platform: getPlatformLabel(conn.platform),
+      trustLevel: conn.trust_level,
+      activityAt: conn.last_used_at || conn.created_at,
+      activityLabel: conn.last_used_at ? '最后使用' : '创建于',
+      badgeDetail: 'API Key',
+      apiKeyPrefix: conn.api_key_prefix,
+      secondaryDetail: conn.api_key_prefix ? `${conn.api_key_prefix}...` : undefined,
+    })),
+    ...oauthGrants.map((grant) => {
+      const inferred = inferOAuthPlatform(grant)
+      return {
+        id: grant.id,
+        kind: 'oauth' as const,
+        name: inferred.name,
+        platform: inferred.platform,
+        platformDetail: inferred.detail,
+        trustLevel: 4,
+        activityAt: grant.created_at,
+        activityLabel: '授权于',
+        badgeDetail: 'OAuth / MCP',
+        secondaryDetail: summarizeScopes(grant.scopes),
+        scopes: grant.scopes,
+      }
+    }),
+  ].sort((a, b) => {
+    const aTime = a.activityAt ? new Date(a.activityAt).getTime() : 0
+    const bTime = b.activityAt ? new Date(b.activityAt).getTime() : 0
+    return bTime - aTime
+  })
+
   if (loading) {
     return <div className="page-loading">加载中...</div>
   }
@@ -140,7 +280,10 @@ export default function ConnectionsPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <h2>连接管理</h2>
+        <div>
+          <h2>连接管理</h2>
+          <p className="empty-hint">这里会显示手动创建的 API Key 连接，以及 OAuth / MCP 授权过的平台连接</p>
+        </div>
         <button
           className="btn btn-primary"
           onClick={() => {
@@ -239,10 +382,10 @@ export default function ConnectionsPage() {
         </div>
       )}
 
-      {connections.length === 0 ? (
+      {rows.length === 0 ? (
         <div className="empty-state">
           <p>还没有连接</p>
-          <p className="empty-hint">添加一个连接来让 Agent 接入不同平台</p>
+          <p className="empty-hint">添加 API Key 连接，或者先在 Claude Connector 等平台完成 OAuth 授权</p>
         </div>
       ) : (
         <div className="table-container">
@@ -257,45 +400,64 @@ export default function ConnectionsPage() {
               </tr>
             </thead>
             <tbody>
-              {connections.map((conn) => {
-                const trust = getTrustInfo(conn.trust_level)
+              {rows.map((row) => {
+                const trust = getTrustInfo(row.trustLevel)
                 return (
-                  <tr key={conn.id}>
+                  <tr key={`${row.kind}-${row.id}`}>
                     <td className="cell-name">
-                      <div>{conn.name}</div>
-                      {conn.api_key_prefix && (
-                        <div className="cell-key-prefix">{conn.api_key_prefix}...</div>
+                      <div>{row.name}</div>
+                      {row.secondaryDetail && (
+                        <div className="cell-key-prefix">{row.badgeDetail} · {row.secondaryDetail}</div>
                       )}
                     </td>
                     <td>
-                      <span className="badge badge-platform">{conn.platform}</span>
+                      <span className="badge badge-platform">{row.platform}</span>
+                      {row.platformDetail && (
+                        <div className="cell-key-prefix">{row.platformDetail}</div>
+                      )}
                     </td>
                     <td>
-                      <span className={`badge badge-l${conn.trust_level}`} style={{ marginRight: 8 }}>
+                      <span className={`badge badge-l${row.trustLevel}`} style={{ marginRight: 8 }}>
                         {trust.label}
                       </span>
-                      <select
-                        className={`trust-select ${trust.className}`}
-                        value={conn.trust_level}
-                        onChange={(e) =>
-                          handleTrustChange(conn.id, Number(e.target.value))
-                        }
-                      >
-                        {TRUST_LEVELS.map((t) => (
-                          <option key={t.value} value={t.value}>
-                            {t.label}
-                          </option>
-                        ))}
-                      </select>
+                      {row.kind === 'manual' ? (
+                        <select
+                          className={`trust-select ${trust.className}`}
+                          value={row.trustLevel}
+                          onChange={(e) =>
+                            handleTrustChange(row.id, Number(e.target.value))
+                          }
+                        >
+                          {TRUST_LEVELS.map((t) => (
+                            <option key={t.value} value={t.value}>
+                              {t.label}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <span className="cell-key-prefix">OAuth 授权当前按完整访问处理</span>
+                      )}
                     </td>
-                    <td className="cell-time">{formatTime(conn.last_used)}</td>
+                    <td className="cell-time">
+                      <div>{formatTime(row.activityAt)}</div>
+                      <div className="cell-key-prefix">{row.activityLabel}</div>
+                    </td>
                     <td>
-                      <button
-                        className="btn btn-sm btn-danger"
-                        onClick={() => handleDelete(conn.id, conn.name)}
-                      >
-                        删除
-                      </button>
+                      {row.kind === 'manual' ? (
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleDelete(row.id, row.name)}
+                        >
+                          删除
+                        </button>
+                      ) : (
+                        <button
+                          className="btn btn-sm btn-danger"
+                          onClick={() => handleRevokeGrant(row.id, row.name)}
+                        >
+                          撤销授权
+                        </button>
+                      )}
                     </td>
                   </tr>
                 )

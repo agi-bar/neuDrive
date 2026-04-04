@@ -112,4 +112,43 @@ test.describe('Connections Page', () => {
     await expect(page.getByText('Claude Main')).toBeVisible()
     await expect(page.getByText('GPT Secondary')).toBeVisible()
   })
+
+  test('shows Claude Connector OAuth grant in connection management', async ({ page, request }) => {
+    const user = await setupUser(page, request)
+
+    const clientID = 'https://claude.ai/oauth/mcp/client-metadata.json'
+    const redirectURI = 'https://claude.ai/api/mcp/auth_callback'
+    const scope = 'admin'
+
+    const infoRes = await request.get('/api/oauth/authorize-info', {
+      params: {
+        client_id: clientID,
+        redirect_uri: redirectURI,
+        scope,
+        response_type: 'code',
+      },
+    })
+    expect(infoRes.ok()).toBeTruthy()
+
+    const authRes = await request.post('/oauth/authorize', {
+      form: {
+        client_id: clientID,
+        redirect_uri: redirectURI,
+        scope,
+        state: 'pw-test',
+        action: 'approve',
+        _token: user.token,
+      },
+      maxRedirects: 0,
+      failOnStatusCode: false,
+    })
+    expect(authRes.status()).toBe(302)
+
+    await page.goto('/connections')
+    await page.waitForLoadState('networkidle')
+
+    await expect(page.getByText('Claude Connector')).toBeVisible()
+    await expect(page.getByText('OAuth / MCP')).toBeVisible()
+    await expect(page.getByRole('button', { name: '撤销授权' })).toBeVisible()
+  })
 })

@@ -12,13 +12,9 @@ import (
 
 type SearchHit struct {
 	Path    string  `json:"path"`
+	Type    string  `json:"type"`
 	Snippet string  `json:"snippet"`
 	Score   float64 `json:"score"`
-}
-
-type SkillSummary struct {
-	Name        string `json:"name"`
-	Description string `json:"description"`
 }
 
 func (s *Server) buildAgentProfile(ctx context.Context, userID uuid.UUID, category string) (map[string]interface{}, error) {
@@ -56,31 +52,43 @@ func (s *Server) searchHub(ctx context.Context, userID uuid.UUID, trustLevel int
 		scope = "all"
 	}
 
+	prefixes := []string{}
+	switch scope {
+	case "memory":
+		prefixes = []string{"/memory", "/identity"}
+	case "projects":
+		prefixes = []string{"/projects"}
+	case "inbox":
+		prefixes = []string{"/inbox"}
+	case "skills":
+		prefixes = []string{"/skills", "/devices", "/roles"}
+	default:
+		prefixes = []string{"/memory", "/identity", "/projects", "/inbox", "/skills", "/devices", "/roles"}
+	}
+
 	results := make([]SearchHit, 0, 64)
-	if scope == "all" || scope == "memory" {
-		entries, err := s.FileTreeService.Search(ctx, userID, query, trustLevel, "")
+	seen := make(map[string]bool)
+	for _, prefix := range prefixes {
+		entries, err := s.FileTreeService.Search(ctx, userID, query, trustLevel, prefix)
 		if err != nil {
 			return nil, err
 		}
 		for _, entry := range entries {
-			results = append(results, SearchHit{
-				Path:    hubpath.StorageToPublic(entry.Path),
-				Snippet: snippetText(entry.Content),
-				Score:   1,
-			})
-		}
-	}
+			publicPath := hubpath.StorageToPublic(entry.Path)
+			if seen[publicPath] {
+				continue
+			}
+			seen[publicPath] = true
 
-	if scope == "all" || scope == "inbox" {
-		messages, err := s.InboxService.Search(ctx, userID, query, "")
-		if err != nil {
-			return nil, err
-		}
-		for _, message := range messages {
+			snippet := snippetText(entry.Content)
+			if desc, ok := entry.Metadata["description"].(string); ok && snippet == "" {
+				snippet = snippetText(desc)
+			}
 			results = append(results, SearchHit{
-				Path:    "/inbox/" + message.ID.String(),
-				Snippet: snippetText(strings.TrimSpace(message.Subject + "\n" + message.Body)),
-				Score:   0.9,
+				Path:    publicPath,
+				Type:    entry.Kind,
+				Snippet: snippet,
+				Score:   1,
 			})
 		}
 	}
@@ -88,26 +96,8 @@ func (s *Server) searchHub(ctx context.Context, userID uuid.UUID, trustLevel int
 	return results, nil
 }
 
-func (s *Server) listSkills(ctx context.Context, userID uuid.UUID, trustLevel int) ([]SkillSummary, error) {
-	entries, err := s.FileTreeService.List(ctx, userID, "/skills", trustLevel)
-	if err != nil {
-		return nil, err
-	}
-
-	skills := make([]SkillSummary, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDirectory {
-			continue
-		}
-
-		name := hubpath.BaseName(entry.Path)
-		skill := SkillSummary{Name: name}
-		if skillDoc, err := s.FileTreeService.Read(ctx, userID, entry.Path+"SKILL.md", trustLevel); err == nil {
-			skill.Description = skillDescription(skillDoc.Content)
-		}
-		skills = append(skills, skill)
-	}
-	return skills, nil
+func (s *Server) listSkills(ctx context.Context, userID uuid.UUID, trustLevel int) ([]models.SkillSummary, error) {
+	return s.FileTreeService.ListSkillSummaries(ctx, userID, trustLevel)
 }
 
 func skillDescription(markdown string) string {

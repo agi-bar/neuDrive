@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
@@ -155,6 +156,26 @@ func (s *TokenService) RevokeToken(ctx context.Context, userID, tokenID uuid.UUI
 	}
 	if tag.RowsAffected() == 0 {
 		return fmt.Errorf("token.RevokeToken: token not found or already revoked")
+	}
+	return nil
+}
+
+// UpdateTokenName changes a token's display name.
+func (s *TokenService) UpdateTokenName(ctx context.Context, userID, tokenID uuid.UUID, name string) error {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return fmt.Errorf("token.UpdateTokenName: name is required")
+	}
+
+	tag, err := s.db.Exec(ctx,
+		`UPDATE scoped_tokens SET name = $1
+		 WHERE id = $2 AND user_id = $3`,
+		name, tokenID, userID)
+	if err != nil {
+		return fmt.Errorf("token.UpdateTokenName: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return fmt.Errorf("token.UpdateTokenName: token not found")
 	}
 	return nil
 }

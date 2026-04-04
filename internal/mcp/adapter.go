@@ -8,7 +8,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
@@ -383,35 +382,36 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		}
 
 		var results []interface{}
-
-		// Search file_tree (memory files)
-		if scope == "memory" || scope == "all" {
-			entries, err := s.FileTree.Search(ctx, s.UserID, query, s.TrustLevel, "/memory/")
-			if err != nil {
-				return fmt.Sprintf("error searching files: %v", err), true
-			}
-			for _, e := range entries {
-				results = append(results, map[string]interface{}{
-					"type":    "memory",
-					"path":    hubpath.StorageToPublic(e.Path),
-					"content": e.Content,
-				})
-			}
+		prefixes := []string{}
+		switch scope {
+		case "memory":
+			prefixes = []string{"/memory", "/identity"}
+		case "projects":
+			prefixes = []string{"/projects"}
+		case "inbox":
+			prefixes = []string{"/inbox"}
+		case "skills":
+			prefixes = []string{"/skills", "/devices", "/roles"}
+		default:
+			prefixes = []string{"/memory", "/identity", "/projects", "/inbox", "/skills", "/devices", "/roles"}
 		}
 
-		// Search inbox messages
-		if scope == "inbox" || scope == "all" {
-			msgs, err := s.Inbox.Search(ctx, s.UserID, query, "")
+		seen := make(map[string]bool)
+		for _, prefix := range prefixes {
+			entries, err := s.FileTree.Search(ctx, s.UserID, query, s.TrustLevel, prefix)
 			if err != nil {
-				return fmt.Sprintf("error searching inbox: %v", err), true
+				return fmt.Sprintf("error searching %s: %v", prefix, err), true
 			}
-			for _, m := range msgs {
+			for _, e := range entries {
+				publicPath := hubpath.StorageToPublic(e.Path)
+				if seen[publicPath] {
+					continue
+				}
+				seen[publicPath] = true
 				results = append(results, map[string]interface{}{
-					"type":    "inbox",
-					"subject": m.Subject,
-					"body":    m.Body,
-					"from":    m.FromAddress,
-					"date":    m.CreatedAt,
+					"type":    e.Kind,
+					"path":    publicPath,
+					"snippet": mcpSnippetText(e.Content),
 				})
 			}
 		}
@@ -525,12 +525,9 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return string(data), false
 
 	case "list_skills":
-		entries, err := s.FileTree.List(ctx, s.UserID, "/skills", s.TrustLevel)
+		entries, err := s.FileTree.ListSkillSummaries(ctx, s.UserID, s.TrustLevel)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
-		}
-		for i := range entries {
-			entries[i].Path = hubpath.StorageToPublic(entries[i].Path)
 		}
 		result, _ := json.MarshalIndent(entries, "", "  ")
 		return string(result), false
@@ -608,13 +605,10 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return string(result), false
 
 	case "save_memory":
-		// Accept array of {content, title?} objects
 		memoriesRaw, ok := args["memories"].([]interface{})
 		if !ok || len(memoriesRaw) == 0 {
 			return "error: memories array is required (at least one {content, title?} object)", true
 		}
-
-		now := time.Now()
 		var saved []string
 
 		for _, item := range memoriesRaw {
@@ -627,33 +621,13 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 				continue
 			}
 			title, _ := m["title"].(string)
-
-			// Generate path: /memory/scratch/{date}-{title}.md
-			filename := now.Format("2006-01-02")
-			if title != "" {
-				safe := strings.Map(func(r rune) rune {
-					if r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_' {
-						return r
-					}
-					if r >= 0x4e00 && r <= 0x9fff {
-						return r
-					}
-					return '-'
-				}, title)
-				filename += "-" + safe
+			entry, err := s.Memory.WriteScratchWithTitle(ctx, s.UserID, content, "mcp", title)
+			if err != nil {
+				return fmt.Sprintf("error saving memory: %v", err), true
 			}
-			path := fmt.Sprintf("/memory/scratch/%s.md", filename)
-
-			// Append if file already exists for today
-			existing, err := s.FileTree.Read(ctx, s.UserID, path, s.TrustLevel)
-			if err == nil && existing.Content != "" {
-				content = existing.Content + "\n\n---\n\n" + content
+			if entry != nil {
+				saved = append(saved, hubpath.StorageToPublic(entry.Path))
 			}
-
-			if _, err := s.FileTree.Write(ctx, s.UserID, path, content, "text/markdown", models.TrustLevelFull); err != nil {
-				return fmt.Sprintf("error writing %s: %v", path, err), true
-			}
-			saved = append(saved, path)
 		}
 
 		if len(saved) == 0 {
@@ -721,23 +695,20 @@ func (s *MCPServer) readResource(uri string) (string, error) {
 		path = "/" + path
 	}
 
-	// Special: profile.json returns user profile as JSON
-	if path == "/identity/profile.json" {
-		ctx := context.Background()
-		profiles, err := s.Memory.GetProfile(ctx, s.UserID)
-		if err != nil {
-			return "", err
-		}
-		result, _ := json.MarshalIndent(profiles, "", "  ")
-		return string(result), nil
-	}
-
 	ctx := context.Background()
 	entry, err := s.FileTree.Read(ctx, s.UserID, path, s.TrustLevel)
 	if err != nil {
 		return "", err
 	}
 	return entry.Content, nil
+}
+
+func mcpSnippetText(raw string) string {
+	raw = strings.Join(strings.Fields(raw), " ")
+	if len(raw) <= 180 {
+		return raw
+	}
+	return strings.TrimSpace(raw[:177]) + "..."
 }
 
 // RunStdio runs the MCP server on stdin/stdout (for Claude Code stdio transport)

@@ -2,16 +2,36 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	pathpkg "path"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const fileTreeSelectColumns = `
+	id,
+	user_id,
+	path,
+	kind,
+	is_directory,
+	COALESCE(content, ''),
+	COALESCE(content_type, ''),
+	COALESCE(metadata, '{}'),
+	COALESCE(checksum, ''),
+	COALESCE(version, 1),
+	min_trust_level,
+	created_at,
+	updated_at,
+	deleted_at
+`
 
 type FileTreeService struct {
 	db *pgxpool.Pool
@@ -21,25 +41,22 @@ func NewFileTreeService(db *pgxpool.Pool) *FileTreeService {
 	return &FileTreeService{db: db}
 }
 
-// List returns file tree entries under the given path, filtered by trust level.
-// It lists immediate children (one level deep) of the specified directory path.
+// List returns immediate children under the requested directory path.
 func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
 	path = hubpath.NormalizeStorage(path)
 	if !strings.HasSuffix(path, "/") {
-		path = path + "/"
+		path += "/"
 	}
 
-	// Skills may be stored under /skills/ (import path) or .skills/ (legacy).
-	// Query both variants so callers always get consistent results.
 	altPath := hubpath.AlternateSkillsPath(path)
-
 	parentDepth := strings.Count(path, "/")
 	altDepth := strings.Count(altPath, "/")
 
 	rows, err := s.db.Query(ctx,
-		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
+		fmt.Sprintf(`SELECT %s
 		 FROM file_tree
 		 WHERE user_id = $1
+		   AND deleted_at IS NULL
 		   AND (path LIKE $2 OR path LIKE $6)
 		   AND path != $3 AND path != $7
 		   AND min_trust_level <= $4
@@ -48,164 +65,812 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 		     OR
 		     (is_directory AND (array_length(string_to_array(path, '/'), 1) = $5 + 2 OR array_length(string_to_array(path, '/'), 1) = $8 + 2))
 		   )
-		 ORDER BY is_directory DESC, path ASC`,
+		 ORDER BY is_directory DESC, path ASC`, fileTreeSelectColumns),
 		userID, path+"%", path, trustLevel, parentDepth, altPath+"%", altPath, altDepth)
 	if err != nil {
 		return nil, fmt.Errorf("filetree.List: %w", err)
 	}
 	defer rows.Close()
 
-	var entries []models.FileTreeEntry
-	for rows.Next() {
-		var e models.FileTreeEntry
-		if err := rows.Scan(&e.ID, &e.UserID, &e.Path, &e.IsDirectory, &e.Content,
-			&e.ContentType, &e.Metadata, &e.MinTrustLevel, &e.CreatedAt, &e.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("filetree.List: scan: %w", err)
-		}
-		entries = append(entries, e)
-	}
-	return entries, rows.Err()
+	return scanFileTreeEntries(rows)
 }
 
-// Read returns a single file entry, checking trust level access.
+// Read returns a single live entry, respecting trust level.
 func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
 	path = hubpath.NormalizeStorage(path)
 	altPath := hubpath.AlternateSkillsPath(path)
-	var e models.FileTreeEntry
+
+	var entry models.FileTreeEntry
 	err := s.db.QueryRow(ctx,
-		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
+		fmt.Sprintf(`SELECT %s
 		 FROM file_tree
-		 WHERE user_id = $1 AND (path = $2 OR path = $3)`,
+		 WHERE user_id = $1
+		   AND deleted_at IS NULL
+		   AND (path = $2 OR path = $3)
+		 ORDER BY CASE WHEN path = $2 THEN 0 ELSE 1 END
+		 LIMIT 1`, fileTreeSelectColumns),
 		userID, path, altPath).
-		Scan(&e.ID, &e.UserID, &e.Path, &e.IsDirectory, &e.Content,
-			&e.ContentType, &e.Metadata, &e.MinTrustLevel, &e.CreatedAt, &e.UpdatedAt)
+		Scan(
+			&entry.ID,
+			&entry.UserID,
+			&entry.Path,
+			&entry.Kind,
+			&entry.IsDirectory,
+			&entry.Content,
+			&entry.ContentType,
+			&entry.Metadata,
+			&entry.Checksum,
+			&entry.Version,
+			&entry.MinTrustLevel,
+			&entry.CreatedAt,
+			&entry.UpdatedAt,
+			&entry.DeletedAt,
+		)
 	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEntryNotFound
+		}
 		return nil, fmt.Errorf("filetree.Read: %w", err)
 	}
-	if e.MinTrustLevel > trustLevel {
-		return nil, fmt.Errorf("filetree.Read: insufficient trust level (need %d, have %d)", e.MinTrustLevel, trustLevel)
+	if entry.MinTrustLevel > trustLevel {
+		return nil, fmt.Errorf("filetree.Read: insufficient trust level (need %d, have %d)", entry.MinTrustLevel, trustLevel)
 	}
-	return &e, nil
+	return &entry, nil
 }
 
-// Write upserts a file entry at the given path.
-// Automatically creates all intermediate directories.
+// Write is the backwards-compatible file write entry point.
 func (s *FileTreeService) Write(ctx context.Context, userID uuid.UUID, path, content, contentType string, minTrustLevel int) (*models.FileTreeEntry, error) {
-	path = hubpath.NormalizeStorage(path)
+	return s.WriteEntry(ctx, userID, path, content, contentType, models.FileTreeWriteOptions{
+		MinTrustLevel: minTrustLevel,
+	})
+}
+
+// WriteEntry creates or updates a live file entry with optimistic version checks.
+func (s *FileTreeService) WriteEntry(
+	ctx context.Context,
+	userID uuid.UUID,
+	path string,
+	content string,
+	contentType string,
+	opts models.FileTreeWriteOptions,
+) (*models.FileTreeEntry, error) {
+	storagePath := hubpath.NormalizeStorage(path)
+	if contentType == "" {
+		contentType = "text/plain"
+	}
+
 	parentDirs := make([]string, 0, 4)
-	for dir := pathpkg.Dir(strings.TrimSuffix(path, "/")); dir != "." && dir != "/" && dir != ""; dir = pathpkg.Dir(dir) {
+	for dir := pathpkg.Dir(strings.TrimSuffix(storagePath, "/")); dir != "." && dir != "/" && dir != ""; dir = pathpkg.Dir(dir) {
 		parentDirs = append(parentDirs, dir)
 	}
 	for i := len(parentDirs) - 1; i >= 0; i-- {
 		if err := s.EnsureDirectory(ctx, userID, parentDirs[i]); err != nil {
-			return nil, fmt.Errorf("filetree.Write: ensure parent dir %q: %w", parentDirs[i], err)
+			return nil, fmt.Errorf("filetree.WriteEntry: ensure parent dir %q: %w", parentDirs[i], err)
 		}
 	}
 
 	now := time.Now().UTC()
-	id := uuid.New()
-
-	_, err := s.db.Exec(ctx,
-		`INSERT INTO file_tree (id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at)
-		 VALUES ($1, $2, $3, false, $4, $5, '{}', $6, $7, $7)
-		 ON CONFLICT (user_id, path) DO UPDATE SET
-		   content = EXCLUDED.content,
-		   content_type = EXCLUDED.content_type,
-		   min_trust_level = EXCLUDED.min_trust_level,
-		   updated_at = EXCLUDED.updated_at`,
-		id, userID, path, content, contentType, minTrustLevel, now)
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("filetree.Write: %w", err)
+		return nil, fmt.Errorf("filetree.WriteEntry: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	current, err := s.lockEntry(ctx, tx, userID, storagePath)
+	if err != nil && !errors.Is(err, ErrEntryNotFound) {
+		return nil, err
 	}
 
-	var e models.FileTreeEntry
-	err = s.db.QueryRow(ctx,
-		`SELECT id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at
-		 FROM file_tree WHERE user_id = $1 AND path = $2`, userID, path).
-		Scan(&e.ID, &e.UserID, &e.Path, &e.IsDirectory, &e.Content,
-			&e.ContentType, &e.Metadata, &e.MinTrustLevel, &e.CreatedAt, &e.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("filetree.Write: fetch after upsert: %w", err)
+	metadata := mergeMetadata(nil, opts.Metadata)
+	metadata = skillMetadataForPath(storagePath, content, metadata)
+	minTrust := opts.MinTrustLevel
+	if minTrust <= 0 {
+		minTrust = models.TrustLevelGuest
 	}
-	return &e, nil
+	kind := strings.TrimSpace(opts.Kind)
+	if kind == "" {
+		kind = classifyEntryKind(storagePath, false)
+	}
+	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), content, contentType, metadata)
+
+	if current != nil {
+		if opts.ExpectedVersion != nil && current.Version != *opts.ExpectedVersion {
+			return nil, ErrOptimisticLockConflict
+		}
+		if opts.ExpectedChecksum != "" && current.Checksum != opts.ExpectedChecksum {
+			return nil, ErrOptimisticLockConflict
+		}
+
+		var updated models.FileTreeEntry
+		err = tx.QueryRow(ctx,
+			fmt.Sprintf(`UPDATE file_tree
+			 SET kind = $3,
+			     is_directory = false,
+			     content = $4,
+			     content_type = $5,
+			     metadata = $6,
+			     checksum = $7,
+			     version = version + 1,
+			     min_trust_level = $8,
+			     deleted_at = NULL,
+			     updated_at = $9
+			 WHERE user_id = $1 AND path = $2
+			 RETURNING %s`, fileTreeSelectColumns),
+			userID, current.Path, kind, content, contentType, metadata, checksum, minTrust, now,
+		).Scan(
+			&updated.ID,
+			&updated.UserID,
+			&updated.Path,
+			&updated.Kind,
+			&updated.IsDirectory,
+			&updated.Content,
+			&updated.ContentType,
+			&updated.Metadata,
+			&updated.Checksum,
+			&updated.Version,
+			&updated.MinTrustLevel,
+			&updated.CreatedAt,
+			&updated.UpdatedAt,
+			&updated.DeletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("filetree.WriteEntry: update: %w", err)
+		}
+
+		if err := s.insertEntryVersion(ctx, tx, &updated, "update"); err != nil {
+			return nil, err
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("filetree.WriteEntry: commit update: %w", err)
+		}
+		return &updated, nil
+	}
+
+	entryID := uuid.New()
+	entry := &models.FileTreeEntry{
+		ID:            entryID,
+		UserID:        userID,
+		Path:          storagePath,
+		Kind:          kind,
+		IsDirectory:   false,
+		Content:       content,
+		ContentType:   contentType,
+		Metadata:      metadata,
+		Checksum:      checksum,
+		Version:       1,
+		MinTrustLevel: minTrust,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	_, err = tx.Exec(ctx,
+		`INSERT INTO file_tree (
+			id, user_id, path, kind, is_directory, content, content_type, metadata,
+			checksum, version, min_trust_level, created_at, updated_at
+		) VALUES ($1, $2, $3, $4, false, $5, $6, $7, $8, 1, $9, $10, $10)`,
+		entry.ID, entry.UserID, entry.Path, entry.Kind, entry.Content, entry.ContentType,
+		entry.Metadata, entry.Checksum, entry.MinTrustLevel, entry.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("filetree.WriteEntry: insert: %w", err)
+	}
+
+	if err := s.insertEntryVersion(ctx, tx, entry, "create"); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("filetree.WriteEntry: commit insert: %w", err)
+	}
+	return entry, nil
 }
 
-// Delete removes a file tree entry by path.
+// Delete tombstones an entry instead of hard deleting it.
 func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path string) error {
-	path = hubpath.NormalizeStorage(path)
-	_, err := s.db.Exec(ctx,
-		`DELETE FROM file_tree WHERE user_id = $1 AND path = $2`, userID, path)
+	storagePath := hubpath.NormalizeStorage(path)
+
+	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return fmt.Errorf("filetree.Delete: %w", err)
+		return fmt.Errorf("filetree.Delete: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	entry, err := s.lockEntry(ctx, tx, userID, storagePath)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now().UTC()
+	nextVersion := entry.Version + 1
+	var deleted models.FileTreeEntry
+	err = tx.QueryRow(ctx,
+		fmt.Sprintf(`UPDATE file_tree
+		 SET deleted_at = $3,
+		     version = $4,
+		     checksum = $5,
+		     updated_at = $3
+		 WHERE user_id = $1 AND path = $2
+		 RETURNING %s`, fileTreeSelectColumns),
+		userID, entry.Path, now, nextVersion, deletedEntryChecksum(hubpath.NormalizePublic(entry.Path), nextVersion),
+	).Scan(
+		&deleted.ID,
+		&deleted.UserID,
+		&deleted.Path,
+		&deleted.Kind,
+		&deleted.IsDirectory,
+		&deleted.Content,
+		&deleted.ContentType,
+		&deleted.Metadata,
+		&deleted.Checksum,
+		&deleted.Version,
+		&deleted.MinTrustLevel,
+		&deleted.CreatedAt,
+		&deleted.UpdatedAt,
+		&deleted.DeletedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("filetree.Delete: update: %w", err)
+	}
+
+	if err := s.insertEntryVersion(ctx, tx, &deleted, "delete"); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("filetree.Delete: commit: %w", err)
 	}
 	return nil
 }
 
-// Search performs full-text search on file content.
-// pathPrefix limits the search to a subtree (e.g. "/memory/"). Empty means all.
-// Uses PostgreSQL tsvector for English, falls back to ILIKE for CJK/other languages.
+// Search performs full-text search across live entries and indexed metadata.
 func (s *FileTreeService) Search(ctx context.Context, userID uuid.UUID, query string, trustLevel int, pathPrefix string) ([]models.FileTreeEntry, error) {
-	cols := `id, user_id, path, is_directory, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata, '{}'), min_trust_level, created_at, updated_at`
-
-	// Try tsvector first (works well for English/space-separated languages)
-	sqlBase := fmt.Sprintf(
-		`SELECT %s FROM file_tree
-		 WHERE user_id = $1 AND min_trust_level <= $2 AND is_directory = false`, cols)
-
 	args := []interface{}{userID, trustLevel}
 	argIdx := 3
 
-	if pathPrefix != "" {
-		pathPrefix = hubpath.NormalizeStorage(pathPrefix)
-		if pathPrefix != "/" && !strings.HasSuffix(pathPrefix, "/") {
-			pathPrefix += "/"
-		}
-		sqlBase += fmt.Sprintf(` AND path LIKE $%d`, argIdx)
-		args = append(args, pathPrefix+"%")
-		argIdx++
+	where := []string{
+		"user_id = $1",
+		"deleted_at IS NULL",
+		"min_trust_level <= $2",
+		"is_directory = false",
 	}
 
-	// Use tsvector with 'simple' config (handles more languages than 'english')
-	// plus ILIKE fallback for CJK characters that tsvector can't tokenize
-	sqlFTS := sqlBase + fmt.Sprintf(
-		` AND (to_tsvector('simple', content) @@ plainto_tsquery('simple', $%d) OR content ILIKE $%d)
-		 ORDER BY CASE WHEN to_tsvector('simple', content) @@ plainto_tsquery('simple', $%d) THEN 0 ELSE 1 END,
-		          updated_at DESC
-		 LIMIT 50`, argIdx, argIdx+1, argIdx)
+	if pathPrefix != "" {
+		where = append(where, s.prefixCondition(pathPrefix, argIdx))
+		prefixArgs := s.prefixArgs(pathPrefix)
+		args = append(args, prefixArgs...)
+		argIdx += len(prefixArgs)
+	}
+
+	searchTextExpr := "coalesce(content, '') || ' ' || coalesce(metadata::text, '')"
+	sqlQuery := fmt.Sprintf(`SELECT %s
+		FROM file_tree
+		WHERE %s
+		  AND (
+		    to_tsvector('simple', %s) @@ plainto_tsquery('simple', $%d)
+		    OR %s ILIKE $%d
+		  )
+		ORDER BY CASE
+		    WHEN to_tsvector('simple', %s) @@ plainto_tsquery('simple', $%d) THEN 0
+		    ELSE 1
+		  END,
+		  updated_at DESC
+		LIMIT 50`,
+		fileTreeSelectColumns,
+		strings.Join(where, " AND "),
+		searchTextExpr,
+		argIdx,
+		searchTextExpr,
+		argIdx+1,
+		searchTextExpr,
+		argIdx,
+	)
 	args = append(args, query, "%"+query+"%")
 
-	rows, err := s.db.Query(ctx, sqlFTS, args...)
+	rows, err := s.db.Query(ctx, sqlQuery, args...)
 	if err != nil {
 		return nil, fmt.Errorf("filetree.Search: %w", err)
 	}
 	defer rows.Close()
 
-	var entries []models.FileTreeEntry
-	for rows.Next() {
-		var e models.FileTreeEntry
-		if err := rows.Scan(&e.ID, &e.UserID, &e.Path, &e.IsDirectory, &e.Content,
-			&e.ContentType, &e.Metadata, &e.MinTrustLevel, &e.CreatedAt, &e.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("filetree.Search: scan: %w", err)
+	return scanFileTreeEntries(rows)
+}
+
+func (s *FileTreeService) EnsureDirectory(ctx context.Context, userID uuid.UUID, path string) error {
+	_, err := s.EnsureDirectoryWithMetadata(ctx, userID, path, nil, models.TrustLevelGuest)
+	return err
+}
+
+func (s *FileTreeService) EnsureDirectoryWithMetadata(
+	ctx context.Context,
+	userID uuid.UUID,
+	path string,
+	metadata map[string]interface{},
+	minTrustLevel int,
+) (*models.FileTreeEntry, error) {
+	storagePath := hubpath.NormalizeStorage(path)
+	if !strings.HasSuffix(storagePath, "/") {
+		storagePath += "/"
+	}
+	if storagePath == "/" {
+		return &models.FileTreeEntry{
+			UserID:        userID,
+			Path:          "/",
+			Kind:          "directory",
+			IsDirectory:   true,
+			ContentType:   "directory",
+			Metadata:      map[string]interface{}{},
+			Checksum:      entryChecksum("/", "", "directory", map[string]interface{}{}),
+			Version:       1,
+			MinTrustLevel: models.TrustLevelGuest,
+		}, nil
+	}
+
+	parentDirs := make([]string, 0, 4)
+	for dir := pathpkg.Dir(strings.TrimSuffix(storagePath, "/")); dir != "." && dir != "/" && dir != ""; dir = pathpkg.Dir(dir) {
+		parentDirs = append(parentDirs, dir)
+	}
+	for i := len(parentDirs) - 1; i >= 0; i-- {
+		parent := parentDirs[i]
+		if parent == "." || parent == "" {
+			continue
 		}
-		entries = append(entries, e)
+		if !strings.HasSuffix(parent, "/") {
+			parent += "/"
+		}
+		if _, err := s.EnsureDirectoryWithMetadata(ctx, userID, parent, nil, models.TrustLevelGuest); err != nil {
+			return nil, err
+		}
+	}
+
+	now := time.Now().UTC()
+	minTrust := minTrustLevel
+	if minTrust <= 0 {
+		minTrust = models.TrustLevelGuest
+	}
+	meta := mergeMetadata(nil, metadata)
+	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", meta)
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("filetree.EnsureDirectory: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	current, err := s.lockEntry(ctx, tx, userID, storagePath)
+	if err != nil && !errors.Is(err, ErrEntryNotFound) {
+		return nil, err
+	}
+
+	if current != nil {
+		var updated models.FileTreeEntry
+		err = tx.QueryRow(ctx,
+			fmt.Sprintf(`UPDATE file_tree
+			 SET kind = 'directory',
+			     is_directory = true,
+			     content = '',
+			     content_type = 'directory',
+			     metadata = $3,
+			     checksum = $4,
+			     version = CASE WHEN deleted_at IS NULL THEN version ELSE version + 1 END,
+			     min_trust_level = LEAST(min_trust_level, $5),
+			     deleted_at = NULL,
+			     updated_at = $6
+			 WHERE user_id = $1 AND path = $2
+			 RETURNING %s`, fileTreeSelectColumns),
+			userID, current.Path, mergeMetadata(current.Metadata, meta), checksum, minTrust, now,
+		).Scan(
+			&updated.ID,
+			&updated.UserID,
+			&updated.Path,
+			&updated.Kind,
+			&updated.IsDirectory,
+			&updated.Content,
+			&updated.ContentType,
+			&updated.Metadata,
+			&updated.Checksum,
+			&updated.Version,
+			&updated.MinTrustLevel,
+			&updated.CreatedAt,
+			&updated.UpdatedAt,
+			&updated.DeletedAt,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("filetree.EnsureDirectory: update: %w", err)
+		}
+
+		// Directory ensure is idempotent; only emit a version when reviving a tombstone.
+		if current.DeletedAt != nil {
+			if err := s.insertEntryVersion(ctx, tx, &updated, "update"); err != nil {
+				return nil, err
+			}
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, fmt.Errorf("filetree.EnsureDirectory: commit update: %w", err)
+		}
+		return &updated, nil
+	}
+
+	entry := &models.FileTreeEntry{
+		ID:            uuid.New(),
+		UserID:        userID,
+		Path:          storagePath,
+		Kind:          "directory",
+		IsDirectory:   true,
+		Content:       "",
+		ContentType:   "directory",
+		Metadata:      meta,
+		Checksum:      checksum,
+		Version:       1,
+		MinTrustLevel: minTrust,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	_, err = tx.Exec(ctx,
+		`INSERT INTO file_tree (
+			id, user_id, path, kind, is_directory, content, content_type, metadata,
+			checksum, version, min_trust_level, created_at, updated_at
+		) VALUES ($1, $2, $3, 'directory', true, '', 'directory', $4, $5, 1, $6, $7, $7)
+		ON CONFLICT (user_id, path) DO NOTHING`,
+		entry.ID, entry.UserID, entry.Path, entry.Metadata, entry.Checksum, entry.MinTrustLevel, entry.CreatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("filetree.EnsureDirectory: insert: %w", err)
+	}
+
+	if err := s.insertEntryVersion(ctx, tx, entry, "create"); err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("filetree.EnsureDirectory: commit insert: %w", err)
+	}
+	return entry, nil
+}
+
+func (s *FileTreeService) Snapshot(ctx context.Context, userID uuid.UUID, pathPrefix string, trustLevel int) (*models.EntrySnapshot, error) {
+	pathPrefix = hubpath.NormalizeStorage(pathPrefix)
+	rows, err := s.db.Query(ctx,
+		fmt.Sprintf(`SELECT %s
+		 FROM file_tree
+		 WHERE user_id = $1
+		   AND deleted_at IS NULL
+		   AND min_trust_level <= $2
+		   AND %s
+		 ORDER BY path ASC`, fileTreeSelectColumns, s.prefixCondition(pathPrefix, 3)),
+		append([]interface{}{userID, trustLevel}, s.prefixArgs(pathPrefix)...)...,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("filetree.Snapshot: list: %w", err)
+	}
+	defer rows.Close()
+
+	entries, err := scanFileTreeEntries(rows)
+	if err != nil {
+		return nil, err
+	}
+
+	cursor, err := s.latestCursor(ctx, userID, pathPrefix)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.EntrySnapshot{
+		Path:         hubpath.NormalizePublic(pathPrefix),
+		Cursor:       cursor,
+		RootChecksum: rootChecksum(entries),
+		Entries:      entries,
+	}, nil
+}
+
+func (s *FileTreeService) Changes(ctx context.Context, userID uuid.UUID, cursor int64, pathPrefix string, trustLevel int) ([]models.EntryChange, int64, error) {
+	pathPrefix = hubpath.NormalizeStorage(pathPrefix)
+	args := append([]interface{}{userID, cursor, trustLevel}, s.prefixArgs(pathPrefix)...)
+	rows, err := s.db.Query(ctx,
+		fmt.Sprintf(`SELECT
+			cursor,
+			id,
+			entry_id,
+			user_id,
+			path,
+			kind,
+			version,
+			change_type,
+			COALESCE(content, ''),
+			COALESCE(content_type, ''),
+			COALESCE(metadata, '{}'),
+			COALESCE(checksum, ''),
+			min_trust_level,
+			created_at
+		 FROM entry_versions
+		 WHERE user_id = $1
+		   AND cursor > $2
+		   AND min_trust_level <= $3
+		   AND %s
+		 ORDER BY cursor ASC`, s.entryVersionPrefixCondition(pathPrefix, 4)),
+		args...,
+	)
+	if err != nil {
+		return nil, cursor, fmt.Errorf("filetree.Changes: %w", err)
+	}
+	defer rows.Close()
+
+	changes := make([]models.EntryChange, 0, 32)
+	nextCursor := cursor
+	for rows.Next() {
+		var version models.EntryVersion
+		if err := rows.Scan(
+			&version.Cursor,
+			&version.ID,
+			&version.EntryID,
+			&version.UserID,
+			&version.Path,
+			&version.Kind,
+			&version.Version,
+			&version.ChangeType,
+			&version.Content,
+			&version.ContentType,
+			&version.Metadata,
+			&version.Checksum,
+			&version.MinTrustLevel,
+			&version.CreatedAt,
+		); err != nil {
+			return nil, cursor, fmt.Errorf("filetree.Changes: scan: %w", err)
+		}
+		nextCursor = version.Cursor
+
+		entry := models.FileTreeEntry{
+			ID:            version.EntryID,
+			UserID:        version.UserID,
+			Path:          version.Path,
+			Kind:          version.Kind,
+			IsDirectory:   version.Kind == "directory",
+			Content:       version.Content,
+			ContentType:   version.ContentType,
+			Metadata:      version.Metadata,
+			Checksum:      version.Checksum,
+			Version:       version.Version,
+			MinTrustLevel: version.MinTrustLevel,
+			CreatedAt:     version.CreatedAt,
+			UpdatedAt:     version.CreatedAt,
+		}
+		if version.ChangeType == "delete" {
+			deletedAt := version.CreatedAt
+			entry.DeletedAt = &deletedAt
+		}
+
+		changes = append(changes, models.EntryChange{
+			Cursor:     version.Cursor,
+			ChangeType: version.ChangeType,
+			Entry:      entry,
+		})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, cursor, fmt.Errorf("filetree.Changes: rows: %w", err)
+	}
+	return changes, nextCursor, nil
+}
+
+func (s *FileTreeService) ListSkillSummaries(ctx context.Context, userID uuid.UUID, trustLevel int) ([]models.SkillSummary, error) {
+	roots := []struct {
+		path   string
+		source string
+	}{
+		{path: "/skills", source: "skills"},
+		{path: "/devices", source: "devices"},
+		{path: "/roles", source: "roles"},
+	}
+
+	summaries := make([]models.SkillSummary, 0, 16)
+	for _, root := range roots {
+		snapshot, err := s.Snapshot(ctx, userID, root.path, trustLevel)
+		if err != nil {
+			if errors.Is(err, ErrEntryNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		for _, entry := range snapshot.Entries {
+			if entry.IsDirectory || !strings.HasSuffix(hubpath.NormalizePublic(entry.Path), "/SKILL.md") {
+				continue
+			}
+			summaries = append(summaries, entryToSkillSummary(entry, root.source))
+		}
+	}
+
+	sort.Slice(summaries, func(i, j int) bool {
+		if summaries[i].Source == summaries[j].Source {
+			return summaries[i].Name < summaries[j].Name
+		}
+		return summaries[i].Source < summaries[j].Source
+	})
+	return summaries, nil
+}
+
+func (s *FileTreeService) latestCursor(ctx context.Context, userID uuid.UUID, pathPrefix string) (int64, error) {
+	var cursor int64
+	err := s.db.QueryRow(ctx,
+		fmt.Sprintf(`SELECT COALESCE(MAX(cursor), 0)
+		 FROM entry_versions
+		 WHERE user_id = $1
+		   AND %s`, s.entryVersionPrefixCondition(pathPrefix, 2)),
+		append([]interface{}{userID}, s.prefixArgs(pathPrefix)...)...,
+	).Scan(&cursor)
+	if err != nil {
+		return 0, fmt.Errorf("filetree.latestCursor: %w", err)
+	}
+	return cursor, nil
+}
+
+func (s *FileTreeService) lockEntry(ctx context.Context, tx pgx.Tx, userID uuid.UUID, path string) (*models.FileTreeEntry, error) {
+	altPath := hubpath.AlternateSkillsPath(path)
+	var entry models.FileTreeEntry
+	err := tx.QueryRow(ctx,
+		fmt.Sprintf(`SELECT %s
+		 FROM file_tree
+		 WHERE user_id = $1
+		   AND (path = $2 OR path = $3)
+		 ORDER BY CASE WHEN path = $2 THEN 0 ELSE 1 END
+		 LIMIT 1
+		 FOR UPDATE`, fileTreeSelectColumns),
+		userID, path, altPath,
+	).Scan(
+		&entry.ID,
+		&entry.UserID,
+		&entry.Path,
+		&entry.Kind,
+		&entry.IsDirectory,
+		&entry.Content,
+		&entry.ContentType,
+		&entry.Metadata,
+		&entry.Checksum,
+		&entry.Version,
+		&entry.MinTrustLevel,
+		&entry.CreatedAt,
+		&entry.UpdatedAt,
+		&entry.DeletedAt,
+	)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, ErrEntryNotFound
+		}
+		return nil, fmt.Errorf("filetree.lockEntry: %w", err)
+	}
+	return &entry, nil
+}
+
+func (s *FileTreeService) insertEntryVersion(ctx context.Context, tx pgx.Tx, entry *models.FileTreeEntry, changeType string) error {
+	content := entry.Content
+	if changeType == "delete" {
+		content = ""
+	}
+
+	_, err := tx.Exec(ctx,
+		`INSERT INTO entry_versions (
+			id, entry_id, user_id, path, kind, version, change_type,
+			content, content_type, metadata, checksum, min_trust_level, created_at
+		) VALUES (
+			$1, $2, $3, $4, $5, $6, $7,
+			$8, $9, $10, $11, $12, $13
+		)`,
+		uuid.New(), entry.ID, entry.UserID, entry.Path, entry.Kind, entry.Version,
+		changeType, content, entry.ContentType, entry.Metadata, entry.Checksum,
+		entry.MinTrustLevel, entry.UpdatedAt,
+	)
+	if err != nil {
+		return fmt.Errorf("filetree.insertEntryVersion: %w", err)
+	}
+	return nil
+}
+
+func (s *FileTreeService) prefixCondition(pathPrefix string, argStart int) string {
+	if pathPrefix == "" || pathPrefix == "/" {
+		return "TRUE"
+	}
+
+	argsCount := len(s.prefixArgs(pathPrefix))
+	if argsCount == 2 {
+		return fmt.Sprintf("(path = $%d OR path LIKE $%d)", argStart, argStart+1)
+	}
+	return fmt.Sprintf(`(
+		path = $%d OR path LIKE $%d OR
+		path = $%d OR path LIKE $%d
+	)`, argStart, argStart+1, argStart+2, argStart+3)
+}
+
+func (s *FileTreeService) entryVersionPrefixCondition(pathPrefix string, argStart int) string {
+	if pathPrefix == "" || pathPrefix == "/" {
+		return "TRUE"
+	}
+
+	argsCount := len(s.prefixArgs(pathPrefix))
+	if argsCount == 2 {
+		return fmt.Sprintf("(path = $%d OR path LIKE $%d)", argStart, argStart+1)
+	}
+	return fmt.Sprintf(`(
+		path = $%d OR path LIKE $%d OR
+		path = $%d OR path LIKE $%d
+	)`, argStart, argStart+1, argStart+2, argStart+3)
+}
+
+func (s *FileTreeService) prefixArgs(pathPrefix string) []interface{} {
+	if pathPrefix == "" || pathPrefix == "/" {
+		return nil
+	}
+	storage := hubpath.NormalizeStorage(pathPrefix)
+	values := []interface{}{storage, prefixMatchValue(storage)}
+	alt := hubpath.AlternateSkillsPath(storage)
+	if alt != storage {
+		values = append(values, alt, prefixMatchValue(alt))
+	}
+	return values
+}
+
+func prefixMatchValue(pathPrefix string) string {
+	if pathPrefix == "" || pathPrefix == "/" {
+		return "/%"
+	}
+	if strings.HasSuffix(pathPrefix, "/") {
+		return pathPrefix + "%"
+	}
+	return pathPrefix + "/%"
+}
+
+func scanFileTreeEntries(rows pgx.Rows) ([]models.FileTreeEntry, error) {
+	entries := make([]models.FileTreeEntry, 0, 16)
+	for rows.Next() {
+		var entry models.FileTreeEntry
+		if err := rows.Scan(
+			&entry.ID,
+			&entry.UserID,
+			&entry.Path,
+			&entry.Kind,
+			&entry.IsDirectory,
+			&entry.Content,
+			&entry.ContentType,
+			&entry.Metadata,
+			&entry.Checksum,
+			&entry.Version,
+			&entry.MinTrustLevel,
+			&entry.CreatedAt,
+			&entry.UpdatedAt,
+			&entry.DeletedAt,
+		); err != nil {
+			return nil, fmt.Errorf("filetree.scanEntries: %w", err)
+		}
+		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
 }
 
-// EnsureDirectory creates a directory entry if it does not already exist.
-func (s *FileTreeService) EnsureDirectory(ctx context.Context, userID uuid.UUID, path string) error {
-	path = hubpath.NormalizeStorage(path)
-	if !strings.HasSuffix(path, "/") {
-		path = path + "/"
+func entryToSkillSummary(entry models.FileTreeEntry, source string) models.SkillSummary {
+	summary := models.SkillSummary{
+		Name:          hubpath.BaseName(pathpkg.Dir(hubpath.NormalizePublic(entry.Path))),
+		Path:          hubpath.StorageToPublic(entry.Path),
+		Source:        source,
+		Description:   firstMarkdownParagraph(entry.Content),
+		MinTrustLevel: entry.MinTrustLevel,
 	}
-	now := time.Now().UTC()
-	_, err := s.db.Exec(ctx,
-		`INSERT INTO file_tree (id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at)
-		 VALUES ($1, $2, $3, true, '', 'directory', '{}', 1, $4, $4)
-		 ON CONFLICT (user_id, path) DO NOTHING`,
-		uuid.New(), userID, path, now)
-	if err != nil {
-		return fmt.Errorf("filetree.EnsureDirectory: %w", err)
+
+	if value, ok := entry.Metadata["name"].(string); ok && strings.TrimSpace(value) != "" {
+		summary.Name = value
 	}
-	return nil
+	if value, ok := entry.Metadata["description"].(string); ok && strings.TrimSpace(value) != "" {
+		summary.Description = value
+	}
+	if value, ok := entry.Metadata["when_to_use"].(string); ok {
+		summary.WhenToUse = value
+	}
+	if value := toStringSlice(entry.Metadata["allowed_tools"]); len(value) > 0 {
+		summary.AllowedTools = value
+	}
+	if value := toStringSlice(entry.Metadata["tags"]); len(value) > 0 {
+		summary.Tags = value
+	}
+	if value := toMap(entry.Metadata["arguments"]); len(value) > 0 {
+		summary.Arguments = value
+	}
+	if value := toMap(entry.Metadata["activation"]); len(value) > 0 {
+		summary.Activation = value
+	}
+	if value, ok := entry.Metadata["min_trust_level"].(int); ok && value > 0 {
+		summary.MinTrustLevel = value
+	}
+	return summary
 }

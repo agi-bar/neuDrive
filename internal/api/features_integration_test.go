@@ -73,6 +73,16 @@ func TestFeature_Scratch(t *testing.T) {
 		}
 	})
 
+	t.Run("WriteScratch_SameSourceSameDay", func(t *testing.T) {
+		status, _ := apiCall(t, "POST", "/api/memory/scratch", jwt, map[string]any{
+			"content": "Second entry for the same source and day",
+			"source":  "integration-test",
+		})
+		if status != 201 {
+			t.Fatalf("write scratch (same source): expected 201, got %d", status)
+		}
+	})
+
 	t.Run("WriteScratch_DefaultSource", func(t *testing.T) {
 		status, _ := apiCall(t, "POST", "/api/memory/scratch", jwt, map[string]any{
 			"content": "No source specified",
@@ -94,9 +104,12 @@ func TestFeature_Scratch(t *testing.T) {
 	t.Run("GetScratch_AfterWrite", func(t *testing.T) {
 		status, body := apiCall(t, "GET", "/api/memory/scratch", jwt, nil)
 		if status != 200 {
-			t.Logf("scratch response: status=%d body=%v", status, body)
+			t.Fatalf("get scratch: expected 200, got %d: %v", status, body)
 		}
-		// Scratch may return 200 with empty or populated data
+		scratch, _ := body["scratch"].([]any)
+		if len(scratch) < 3 {
+			t.Fatalf("expected at least 3 scratch entries, got %d: %v", len(scratch), body)
+		}
 	})
 }
 

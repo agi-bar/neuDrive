@@ -4,23 +4,38 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"path"
+	"sort"
+	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 type MemoryService struct {
-	db      *pgxpool.Pool
-	Webhook *WebhookService
+	db       *pgxpool.Pool
+	fileTree *FileTreeService
+	Webhook  *WebhookService
 }
 
-func NewMemoryService(db *pgxpool.Pool) *MemoryService {
-	return &MemoryService{db: db}
+func NewMemoryService(db *pgxpool.Pool, fileTree *FileTreeService) *MemoryService {
+	return &MemoryService{db: db, fileTree: fileTree}
 }
 
 func (s *MemoryService) GetProfile(ctx context.Context, userID uuid.UUID) ([]models.MemoryProfile, error) {
+	if s.fileTree != nil {
+		profiles, err := s.loadProfilesFromTree(ctx, userID)
+		if err == nil && len(profiles) > 0 {
+			return profiles, nil
+		}
+		if err != nil && err != ErrEntryNotFound {
+			return nil, err
+		}
+	}
+
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, category, content, source, created_at, updated_at
 		 FROM memory_profile WHERE user_id = $1
@@ -33,8 +48,7 @@ func (s *MemoryService) GetProfile(ctx context.Context, userID uuid.UUID) ([]mod
 	var profiles []models.MemoryProfile
 	for rows.Next() {
 		var p models.MemoryProfile
-		if err := rows.Scan(&p.ID, &p.UserID, &p.Category, &p.Content, &p.Source,
-			&p.CreatedAt, &p.UpdatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.UserID, &p.Category, &p.Content, &p.Source, &p.CreatedAt, &p.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("memory.GetProfile: scan: %w", err)
 		}
 		profiles = append(profiles, p)
@@ -46,11 +60,29 @@ func (s *MemoryService) UpsertProfile(ctx context.Context, userID uuid.UUID, cat
 	if err := validateContentLength(content, maxContentBytes); err != nil {
 		return fmt.Errorf("memory.UpsertProfile: %w", err)
 	}
+	if err := validateSlug(category, 128); err != nil {
+		return fmt.Errorf("memory.UpsertProfile: invalid category: %w", err)
+	}
+	if source == "" {
+		source = "agenthub"
+	}
 
-	// Detect cross-source conflicts before upsert (non-blocking).
 	if conflict, _ := s.DetectConflict(ctx, userID, category, content, source); conflict != nil {
 		slog.Info("memory conflict detected",
 			"category", category, "sourceA", conflict.SourceA, "sourceB", conflict.SourceB)
+	}
+
+	if s.fileTree != nil {
+		if _, err := s.fileTree.WriteEntry(ctx, userID, hubpath.ProfilePath(category), content, "text/markdown", models.FileTreeWriteOptions{
+			Kind:          "memory_profile",
+			MinTrustLevel: models.TrustLevelFull,
+			Metadata: map[string]interface{}{
+				"category": category,
+				"source":   source,
+			},
+		}); err != nil {
+			return fmt.Errorf("memory.UpsertProfile: write canonical entry: %w", err)
+		}
 	}
 
 	now := time.Now().UTC()
@@ -72,6 +104,17 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 	if days <= 0 {
 		days = 7
 	}
+
+	if s.fileTree != nil {
+		entries, err := s.loadScratchFromTree(ctx, userID, days)
+		if err == nil && len(entries) > 0 {
+			return entries, nil
+		}
+		if err != nil && err != ErrEntryNotFound {
+			return nil, err
+		}
+	}
+
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, date, content, source, expires_at, created_at
 		 FROM memory_scratch
@@ -87,8 +130,7 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 	var entries []models.MemoryScratch
 	for rows.Next() {
 		var m models.MemoryScratch
-		if err := rows.Scan(&m.ID, &m.UserID, &m.Date, &m.Content, &m.Source,
-			&m.ExpiresAt, &m.CreatedAt); err != nil {
+		if err := rows.Scan(&m.ID, &m.UserID, &m.Date, &m.Content, &m.Source, &m.ExpiresAt, &m.CreatedAt); err != nil {
 			return nil, fmt.Errorf("memory.GetScratch: scan: %w", err)
 		}
 		entries = append(entries, m)
@@ -97,51 +139,141 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 }
 
 func (s *MemoryService) WriteScratch(ctx context.Context, userID uuid.UUID, content, source string) error {
-	if err := validateContentLength(content, maxContentBytes); err != nil {
-		return fmt.Errorf("memory.WriteScratch: %w", err)
-	}
-	now := time.Now().UTC()
-	date := now.Format("2006-01-02")
-	// Default TTL: 7 days from now.
-	expiresAt := now.AddDate(0, 0, 7)
+	_, err := s.WriteScratchWithTitle(ctx, userID, content, source, "")
+	return err
+}
 
-	_, err := s.db.Exec(ctx,
+func (s *MemoryService) WriteScratchWithTitle(ctx context.Context, userID uuid.UUID, content, source, title string) (*models.FileTreeEntry, error) {
+	if err := validateContentLength(content, maxContentBytes); err != nil {
+		return nil, fmt.Errorf("memory.WriteScratchWithTitle: %w", err)
+	}
+	if source == "" {
+		source = "agenthub"
+	}
+
+	now := time.Now().UTC()
+	legacyID := uuid.New()
+	expiresAt := now.AddDate(0, 0, 7)
+	slugBase := title
+	if strings.TrimSpace(slugBase) == "" {
+		slugBase = source
+	}
+	slug := fmt.Sprintf("%s-%s", slugBase, legacyID.String()[:8])
+	path := hubpath.ScratchPath(now, slug)
+
+	var entry *models.FileTreeEntry
+	var err error
+	if s.fileTree != nil {
+		entry, err = s.fileTree.WriteEntry(ctx, userID, path, content, "text/markdown", models.FileTreeWriteOptions{
+			Kind:          "memory_scratch",
+			MinTrustLevel: models.TrustLevelFull,
+			Metadata: map[string]interface{}{
+				"source":     source,
+				"title":      title,
+				"date":       now.Format("2006-01-02"),
+				"expires_at": expiresAt.Format(time.RFC3339),
+				"legacy_id":  legacyID.String(),
+			},
+		})
+		if err != nil {
+			return nil, fmt.Errorf("memory.WriteScratchWithTitle: write canonical entry: %w", err)
+		}
+	}
+
+	_, err = s.db.Exec(ctx,
 		`INSERT INTO memory_scratch (id, user_id, date, content, source, expires_at, created_at)
 		 VALUES ($1, $2, $3::DATE, $4, $5, $6, $7)`,
-		uuid.New(), userID, date, content, source, expiresAt, now)
+		legacyID, userID, now.Format("2006-01-02"), content, source, expiresAt, now)
 	if err != nil {
-		return fmt.Errorf("memory.WriteScratch: %w", err)
+		return nil, fmt.Errorf("memory.WriteScratchWithTitle: %w", err)
 	}
-	return nil
+	return entry, nil
 }
 
 // GenerateDailyScratchPlaceholders creates a daily summary placeholder for users
-// who have been active in the last 7 days (i.e., have recent scratch entries).
-// Returns the number of placeholders created.
+// who have recent scratch activity and mirrors it to the canonical tree.
 func (s *MemoryService) GenerateDailyScratchPlaceholders(ctx context.Context) (int64, error) {
-	now := time.Now().UTC()
-	date := now.Format("2006-01-02")
-	expiresAt := now.AddDate(0, 0, 7)
-
-	tag, err := s.db.Exec(ctx,
-		`INSERT INTO memory_scratch (id, user_id, date, content, source, expires_at, created_at)
-		 SELECT gen_random_uuid(), u.user_id, $1::DATE, 'Daily summary placeholder for ' || $1, 'scheduler', $2, $3
-		 FROM (
-		   SELECT DISTINCT user_id FROM memory_scratch
-		   WHERE created_at >= NOW() - INTERVAL '7 days'
-		 ) u
-		 WHERE NOT EXISTS (
-		   SELECT 1 FROM memory_scratch ms
-		   WHERE ms.user_id = u.user_id AND ms.date = $1::DATE AND ms.source = 'scheduler'
-		 )`, date, expiresAt, now)
+	rows, err := s.db.Query(ctx,
+		`SELECT DISTINCT user_id FROM memory_scratch
+		 WHERE created_at >= NOW() - INTERVAL '7 days'`)
 	if err != nil {
 		return 0, fmt.Errorf("memory.GenerateDailyScratchPlaceholders: %w", err)
 	}
-	return tag.RowsAffected(), nil
+	defer rows.Close()
+
+	var count int64
+	now := time.Now().UTC()
+	date := now.Format("2006-01-02")
+	for rows.Next() {
+		var userID uuid.UUID
+		if err := rows.Scan(&userID); err != nil {
+			return count, fmt.Errorf("memory.GenerateDailyScratchPlaceholders: scan: %w", err)
+		}
+
+		var exists bool
+		err := s.db.QueryRow(ctx,
+			`SELECT EXISTS(
+				SELECT 1 FROM memory_scratch
+				WHERE user_id = $1 AND date = $2::DATE AND source = 'scheduler'
+			)`, userID, date).Scan(&exists)
+		if err != nil {
+			return count, fmt.Errorf("memory.GenerateDailyScratchPlaceholders: check exists: %w", err)
+		}
+		if exists {
+			continue
+		}
+
+		if _, err := s.WriteScratchWithTitle(ctx, userID, "Daily summary placeholder for "+date, "scheduler", "daily-summary"); err != nil {
+			return count, err
+		}
+		count++
+	}
+	return count, rows.Err()
 }
 
-// CleanExpiredScratch removes expired scratch entries and returns how many were deleted.
+// CleanExpiredScratch removes expired scratch entries from both projections.
 func (s *MemoryService) CleanExpiredScratch(ctx context.Context) (int64, error) {
+	rows, err := s.db.Query(ctx,
+		`SELECT id, user_id FROM memory_scratch
+		 WHERE expires_at IS NOT NULL AND expires_at <= NOW()`)
+	if err != nil {
+		return 0, fmt.Errorf("memory.CleanExpiredScratch: query: %w", err)
+	}
+	defer rows.Close()
+
+	type expiredScratch struct {
+		ID     uuid.UUID
+		UserID uuid.UUID
+	}
+	expired := make([]expiredScratch, 0, 16)
+	for rows.Next() {
+		var item expiredScratch
+		if err := rows.Scan(&item.ID, &item.UserID); err != nil {
+			return 0, fmt.Errorf("memory.CleanExpiredScratch: scan: %w", err)
+		}
+		expired = append(expired, item)
+	}
+	if err := rows.Err(); err != nil {
+		return 0, fmt.Errorf("memory.CleanExpiredScratch: rows: %w", err)
+	}
+
+	if s.fileTree != nil {
+		for _, item := range expired {
+			var path string
+			err := s.db.QueryRow(ctx,
+				`SELECT path FROM file_tree
+				 WHERE user_id = $1
+				   AND deleted_at IS NULL
+				   AND metadata->>'legacy_id' = $2
+				 LIMIT 1`,
+				item.UserID, item.ID.String(),
+			).Scan(&path)
+			if err == nil {
+				_ = s.fileTree.Delete(ctx, item.UserID, path)
+			}
+		}
+	}
+
 	tag, err := s.db.Exec(ctx,
 		`DELETE FROM memory_scratch WHERE expires_at IS NOT NULL AND expires_at <= NOW()`)
 	if err != nil {
@@ -150,12 +282,7 @@ func (s *MemoryService) CleanExpiredScratch(ctx context.Context) (int64, error) 
 	return tag.RowsAffected(), nil
 }
 
-// DetectConflict checks whether the new content for a category from a given
-// source conflicts with existing content from a different source. If the
-// contents differ by more than 20% (measured by character-level difference
-// ratio), a conflict record is created and returned.
 func (s *MemoryService) DetectConflict(ctx context.Context, userID uuid.UUID, category, newContent, source string) (*models.MemoryConflict, error) {
-	// Look up the existing profile entry for this category.
 	var existing models.MemoryProfile
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, category, content, source, created_at, updated_at
@@ -164,22 +291,18 @@ func (s *MemoryService) DetectConflict(ctx context.Context, userID uuid.UUID, ca
 		&existing.ID, &existing.UserID, &existing.Category,
 		&existing.Content, &existing.Source, &existing.CreatedAt, &existing.UpdatedAt)
 	if err != nil {
-		// No existing entry — no conflict possible.
 		return nil, nil
 	}
 
-	// Same source — not a cross-platform conflict.
 	if existing.Source == source {
 		return nil, nil
 	}
 
-	// Compute difference ratio. If contents differ by more than 20%, flag it.
 	ratio := diffRatio(existing.Content, newContent)
 	if ratio <= 0.20 {
 		return nil, nil
 	}
 
-	// Create conflict record.
 	conflict := models.MemoryConflict{
 		ID:        uuid.New(),
 		UserID:    userID,
@@ -214,7 +337,6 @@ func (s *MemoryService) DetectConflict(ctx context.Context, userID uuid.UUID, ca
 	return &conflict, nil
 }
 
-// ListConflicts returns all pending memory conflicts for a user.
 func (s *MemoryService) ListConflicts(ctx context.Context, userID uuid.UUID) ([]models.MemoryConflict, error) {
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, category, source_a, content_a, source_b, content_b, status, resolved_at, created_at
@@ -238,8 +360,6 @@ func (s *MemoryService) ListConflicts(ctx context.Context, userID uuid.UUID) ([]
 	return conflicts, rows.Err()
 }
 
-// ResolveConflict resolves a conflict with the given resolution. Valid
-// resolutions: keep_a, keep_b, keep_both, dismiss.
 func (s *MemoryService) ResolveConflict(ctx context.Context, conflictID uuid.UUID, resolution string) error {
 	validResolutions := map[string]bool{
 		"keep_a":    true,
@@ -270,8 +390,101 @@ func (s *MemoryService) ResolveConflict(ctx context.Context, conflictID uuid.UUI
 	return nil
 }
 
-// diffRatio returns the fraction of characters that differ between two strings,
-// using a simple positional comparison bounded to [0, 1].
+func (s *MemoryService) loadProfilesFromTree(ctx context.Context, userID uuid.UUID) ([]models.MemoryProfile, error) {
+	snapshot, err := s.fileTree.Snapshot(ctx, userID, "/memory/profile", models.TrustLevelFull)
+	if err != nil {
+		return nil, err
+	}
+
+	profiles := make([]models.MemoryProfile, 0, len(snapshot.Entries))
+	for _, entry := range snapshot.Entries {
+		if entry.IsDirectory || !strings.HasSuffix(entry.Path, ".md") {
+			continue
+		}
+		category := strings.TrimSuffix(path.Base(entry.Path), ".md")
+		source, _ := entry.Metadata["source"].(string)
+		profiles = append(profiles, models.MemoryProfile{
+			ID:        entry.ID,
+			UserID:    entry.UserID,
+			Category:  category,
+			Content:   entry.Content,
+			Source:    source,
+			CreatedAt: entry.CreatedAt,
+			UpdatedAt: entry.UpdatedAt,
+		})
+	}
+	sort.Slice(profiles, func(i, j int) bool { return profiles[i].Category < profiles[j].Category })
+	return profiles, nil
+}
+
+func (s *MemoryService) loadScratchFromTree(ctx context.Context, userID uuid.UUID, days int) ([]models.MemoryScratch, error) {
+	snapshot, err := s.fileTree.Snapshot(ctx, userID, "/memory/scratch", models.TrustLevelFull)
+	if err != nil {
+		return nil, err
+	}
+
+	cutoff := time.Now().UTC().AddDate(0, 0, -days)
+	entries := make([]models.MemoryScratch, 0, len(snapshot.Entries))
+	for _, entry := range snapshot.Entries {
+		if entry.IsDirectory || !strings.HasSuffix(entry.Path, ".md") {
+			continue
+		}
+
+		if expiresAt := metadataTime(entry.Metadata, "expires_at"); expiresAt != nil && !expiresAt.After(time.Now().UTC()) {
+			continue
+		}
+		if entry.CreatedAt.Before(cutoff) {
+			continue
+		}
+
+		date, _ := entry.Metadata["date"].(string)
+		if date == "" {
+			date = inferScratchDate(entry.Path, entry.CreatedAt)
+		}
+		source, _ := entry.Metadata["source"].(string)
+
+		entries = append(entries, models.MemoryScratch{
+			ID:        entry.ID,
+			UserID:    entry.UserID,
+			Date:      date,
+			Content:   entry.Content,
+			Source:    source,
+			ExpiresAt: metadataTime(entry.Metadata, "expires_at"),
+			CreatedAt: entry.CreatedAt,
+		})
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		return entries[i].CreatedAt.After(entries[j].CreatedAt)
+	})
+	return entries, nil
+}
+
+func metadataTime(metadata map[string]interface{}, key string) *time.Time {
+	raw, ok := metadata[key]
+	if !ok {
+		return nil
+	}
+	text, ok := raw.(string)
+	if !ok || strings.TrimSpace(text) == "" {
+		return nil
+	}
+	ts, err := time.Parse(time.RFC3339, text)
+	if err != nil {
+		return nil
+	}
+	return &ts
+}
+
+func inferScratchDate(path string, createdAt time.Time) string {
+	parts := strings.Split(strings.Trim(hubpath.NormalizePublic(path), "/"), "/")
+	if len(parts) >= 3 {
+		return parts[2]
+	}
+	return createdAt.Format("2006-01-02")
+}
+
+// diffRatio returns the fraction of characters that differ between two strings.
 func diffRatio(a, b string) float64 {
 	if a == b {
 		return 0
@@ -281,7 +494,6 @@ func diffRatio(a, b string) float64 {
 		return 1.0
 	}
 
-	// Use the longer string as the denominator.
 	maxLen := la
 	if lb > maxLen {
 		maxLen = lb

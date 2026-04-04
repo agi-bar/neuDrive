@@ -58,11 +58,11 @@ func main() {
 	// Create services
 	fileTreeSvc := services.NewFileTreeService(db)
 	vaultSvc := services.NewVaultService(db, v)
-	memorySvc := services.NewMemoryService(db)
-	roleSvc := services.NewRoleService(db)
-	projectSvc := services.NewProjectService(db, roleSvc)
-	inboxSvc := services.NewInboxService(db)
-	deviceSvc := services.NewDeviceService(db)
+	memorySvc := services.NewMemoryService(db, fileTreeSvc)
+	roleSvc := services.NewRoleService(db, fileTreeSvc)
+	projectSvc := services.NewProjectService(db, roleSvc, fileTreeSvc)
+	inboxSvc := services.NewInboxService(db, fileTreeSvc)
+	deviceSvc := services.NewDeviceService(db, fileTreeSvc)
 	dashboardSvc := services.NewDashboardService(db)
 	importSvc := services.NewImportService(db, fileTreeSvc, memorySvc, vaultSvc)
 

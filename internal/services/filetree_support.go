@@ -1,0 +1,251 @@
+package services
+
+import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"path"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/agi-bar/agenthub/internal/hubpath"
+	"github.com/agi-bar/agenthub/internal/models"
+	"gopkg.in/yaml.v3"
+)
+
+var (
+	ErrEntryNotFound          = errors.New("entry not found")
+	ErrOptimisticLockConflict = errors.New("entry version conflict")
+	ErrSkillMetadataMalformed = errors.New("skill metadata malformed")
+)
+
+func entryChecksum(path, content, contentType string, metadata map[string]interface{}) string {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"path":         path,
+		"content":      content,
+		"content_type": contentType,
+		"metadata":     metadata,
+	})
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
+func deletedEntryChecksum(path string, version int64) string {
+	payload := []byte(path + "|deleted|" + strconvFormatInt(version))
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
+}
+
+func rootChecksum(entries []models.FileTreeEntry) string {
+	if len(entries) == 0 {
+		return entryChecksum("/", "", "directory", map[string]interface{}{})
+	}
+
+	parts := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		parts = append(parts, entry.Path+":"+entry.Checksum+":"+strconvFormatInt(entry.Version))
+	}
+	sort.Strings(parts)
+	sum := sha256.Sum256([]byte(strings.Join(parts, "\n")))
+	return hex.EncodeToString(sum[:])
+}
+
+func mergeMetadata(base map[string]interface{}, overlay map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(base)+len(overlay))
+	for k, v := range base {
+		out[k] = v
+	}
+	for k, v := range overlay {
+		out[k] = v
+	}
+	return out
+}
+
+func classifyEntryKind(rawPath string, isDirectory bool) string {
+	if isDirectory {
+		return "directory"
+	}
+
+	publicPath := hubpath.NormalizePublic(rawPath)
+	switch {
+	case publicPath == "/identity/profile.json":
+		return "identity"
+	case strings.HasPrefix(publicPath, "/memory/profile/"):
+		return "memory_profile"
+	case strings.HasPrefix(publicPath, "/memory/scratch/"):
+		return "memory_scratch"
+	case strings.HasPrefix(publicPath, "/projects/") && strings.HasSuffix(publicPath, "/context.md"):
+		return "project_context"
+	case strings.HasPrefix(publicPath, "/projects/") && strings.HasSuffix(publicPath, "/log.jsonl"):
+		return "project_log"
+	case strings.HasPrefix(publicPath, "/inbox/") && strings.HasSuffix(publicPath, ".json"):
+		return "inbox_message"
+	case strings.HasPrefix(publicPath, "/devices/") && strings.HasSuffix(publicPath, "/SKILL.md"):
+		return "device_skill"
+	case strings.HasPrefix(publicPath, "/devices/") && strings.HasSuffix(publicPath, "/config.json"):
+		return "device_config"
+	case strings.HasPrefix(publicPath, "/roles/") && strings.HasSuffix(publicPath, "/SKILL.md"):
+		return "role_skill"
+	case strings.HasSuffix(publicPath, "/SKILL.md"):
+		return "skill"
+	default:
+		return "file"
+	}
+}
+
+func skillMetadataForPath(rawPath, content string, metadata map[string]interface{}) map[string]interface{} {
+	if !strings.HasSuffix(hubpath.NormalizePublic(rawPath), "/SKILL.md") {
+		return metadata
+	}
+
+	frontmatter, description, err := parseSkillFrontmatter(content)
+	if err != nil {
+		return mergeMetadata(metadata, map[string]interface{}{
+			"description": description,
+			"indexed":     false,
+			"parse_error": err.Error(),
+		})
+	}
+
+	summary := map[string]interface{}{
+		"description": description,
+		"indexed":     true,
+	}
+	for key, value := range frontmatter {
+		summary[key] = value
+	}
+	if name, ok := summary["name"].(string); !ok || strings.TrimSpace(name) == "" {
+		summary["name"] = path.Base(path.Dir(hubpath.NormalizePublic(rawPath)))
+	}
+	return mergeMetadata(metadata, summary)
+}
+
+func parseSkillFrontmatter(content string) (map[string]interface{}, string, error) {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return map[string]interface{}{}, "", nil
+	}
+
+	description := firstMarkdownParagraph(content)
+	if !strings.HasPrefix(trimmed, "---\n") && !strings.HasPrefix(trimmed, "---\r\n") {
+		return map[string]interface{}{}, description, nil
+	}
+
+	lines := strings.Split(content, "\n")
+	if len(lines) < 3 || strings.TrimSpace(lines[0]) != "---" {
+		return nil, description, ErrSkillMetadataMalformed
+	}
+
+	end := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.TrimSpace(lines[i]) == "---" {
+			end = i
+			break
+		}
+	}
+	if end == -1 {
+		return nil, description, ErrSkillMetadataMalformed
+	}
+
+	fm := strings.Join(lines[1:end], "\n")
+	if strings.TrimSpace(fm) == "" {
+		return map[string]interface{}{}, description, nil
+	}
+
+	var decoded map[string]interface{}
+	if err := yaml.Unmarshal([]byte(fm), &decoded); err != nil {
+		return nil, description, err
+	}
+
+	return normalizeYAMLMap(decoded), description, nil
+}
+
+func normalizeYAMLMap(in map[string]interface{}) map[string]interface{} {
+	out := make(map[string]interface{}, len(in))
+	for key, value := range in {
+		out[key] = normalizeYAMLValue(value)
+	}
+	return out
+}
+
+func normalizeYAMLValue(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		return normalizeYAMLMap(typed)
+	case []interface{}:
+		out := make([]interface{}, 0, len(typed))
+		for _, item := range typed {
+			out = append(out, normalizeYAMLValue(item))
+		}
+		return out
+	default:
+		return typed
+	}
+}
+
+func firstMarkdownParagraph(markdown string) string {
+	lines := strings.Split(markdown, "\n")
+	paragraph := make([]string, 0, 4)
+	inFrontmatter := false
+	frontmatterClosed := false
+
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if idx == 0 && trimmed == "---" {
+			inFrontmatter = true
+			continue
+		}
+		if inFrontmatter {
+			if trimmed == "---" {
+				inFrontmatter = false
+				frontmatterClosed = true
+			}
+			continue
+		}
+		if trimmed == "" {
+			if len(paragraph) > 0 {
+				break
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") && len(paragraph) == 0 && !frontmatterClosed {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") && len(paragraph) == 0 {
+			continue
+		}
+		paragraph = append(paragraph, trimmed)
+	}
+
+	return strings.TrimSpace(strings.Join(paragraph, " "))
+}
+
+func toStringSlice(value interface{}) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []interface{}:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+				out = append(out, text)
+			}
+		}
+		return out
+	default:
+		return nil
+	}
+}
+
+func toMap(value interface{}) map[string]interface{} {
+	if typed, ok := value.(map[string]interface{}); ok {
+		return typed
+	}
+	return nil
+}
+
+func strconvFormatInt(v int64) string {
+	return strconv.FormatInt(v, 10)
+}

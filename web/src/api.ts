@@ -364,6 +364,12 @@ export const api = {
       body: JSON.stringify(req),
     }),
 
+  updateToken: (id: string, req: UpdateTokenRequest): Promise<ScopedTokenResponse> =>
+    request<ScopedTokenResponse>(`/tokens/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
   revokeToken: (id: string): Promise<void> =>
     request<void>(`/tokens/${id}`, { method: 'DELETE' }),
 
@@ -478,6 +484,10 @@ export interface CreateTokenRequest {
   scopes: string[]
   max_trust_level: number
   expires_in_days: number
+}
+
+export interface UpdateTokenRequest {
+  name: string
 }
 
 export interface CreateTokenResponse {

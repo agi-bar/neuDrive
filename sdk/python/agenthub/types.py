@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -59,3 +59,31 @@ class Device:
 class ImportResult:
     imported: int
     errors: list[str] = field(default_factory=list)
+
+
+@dataclass
+class FileTreeEntry:
+    path: str
+    name: str = ""
+    is_dir: bool = False
+    kind: str = ""
+    content: str = ""
+    mime_type: str = ""
+    version: int = 0
+    checksum: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class TreeChange:
+    cursor: int
+    change_type: str
+    entry: dict[str, Any]
+
+
+@dataclass
+class TreeSnapshot:
+    path: str
+    cursor: int
+    root_checksum: str
+    entries: list[dict[str, Any]] = field(default_factory=list)

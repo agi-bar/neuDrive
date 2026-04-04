@@ -177,7 +177,9 @@ test.describe('Setup Page', () => {
 
     await page.goto('/setup')
 
-    await expect(page.getByText('Claude Code 云端模式')).toBeVisible()
+    await expect(page.getByText('云端模式（浏览器授权）')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Claude' })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Codex' })).toBeVisible()
     await expect(page.getByText('Claude Code 本地模式')).toBeVisible()
     await expect(page.getByText('高级模式（HTTP + 手动 Bearer Token）')).toBeVisible()
     await expect(page.getByText('ChatGPT GPT Actions')).toBeVisible()

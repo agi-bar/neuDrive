@@ -22,6 +22,7 @@ const EXPIRY_OPTIONS = [
 
 type Preset = 'agent' | 'readonly' | 'custom'
 type ModeKey = 'local' | 'advanced'
+type CloudPlatform = 'claude' | 'codex'
 
 interface ScopeInfo {
   scopes: string[]
@@ -77,6 +78,7 @@ export default function SetupPage() {
   const [openModes, setOpenModes] = useState<Record<ModeKey, boolean>>(EMPTY_MODE_STATE)
   const [modeTokens, setModeTokens] = useState<Partial<Record<ModeKey, ModeTokenState>>>({})
   const [provisioningMode, setProvisioningMode] = useState<ModeKey | null>(null)
+  const [cloudPlatform, setCloudPlatform] = useState<CloudPlatform>('claude')
 
   // ---------------------------------------------------------------------------
   // Data loading
@@ -172,8 +174,11 @@ export default function SetupPage() {
   const isSecureOrigin = baseUrl.startsWith('https://')
   const cloudModeNeedsPublicUrl = !isSecureOrigin || isLocalOrigin
 
-  const cloudCommand = `claude mcp add --transport http agenthub \\
+  const claudeCloudCommand = `claude mcp add -s user --transport http agenthub \\
   ${baseUrl}/mcp`
+  const codexCloudCommand = `codex mcp add agenthub --url ${baseUrl}/mcp`
+  const codexLoginCommand = 'codex mcp login agenthub'
+  const codexStatusCommand = 'codex mcp list'
 
   const buildModeTokenRequest = (mode: ModeKey): CreateTokenRequest => {
     const defaults = MODE_DEFAULTS[mode]
@@ -319,48 +324,135 @@ export default function SetupPage() {
         <div className="setup-section-header">
           <span className="setup-section-icon">&#9729;</span>
           <div>
-            <h3>Claude Code 云端模式 <span className="badge badge-platform" style={{ marginLeft: 8, fontSize: 11 }}>推荐</span></h3>
-            <p className="setup-section-desc">直接连接远程 HTTP MCP server，在 Claude Code 中用浏览器完成 OAuth 授权</p>
+            <h3>云端模式（浏览器授权） <span className="badge badge-platform" style={{ marginLeft: 8, fontSize: 11 }}>推荐</span></h3>
+            <p className="setup-section-desc">通过远程 HTTP MCP Server 连接 Agent Hub。默认添加到全局配置，设置一次，可在多个项目中复用。</p>
           </div>
         </div>
 
         {cloudModeNeedsPublicUrl && (
           <div className="alert alert-warn">
-            当前地址是 <code>{baseUrl}</code>。云端模式更适合可从 Claude Code 访问的 HTTPS Hub URL；如果你现在在本地开发，建议先用本地模式，或通过公网域名 / 隧道暴露这个 Hub。
+            当前地址是 <code>{baseUrl}</code>。云端模式需要可公开访问的 HTTPS Hub URL；如果你现在在本地开发，建议先用本地模式，或通过公网域名 / 隧道暴露这个 Hub。
           </div>
         )}
 
-        <div className="code-block">
-          <div className="code-block-label">步骤 1：添加远程 MCP server</div>
-          <pre>{cloudCommand}</pre>
+        <div className="setup-tabs" role="tablist" aria-label="云端模式平台">
           <button
-            className="copy-btn"
-            onClick={() => copyToClipboard(cloudCommand, 'cloud-cmd')}
+            type="button"
+            role="tab"
+            className={`setup-tab ${cloudPlatform === 'claude' ? 'setup-tab-active' : ''}`}
+            aria-selected={cloudPlatform === 'claude'}
+            onClick={() => setCloudPlatform('claude')}
           >
-            {copied === 'cloud-cmd' ? '已复制' : '复制'}
+            Claude
+          </button>
+          <button
+            type="button"
+            role="tab"
+            className={`setup-tab ${cloudPlatform === 'codex' ? 'setup-tab-active' : ''}`}
+            aria-selected={cloudPlatform === 'codex'}
+            onClick={() => setCloudPlatform('codex')}
+          >
+            Codex
           </button>
         </div>
 
-        <div className="code-block">
-          <div className="code-block-label">步骤 2：在 Claude Code 中发起浏览器授权</div>
-          <pre>/mcp</pre>
-          <button
-            className="copy-btn"
-            onClick={() => copyToClipboard('/mcp', 'cloud-auth')}
-          >
-            {copied === 'cloud-auth' ? '已复制' : '复制'}
-          </button>
-        </div>
+        <div className="setup-tab-panel">
+          {cloudPlatform === 'claude' ? (
+            <>
+              <h4 className="setup-platform-title">Claude Code</h4>
+              <p className="setup-note setup-note-first">
+                把 Agent Hub 添加到 Claude Code 的全局 MCP 配置中，然后在 Claude Code 里发起浏览器授权。
+              </p>
 
-        <ol className="setup-steps">
-          <li>运行上面的 `claude mcp add --transport http ...` 命令，把 Agent Hub 注册成远程 MCP server。</li>
-          <li>打开 Claude Code，执行 `/mcp`，按提示选择 `agenthub` 并开始认证。</li>
-          <li>浏览器会打开授权页；完成登录和批准后，Claude Code 会保存并刷新 OAuth 凭证。</li>
-          <li>如果浏览器没有自动打开，就手动复制 Claude Code 提供的 URL；如果回调完成后 CLI 里仍提示等待，把浏览器地址栏中的完整 callback URL 粘回 Claude Code。</li>
-        </ol>
+              <div className="code-block">
+                <div className="code-block-label">步骤 1：添加远程 MCP Server（全局）</div>
+                <pre>{claudeCloudCommand}</pre>
+                <button
+                  className="copy-btn"
+                  onClick={() => copyToClipboard(claudeCloudCommand, 'cloud-claude-cmd')}
+                >
+                  {copied === 'cloud-claude-cmd' ? '已复制' : '复制'}
+                </button>
+              </div>
+
+              <div className="code-block">
+                <div className="code-block-label">步骤 2：在 Claude Code 中发起授权</div>
+                <pre>/mcp</pre>
+                <button
+                  className="copy-btn"
+                  onClick={() => copyToClipboard('/mcp', 'cloud-claude-auth')}
+                >
+                  {copied === 'cloud-claude-auth' ? '已复制' : '复制'}
+                </button>
+              </div>
+
+              <ol className="setup-steps">
+                <li>运行上面的命令后，Agent Hub 会作为全局 MCP Server 出现在 Claude Code 中。</li>
+                <li>打开 Claude Code，执行 <code>/mcp</code>，选择 <code>agenthub</code>，然后开始认证。</li>
+                <li>浏览器会打开授权页面；完成登录和批准后，Claude Code 会自动保存并刷新凭证。</li>
+                <li>如果浏览器没有自动打开，就手动复制 Claude Code 提供的授权链接；如果网页授权完成后 CLI 仍提示等待，把浏览器地址栏里的完整 callback URL 粘回 Claude Code。</li>
+              </ol>
+
+              <p className="setup-note">
+                授权完成后，你可以在 Claude Code 的 <code>/mcp</code> 菜单里重新认证或清除认证；Agent Hub 侧也会在“连接管理”中显示这条平台连接。
+              </p>
+            </>
+          ) : (
+            <>
+              <h4 className="setup-platform-title">Codex CLI</h4>
+              <p className="setup-note setup-note-first">
+                把 Agent Hub 添加到 Codex 的全局 MCP 配置中，然后用 Codex CLI 发起浏览器授权。
+              </p>
+
+              <div className="code-block">
+                <div className="code-block-label">步骤 1：添加远程 MCP Server（全局）</div>
+                <pre>{codexCloudCommand}</pre>
+                <button
+                  className="copy-btn"
+                  onClick={() => copyToClipboard(codexCloudCommand, 'cloud-codex-add')}
+                >
+                  {copied === 'cloud-codex-add' ? '已复制' : '复制'}
+                </button>
+              </div>
+
+              <div className="code-block">
+                <div className="code-block-label">步骤 2：发起授权</div>
+                <pre>{codexLoginCommand}</pre>
+                <button
+                  className="copy-btn"
+                  onClick={() => copyToClipboard(codexLoginCommand, 'cloud-codex-login')}
+                >
+                  {copied === 'cloud-codex-login' ? '已复制' : '复制'}
+                </button>
+              </div>
+
+              <div className="code-block">
+                <div className="code-block-label">步骤 3：确认连接状态</div>
+                <pre>{codexStatusCommand}</pre>
+                <button
+                  className="copy-btn"
+                  onClick={() => copyToClipboard(codexStatusCommand, 'cloud-codex-list')}
+                >
+                  {copied === 'cloud-codex-list' ? '已复制' : '复制'}
+                </button>
+              </div>
+
+              <ol className="setup-steps">
+                <li>运行 add 命令后，Agent Hub 会写入 Codex 的用户级 MCP 配置，可在多个工作区复用。</li>
+                <li>运行 <code>codex mcp login agenthub</code> 后，浏览器会打开授权页面。</li>
+                <li>完成登录和批准后，Codex 会保存 OAuth 凭证；再次运行 <code>codex mcp list</code> 可以查看连接状态。</li>
+                <li>如果浏览器没有自动打开，就手动复制终端里提供的授权链接继续完成授权。</li>
+              </ol>
+
+              <p className="setup-note">
+                授权完成后，Agent Hub 侧会在“连接管理”中显示这条平台连接；需要重新认证时，可再次运行 <code>codex mcp login agenthub</code>。
+              </p>
+            </>
+          )}
+        </div>
 
         <p className="setup-note">
-          授权完成后，可在 Claude Code 的 `/mcp` 菜单里重新认证或清除认证；Agent Hub 侧的 OAuth 连接会出现在“连接管理”中。
+          如果你本机已经有一个同名的本地 MCP 配置，例如旧的 <code>agenthub</code> stdio 配置，建议先删除或改名，避免在平台列表中和云端连接混淆。
         </p>
       </div>
 

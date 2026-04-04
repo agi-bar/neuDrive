@@ -2,23 +2,36 @@ import { test, expect } from '@playwright/test'
 import { setupUser } from './helpers'
 
 test.describe('Setup Page — Token Management', () => {
-  test('shows cloud mode first without auto-generating token', async ({ page, request }) => {
+  test('shows cloud mode tabs first without auto-generating token', async ({ page, request }) => {
     await setupUser(page, request)
     await page.goto('/setup')
-    await expect(page.getByText('Claude Code 云端模式')).toBeVisible()
+    await expect(page.getByText('云端模式（浏览器授权）')).toBeVisible()
     await expect(page.getByText('推荐')).toBeVisible()
-    await expect(page.getByText('claude mcp add --transport http agenthub')).toBeVisible()
-    await expect(page.getByText(/执行.*\/mcp.*agenthub.*开始认证/)).toBeVisible()
+    await expect(page.getByText('默认添加到全局配置')).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Claude' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('tab', { name: 'Codex' })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /claude mcp add -s user --transport http agenthub/ })).toBeVisible()
+    await expect(page.locator('ol.setup-steps').getByText(/\/mcp/)).toBeVisible()
     await expect(page.getByText('暂无 Token')).toBeVisible()
+  })
+
+  test('cloud mode can switch to codex instructions', async ({ page, request }) => {
+    await setupUser(page, request)
+    await page.goto('/setup')
+    await page.getByRole('tab', { name: 'Codex' }).click()
+    await expect(page.getByRole('tab', { name: 'Codex' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('heading', { name: 'Codex CLI' })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /codex mcp add agenthub --url/ })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: 'codex mcp login agenthub' })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: 'codex mcp list' })).toBeVisible()
   })
 
   test('local mode lazily generates stdio token and config', async ({ page, request }) => {
     await setupUser(page, request)
     await page.goto('/setup')
     await page.getByRole('button', { name: '生成并显示本地模式配置' }).click()
-    await expect(page.getByText('agenthub-mcp')).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('--transport stdio')).toBeVisible()
-    await expect(page.getByText('mcpServers')).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /claude mcp add agenthub[\s\S]*--transport stdio[\s\S]*agenthub-mcp/ })).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('pre').filter({ hasText: /"mcpServers"/ })).toBeVisible()
     await expect(page.locator('.token-list-name', { hasText: 'Claude Code' })).toBeVisible()
   })
 

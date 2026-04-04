@@ -163,6 +163,7 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 		r.Get("/api/tokens", store.handleListTokens)
 		r.Get("/api/tokens/scopes", s.handleListScopes)
 		r.Get("/api/tokens/{id}", store.handleGetToken)
+		r.Put("/api/tokens/{id}", store.handleUpdateToken)
 		r.Delete("/api/tokens/{id}", store.handleRevokeToken)
 	})
 }
@@ -285,6 +286,41 @@ func (st *inMemoryTokenStore) handleRevokeToken(w http.ResponseWriter, r *http.R
 	t.RevokedAt = &now
 	st.tokens[tokenID] = t
 	respondOK(w, map[string]string{"status": "revoked"})
+}
+
+func (st *inMemoryTokenStore) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	tokenID, err := uuid.Parse(idStr)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid token ID")
+		return
+	}
+
+	var req models.UpdateTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+	if req.Name == "" {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "name is required")
+		return
+	}
+
+	t, exists := st.tokens[tokenID]
+	if !exists || t.UserID != userID {
+		respondNotFound(w, "token")
+		return
+	}
+
+	t.Name = req.Name
+	st.tokens[tokenID] = t
+	respondOK(w, t.ToResponse())
 }
 
 // ---------------------------------------------------------------------------

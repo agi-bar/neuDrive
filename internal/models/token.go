@@ -133,6 +133,11 @@ type CreateTokenRequest struct {
 	ExpiresInDays int      `json:"expires_in_days"`
 }
 
+// UpdateTokenRequest allows changing mutable token metadata.
+type UpdateTokenRequest struct {
+	Name string `json:"name"`
+}
+
 // CreateTokenResponse includes the raw token (shown only once).
 type CreateTokenResponse struct {
 	Token       string              `json:"token"` // raw token, shown only once

@@ -271,6 +271,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/tokens", s.handleListTokens)
 		r.Get("/api/tokens/scopes", s.handleListScopes)
 		r.Get("/api/tokens/{id}", s.handleGetToken)
+		r.Put("/api/tokens/{id}", s.handleUpdateToken)
 		r.Delete("/api/tokens/{id}", s.handleRevokeToken)
 		r.Post("/api/tokens/validate", s.handleValidateToken)
 

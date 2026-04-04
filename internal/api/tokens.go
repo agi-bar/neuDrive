@@ -96,6 +96,45 @@ func (s *Server) handleGetToken(w http.ResponseWriter, r *http.Request) {
 	respondOK(w, token.ToResponse())
 }
 
+// handleUpdateToken updates mutable token metadata such as the display name.
+func (s *Server) handleUpdateToken(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	idStr := chi.URLParam(r, "id")
+	tokenID, err := uuid.Parse(idStr)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid token ID")
+		return
+	}
+
+	var req models.UpdateTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+	if req.Name == "" {
+		respondValidationError(w, "name", "name is required")
+		return
+	}
+
+	if err := s.TokenService.UpdateTokenName(r.Context(), userID, tokenID, req.Name); err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
+		return
+	}
+
+	token, err := s.TokenService.GetByID(r.Context(), tokenID, userID)
+	if err != nil {
+		respondNotFound(w, "token")
+		return
+	}
+
+	respondOK(w, token.ToResponse())
+}
+
 // handleRevokeToken revokes a single token by ID.
 func (s *Server) handleRevokeToken(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())

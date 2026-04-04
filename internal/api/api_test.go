@@ -91,7 +91,7 @@ func TestAuthMeWithInvalidTokenReturns401(t *testing.T) {
 // 3. Token CRUD
 // ---------------------------------------------------------------------------
 
-func TestTokenCreateListRevoke(t *testing.T) {
+func TestTokenCreateUpdateListRevoke(t *testing.T) {
 	ts, _ := newTestServer()
 	defer ts.Close()
 
@@ -149,6 +149,43 @@ func TestTokenCreateListRevoke(t *testing.T) {
 	detail := parseJSON(resp)
 	if detail["name"] != "test-token" {
 		t.Errorf("expected name=test-token, got %v", detail["name"])
+	}
+
+	// Update token name.
+	resp, err = authPut(ts, "/api/tokens/"+tokenID, map[string]interface{}{
+		"name": "renamed-token",
+	})
+	if err != nil {
+		t.Fatalf("PUT /api/tokens/{id}: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		body := parseJSONRaw(resp)
+		t.Fatalf("expected 200 on update, got %d: %v", resp.StatusCode, body)
+	}
+	updated := parseJSON(resp)
+	if updated["name"] != "renamed-token" {
+		t.Errorf("expected renamed token, got %v", updated["name"])
+	}
+
+	// Verify list reflects updated name.
+	resp, err = authGet(ts, "/api/tokens")
+	if err != nil {
+		t.Fatalf("GET /api/tokens after update: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200 after update, got %d", resp.StatusCode)
+	}
+	listBody = parseJSON(resp)
+	tokens, ok = listBody["tokens"].([]interface{})
+	if !ok || len(tokens) == 0 {
+		t.Fatal("expected at least one token in list after update")
+	}
+	firstToken, ok := tokens[0].(map[string]interface{})
+	if !ok {
+		t.Fatal("expected first token object in list")
+	}
+	if firstToken["name"] != "renamed-token" {
+		t.Errorf("expected renamed token in list, got %v", firstToken["name"])
 	}
 
 	// Revoke token.

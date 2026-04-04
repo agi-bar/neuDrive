@@ -19,8 +19,9 @@ var (
 )
 
 type Claims struct {
-	UserID uuid.UUID `json:"user_id"`
-	Slug   string    `json:"slug"`
+	UserID   uuid.UUID `json:"user_id"`
+	Slug     string    `json:"slug"`
+	TokenUse string    `json:"token_use,omitempty"`
 	jwt.RegisteredClaims
 }
 
@@ -34,8 +35,9 @@ type GitHubUser struct {
 // GenerateToken creates a JWT token for a user
 func GenerateToken(userID uuid.UUID, slug string, secret string) (string, error) {
 	claims := Claims{
-		UserID: userID,
-		Slug:   slug,
+		UserID:   userID,
+		Slug:     slug,
+		TokenUse: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)), // 30 days
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -58,6 +60,9 @@ func ValidateToken(tokenString string, secret string) (*Claims, error) {
 	}
 	claims, ok := token.Claims.(*Claims)
 	if !ok || !token.Valid {
+		return nil, ErrInvalidToken
+	}
+	if claims.TokenUse != "" && claims.TokenUse != "access" {
 		return nil, ErrInvalidToken
 	}
 	return claims, nil

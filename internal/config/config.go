@@ -14,6 +14,7 @@ type Config struct {
 	GithubClientID     string
 	GithubClientSecret string
 	VaultMasterKey     string
+	PublicBaseURL      string
 	CORSOrigins        []string
 	RateLimit          int   // max requests per minute
 	MaxBodySize        int64 // max request body in bytes
@@ -29,6 +30,7 @@ func Load() (*Config, error) {
 		GithubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
 		VaultMasterKey:     getEnv("VAULT_MASTER_KEY", ""),
+		PublicBaseURL:      strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
 		CORSOrigins:        strings.Split(getEnv("CORS_ORIGINS", "http://localhost:3000"), ","),
 		RateLimit:          getEnvInt("RATE_LIMIT", 100),
 		MaxBodySize:        int64(getEnvInt("MAX_BODY_SIZE", 10*1024*1024)),

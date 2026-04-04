@@ -3,11 +3,14 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -16,23 +19,46 @@ type FileNode struct {
 	Path      string      `json:"path"`
 	Name      string      `json:"name"`
 	IsDir     bool        `json:"is_dir"`
+	Kind      string      `json:"kind,omitempty"`
 	Content   string      `json:"content,omitempty"`
 	MimeType  string      `json:"mime_type,omitempty"`
 	Size      int64       `json:"size,omitempty"`
+	Version   int64       `json:"version,omitempty"`
+	Checksum  string      `json:"checksum,omitempty"`
+	Metadata  interface{} `json:"metadata,omitempty"`
 	Children  []*FileNode `json:"children,omitempty"`
 	CreatedAt string      `json:"created_at,omitempty"`
 	UpdatedAt string      `json:"updated_at,omitempty"`
+	DeletedAt string      `json:"deleted_at,omitempty"`
 }
 
 type WriteFileRequest struct {
-	Content  string `json:"content"`
-	MimeType string `json:"mime_type,omitempty"`
-	IsDir    bool   `json:"is_dir"`
+	Content          string                 `json:"content"`
+	MimeType         string                 `json:"mime_type,omitempty"`
+	IsDir            bool                   `json:"is_dir"`
+	Metadata         map[string]interface{} `json:"metadata,omitempty"`
+	MinTrustLevel    int                    `json:"min_trust_level,omitempty"`
+	ExpectedVersion  *int64                 `json:"expected_version,omitempty"`
+	ExpectedChecksum string                 `json:"expected_checksum,omitempty"`
 }
 
 type SearchRequest struct {
 	Query string `json:"q"`
 	Path  string `json:"path,omitempty"`
+}
+
+type SnapshotResponse struct {
+	Path         string      `json:"path"`
+	Cursor       int64       `json:"cursor"`
+	RootChecksum string      `json:"root_checksum"`
+	Entries      []*FileNode `json:"entries"`
+}
+
+type ChangesResponse struct {
+	Path       string                   `json:"path"`
+	FromCursor int64                    `json:"from_cursor"`
+	NextCursor int64                    `json:"next_cursor"`
+	Changes    []map[string]interface{} `json:"changes"`
 }
 
 func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
@@ -73,15 +99,12 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.IsDir {
-		if err := s.FileTreeService.EnsureDirectory(r.Context(), userID, path); err != nil {
+		entry, err := s.FileTreeService.EnsureDirectoryWithMetadata(r.Context(), userID, path, req.Metadata, req.MinTrustLevel)
+		if err != nil {
 			respondInternalError(w, err)
 			return
 		}
-		publicPath := hubpath.NormalizePublic(path)
-		if !strings.HasSuffix(publicPath, "/") && publicPath != "/" {
-			publicPath += "/"
-		}
-		respondOK(w, &FileNode{Path: publicPath, Name: hubpath.BaseName(publicPath), IsDir: true})
+		respondOK(w, fileTreeEntryToNode(entry))
 		return
 	}
 
@@ -90,8 +113,21 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 		mimeType = "text/plain"
 	}
 
-	entry, err := s.FileTreeService.Write(r.Context(), userID, path, req.Content, mimeType, models.TrustLevelFull)
+	minTrustLevel := req.MinTrustLevel
+	if minTrustLevel <= 0 {
+		minTrustLevel = models.TrustLevelFull
+	}
+	entry, err := s.FileTreeService.WriteEntry(r.Context(), userID, path, req.Content, mimeType, models.FileTreeWriteOptions{
+		Metadata:         req.Metadata,
+		MinTrustLevel:    minTrustLevel,
+		ExpectedVersion:  req.ExpectedVersion,
+		ExpectedChecksum: req.ExpectedChecksum,
+	})
 	if err != nil {
+		if errors.Is(err, services.ErrOptimisticLockConflict) {
+			respondError(w, http.StatusConflict, ErrCodeConflict, err.Error())
+			return
+		}
 		respondInternalError(w, err)
 		return
 	}
@@ -135,15 +171,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 	trustLevel := trustLevelFromCtx(r.Context())
 
-	entries, err := s.FileTreeService.Search(r.Context(), userID, query, trustLevel, "")
+	results, err := s.searchHub(r.Context(), userID, trustLevel, query, "")
 	if err != nil {
 		respondInternalError(w, err)
 		return
-	}
-
-	results := make([]*FileNode, 0, len(entries))
-	for _, e := range entries {
-		results = append(results, fileTreeEntryToNode(&e))
 	}
 
 	respondOK(w, map[string]interface{}{
@@ -154,16 +185,99 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 
 func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 	publicPath := hubpath.StorageToPublic(e.Path)
+	deletedAt := ""
+	if e.DeletedAt != nil {
+		deletedAt = e.DeletedAt.Format("2006-01-02T15:04:05Z")
+	}
 	return &FileNode{
 		Path:      publicPath,
 		Name:      hubpath.BaseName(publicPath),
 		IsDir:     e.IsDirectory,
+		Kind:      e.Kind,
 		Content:   e.Content,
 		MimeType:  e.ContentType,
 		Size:      int64(len(e.Content)),
+		Version:   e.Version,
+		Checksum:  e.Checksum,
+		Metadata:  e.Metadata,
 		CreatedAt: e.CreatedAt.Format("2006-01-02T15:04:05Z"),
 		UpdatedAt: e.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		DeletedAt: deletedAt,
 	}
+}
+
+func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = "/"
+	}
+	trustLevel := trustLevelFromCtx(r.Context())
+	snapshot, err := s.FileTreeService.Snapshot(r.Context(), userID, path, trustLevel)
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	nodes := make([]*FileNode, 0, len(snapshot.Entries))
+	for _, entry := range snapshot.Entries {
+		nodes = append(nodes, fileTreeEntryToNode(&entry))
+	}
+	respondOK(w, SnapshotResponse{
+		Path:         snapshot.Path,
+		Cursor:       snapshot.Cursor,
+		RootChecksum: snapshot.RootChecksum,
+		Entries:      nodes,
+	})
+}
+
+func (s *Server) handleTreeChanges(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
+		return
+	}
+
+	cursorText := r.URL.Query().Get("cursor")
+	if cursorText == "" {
+		cursorText = "0"
+	}
+	cursor, err := strconv.ParseInt(cursorText, 10, 64)
+	if err != nil {
+		respondValidationError(w, "cursor", "cursor must be an integer")
+		return
+	}
+	path := r.URL.Query().Get("path")
+	if path == "" {
+		path = "/"
+	}
+
+	changes, nextCursor, err := s.FileTreeService.Changes(r.Context(), userID, cursor, path, trustLevelFromCtx(r.Context()))
+	if err != nil {
+		respondInternalError(w, err)
+		return
+	}
+
+	payload := make([]map[string]interface{}, 0, len(changes))
+	for _, change := range changes {
+		node := fileTreeEntryToNode(&change.Entry)
+		payload = append(payload, map[string]interface{}{
+			"cursor":      change.Cursor,
+			"change_type": change.ChangeType,
+			"entry":       node,
+		})
+	}
+	respondOK(w, ChangesResponse{
+		Path:       hubpath.NormalizePublic(path),
+		FromCursor: cursor,
+		NextCursor: nextCursor,
+		Changes:    payload,
+	})
 }
 
 func (s *Server) readOrListTreePath(ctx context.Context, userID uuid.UUID, trustLevel int, rawPath string) (*FileNode, error) {

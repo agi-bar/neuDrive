@@ -37,7 +37,7 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 	storagePat := hubpath.NormalizeStorage("/skills/") + "%"
 	altPat := hubpath.AlternateSkillsPath(hubpath.NormalizeStorage("/skills/")) + "%"
 	err = s.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false
+		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND deleted_at IS NULL
 		   AND (path LIKE $2 OR path LIKE $3)`,
 		userID, storagePat, altPat).
 		Scan(&stats.TotalSkills)

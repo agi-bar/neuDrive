@@ -24,6 +24,8 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 	scope := r.URL.Query().Get("scope")
 	state := r.URL.Query().Get("state")
 	responseType := r.URL.Query().Get("response_type")
+	codeChallenge := r.URL.Query().Get("code_challenge")
+	codeChallengeMethod := r.URL.Query().Get("code_challenge_method")
 
 	// Validate response_type.
 	if responseType != "code" {
@@ -36,6 +38,13 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 	if clientID == "" {
 		auth.RenderConsentPage(w, auth.ConsentPageData{
 			Error: "Missing required parameter: client_id",
+		})
+		return
+	}
+
+	if codeChallenge != "" && codeChallengeMethod != "S256" {
+		auth.RenderConsentPage(w, auth.ConsentPageData{
+			Error: "Invalid code_challenge_method. Only 'S256' is supported.",
 		})
 		return
 	}
@@ -81,14 +90,16 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 	_, isAuthed := userIDFromCtx(r.Context())
 
 	auth.RenderConsentPage(w, auth.ConsentPageData{
-		AppName:     app.Name,
-		AppLogoURL:  app.LogoURL,
-		Scopes:      scopes,
-		ClientID:    clientID,
-		RedirectURI: redirectURI,
-		Scope:       scope,
-		State:       state,
-		ShowLogin:   !isAuthed,
+		AppName:             app.Name,
+		AppLogoURL:          app.LogoURL,
+		Scopes:              scopes,
+		ClientID:            clientID,
+		RedirectURI:         redirectURI,
+		Scope:               scope,
+		State:               state,
+		CodeChallenge:       codeChallenge,
+		CodeChallengeMethod: codeChallengeMethod,
+		ShowLogin:           !isAuthed,
 	})
 }
 
@@ -106,6 +117,8 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 	scope := r.FormValue("scope")
 	state := r.FormValue("state")
 	action := r.FormValue("action")
+	codeChallenge := r.FormValue("code_challenge")
+	codeChallengeMethod := r.FormValue("code_challenge_method")
 
 	// Build the redirect URL.
 	redirectURL, err := url.Parse(redirectURI)
@@ -150,13 +163,15 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		password := r.FormValue("password")
 		if email == "" || password == "" {
 			auth.RenderConsentPage(w, auth.ConsentPageData{
-				Error:       "Please enter your email and password to authorize.",
-				AppName:     clientID,
-				ClientID:    clientID,
-				RedirectURI: redirectURI,
-				Scope:       scope,
-				State:       state,
-				ShowLogin:   true,
+				Error:               "Please enter your email and password to authorize.",
+				AppName:             clientID,
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				Scope:               scope,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: codeChallengeMethod,
+				ShowLogin:           true,
 			})
 			return
 		}
@@ -164,13 +179,15 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		loginResp, err := s.AuthService.Login(r.Context(), models.LoginRequest{Email: email, Password: password}, r.UserAgent(), r.RemoteAddr)
 		if err != nil {
 			auth.RenderConsentPage(w, auth.ConsentPageData{
-				Error:       "Login failed: " + err.Error(),
-				AppName:     clientID,
-				ClientID:    clientID,
-				RedirectURI: redirectURI,
-				Scope:       scope,
-				State:       state,
-				ShowLogin:   true,
+				Error:               "Login failed: " + err.Error(),
+				AppName:             clientID,
+				ClientID:            clientID,
+				RedirectURI:         redirectURI,
+				Scope:               scope,
+				State:               state,
+				CodeChallenge:       codeChallenge,
+				CodeChallengeMethod: codeChallengeMethod,
+				ShowLogin:           true,
 			})
 			return
 		}
@@ -199,7 +216,7 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 	scopes := auth.SplitScopes(scope)
 
 	// Generate the authorization code.
-	code, err := s.OAuthService.Authorize(r.Context(), app.ID, userID, scopes, redirectURI)
+	code, err := s.OAuthService.Authorize(r.Context(), app.ID, userID, scopes, redirectURI, codeChallenge, codeChallengeMethod)
 	if err != nil {
 		q.Set("error", "server_error")
 		q.Set("error_description", "Failed to generate authorization code.")
@@ -229,6 +246,8 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		req.ClientID = r.FormValue("client_id")
 		req.ClientSecret = r.FormValue("client_secret")
 		req.RedirectURI = r.FormValue("redirect_uri")
+		req.CodeVerifier = r.FormValue("code_verifier")
+		req.RefreshToken = r.FormValue("refresh_token")
 	} else {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Invalid request body.")
@@ -236,17 +255,28 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if req.GrantType != "authorization_code" {
-		writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "Only 'authorization_code' grant type is supported.")
+	var (
+		resp *models.OAuthTokenResponse
+		err  error
+	)
+
+	switch req.GrantType {
+	case "authorization_code":
+		if req.Code == "" || req.ClientID == "" || req.RedirectURI == "" {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Missing required parameters: code, client_id, redirect_uri.")
+			return
+		}
+		resp, err = s.OAuthService.ExchangeCode(r.Context(), req.ClientID, req.ClientSecret, req.Code, req.RedirectURI, req.CodeVerifier)
+	case "refresh_token":
+		if req.RefreshToken == "" || req.ClientID == "" {
+			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Missing required parameters: refresh_token, client_id.")
+			return
+		}
+		resp, err = s.OAuthService.ExchangeRefreshToken(r.Context(), req.ClientID, req.ClientSecret, req.RefreshToken)
+	default:
+		writeOAuthError(w, http.StatusBadRequest, "unsupported_grant_type", "Only 'authorization_code' and 'refresh_token' grant types are supported.")
 		return
 	}
-
-	if req.Code == "" || req.ClientID == "" || req.RedirectURI == "" {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Missing required parameters: code, client_id, redirect_uri.")
-		return
-	}
-
-	resp, err := s.OAuthService.ExchangeCode(r.Context(), req.ClientID, req.ClientSecret, req.Code, req.RedirectURI)
 	if err != nil {
 		writeOAuthError(w, http.StatusBadRequest, "invalid_grant", err.Error())
 		return

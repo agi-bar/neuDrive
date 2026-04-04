@@ -3,18 +3,13 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 )
 
 // handleGPTOpenAPISchema serves the GPT Actions OpenAPI schema as JSON,
 // dynamically setting the server URL to match the incoming request host.
 // All actions point to /agent/* endpoints — no separate /gpt/* handlers needed.
 func (s *Server) handleGPTOpenAPISchema(w http.ResponseWriter, r *http.Request) {
-	scheme := "https"
-	if r.TLS == nil && !strings.HasPrefix(r.Header.Get("X-Forwarded-Proto"), "https") {
-		scheme = "http"
-	}
-	baseURL := scheme + "://" + r.Host
+	baseURL := s.baseURL(r)
 
 	schema := map[string]interface{}{
 		"openapi": "3.1.0",
@@ -82,7 +77,7 @@ func agentOpenAPIPaths() map[string]interface{} {
 		"/agent/search": M{"post": M{
 			"operationId": "searchMemory", "summary": "搜索记忆和知识库",
 			"requestBody": body([]string{"query"}, M{"query": str, "scope": str}),
-			"responses":   rsp(obj(M{"query": str, "results": arr(obj(M{"path": str, "snippet": str, "score": num}))})),
+			"responses":   rsp(obj(M{"query": str, "results": arr(obj(M{"path": str, "type": str, "snippet": str, "score": num}))})),
 		}},
 
 		// Projects
@@ -103,7 +98,16 @@ func agentOpenAPIPaths() map[string]interface{} {
 
 		// Skills
 		"/agent/skills": get("listSkills", "列出所有技能", obj(M{
-			"skills": arr(obj(M{"name": str, "description": str})),
+			"skills": arr(obj(M{"name": str, "path": str, "source": str, "description": str, "when_to_use": str})),
+		})),
+
+		// Tree sync
+		"/agent/tree/snapshot": get("snapshotTree", "获取虚拟树快照", obj(M{
+			"path": str, "cursor": num, "root_checksum": str, "entries": arr(obj(M{"path": str, "kind": str, "checksum": str, "version": num})),
+		})),
+		"/agent/tree/changes": get("treeChanges", "获取虚拟树增量变更", obj(M{
+			"path": str, "from_cursor": num, "next_cursor": num,
+			"changes": arr(obj(M{"cursor": num, "change_type": str, "entry": obj(M{"path": str, "kind": str, "checksum": str, "version": num})})),
 		})),
 
 		// Devices

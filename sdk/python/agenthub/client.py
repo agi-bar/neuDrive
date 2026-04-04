@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 from typing import Any, Optional
 
-from .types import Device, ImportResult, InboxMessage, Profile, Project, VaultScope
+from .types import Device, ImportResult, InboxMessage, Profile, Project, TreeSnapshot, VaultScope
 
 
 class AgentHub:
@@ -135,12 +135,37 @@ class AgentHub:
         data = self._request("GET", f"/agent/tree{self._file_path(path)}")
         return data.get("content", "")
 
-    def write_file(self, path: str, content: str) -> None:
+    def write_file(self, path: str, content: str, **kwargs: Any) -> None:
         """Create or overwrite a file in the file tree."""
         self._request(
             "PUT",
             f"/agent/tree{self._file_path(path)}",
-            json={"content": content},
+            json={
+                "content": content,
+                "content_type": kwargs.get("mime_type"),
+                "metadata": kwargs.get("metadata"),
+                "min_trust_level": kwargs.get("min_trust_level"),
+                "expected_version": kwargs.get("expected_version"),
+                "expected_checksum": kwargs.get("expected_checksum"),
+            },
+        )
+
+    def snapshot(self, path: str = "/") -> TreeSnapshot:
+        """Fetch a full subtree snapshot."""
+        data = self._request("GET", "/agent/tree/snapshot", params={"path": path})
+        return TreeSnapshot(
+            path=data.get("path", path),
+            cursor=data.get("cursor", 0),
+            root_checksum=data.get("root_checksum", ""),
+            entries=data.get("entries") or [],
+        )
+
+    def changes(self, cursor: int, path: str = "/") -> dict:
+        """Fetch incremental subtree changes."""
+        return self._request(
+            "GET",
+            "/agent/tree/changes",
+            params={"cursor": str(cursor), "path": path},
         )
 
     # ------------------------------------------------------------------
@@ -432,11 +457,34 @@ class AsyncAgentHub:
         data = await self._request("GET", f"/agent/tree{self._file_path(path)}")
         return data.get("content", "")
 
-    async def write_file(self, path: str, content: str) -> None:
+    async def write_file(self, path: str, content: str, **kwargs: Any) -> None:
         await self._request(
             "PUT",
             f"/agent/tree{self._file_path(path)}",
-            json={"content": content},
+            json={
+                "content": content,
+                "content_type": kwargs.get("mime_type"),
+                "metadata": kwargs.get("metadata"),
+                "min_trust_level": kwargs.get("min_trust_level"),
+                "expected_version": kwargs.get("expected_version"),
+                "expected_checksum": kwargs.get("expected_checksum"),
+            },
+        )
+
+    async def snapshot(self, path: str = "/") -> TreeSnapshot:
+        data = await self._request("GET", "/agent/tree/snapshot", params={"path": path})
+        return TreeSnapshot(
+            path=data.get("path", path),
+            cursor=data.get("cursor", 0),
+            root_checksum=data.get("root_checksum", ""),
+            entries=data.get("entries") or [],
+        )
+
+    async def changes(self, cursor: int, path: str = "/") -> dict:
+        return await self._request(
+            "GET",
+            "/agent/tree/changes",
+            params={"cursor": str(cursor), "path": path},
         )
 
     # ------------------------------------------------------------------

@@ -3,8 +3,10 @@ package services
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -12,11 +14,12 @@ import (
 )
 
 type RoleService struct {
-	db *pgxpool.Pool
+	db       *pgxpool.Pool
+	fileTree *FileTreeService
 }
 
-func NewRoleService(db *pgxpool.Pool) *RoleService {
-	return &RoleService{db: db}
+func NewRoleService(db *pgxpool.Pool, fileTree *FileTreeService) *RoleService {
+	return &RoleService{db: db, fileTree: fileTree}
 }
 
 func (s *RoleService) List(ctx context.Context, userID uuid.UUID) ([]models.Role, error) {
@@ -63,6 +66,9 @@ func (s *RoleService) Create(ctx context.Context, userID uuid.UUID, name, roleTy
 		Lifecycle:          lifecycle,
 		CreatedAt:          now,
 	}
+	if err := s.syncRoleTree(ctx, *r); err != nil {
+		return nil, err
+	}
 	return r, nil
 }
 
@@ -71,6 +77,9 @@ func (s *RoleService) Delete(ctx context.Context, userID uuid.UUID, name string)
 		`DELETE FROM roles WHERE user_id = $1 AND name = $2`, userID, name)
 	if err != nil {
 		return fmt.Errorf("role.Delete: %w", err)
+	}
+	if s.fileTree != nil {
+		_ = s.fileTree.Delete(ctx, userID, hubpath.RoleSkillPath(name))
 	}
 	return nil
 }
@@ -88,10 +97,44 @@ func (s *RoleService) EnsureDefaultRoles(ctx context.Context, userID uuid.UUID) 
 		return nil
 	}
 
-	_, err = s.Create(ctx, userID, "assistant", "assistant",
-		[]string{"/"}, []string{}, "permanent")
+	_, err = s.Create(ctx, userID, "assistant", "assistant", []string{"/"}, []string{}, "permanent")
 	if err != nil {
 		return fmt.Errorf("role.EnsureDefaultRoles: create assistant: %w", err)
 	}
 	return nil
+}
+
+func (s *RoleService) syncRoleTree(ctx context.Context, role models.Role) error {
+	if s.fileTree == nil {
+		return nil
+	}
+	content := renderRoleSkill(role)
+	_, err := s.fileTree.WriteEntry(ctx, role.UserID, hubpath.RoleSkillPath(role.Name), content, "text/markdown", models.FileTreeWriteOptions{
+		Kind:          "role_skill",
+		MinTrustLevel: models.TrustLevelCollaborate,
+		Metadata: map[string]interface{}{
+			"name":                 role.Name,
+			"description":          strings.TrimSpace(role.RoleType + " role"),
+			"role_type":            role.RoleType,
+			"lifecycle":            role.Lifecycle,
+			"allowed_paths":        role.AllowedPaths,
+			"allowed_vault_scopes": role.AllowedVaultScopes,
+			"source":               "roles",
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("role.syncRoleTree: %w", err)
+	}
+	return nil
+}
+
+func renderRoleSkill(role models.Role) string {
+	return strings.TrimSpace(fmt.Sprintf(
+		"# Role: %s\n\nThis role represents the `%s` persona inside AgentHub.\n\n## Lifecycle\n%s\n\n## Allowed Paths\n%s\n\n## Allowed Vault Scopes\n%s\n",
+		role.Name,
+		role.RoleType,
+		role.Lifecycle,
+		strings.Join(role.AllowedPaths, ", "),
+		strings.Join(role.AllowedVaultScopes, ", "),
+	)) + "\n"
 }

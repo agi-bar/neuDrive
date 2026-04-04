@@ -118,22 +118,61 @@ export interface FileTreeEntry {
   name: string
   path: string
   is_dir: boolean
+  kind?: string
   content?: string
   mime_type?: string
+  version?: number
+  checksum?: string
+  metadata?: Record<string, unknown>
   children?: FileTreeEntry[]
   size?: number
   updated_at?: string
+  deleted_at?: string
 }
 
 export interface SearchResult {
   path: string
+  type?: string
   snippet: string
   score?: number
 }
 
 export interface Skill {
   name: string
+  path?: string
+  source?: string
   description?: string
+  when_to_use?: string
+  allowed_tools?: string[]
+  tags?: string[]
+}
+
+export interface WriteFileOptions {
+  mime_type?: string
+  metadata?: Record<string, unknown>
+  min_trust_level?: number
+  expected_version?: number
+  expected_checksum?: string
+}
+
+export interface TreeSnapshot {
+  path: string
+  cursor: number
+  root_checksum: string
+  entries: FileTreeEntry[]
+}
+
+export interface TreeChange {
+  cursor: number
+  change_type: string
+  entry: FileTreeEntry
+}
+
+export interface TreeChanges {
+  path: string
+  from_cursor: number
+  next_cursor: number
+  changes: TreeChange[]
 }
 
 export interface DashboardStats {

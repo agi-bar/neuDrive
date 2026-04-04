@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: agenthub-postgres
+  namespace: agenthub
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: agenthub-postgres
+  serviceName: agenthub-postgres
+  template:
+    metadata:
+      labels:
+        app: agenthub-postgres
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:16
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_DB
+              valueFrom:
+                secretKeyRef:
+                  name: agenthub-postgres
+                  key: POSTGRES_DB
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: agenthub-postgres
+                  key: POSTGRES_USER
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: agenthub-postgres
+                  key: POSTGRES_PASSWORD
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -U agenthub -d agenthub
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 6
+          volumeMounts:
+            - name: pgdata
+              mountPath: /var/lib/postgresql/data
+  volumeClaimTemplates:
+    - metadata:
+        name: pgdata
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agenthub-postgres
+  namespace: agenthub
+spec:
+  selector:
+    app: agenthub-postgres
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: 5432

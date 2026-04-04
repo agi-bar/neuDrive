@@ -213,74 +213,21 @@ func (s *ImportService) ImportBulkFiles(ctx context.Context, userID uuid.UUID, f
 	if minTrustLevel <= 0 {
 		minTrustLevel = models.TrustLevelGuest
 	}
-
-	// Use a transaction for atomicity.
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("import.ImportBulkFiles: begin tx: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	now := time.Now().UTC()
 	imported := 0
 
-	// Collect all parent directories that need to be created.
-	dirs := map[string]bool{}
-	normalizedFiles := make(map[string]string, len(files))
-	for path, content := range files {
-		normalizedPath := hubpath.NormalizeStorage(path)
-		normalizedFiles[normalizedPath] = content
-		dir := filepath.Dir(normalizedPath)
-		for dir != "." && dir != "" && dir != "/" {
-			if !dirs[dir] {
-				dirs[dir] = true
-			}
-			dir = filepath.Dir(dir)
-		}
-	}
-
-	// Create directories.
-	for dir := range dirs {
-		dirPath := dir
-		if !strings.HasSuffix(dirPath, "/") {
-			dirPath = dirPath + "/"
-		}
-		_, err := tx.Exec(ctx,
-			`INSERT INTO file_tree (id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at)
-			 VALUES ($1, $2, $3, true, '', 'directory', '{}', 1, $4, $4)
-			 ON CONFLICT (user_id, path) DO NOTHING`,
-			uuid.New(), userID, dirPath, now)
-		if err != nil {
-			return 0, fmt.Errorf("import.ImportBulkFiles: ensure dir %s: %w", dir, err)
-		}
-	}
-
-	// Insert files.
-	for path, content := range normalizedFiles {
-		if path == "" || content == "" {
+	for rawPath, content := range files {
+		if rawPath == "" || content == "" {
 			continue
 		}
 
-		ct := contentTypeFromExt(path)
-		id := uuid.New()
-
-		_, err := tx.Exec(ctx,
-			`INSERT INTO file_tree (id, user_id, path, is_directory, content, content_type, metadata, min_trust_level, created_at, updated_at)
-			 VALUES ($1, $2, $3, false, $4, $5, '{}', $6, $7, $7)
-			 ON CONFLICT (user_id, path) DO UPDATE SET
-			   content = EXCLUDED.content,
-			   content_type = EXCLUDED.content_type,
-			   min_trust_level = EXCLUDED.min_trust_level,
-			   updated_at = EXCLUDED.updated_at`,
-			id, userID, path, content, ct, minTrustLevel, now)
-		if err != nil {
-			return 0, fmt.Errorf("import.ImportBulkFiles: write %s: %w", path, err)
+		normalizedPath := hubpath.NormalizeStorage(rawPath)
+		ct := contentTypeFromExt(normalizedPath)
+		if _, err := s.fileTree.WriteEntry(ctx, userID, normalizedPath, content, ct, models.FileTreeWriteOptions{
+			MinTrustLevel: minTrustLevel,
+		}); err != nil {
+			return 0, fmt.Errorf("import.ImportBulkFiles: write %s: %w", normalizedPath, err)
 		}
 		imported++
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return 0, fmt.Errorf("import.ImportBulkFiles: commit: %w", err)
 	}
 
 	return imported, nil

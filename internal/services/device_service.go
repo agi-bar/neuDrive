@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -25,11 +26,12 @@ var (
 )
 
 type DeviceService struct {
-	db *pgxpool.Pool
+	db       *pgxpool.Pool
+	fileTree *FileTreeService
 }
 
-func NewDeviceService(db *pgxpool.Pool) *DeviceService {
-	return &DeviceService{db: db}
+func NewDeviceService(db *pgxpool.Pool, fileTree *FileTreeService) *DeviceService {
+	return &DeviceService{db: db, fileTree: fileTree}
 }
 
 func (s *DeviceService) List(ctx context.Context, userID uuid.UUID) ([]models.Device, error) {
@@ -47,6 +49,14 @@ func (s *DeviceService) List(ctx context.Context, userID uuid.UUID) ([]models.De
 		if err := rows.Scan(&d.ID, &d.UserID, &d.Name, &d.DeviceType, &d.Brand,
 			&d.Protocol, &d.Endpoint, &d.SkillMD, &d.Config, &d.Status, &d.CreatedAt, &d.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("device.List: scan: %w", err)
+		}
+		if s.fileTree != nil {
+			if skill, err := s.fileTree.Read(ctx, userID, hubpath.DeviceSkillPath(d.Name), models.TrustLevelFull); err == nil {
+				d.SkillMD = skill.Content
+			}
+			if cfg, err := s.fileTree.Read(ctx, userID, hubpath.DeviceConfigPath(d.Name), models.TrustLevelFull); err == nil {
+				_ = json.Unmarshal([]byte(cfg.Content), &d.Config)
+			}
 		}
 		devices = append(devices, d)
 	}
@@ -70,17 +80,18 @@ func (s *DeviceService) Register(ctx context.Context, userID uuid.UUID, device m
 	if err != nil {
 		return nil, fmt.Errorf("device.Register: %w", err)
 	}
+	if err := s.syncDeviceTree(ctx, device); err != nil {
+		return nil, err
+	}
 	return &device, nil
 }
 
 // Call sends an action to a device. Dispatches via protocol-specific handler.
-// Supports: "http" and "homeassistant" (real HTTP calls).
 func (s *DeviceService) Call(ctx context.Context, userID uuid.UUID, deviceName, action string, params map[string]interface{}) (map[string]interface{}, error) {
 	if strings.TrimSpace(action) == "" {
 		return nil, fmt.Errorf("%w: action is required", ErrDeviceInvalidRequest)
 	}
 
-	// Verify the device exists and belongs to the user.
 	var deviceID uuid.UUID
 	var protocol, endpoint string
 	err := s.db.QueryRow(ctx,
@@ -105,7 +116,6 @@ func (s *DeviceService) Call(ctx context.Context, userID uuid.UUID, deviceName, 
 	}
 }
 
-// callHTTP dispatches a device action via HTTP POST to the device endpoint.
 func (s *DeviceService) callHTTP(ctx context.Context, deviceID uuid.UUID, deviceName, endpoint, action string, params map[string]interface{}) (map[string]interface{}, error) {
 	body, err := json.Marshal(map[string]interface{}{
 		"action": action,
@@ -131,7 +141,6 @@ func (s *DeviceService) callHTTP(ctx context.Context, deviceID uuid.UUID, device
 	bodyBytes, _ := io.ReadAll(resp.Body)
 	var result map[string]interface{}
 	if err := json.Unmarshal(bodyBytes, &result); err != nil {
-		// Non-JSON response — wrap status
 		result = map[string]interface{}{
 			"status_code": resp.StatusCode,
 			"status":      resp.Status,
@@ -147,4 +156,41 @@ func (s *DeviceService) callHTTP(ctx context.Context, deviceID uuid.UUID, device
 	result["action"] = action
 	result["timestamp"] = time.Now().UTC().Format(time.RFC3339)
 	return result, nil
+}
+
+func (s *DeviceService) syncDeviceTree(ctx context.Context, device models.Device) error {
+	if s.fileTree == nil {
+		return nil
+	}
+	if _, err := s.fileTree.WriteEntry(ctx, device.UserID, hubpath.DeviceSkillPath(device.Name), device.SkillMD, "text/markdown", models.FileTreeWriteOptions{
+		Kind:          "device_skill",
+		MinTrustLevel: models.TrustLevelCollaborate,
+		Metadata: map[string]interface{}{
+			"name":        device.Name,
+			"description": strings.TrimSpace(device.DeviceType + " device"),
+			"device_type": device.DeviceType,
+			"protocol":    device.Protocol,
+			"status":      device.Status,
+			"brand":       device.Brand,
+			"endpoint":    device.Endpoint,
+			"source":      "devices",
+		},
+	}); err != nil {
+		return fmt.Errorf("device.syncDeviceTree: skill: %w", err)
+	}
+	configJSON, err := json.MarshalIndent(device.Config, "", "  ")
+	if err != nil {
+		return fmt.Errorf("device.syncDeviceTree: marshal config: %w", err)
+	}
+	if _, err := s.fileTree.WriteEntry(ctx, device.UserID, hubpath.DeviceConfigPath(device.Name), string(configJSON), "application/json", models.FileTreeWriteOptions{
+		Kind:          "device_config",
+		MinTrustLevel: models.TrustLevelCollaborate,
+		Metadata: map[string]interface{}{
+			"device": device.Name,
+			"source": "devices",
+		},
+	}); err != nil {
+		return fmt.Errorf("device.syncDeviceTree: config: %w", err)
+	}
+	return nil
 }

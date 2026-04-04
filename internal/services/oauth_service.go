@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -20,6 +22,11 @@ type OAuthService struct {
 	db        *pgxpool.Pool
 	jwtSecret string
 }
+
+const (
+	oauthAccessTokenTTL  = 24 * time.Hour
+	oauthRefreshTokenTTL = 30 * 24 * time.Hour
+)
 
 // NewOAuthService creates a new OAuthService.
 func NewOAuthService(db *pgxpool.Pool, jwtSecret string) *OAuthService {
@@ -100,7 +107,7 @@ func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.
 
 // Authorize creates an authorization code for the given app and user.
 // It also creates or updates the grant record.
-func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, scopes []string, redirectURI string) (string, error) {
+func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, scopes []string, redirectURI, codeChallenge, codeChallengeMethod string) (string, error) {
 	code, err := generateAuthCode()
 	if err != nil {
 		return "", fmt.Errorf("oauth.Authorize: %w", err)
@@ -110,9 +117,9 @@ func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, s
 
 	id := uuid.New()
 	_, err = s.db.Exec(ctx,
-		`INSERT INTO oauth_codes (id, app_id, user_id, code_hash, scopes, redirect_uri, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		id, appID, userID, codeHash, scopes, redirectURI, expiresAt)
+		`INSERT INTO oauth_codes (id, app_id, user_id, code_hash, scopes, redirect_uri, code_challenge, code_challenge_method, expires_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+		id, appID, userID, codeHash, scopes, redirectURI, codeChallenge, codeChallengeMethod, expiresAt)
 	if err != nil {
 		return "", fmt.Errorf("oauth.Authorize: insert code: %w", err)
 	}
@@ -131,17 +138,10 @@ func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, s
 }
 
 // ExchangeCode validates an authorization code and returns a JWT access token.
-func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret, code, redirectURI string) (*models.OAuthTokenResponse, error) {
-	app, err := s.GetAppByClientID(ctx, clientID)
+func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret, code, redirectURI, codeVerifier string) (*models.OAuthTokenResponse, error) {
+	app, err := s.validateClientAuth(ctx, clientID, clientSecret)
 	if err != nil {
-		return nil, fmt.Errorf("oauth.ExchangeCode: invalid client_id")
-	}
-
-	// Public clients (URL-based client_ids per MCP spec) don't have secrets.
-	// Only validate secret for confidential clients (non-URL client_ids).
-	isPublicClient := strings.HasPrefix(clientID, "https://")
-	if !isPublicClient && hashString(clientSecret) != app.ClientSecretHash {
-		return nil, fmt.Errorf("oauth.ExchangeCode: invalid client_secret")
+		return nil, err
 	}
 
 	if !app.IsActive {
@@ -151,10 +151,10 @@ func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret,
 	codeHash := hashString(code)
 	var oc models.OAuthCode
 	err = s.db.QueryRow(ctx,
-		`SELECT id, app_id, user_id, code_hash, scopes, redirect_uri, expires_at, used
+		`SELECT id, app_id, user_id, code_hash, scopes, redirect_uri, code_challenge, code_challenge_method, expires_at, used
 		 FROM oauth_codes
 		 WHERE code_hash = $1 AND used = false`, codeHash).
-		Scan(&oc.ID, &oc.AppID, &oc.UserID, &oc.CodeHash, &oc.Scopes, &oc.RedirectURI, &oc.ExpiresAt, &oc.Used)
+		Scan(&oc.ID, &oc.AppID, &oc.UserID, &oc.CodeHash, &oc.Scopes, &oc.RedirectURI, &oc.CodeChallenge, &oc.CodeChallengeMethod, &oc.ExpiresAt, &oc.Used)
 	if err != nil {
 		return nil, fmt.Errorf("oauth.ExchangeCode: invalid or already-used code")
 	}
@@ -169,6 +169,10 @@ func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret,
 
 	if time.Now().UTC().After(oc.ExpiresAt) {
 		return nil, fmt.Errorf("oauth.ExchangeCode: code has expired")
+	}
+
+	if err := verifyPKCE(oc.CodeChallenge, oc.CodeChallengeMethod, codeVerifier); err != nil {
+		return nil, fmt.Errorf("oauth.ExchangeCode: %w", err)
 	}
 
 	// Mark the code as used.
@@ -189,14 +193,59 @@ func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret,
 	if err != nil {
 		return nil, fmt.Errorf("oauth.ExchangeCode: failed to generate token: %w", err)
 	}
+	refreshToken, err := s.generateOAuthRefreshToken(oc.UserID, slug, clientID, oc.Scopes)
+	if err != nil {
+		return nil, fmt.Errorf("oauth.ExchangeCode: failed to generate refresh token: %w", err)
+	}
 
 	scopeStr := strings.Join(oc.Scopes, " ")
 
 	return &models.OAuthTokenResponse{
-		AccessToken: accessToken,
-		TokenType:   "Bearer",
-		ExpiresIn:   86400,
-		Scope:       scopeStr,
+		AccessToken:  accessToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int(oauthAccessTokenTTL / time.Second),
+		Scope:        scopeStr,
+		RefreshToken: refreshToken,
+	}, nil
+}
+
+// ExchangeRefreshToken validates a refresh token and rotates both tokens.
+func (s *OAuthService) ExchangeRefreshToken(ctx context.Context, clientID, clientSecret, refreshToken string) (*models.OAuthTokenResponse, error) {
+	app, err := s.validateClientAuth(ctx, clientID, clientSecret)
+	if err != nil {
+		return nil, err
+	}
+	if !app.IsActive {
+		return nil, fmt.Errorf("oauth.ExchangeRefreshToken: app is deactivated")
+	}
+	claims, err := s.validateOAuthRefreshToken(refreshToken)
+	if err != nil {
+		return nil, fmt.Errorf("oauth.ExchangeRefreshToken: invalid refresh_token")
+	}
+	if claims.ClientID != clientID {
+		return nil, fmt.Errorf("oauth.ExchangeRefreshToken: refresh_token does not belong to this client")
+	}
+
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("oauth.ExchangeRefreshToken: invalid user in token")
+	}
+
+	accessToken, err := s.generateOAuthAccessToken(userID, claims.Slug)
+	if err != nil {
+		return nil, fmt.Errorf("oauth.ExchangeRefreshToken: failed to generate access token: %w", err)
+	}
+	newRefreshToken, err := s.generateOAuthRefreshToken(userID, claims.Slug, clientID, authSplitScopes(claims.Scope))
+	if err != nil {
+		return nil, fmt.Errorf("oauth.ExchangeRefreshToken: failed to rotate refresh token: %w", err)
+	}
+
+	return &models.OAuthTokenResponse{
+		AccessToken:  accessToken,
+		TokenType:    "Bearer",
+		ExpiresIn:    int(oauthAccessTokenTTL / time.Second),
+		Scope:        claims.Scope,
+		RefreshToken: newRefreshToken,
 	}, nil
 }
 
@@ -367,21 +416,105 @@ func hashString(s string) string {
 
 // oauthJWTClaims are the JWT claims for OAuth access tokens.
 type oauthJWTClaims struct {
-	UserID string `json:"user_id"`
-	Slug   string `json:"slug"`
+	UserID   string `json:"user_id"`
+	Slug     string `json:"slug"`
+	TokenUse string `json:"token_use,omitempty"`
+	jwt.RegisteredClaims
+}
+
+type oauthRefreshClaims struct {
+	UserID   string `json:"user_id"`
+	Slug     string `json:"slug"`
+	ClientID string `json:"client_id"`
+	Scope    string `json:"scope"`
+	TokenUse string `json:"token_use,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // generateOAuthAccessToken creates a 24-hour JWT for OAuth access tokens.
 func (s *OAuthService) generateOAuthAccessToken(userID uuid.UUID, slug string) (string, error) {
 	claims := oauthJWTClaims{
-		UserID: userID.String(),
-		Slug:   slug,
+		UserID:   userID.String(),
+		Slug:     slug,
+		TokenUse: "access",
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(oauthAccessTokenTTL)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 		},
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.jwtSecret))
+}
+
+func (s *OAuthService) generateOAuthRefreshToken(userID uuid.UUID, slug, clientID string, scopes []string) (string, error) {
+	claims := oauthRefreshClaims{
+		UserID:   userID.String(),
+		Slug:     slug,
+		ClientID: clientID,
+		Scope:    strings.Join(scopes, " "),
+		TokenUse: "refresh",
+		RegisteredClaims: jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(oauthRefreshTokenTTL)),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+		},
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	return token.SignedString([]byte(s.jwtSecret))
+}
+
+func (s *OAuthService) validateOAuthRefreshToken(tokenString string) (*oauthRefreshClaims, error) {
+	token, err := jwt.ParseWithClaims(tokenString, &oauthRefreshClaims{}, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return []byte(s.jwtSecret), nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	claims, ok := token.Claims.(*oauthRefreshClaims)
+	if !ok || !token.Valid || claims.TokenUse != "refresh" {
+		return nil, fmt.Errorf("invalid refresh token")
+	}
+	return claims, nil
+}
+
+func (s *OAuthService) validateClientAuth(ctx context.Context, clientID, clientSecret string) (*models.OAuthApp, error) {
+	app, err := s.GetAppByClientID(ctx, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("oauth: invalid client_id")
+	}
+
+	// Public clients (URL-based client_ids per MCP spec) don't have secrets.
+	if !strings.HasPrefix(clientID, "https://") && hashString(clientSecret) != app.ClientSecretHash {
+		return nil, fmt.Errorf("oauth: invalid client_secret")
+	}
+
+	return app, nil
+}
+
+func verifyPKCE(codeChallenge, codeChallengeMethod, codeVerifier string) error {
+	if codeChallenge == "" {
+		return nil
+	}
+	if codeChallengeMethod != "S256" {
+		return fmt.Errorf("unsupported code_challenge_method")
+	}
+	if codeVerifier == "" {
+		return fmt.Errorf("missing code_verifier")
+	}
+
+	sum := sha256.Sum256([]byte(codeVerifier))
+	expected := base64.RawURLEncoding.EncodeToString(sum[:])
+	if subtle.ConstantTimeCompare([]byte(expected), []byte(codeChallenge)) != 1 {
+		return fmt.Errorf("invalid code_verifier")
+	}
+	return nil
+}
+
+func authSplitScopes(scope string) []string {
+	if scope == "" {
+		return nil
+	}
+	return strings.Fields(scope)
 }

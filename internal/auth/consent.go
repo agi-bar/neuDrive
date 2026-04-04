@@ -9,15 +9,17 @@ import (
 
 // ConsentPageData holds the data passed to the consent HTML template.
 type ConsentPageData struct {
-	AppName     string
-	AppLogoURL  string
-	Scopes      []string
-	ClientID    string
-	RedirectURI string
-	Scope       string
-	State       string
-	Error       string
-	ShowLogin   bool
+	AppName             string
+	AppLogoURL          string
+	Scopes              []string
+	ClientID            string
+	RedirectURI         string
+	Scope               string
+	State               string
+	CodeChallenge       string
+	CodeChallengeMethod string
+	Error               string
+	ShowLogin           bool
 }
 
 // consentTemplate is the HTML template for the OAuth consent screen.
@@ -60,6 +62,7 @@ func ScopeLabel(scope string) string {
 		"write:tree":      "Write to your file tree",
 		"search":          "Search your data",
 		"admin":           "Full administrative access",
+		"offline_access":  "Keep access without signing in again",
 	}
 	if label, ok := labels[scope]; ok {
 		return label
@@ -262,6 +265,8 @@ const consentHTML = `<!DOCTYPE html>
             <input type="hidden" name="redirect_uri" value="{{.RedirectURI}}">
             <input type="hidden" name="scope" value="{{.Scope}}">
             <input type="hidden" name="state" value="{{.State}}">
+            <input type="hidden" name="code_challenge" value="{{.CodeChallenge}}">
+            <input type="hidden" name="code_challenge_method" value="{{.CodeChallengeMethod}}">
             <input type="hidden" name="action" value="approve">
 
             <div id="auto-status" style="display:none; text-align:center; padding:16px 0; color:#666;">

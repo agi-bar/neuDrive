@@ -76,6 +76,16 @@ func TestInferCaptureSourceFromCapturedFixtures(t *testing.T) {
 			expected: "cursor",
 		},
 		{
+			name:     "cursor agent dynamic register",
+			fixture:  "testdata/oauth/cursor-agent/oauth_register.json",
+			expected: "cursor",
+		},
+		{
+			name:     "cursor agent authenticated initialize",
+			fixture:  "testdata/oauth/cursor-agent/mcp_initialize_authenticated.json",
+			expected: "cursor",
+		},
+		{
 			name:     "codex initialize",
 			fixture:  "testdata/oauth/codex/mcp_initialize.json",
 			expected: "codex",

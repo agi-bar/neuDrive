@@ -12,7 +12,9 @@ export default function SetupCloudPage() {
     claudeCloudCommand,
     codexCloudCommand,
     geminiCloudCommand,
+    cursorAgentStatusCommand,
     codexLoginCommand,
+    cursorAgentLoginCommand,
     geminiAuthCommand,
     codexStatusCommand,
   } = useSetup()
@@ -21,7 +23,7 @@ export default function SetupCloudPage() {
     <SetupSection
       icon={<>&#9729;</>}
       title="CLI Apps"
-      description="给命令行应用配置远程 HTTP MCP + OAuth。适合 Claude Code、Codex CLI 和 Gemini CLI。"
+      description="给命令行应用配置远程 HTTP MCP + OAuth。适合 Claude Code、Codex CLI、Gemini CLI 和 Cursor Agent。"
       badge="推荐"
       highlight
     >
@@ -58,6 +60,15 @@ export default function SetupCloudPage() {
           onClick={() => setCloudPlatform('gemini')}
         >
           Gemini
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={`setup-tab ${cloudPlatform === 'cursor' ? 'setup-tab-active' : ''}`}
+          aria-selected={cloudPlatform === 'cursor'}
+          onClick={() => setCloudPlatform('cursor')}
+        >
+          Cursor
         </button>
       </div>
 
@@ -138,7 +149,7 @@ export default function SetupCloudPage() {
               授权完成后，Agent Hub 侧会在“连接管理”中显示这条平台连接；需要重新认证时，可再次运行 <code>codex mcp login agenthub</code>。
             </p>
           </>
-        ) : (
+        ) : cloudPlatform === 'gemini' ? (
           <>
             <h4 className="setup-platform-title">Gemini CLI</h4>
             <p className="setup-note setup-note-first">
@@ -170,6 +181,54 @@ export default function SetupCloudPage() {
 
             <p className="setup-note">
               Gemini CLI 当前已验证 Remote MCP + OAuth 可用，真实请求形态是 dynamic registration + <code>client_secret_post</code> token exchange。
+            </p>
+          </>
+        ) : (
+          <>
+            <h4 className="setup-platform-title">Cursor Agent</h4>
+            <p className="setup-note setup-note-first">
+              Cursor Agent 会读取 <code>.cursor/mcp.json</code> 或 <code>~/.cursor/mcp.json</code> 里的 MCP 配置，然后通过浏览器 OAuth 完成授权。
+            </p>
+
+            <SetupCodeBlock
+              label="步骤 1：配置 ~/.cursor/mcp.json"
+              content={JSON.stringify({
+                mcpServers: {
+                  agenthub: {
+                    url: `${baseUrl}/mcp`,
+                  },
+                },
+              }, null, 2)}
+              copied={copied}
+              copyKey="cloud-cursor-agent-json"
+              onCopy={copyToClipboard}
+            />
+
+            <SetupCodeBlock
+              label="步骤 2：发起授权"
+              content={cursorAgentLoginCommand}
+              copied={copied}
+              copyKey="cloud-cursor-agent-login"
+              onCopy={copyToClipboard}
+            />
+
+            <SetupCodeBlock
+              label="步骤 3：确认连接状态"
+              content={cursorAgentStatusCommand}
+              copied={copied}
+              copyKey="cloud-cursor-agent-list"
+              onCopy={copyToClipboard}
+            />
+
+            <ol className="setup-steps">
+              <li>先在项目目录的 <code>.cursor/mcp.json</code>，或用户目录的 <code>~/.cursor/mcp.json</code> 中加入上面的 <code>agenthub</code> 配置。</li>
+              <li>运行 <code>cursor-agent mcp login agenthub</code> 后，Cursor Agent 会自动读取配置，并在浏览器中发起 Agent Hub 的登录与授权。</li>
+              <li>授权完成后，再运行 <code>cursor-agent mcp list</code> 检查状态；需要查看工具时，可以继续运行 <code>cursor-agent mcp list-tools agenthub</code>。</li>
+              <li>Cursor Agent 当前真实请求形态和 Cursor Desktop 不同：它使用 <code>http://localhost:8787/callback</code> 作为回调地址，并以 <code>Cursor/1.0.0</code> 身份完成 dynamic registration。</li>
+            </ol>
+
+            <p className="setup-note">
+              Cursor Agent 当前已验证 Remote MCP + OAuth 可用，真实请求形态是 dynamic registration + <code>client_secret_post</code> token exchange。
             </p>
           </>
         )}

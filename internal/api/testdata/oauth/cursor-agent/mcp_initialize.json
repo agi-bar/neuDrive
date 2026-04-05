@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "application/json, text/event-stream",
+    "Content-Type": "application/json",
+    "User-Agent": "Cursor/1.0.0"
+  },
+  "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"elicitation\":{\"form\":{}}},\"clientInfo\":{\"name\":\"Cursor\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}"
+}

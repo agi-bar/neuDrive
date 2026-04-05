@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/oauth/token",
+  "headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "node"
+  },
+  "body": "grant_type=authorization_code&code=captured_cursor_agent_auth_code&code_verifier=CAPTURED_CURSOR_AGENT_CODE_VERIFIER&redirect_uri=http%3A%2F%2Flocalhost%3A8787%2Fcallback&resource=https%3A%2F%2Fatmospheric-intellectual-sleeping-conducting.trycloudflare.com%2Fmcp&client_id=ahc_captured_cursor_agent_client&client_secret=ahs_captured_cursor_agent_secret"
+}

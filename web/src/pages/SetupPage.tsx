@@ -25,7 +25,7 @@ export const EXPIRY_OPTIONS = [
 
 export type Preset = 'agent' | 'readonly' | 'custom'
 export type ModeKey = 'local' | 'advanced'
-export type CloudPlatformTab = 'claude' | 'codex' | 'gemini'
+export type CloudPlatformTab = 'claude' | 'codex' | 'gemini' | 'cursor'
 export type LocalPlatformTab = 'claude' | 'codex'
 
 interface ScopeInfo {
@@ -94,7 +94,9 @@ export interface SetupOutletContext {
   claudeCloudCommand: string
   codexCloudCommand: string
   geminiCloudCommand: string
+  cursorAgentStatusCommand: string
   codexLoginCommand: string
+  cursorAgentLoginCommand: string
   geminiAuthCommand: string
   codexStatusCommand: string
   localSessionToken: string
@@ -241,6 +243,8 @@ export default function SetupPage() {
   ${baseUrl}/mcp`
   const codexCloudCommand = `codex mcp add agenthub --url ${baseUrl}/mcp`
   const geminiCloudCommand = `gemini mcp add --transport http agenthub ${baseUrl}/mcp`
+  const cursorAgentLoginCommand = 'cursor-agent mcp login agenthub'
+  const cursorAgentStatusCommand = 'cursor-agent mcp list'
   const codexLoginCommand = 'codex mcp login agenthub'
   const geminiAuthCommand = '/mcp auth agenthub'
   const codexStatusCommand = 'codex mcp list'
@@ -453,7 +457,9 @@ export default function SetupPage() {
           claudeCloudCommand,
           codexCloudCommand,
           geminiCloudCommand,
+          cursorAgentStatusCommand,
           codexLoginCommand,
+          cursorAgentLoginCommand,
           geminiAuthCommand,
           codexStatusCommand,
           localSessionToken,

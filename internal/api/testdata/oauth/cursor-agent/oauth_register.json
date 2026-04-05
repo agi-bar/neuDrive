@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/oauth/register",
+  "headers": {
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "User-Agent": "Cursor/1.0.0"
+  },
+  "body": "{\"redirect_uris\":[\"http://localhost:8787/callback\"],\"token_endpoint_auth_method\":\"none\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"response_types\":[\"code\"],\"client_name\":\"Cursor\"}"
+}

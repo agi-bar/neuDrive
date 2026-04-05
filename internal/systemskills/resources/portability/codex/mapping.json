@@ -1,0 +1,45 @@
+{
+  "platform": "codex",
+  "display_name": "Codex",
+  "mappings": [
+    {
+      "source_feature": "workspace or project instructions",
+      "agenthub_target": [
+        "/projects/<name>/context.md",
+        "/memory/profile/*"
+      ],
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "reusable prompts",
+      "agenthub_target": [
+        "skill_reference_material",
+        "project_assets"
+      ],
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "tools / MCP config",
+      "agenthub_target": [
+        "tool_metadata",
+        "connection_metadata"
+      ],
+      "restore_strategy": "draft_config"
+    },
+    {
+      "source_feature": "automation manifests",
+      "agenthub_target": [
+        "automation_shadow"
+      ],
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "session transcripts or notes",
+      "agenthub_target": [
+        "conversation_archive",
+        "/projects/<name>/log.jsonl"
+      ],
+      "restore_strategy": "manual_recreation"
+    }
+  ]
+}

@@ -3,7 +3,10 @@ package api
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"testing"
+
+	"github.com/agi-bar/agenthub/internal/services"
 )
 
 // ---------------------------------------------------------------------------
@@ -356,6 +359,82 @@ func TestFileTreeDelete(t *testing.T) {
 		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
+}
+
+func TestFileTreeReadSystemPortabilitySkill(t *testing.T) {
+	ts, _ := newTestServerWithFileTree(&services.FileTreeService{})
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tree/skills/portability/chatgpt/SKILL.md")
+	if err != nil {
+		t.Fatalf("GET /api/tree/skills/portability/chatgpt/SKILL.md: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body := parseJSON(resp)
+	content, _ := body["content"].(string)
+	if content == "" {
+		t.Fatal("expected skill content")
+	}
+	if !strings.Contains(content, "## Current User Snapshot") {
+		t.Fatalf("expected rendered snapshot block, got %q", content)
+	}
+	if !strings.Contains(content, "Connected to ChatGPT: unknown") {
+		t.Fatalf("expected default snapshot, got %q", content)
+	}
+}
+
+func TestFileTreeListSystemPortabilityDirectory(t *testing.T) {
+	ts, _ := newTestServerWithFileTree(&services.FileTreeService{})
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tree/skills/portability/")
+	if err != nil {
+		t.Fatalf("GET /api/tree/skills/portability/: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body := parseJSON(resp)
+	children, ok := body["children"].([]interface{})
+	if !ok {
+		t.Fatalf("expected children array, got %#v", body["children"])
+	}
+	if len(children) != 3 {
+		t.Fatalf("expected 3 platform directories, got %d", len(children))
+	}
+}
+
+func TestFileTreeWriteProtectedSystemPortabilitySkill(t *testing.T) {
+	ts, _ := newTestServerWithFileTree(&services.FileTreeService{})
+	defer ts.Close()
+
+	resp, err := authPut(ts, "/api/tree/skills/portability/chatgpt/SKILL.md", map[string]interface{}{
+		"content":   "override",
+		"mime_type": "text/markdown",
+	})
+	if err != nil {
+		t.Fatalf("PUT /api/tree/skills/portability/chatgpt/SKILL.md: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestFileTreeDeleteProtectedSystemPortabilitySkill(t *testing.T) {
+	ts, _ := newTestServerWithFileTree(&services.FileTreeService{})
+	defer ts.Close()
+
+	resp, err := authDelete(ts, "/api/tree/skills/portability/chatgpt/SKILL.md")
+	if err != nil {
+		t.Fatalf("DELETE /api/tree/skills/portability/chatgpt/SKILL.md: %v", err)
+	}
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", resp.StatusCode)
+	}
 }
 
 // ---------------------------------------------------------------------------

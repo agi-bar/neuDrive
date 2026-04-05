@@ -11,6 +11,7 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/systemskills"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -48,6 +49,14 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 		path += "/"
 	}
 
+	systemEntries, handledBySystem := systemskills.ListEntries(path)
+	if s.db == nil {
+		if handledBySystem {
+			return systemEntries, nil
+		}
+		return nil, fmt.Errorf("filetree.List: database not configured")
+	}
+
 	altPath := hubpath.AlternateSkillsPath(path)
 	parentDepth := strings.Count(path, "/")
 	altDepth := strings.Count(altPath, "/")
@@ -72,12 +81,30 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 	}
 	defer rows.Close()
 
-	return scanFileTreeEntries(rows)
+	entries, err := scanFileTreeEntries(rows)
+	if err != nil {
+		return nil, err
+	}
+	if !handledBySystem {
+		return entries, nil
+	}
+	if systemskills.IsProtectedPath(path) {
+		return mergeFileTreeEntries(entries, systemEntries), nil
+	}
+	return mergeFileTreeEntries(systemEntries, entries), nil
 }
 
 // Read returns a single live entry, respecting trust level.
 func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
 	path = hubpath.NormalizeStorage(path)
+	if entry, ok, err := systemskills.ReadEntry(path); err != nil {
+		return nil, fmt.Errorf("filetree.Read: %w", err)
+	} else if ok {
+		return entry, nil
+	}
+	if s.db == nil {
+		return nil, ErrEntryNotFound
+	}
 	altPath := hubpath.AlternateSkillsPath(path)
 
 	var entry models.FileTreeEntry
@@ -135,8 +162,14 @@ func (s *FileTreeService) WriteEntry(
 	opts models.FileTreeWriteOptions,
 ) (*models.FileTreeEntry, error) {
 	storagePath := hubpath.NormalizeStorage(path)
+	if systemskills.IsProtectedPath(storagePath) {
+		return nil, ErrReadOnlyPath
+	}
 	if contentType == "" {
 		contentType = "text/plain"
+	}
+	if s.db == nil {
+		return nil, fmt.Errorf("filetree.WriteEntry: database not configured")
 	}
 
 	parentDirs := make([]string, 0, 4)
@@ -266,6 +299,12 @@ func (s *FileTreeService) WriteEntry(
 // Delete tombstones an entry instead of hard deleting it.
 func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path string) error {
 	storagePath := hubpath.NormalizeStorage(path)
+	if systemskills.IsProtectedPath(storagePath) {
+		return ErrReadOnlyPath
+	}
+	if s.db == nil {
+		return fmt.Errorf("filetree.Delete: database not configured")
+	}
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -389,6 +428,9 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 	if !strings.HasSuffix(storagePath, "/") {
 		storagePath += "/"
 	}
+	if systemskills.IsProtectedPath(storagePath) {
+		return nil, ErrReadOnlyPath
+	}
 	if storagePath == "/" {
 		return &models.FileTreeEntry{
 			UserID:        userID,
@@ -401,6 +443,9 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 			Version:       1,
 			MinTrustLevel: models.TrustLevelGuest,
 		}, nil
+	}
+	if s.db == nil {
+		return nil, fmt.Errorf("filetree.EnsureDirectory: database not configured")
 	}
 
 	parentDirs := make([]string, 0, 4)
@@ -648,6 +693,17 @@ func (s *FileTreeService) Changes(ctx context.Context, userID uuid.UUID, cursor 
 }
 
 func (s *FileTreeService) ListSkillSummaries(ctx context.Context, userID uuid.UUID, trustLevel int) ([]models.SkillSummary, error) {
+	summaries := append([]models.SkillSummary{}, systemskills.SkillSummaries()...)
+	if s.db == nil {
+		sort.Slice(summaries, func(i, j int) bool {
+			if summaries[i].Source == summaries[j].Source {
+				return summaries[i].Name < summaries[j].Name
+			}
+			return summaries[i].Source < summaries[j].Source
+		})
+		return summaries, nil
+	}
+
 	roots := []struct {
 		path   string
 		source string
@@ -657,7 +713,6 @@ func (s *FileTreeService) ListSkillSummaries(ctx context.Context, userID uuid.UU
 		{path: "/roles", source: "roles"},
 	}
 
-	summaries := make([]models.SkillSummary, 0, 16)
 	for _, root := range roots {
 		snapshot, err := s.Snapshot(ctx, userID, root.path, trustLevel)
 		if err != nil {
@@ -857,6 +912,9 @@ func entryToSkillSummary(entry models.FileTreeEntry, source string) models.Skill
 	if value, ok := entry.Metadata["when_to_use"].(string); ok {
 		summary.WhenToUse = value
 	}
+	if value, ok := entry.Metadata["read_only"].(bool); ok {
+		summary.ReadOnly = value
+	}
 	if value := toStringSlice(entry.Metadata["allowed_tools"]); len(value) > 0 {
 		summary.AllowedTools = value
 	}
@@ -873,4 +931,27 @@ func entryToSkillSummary(entry models.FileTreeEntry, source string) models.Skill
 		summary.MinTrustLevel = value
 	}
 	return summary
+}
+
+func mergeFileTreeEntries(groups ...[]models.FileTreeEntry) []models.FileTreeEntry {
+	merged := make(map[string]models.FileTreeEntry)
+	for _, group := range groups {
+		for _, entry := range group {
+			merged[hubpath.NormalizePublic(entry.Path)] = entry
+		}
+	}
+
+	entries := make([]models.FileTreeEntry, 0, len(merged))
+	for _, entry := range merged {
+		entries = append(entries, entry)
+	}
+
+	sort.Slice(entries, func(i, j int) bool {
+		if entries[i].IsDirectory == entries[j].IsDirectory {
+			return hubpath.NormalizePublic(entries[i].Path) < hubpath.NormalizePublic(entries[j].Path)
+		}
+		return entries[i].IsDirectory && !entries[j].IsDirectory
+	})
+
+	return entries
 }

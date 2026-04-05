@@ -1,0 +1,43 @@
+{
+  "platform": "claude",
+  "display_name": "Claude",
+  "mappings": [
+    {
+      "source_feature": "Claude memory",
+      "agenthub_target": [
+        "/memory/profile/*",
+        "/memory/scratch/*"
+      ],
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Claude exported data zip",
+      "agenthub_target": [
+        "native_claude_data_import"
+      ],
+      "restore_strategy": "native_import"
+    },
+    {
+      "source_feature": "Projects",
+      "agenthub_target": [
+        "/projects/<name>/context.md",
+        "/projects/<name>/log.jsonl"
+      ],
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": ".skill directories",
+      "agenthub_target": [
+        "/skills/<name>/..."
+      ],
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Conversations",
+      "agenthub_target": [
+        "conversation_archive"
+      ],
+      "restore_strategy": "manual_recreation"
+    }
+  ]
+}

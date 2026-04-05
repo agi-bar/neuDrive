@@ -55,6 +55,18 @@ func newTestServer() (*httptest.Server, *inMemoryTokenStore) {
 	return ts, store
 }
 
+func newTestServerWithFileTree(fileTree *services.FileTreeService) (*httptest.Server, *inMemoryTokenStore) {
+	store := newInMemoryTokenStore()
+	s := &Server{
+		Router:          chi.NewRouter(),
+		JWTSecret:       testJWTSecret,
+		FileTreeService: fileTree,
+	}
+	s.setupTestRoutes(store)
+	ts := httptest.NewServer(s.Router)
+	return ts, store
+}
+
 func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 	r := s.Router
 

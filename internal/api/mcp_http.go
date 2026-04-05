@@ -122,6 +122,8 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		UserID:      userID,
 		TrustLevel:  trustLevel,
 		Scopes:      scopes,
+		Connection:  s.ConnectionService,
+		OAuth:       s.OAuthService,
 		FileTree:    s.FileTreeService,
 		Vault:       s.VaultService,
 		VaultCrypto: s.Vault,

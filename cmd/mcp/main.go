@@ -62,6 +62,7 @@ func main() {
 	}
 
 	// Create services
+	connectionSvc := services.NewConnectionService(db)
 	fileTreeSvc := services.NewFileTreeService(db)
 	vaultSvc := services.NewVaultService(db, v)
 	memorySvc := services.NewMemoryService(db, fileTreeSvc)
@@ -71,12 +72,15 @@ func main() {
 	deviceSvc := services.NewDeviceService(db, fileTreeSvc)
 	dashboardSvc := services.NewDashboardService(db)
 	importSvc := services.NewImportService(db, fileTreeSvc, memorySvc, vaultSvc)
+	oauthSvc := services.NewOAuthService(db, cfg.JWTSecret)
 
 	// Create MCP server
 	server := &mcp.MCPServer{
 		UserID:      scopedToken.UserID,
 		TrustLevel:  scopedToken.MaxTrustLevel,
 		Scopes:      scopedToken.Scopes,
+		Connection:  connectionSvc,
+		OAuth:       oauthSvc,
 		FileTree:    fileTreeSvc,
 		Vault:       vaultSvc,
 		VaultCrypto: v,

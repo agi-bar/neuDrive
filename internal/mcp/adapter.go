@@ -70,6 +70,8 @@ type MCPServer struct {
 	TrustLevel int
 	Scopes     []string
 
+	Connection  *services.ConnectionService
+	OAuth       *services.OAuthService
 	FileTree    *services.FileTreeService
 	Vault       *services.VaultService
 	VaultCrypto *vault.Vault
@@ -93,8 +95,9 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 				"resources": map[string]interface{}{"listChanged": false},
 			},
 			"serverInfo": map[string]interface{}{
-				"name":    "agenthub",
-				"version": "1.0.0",
+				"name":         "agenthub",
+				"version":      "1.0.0",
+				"instructions": "Platform portability manuals live under /skills/portability/<platform>/SKILL.md. Read them first when the user asks about import, export, migration, backup, or restore.",
 			},
 		}
 	case "notifications/initialized":
@@ -230,12 +233,12 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "list_skills",
-			Description: "列出所有可用技能",
+			Description: "列出所有可用技能，包含系统级 portability 手册（如 portability/chatgpt）",
 			InputSchema: jsonSchema(map[string]interface{}{}),
 		},
 		{
 			Name:        "read_skill",
-			Description: "读取技能的 SKILL.md",
+			Description: "读取技能的 SKILL.md；当用户提到平台迁移时，也可读取 portability/<platform>",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"name": prop("string", "技能名称"),
 			}, "name"),
@@ -487,6 +490,8 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		}
 		// Normalize storage paths to public paths (e.g. .skills/ → /skills/).
 		for i := range entries {
+			rendered := s.renderSystemSkillEntry(ctx, &entries[i])
+			entries[i] = *rendered
 			entries[i].Path = hubpath.StorageToPublic(entries[i].Path)
 		}
 		result, _ := json.MarshalIndent(entries, "", "  ")
@@ -498,6 +503,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
+		entry = s.renderSystemSkillEntry(ctx, entry)
 		return entry.Content, false
 
 	case "write_file":
@@ -539,6 +545,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
+		entry = s.renderSystemSkillEntry(ctx, entry)
 		return entry.Content, false
 
 	case "list_devices":
@@ -700,6 +707,7 @@ func (s *MCPServer) readResource(uri string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	entry = s.renderSystemSkillEntry(ctx, entry)
 	return entry.Content, nil
 }
 

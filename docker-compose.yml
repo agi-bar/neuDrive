@@ -1,18 +1,16 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: agenthub
-      POSTGRES_USER: agenthub
-      POSTGRES_PASSWORD: agenthub_dev
+      POSTGRES_DB: ${POSTGRES_DB:-agenthub}
+      POSTGRES_USER: ${POSTGRES_USER:-agenthub}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agenthub_dev}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U agenthub"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-agenthub} -d ${POSTGRES_DB:-agenthub}"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -20,15 +18,16 @@ services:
   server:
     build: .
     ports:
-      - "8080:8080"
+      - "${PORT:-8080}:8080"
     environment:
-      DATABASE_URL: postgres://agenthub:agenthub_dev@db:5432/agenthub?sslmode=disable
-      PORT: "8080"
-      JWT_SECRET: dev-jwt-secret-change-in-production
-      VAULT_MASTER_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-      GITHUB_CLIENT_ID: ""
-      GITHUB_CLIENT_SECRET: ""
-      CORS_ORIGINS: "http://localhost:3000,http://localhost:5173"
+      DATABASE_URL: postgres://${POSTGRES_USER:-agenthub}:${POSTGRES_PASSWORD:-agenthub_dev}@db:${POSTGRES_PORT:-5432}/${POSTGRES_DB:-agenthub}?sslmode=disable
+      PORT: "${PORT:-8080}"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      VAULT_MASTER_KEY: ${VAULT_MASTER_KEY:-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef}
+      GITHUB_CLIENT_ID: ${GITHUB_CLIENT_ID:-}
+      GITHUB_CLIENT_SECRET: ${GITHUB_CLIENT_SECRET:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost:8080}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://localhost:5173}
     depends_on:
       db:
         condition: service_healthy

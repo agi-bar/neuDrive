@@ -2,6 +2,9 @@
 
 Python client library for [Agent Hub](https://github.com/agi-bar/agenthub) -- AI identity and trust infrastructure.
 
+The client wraps the scoped-token `/agent/*` API surface, including the
+canonical virtual tree sync endpoints.
+
 ## Installation
 
 ```bash
@@ -28,6 +31,10 @@ with AgentHub("https://hub.example.com", token="aht_xxx") as hub:
 
     # Control a device
     hub.call_device("living-room-light", "off")
+
+    # Sync a subtree
+    snapshot = hub.snapshot("/projects/my-project")
+    delta = hub.changes(snapshot.cursor, "/projects/my-project")
 
     # Send a message
     hub.send_message(to="assistant", subject="Hello", body="Testing the SDK")
@@ -74,6 +81,14 @@ hub.log_action("my-project", "info", "deployed v2", tags=["deploy"])
 hub.list_directory("/")
 hub.read_file("notes/todo.md")
 hub.write_file("notes/todo.md", "# TODO\n- Ship SDK")
+hub.write_file(
+    "notes/todo.md",
+    "# TODO\n- Ship SDK",
+    expected_version=2,
+    metadata={"source": "python-sdk"},
+)
+snapshot = hub.snapshot("/projects/my-project")
+changes = hub.changes(snapshot.cursor, "/projects/my-project")
 ```
 
 ### Vault (Encrypted Secrets)
@@ -89,6 +104,7 @@ hub.write_secret("api-keys", '{"openai": "sk-..."}')
 ```python
 hub.list_skills()
 hub.read_skill("cyberzen-write")
+# list_skills() returns indexed metadata such as description / when_to_use / tags
 ```
 
 ### Devices

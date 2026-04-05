@@ -4,6 +4,10 @@ bin/
 node_modules/
 web/dist/
 .env
+agenthub.env
+.local/
+deploy/k8s/*-secret.yaml
+docker-compose.override.yml
 
 # Keep the placeholder for embed but ignore real builds
 !internal/web/dist/index.html

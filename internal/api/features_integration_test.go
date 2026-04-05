@@ -511,6 +511,23 @@ func TestFeature_OAuth(t *testing.T) {
 		}
 	})
 
+	t.Run("AuthorizeInfo_DefaultsToAppScopes", func(t *testing.T) {
+		status, body := apiCall(t, "GET", "/api/oauth/authorize-info?client_id="+clientID+"&redirect_uri=https://example.com/callback&response_type=code", jwt, nil)
+		if status != 200 {
+			t.Fatalf("authorize-info: expected 200, got %d: %v", status, body)
+		}
+		rawScopes, ok := body["scopes"].([]any)
+		if !ok {
+			t.Fatalf("authorize-info: expected scopes array, got %T: %v", body["scopes"], body["scopes"])
+		}
+		if len(rawScopes) != 2 {
+			t.Fatalf("authorize-info: expected 2 scopes, got %d: %v", len(rawScopes), rawScopes)
+		}
+		if scopeStr, _ := body["scope"].(string); scopeStr != "read:profile read:memory" {
+			t.Fatalf("authorize-info: unexpected scope string %q", scopeStr)
+		}
+	})
+
 	// Authorize flow: POST /oauth/authorize with JWT auth
 	var authCode string
 	t.Run("Authorize", func(t *testing.T) {
@@ -539,6 +556,34 @@ func TestFeature_OAuth(t *testing.T) {
 		}
 	})
 
+	var defaultScopeCode string
+	t.Run("Authorize_DefaultsToAppScopes", func(t *testing.T) {
+		status, body := apiCall(t, "POST", "/oauth/authorize", jwt, map[string]any{
+			"client_id":    clientID,
+			"redirect_uri": "https://example.com/callback",
+			"state":        "test-state-default-scope",
+			"action":       "approve",
+		})
+		t.Logf("authorize-default-scope: status=%d body=%v", status, body)
+		if status != 200 && status != 302 {
+			t.Fatalf("authorize-default-scope: expected 200 or 302, got %d: %v", status, body)
+		}
+		defaultScopeCode, _ = body["code"].(string)
+		if redirect, ok := body["redirect"].(string); ok && defaultScopeCode == "" {
+			if idx := strings.Index(redirect, "code="); idx >= 0 {
+				end := strings.Index(redirect[idx:], "&")
+				if end == -1 {
+					defaultScopeCode = redirect[idx+5:]
+				} else {
+					defaultScopeCode = redirect[idx+5 : idx+end]
+				}
+			}
+		}
+		if defaultScopeCode == "" {
+			t.Fatalf("authorize-default-scope: expected non-empty auth code")
+		}
+	})
+
 	// Exchange code for token
 	t.Run("ExchangeCode", func(t *testing.T) {
 		if authCode == "" {
@@ -562,6 +607,26 @@ func TestFeature_OAuth(t *testing.T) {
 			if status2 == 200 {
 				t.Logf("userinfo: %v", body2)
 			}
+		}
+	})
+
+	t.Run("ExchangeCode_DefaultsToAppScopes", func(t *testing.T) {
+		if defaultScopeCode == "" {
+			t.Skip("no auth code to exchange")
+		}
+		status, body := apiCall(t, "POST", "/oauth/token", "", map[string]any{
+			"grant_type":    "authorization_code",
+			"code":          defaultScopeCode,
+			"client_id":     clientID,
+			"client_secret": clientSecret,
+			"redirect_uri":  "https://example.com/callback",
+		})
+		t.Logf("exchange-default-scope: status=%d body=%v", status, body)
+		if status != 200 {
+			t.Fatalf("exchange-default-scope: expected 200, got %d: %v", status, body)
+		}
+		if scope, _ := body["scope"].(string); scope != "read:profile read:memory" {
+			t.Fatalf("exchange-default-scope: unexpected scope %q", scope)
 		}
 	})
 

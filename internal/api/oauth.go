@@ -84,7 +84,7 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	scopes := auth.SplitScopes(scope)
+	scopes, scope := effectiveOAuthScopes(app, scope)
 
 	// Show login form if user is not authenticated (common for MCP connectors)
 	_, isAuthed := userIDFromCtx(r.Context())
@@ -134,6 +134,15 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		q.Set("state", state)
 	}
 
+	app, appErr := s.OAuthService.GetAppByClientID(r.Context(), clientID)
+	scopes, scope := effectiveOAuthScopes(app, scope)
+	appName := clientID
+	appLogoURL := ""
+	if app != nil {
+		appName = app.Name
+		appLogoURL = app.LogoURL
+	}
+
 	// If denied, redirect with error.
 	if action != "approve" {
 		q.Set("error", "access_denied")
@@ -164,7 +173,9 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		if email == "" || password == "" {
 			auth.RenderConsentPage(w, auth.ConsentPageData{
 				Error:               "Please enter your email and password to authorize.",
-				AppName:             clientID,
+				AppName:             appName,
+				AppLogoURL:          appLogoURL,
+				Scopes:              scopes,
 				ClientID:            clientID,
 				RedirectURI:         redirectURI,
 				Scope:               scope,
@@ -180,7 +191,9 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		if err != nil {
 			auth.RenderConsentPage(w, auth.ConsentPageData{
 				Error:               "Login failed: " + err.Error(),
-				AppName:             clientID,
+				AppName:             appName,
+				AppLogoURL:          appLogoURL,
+				Scopes:              scopes,
 				ClientID:            clientID,
 				RedirectURI:         redirectURI,
 				Scope:               scope,
@@ -197,8 +210,7 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 	_ = ok
 
 	// Look up the app.
-	app, err := s.OAuthService.GetAppByClientID(r.Context(), clientID)
-	if err != nil {
+	if appErr != nil {
 		q.Set("error", "invalid_request")
 		q.Set("error_description", "Unknown application.")
 		redirectURL.RawQuery = q.Encode()
@@ -212,8 +224,6 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 		})
 		return
 	}
-
-	scopes := auth.SplitScopes(scope)
 
 	// Generate the authorization code.
 	code, err := s.OAuthService.Authorize(r.Context(), app.ID, userID, scopes, redirectURI, codeChallenge, codeChallengeMethod)
@@ -483,7 +493,7 @@ func (s *Server) handleOAuthAuthorizeInfo(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	scopes := auth.SplitScopes(scope)
+	scopes, scope := effectiveOAuthScopes(app, scope)
 	scopeLabels := make([]map[string]string, 0, len(scopes))
 	for _, sc := range scopes {
 		scopeLabels = append(scopeLabels, map[string]string{
@@ -498,6 +508,7 @@ func (s *Server) handleOAuthAuthorizeInfo(w http.ResponseWriter, r *http.Request
 		"scopes":       scopeLabels,
 		"client_id":    clientID,
 		"redirect_uri": redirectURI,
+		"scope":        scope,
 	})
 }
 
@@ -529,6 +540,17 @@ func (s *Server) autoRegisterOAuthClient(ctx context.Context, clientIDURL, redir
 
 	return s.OAuthService.RegisterAppWithClientID(ctx, systemUserID,
 		clientIDURL, appName, redirectURIs, []string{"admin"})
+}
+
+func effectiveOAuthScopes(app *models.OAuthApp, requestedScope string) ([]string, string) {
+	scopes := auth.SplitScopes(requestedScope)
+	if len(scopes) == 0 && app != nil {
+		scopes = append([]string(nil), app.Scopes...)
+	}
+	if len(scopes) == 0 {
+		return nil, ""
+	}
+	return scopes, strings.Join(scopes, " ")
 }
 
 // writeOAuthError writes an OAuth 2.0 compliant error response.

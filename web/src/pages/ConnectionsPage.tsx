@@ -209,9 +209,20 @@ export default function ConnectionsPage() {
     return `${scopes.length} 项 scope`
   }
 
+  const getGrantScopes = (grant: OAuthGrantResponse) => {
+    const directScopes = Array.isArray(grant.scopes) ? grant.scopes.filter(Boolean) : []
+    if (directScopes.length > 0) {
+      return directScopes
+    }
+    return Array.isArray(grant.app?.scopes) ? grant.app.scopes.filter(Boolean) : []
+  }
+
   const inferOAuthPlatform = (grant: OAuthGrantResponse) => {
-    const clientHost = parseHost(grant.app.client_id)
-    const redirectHosts = grant.app.redirect_uris.map(parseHost).filter(Boolean)
+    const clientID = typeof grant.app?.client_id === 'string' ? grant.app.client_id : ''
+    const redirectURIs = Array.isArray(grant.app?.redirect_uris) ? grant.app.redirect_uris : []
+    const appName = typeof grant.app?.name === 'string' ? grant.app.name : ''
+    const clientHost = parseHost(clientID)
+    const redirectHosts = redirectURIs.map(parseHost).filter(Boolean)
     const knownHosts = [clientHost, ...redirectHosts]
     const primaryHost = knownHosts[0]
 
@@ -219,22 +230,22 @@ export default function ConnectionsPage() {
       return {
         platform: 'Claude',
         name: 'Claude Connector',
-        detail: primaryHost || grant.app.client_id,
+        detail: primaryHost || clientID,
       }
     }
 
     if (knownHosts.some((host) => host.includes('openai.com') || host.includes('chatgpt.com'))) {
       return {
         platform: 'GPT',
-        name: grant.app.name || 'ChatGPT Connector',
-        detail: primaryHost || grant.app.client_id,
+        name: appName || 'ChatGPT Connector',
+        detail: primaryHost || clientID,
       }
     }
 
     return {
       platform: primaryHost || 'OAuth',
-      name: grant.app.name || primaryHost || 'OAuth App',
-      detail: primaryHost || grant.app.client_id,
+      name: appName || primaryHost || 'OAuth App',
+      detail: primaryHost || clientID,
     }
   }
 
@@ -253,6 +264,7 @@ export default function ConnectionsPage() {
     })),
     ...oauthGrants.map((grant) => {
       const inferred = inferOAuthPlatform(grant)
+      const scopes = getGrantScopes(grant)
       return {
         id: grant.id,
         kind: 'oauth' as const,
@@ -263,8 +275,8 @@ export default function ConnectionsPage() {
         activityAt: grant.created_at,
         activityLabel: '授权于',
         badgeDetail: 'OAuth / MCP',
-        secondaryDetail: summarizeScopes(grant.scopes),
-        scopes: grant.scopes,
+        secondaryDetail: summarizeScopes(scopes),
+        scopes,
       }
     }),
   ].sort((a, b) => {

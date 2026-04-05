@@ -43,6 +43,9 @@ func (s *OAuthService) RegisterApp(ctx context.Context, userID uuid.UUID, name s
 		return nil, fmt.Errorf("oauth.RegisterApp: at least one redirect_uri is required")
 	}
 
+	redirectURIs = normalizeOAuthStringSlice(redirectURIs)
+	scopes = normalizeOAuthStringSlice(scopes)
+
 	clientID, err := generateClientID()
 	if err != nil {
 		return nil, fmt.Errorf("oauth.RegisterApp: %w", err)
@@ -84,6 +87,9 @@ func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.
 		return existing, nil
 	}
 
+	redirectURIs = normalizeOAuthStringSlice(redirectURIs)
+	scopes = normalizeOAuthStringSlice(scopes)
+
 	clientSecret, err := generateClientSecret()
 	if err != nil {
 		return nil, err
@@ -108,6 +114,8 @@ func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.
 // Authorize creates an authorization code for the given app and user.
 // It also creates or updates the grant record.
 func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, scopes []string, redirectURI, codeChallenge, codeChallengeMethod string) (string, error) {
+	scopes = normalizeOAuthStringSlice(scopes)
+
 	code, err := generateAuthCode()
 	if err != nil {
 		return "", fmt.Errorf("oauth.Authorize: %w", err)
@@ -260,6 +268,7 @@ func (s *OAuthService) ValidateGrant(ctx context.Context, userID, appID uuid.UUI
 	if err != nil {
 		return nil, fmt.Errorf("oauth.ValidateGrant: no grant found")
 	}
+	g.Scopes = normalizeOAuthStringSlice(g.Scopes)
 	return &g, nil
 }
 
@@ -282,6 +291,7 @@ func (s *OAuthService) ListApps(ctx context.Context, userID uuid.UUID) ([]models
 			&a.RedirectURIs, &a.Scopes, &a.Description, &a.LogoURL, &a.IsActive, &a.CreatedAt); err != nil {
 			return nil, fmt.Errorf("oauth.ListApps: scan: %w", err)
 		}
+		normalizeOAuthApp(&a)
 		apps = append(apps, a)
 	}
 	return apps, rows.Err()
@@ -322,6 +332,8 @@ func (s *OAuthService) ListGrants(ctx context.Context, userID uuid.UUID) ([]mode
 			&app.ID, &app.Name, &app.ClientID, &app.RedirectURIs, &app.Scopes, &app.Description, &app.LogoURL, &app.IsActive, &app.CreatedAt); err != nil {
 			return nil, fmt.Errorf("oauth.ListGrants: scan: %w", err)
 		}
+		normalizeOAuthAppResponse(&app)
+		gr.Scopes = normalizeOAuthGrantScopes(gr.Scopes, app.Scopes)
 		gr.App = app
 		grants = append(grants, gr)
 	}
@@ -353,6 +365,7 @@ func (s *OAuthService) GetAppByClientID(ctx context.Context, clientID string) (*
 	if err != nil {
 		return nil, fmt.Errorf("oauth.GetAppByClientID: %w", err)
 	}
+	normalizeOAuthApp(&a)
 	return &a, nil
 }
 
@@ -368,6 +381,7 @@ func (s *OAuthService) getAppByID(ctx context.Context, id uuid.UUID) (*models.OA
 	if err != nil {
 		return nil, fmt.Errorf("oauth.getAppByID: %w", err)
 	}
+	normalizeOAuthApp(&a)
 	return &a, nil
 }
 
@@ -517,4 +531,46 @@ func authSplitScopes(scope string) []string {
 		return nil
 	}
 	return strings.Fields(scope)
+}
+
+func normalizeOAuthApp(app *models.OAuthApp) {
+	if app == nil {
+		return
+	}
+	app.RedirectURIs = normalizeOAuthStringSlice(app.RedirectURIs)
+	app.Scopes = normalizeOAuthStringSlice(app.Scopes)
+}
+
+func normalizeOAuthAppResponse(app *models.OAuthAppResponse) {
+	if app == nil {
+		return
+	}
+	app.RedirectURIs = normalizeOAuthStringSlice(app.RedirectURIs)
+	app.Scopes = normalizeOAuthStringSlice(app.Scopes)
+}
+
+func normalizeOAuthGrantScopes(grantScopes, appScopes []string) []string {
+	scopes := normalizeOAuthStringSlice(grantScopes)
+	if len(scopes) > 0 {
+		return scopes
+	}
+	return normalizeOAuthStringSlice(appScopes)
+}
+
+func normalizeOAuthStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	normalized := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		normalized = append(normalized, value)
+	}
+	if len(normalized) == 0 {
+		return []string{}
+	}
+	return normalized
 }

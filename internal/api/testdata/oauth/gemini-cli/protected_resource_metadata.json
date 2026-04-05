@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/oauth-protected-resource/mcp",
+  "headers": {
+    "Accept": "*/*",
+    "User-Agent": "node"
+  }
+}

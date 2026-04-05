@@ -1,0 +1,8 @@
+{
+  "method": "HEAD",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "application/json",
+    "User-Agent": "node"
+  }
+}

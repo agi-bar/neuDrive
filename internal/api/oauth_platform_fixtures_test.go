@@ -111,8 +111,58 @@ func TestCapturedOAuthRequests_ChatGPTDynamicRegisterRequestParses(t *testing.T)
 	}
 }
 
+func TestCapturedOAuthRequests_GeminiCLIDynamicRegisterRequestParses(t *testing.T) {
+	req := newRequestFromFixture(t, "testdata/oauth/gemini-cli/oauth_register.json")
+
+	parsed, err := parseOAuthDynamicRegisterRequest(req)
+	if err != nil {
+		t.Fatalf("parseOAuthDynamicRegisterRequest returned error: %v", err)
+	}
+
+	if parsed.ClientName != "Gemini CLI MCP Client" {
+		t.Fatalf("expected client_name Gemini CLI MCP Client, got %q", parsed.ClientName)
+	}
+	if parsed.TokenEndpointAuthMethod != "none" {
+		t.Fatalf("expected token_endpoint_auth_method none, got %q", parsed.TokenEndpointAuthMethod)
+	}
+	if len(parsed.RedirectURIs) != 1 || parsed.RedirectURIs[0] != "http://localhost:65290/oauth/callback" {
+		t.Fatalf("unexpected redirect_uris: %v", parsed.RedirectURIs)
+	}
+	if len(parsed.GrantTypes) != 2 || parsed.GrantTypes[0] != "authorization_code" || parsed.GrantTypes[1] != "refresh_token" {
+		t.Fatalf("unexpected grant_types: %v", parsed.GrantTypes)
+	}
+	if len(parsed.ResponseTypes) != 1 || parsed.ResponseTypes[0] != "code" {
+		t.Fatalf("unexpected response_types: %v", parsed.ResponseTypes)
+	}
+	if !strings.Contains(parsed.Scope, "offline_access") {
+		t.Fatalf("expected offline_access in scope, got %q", parsed.Scope)
+	}
+}
+
 func TestCapturedOAuthRequests_ClaudeWebInitializeGetsOAuthChallenge(t *testing.T) {
 	req := newRequestFromFixture(t, "testdata/oauth/claude-web/mcp_initialize.json")
+	rec := httptest.NewRecorder()
+
+	s := &Server{}
+	s.handleMCPEndpoint(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for unauthenticated initialize, got %d", rec.Code)
+	}
+
+	authHeader := rec.Header().Get("WWW-Authenticate")
+	if !strings.Contains(authHeader, `Bearer resource_metadata="https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/oauth-protected-resource"`) {
+		t.Fatalf("expected WWW-Authenticate to point to protected resource metadata, got %q", authHeader)
+	}
+
+	body := decodeResponseBody(t, rec)
+	if body["jsonrpc"] != "2.0" {
+		t.Fatalf("expected jsonrpc 2.0 response, got %v", body)
+	}
+}
+
+func TestCapturedOAuthRequests_GeminiCLIInitializeGetsOAuthChallenge(t *testing.T) {
+	req := newRequestFromFixture(t, "testdata/oauth/gemini-cli/mcp_initialize.json")
 	rec := httptest.NewRecorder()
 
 	s := &Server{}
@@ -172,8 +222,37 @@ func TestCapturedOAuthRequests_ProtectedResourceMetadataForClaudeCode(t *testing
 	}
 }
 
+func TestCapturedOAuthRequests_GeminiCLIHeadProbeGetsMethodNotAllowed(t *testing.T) {
+	req := newRequestFromFixture(t, "testdata/oauth/gemini-cli/mcp_head_probe.json")
+	rec := httptest.NewRecorder()
+
+	s := &Server{}
+	s.handleMCPEndpoint(rec, req)
+
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("expected 405 for HEAD probe, got %d", rec.Code)
+	}
+}
+
 func TestCapturedOAuthRequests_ProtectedResourceMetadataForClaudeWeb(t *testing.T) {
 	req := newRequestFromFixture(t, "testdata/oauth/claude-web/protected_resource_metadata.json")
+	rec := httptest.NewRecorder()
+
+	s := &Server{}
+	s.handleProtectedResourceMetadata(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+
+	body := decodeResponseBody(t, rec)
+	if body["resource"] != "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp" {
+		t.Fatalf("expected resource metadata for captured host, got %v", body["resource"])
+	}
+}
+
+func TestCapturedOAuthRequests_ProtectedResourceMetadataForGeminiCLI(t *testing.T) {
+	req := newRequestFromFixture(t, "testdata/oauth/gemini-cli/protected_resource_metadata.json")
 	rec := httptest.NewRecorder()
 
 	s := &Server{}
@@ -277,6 +356,33 @@ func TestCapturedOAuthRequests_ClaudeWebAuthorizeApprovalFormParses(t *testing.T
 	}
 }
 
+func TestCapturedOAuthRequests_GeminiCLIAuthorizeApprovalFormParses(t *testing.T) {
+	req := newRequestFromFixture(t, "testdata/oauth/gemini-cli/oauth_authorize.json")
+
+	if err := req.ParseForm(); err != nil {
+		t.Fatalf("ParseForm: %v", err)
+	}
+
+	if req.FormValue("client_id") != "ahc_captured_gemini_client" {
+		t.Fatalf("unexpected client_id: %q", req.FormValue("client_id"))
+	}
+	if req.FormValue("redirect_uri") != "http://localhost:65290/oauth/callback" {
+		t.Fatalf("unexpected redirect_uri: %q", req.FormValue("redirect_uri"))
+	}
+	if req.FormValue("state") != "CAPTURED_GEMINI_STATE" {
+		t.Fatalf("unexpected state: %q", req.FormValue("state"))
+	}
+	if req.FormValue("action") != "approve" {
+		t.Fatalf("unexpected action: %q", req.FormValue("action"))
+	}
+	if req.FormValue("_token") != "CAPTURED_GEMINI_LOGIN_JWT" {
+		t.Fatalf("unexpected _token placeholder: %q", req.FormValue("_token"))
+	}
+	if !strings.Contains(req.FormValue("scope"), "offline_access") {
+		t.Fatalf("expected offline_access in scope, got %q", req.FormValue("scope"))
+	}
+}
+
 func TestCapturedOAuthRequests_ClaudeCodeAuthenticatedInitializeRequestParses(t *testing.T) {
 	req := newRequestFromFixture(t, "testdata/oauth/claude-code/mcp_initialize_authenticated.json")
 
@@ -351,6 +457,45 @@ func TestCapturedOAuthRequests_ClaudeWebAuthenticatedInitializeRequestParses(t *
 		t.Fatalf("unexpected clientInfo.name: %v", clientInfo["name"])
 	}
 	if clientInfo["version"] != "1.0.0" {
+		t.Fatalf("unexpected clientInfo.version: %v", clientInfo["version"])
+	}
+}
+
+func TestCapturedOAuthRequests_GeminiCLIAuthenticatedInitializeRequestParses(t *testing.T) {
+	req := newRequestFromFixture(t, "testdata/oauth/gemini-cli/mcp_initialize_authenticated.json")
+
+	if got := req.Header.Get("Authorization"); got != "Bearer CAPTURED_GEMINI_ACCESS_TOKEN" {
+		t.Fatalf("unexpected Authorization header: %q", got)
+	}
+
+	var payload map[string]any
+	if err := json.NewDecoder(req.Body).Decode(&payload); err != nil {
+		t.Fatalf("Decode: %v", err)
+	}
+
+	if payload["jsonrpc"] != "2.0" {
+		t.Fatalf("expected jsonrpc 2.0, got %v", payload["jsonrpc"])
+	}
+	if payload["method"] != "initialize" {
+		t.Fatalf("expected initialize method, got %v", payload["method"])
+	}
+
+	params, ok := payload["params"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected params object, got %T", payload["params"])
+	}
+	if params["protocolVersion"] != "2025-11-25" {
+		t.Fatalf("unexpected protocolVersion: %v", params["protocolVersion"])
+	}
+
+	clientInfo, ok := params["clientInfo"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected clientInfo object, got %T", params["clientInfo"])
+	}
+	if clientInfo["name"] != "gemini-cli-mcp-client" {
+		t.Fatalf("unexpected clientInfo.name: %v", clientInfo["name"])
+	}
+	if clientInfo["version"] != "0.36.0" {
 		t.Fatalf("unexpected clientInfo.version: %v", clientInfo["version"])
 	}
 }
@@ -508,6 +653,7 @@ func TestCapturedOAuthRequests_AuthorizationServerMetadataSupportsPlatformClient
 		"testdata/oauth/codex/authorization_server_metadata.json",
 		"testdata/oauth/chatgpt/authorization_server_metadata.json",
 		"testdata/oauth/chatgpt/openid_configuration.json",
+		"testdata/oauth/gemini-cli/authorization_server_metadata.json",
 	}
 
 	for _, fixturePath := range fixtures {

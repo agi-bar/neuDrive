@@ -56,6 +56,16 @@ func TestInferCaptureSourceFromCapturedFixtures(t *testing.T) {
 			expected: "chatgpt",
 		},
 		{
+			name:     "gemini cli dynamic register",
+			fixture:  "testdata/oauth/gemini-cli/oauth_register.json",
+			expected: "gemini-cli",
+		},
+		{
+			name:     "gemini cli authenticated initialize",
+			fixture:  "testdata/oauth/gemini-cli/mcp_initialize_authenticated.json",
+			expected: "gemini-cli",
+		},
+		{
 			name:     "codex initialize",
 			fixture:  "testdata/oauth/codex/mcp_initialize.json",
 			expected: "codex",

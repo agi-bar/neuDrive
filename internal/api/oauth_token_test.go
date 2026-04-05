@@ -119,6 +119,34 @@ func TestParseOAuthTokenRequestSupportsCapturedChatGPTRequest(t *testing.T) {
 	}
 }
 
+func TestParseOAuthTokenRequestSupportsCapturedGeminiCLIRequest(t *testing.T) {
+	req := newRequestFromFixture(t, "testdata/oauth/gemini-cli/oauth_token_authorization_code.json")
+
+	parsed, err := parseOAuthTokenRequest(req)
+	if err != nil {
+		t.Fatalf("parseOAuthTokenRequest returned error: %v", err)
+	}
+
+	if parsed.GrantType != "authorization_code" {
+		t.Fatalf("expected grant_type authorization_code, got %q", parsed.GrantType)
+	}
+	if parsed.Code != "captured_gemini_auth_code" {
+		t.Fatalf("expected code from form body, got %q", parsed.Code)
+	}
+	if parsed.CodeVerifier != "CAPTURED_GEMINI_CODE_VERIFIER" {
+		t.Fatalf("expected code_verifier from form body, got %q", parsed.CodeVerifier)
+	}
+	if parsed.RedirectURI != "http://localhost:65290/oauth/callback" {
+		t.Fatalf("expected redirect_uri from form body, got %q", parsed.RedirectURI)
+	}
+	if parsed.ClientID != "ahc_captured_gemini_client" {
+		t.Fatalf("expected client_id from form body, got %q", parsed.ClientID)
+	}
+	if parsed.ClientSecret != "ahs_captured_gemini_secret" {
+		t.Fatalf("expected client_secret from form body, got %q", parsed.ClientSecret)
+	}
+}
+
 func TestParseOAuthTokenRequestRejectsConflictingBasicAuth(t *testing.T) {
 	form := url.Values{
 		"grant_type":   {"authorization_code"},

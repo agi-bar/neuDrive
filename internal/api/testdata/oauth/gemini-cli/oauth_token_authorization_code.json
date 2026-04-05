@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/oauth/token",
+  "headers": {
+    "Accept": "application/json, application/x-www-form-urlencoded",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "node"
+  },
+  "body": "grant_type=authorization_code&code=captured_gemini_auth_code&redirect_uri=http%3A%2F%2Flocalhost%3A65290%2Foauth%2Fcallback&code_verifier=CAPTURED_GEMINI_CODE_VERIFIER&client_id=ahc_captured_gemini_client&client_secret=ahs_captured_gemini_secret&resource=https%3A%2F%2Fatmospheric-intellectual-sleeping-conducting.trycloudflare.com%2Fmcp"
+}

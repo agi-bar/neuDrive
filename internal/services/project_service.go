@@ -226,6 +226,13 @@ func (s *ProjectService) AppendLog(ctx context.Context, projectID uuid.UUID, log
 	if err != nil {
 		return fmt.Errorf("project.AppendLog: %w", err)
 	}
+
+	_, err = s.db.Exec(ctx,
+		`UPDATE projects SET updated_at = $1 WHERE id = $2`,
+		now, projectID)
+	if err != nil {
+		return fmt.Errorf("project.AppendLog: update project timestamp: %w", err)
+	}
 	return nil
 }
 

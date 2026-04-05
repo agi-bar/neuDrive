@@ -2,6 +2,28 @@ package mcp
 
 import "testing"
 
+func TestGenerateStdioEnvConfig(t *testing.T) {
+	cfg := GenerateStdioEnvConfig("agenthub-mcp", "")
+
+	mcpServers, ok := cfg["mcpServers"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected mcpServers map, got %T", cfg["mcpServers"])
+	}
+
+	server, ok := mcpServers["agenthub"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected agenthub server map, got %T", mcpServers["agenthub"])
+	}
+
+	args, ok := server["args"].([]string)
+	if !ok {
+		t.Fatalf("expected args slice, got %T", server["args"])
+	}
+	if len(args) != 2 || args[0] != "--token-env" || args[1] != DefaultTokenEnvVar {
+		t.Fatalf("unexpected args: %#v", args)
+	}
+}
+
 func TestGenerateHTTPOAuthConfig(t *testing.T) {
 	cfg := GenerateHTTPOAuthConfig("https://hub.example.com")
 

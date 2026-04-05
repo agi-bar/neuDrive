@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"strings"
 
 	"github.com/agi-bar/agenthub/internal/config"
 	"github.com/agi-bar/agenthub/internal/database"
@@ -14,13 +15,18 @@ import (
 	"github.com/agi-bar/agenthub/internal/vault"
 )
 
+const defaultTokenEnvVar = "AGENTHUB_TOKEN"
+
 func main() {
 	token := flag.String("token", "", "Scoped access token (aht_...)")
+	tokenEnv := flag.String("token-env", defaultTokenEnvVar, "Environment variable name containing the scoped access token")
 	flag.Parse()
 
-	if *token == "" {
-		fmt.Fprintln(os.Stderr, "error: --token is required")
-		fmt.Fprintln(os.Stderr, "usage: agenthub-mcp --token aht_xxxxx")
+	resolvedToken, err := resolveToken(*token, *tokenEnv)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		fmt.Fprintf(os.Stderr, "usage: agenthub-mcp --token aht_xxxxx\n")
+		fmt.Fprintf(os.Stderr, "   or: export %s=aht_xxxxx && agenthub-mcp --token-env %s\n", defaultTokenEnvVar, defaultTokenEnvVar)
 		os.Exit(1)
 	}
 
@@ -39,7 +45,7 @@ func main() {
 
 	// Validate token
 	tokenSvc := services.NewTokenService(db)
-	scopedToken, err := tokenSvc.ValidateToken(context.Background(), *token)
+	scopedToken, err := tokenSvc.ValidateToken(context.Background(), resolvedToken)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: invalid token: %v\n", err)
 		os.Exit(1)
@@ -88,4 +94,23 @@ func main() {
 		slog.Error("stdio error", "error", err)
 		os.Exit(1)
 	}
+}
+
+func resolveToken(explicitToken, tokenEnvName string) (string, error) {
+	token := strings.TrimSpace(explicitToken)
+	if token != "" {
+		return token, nil
+	}
+
+	envName := strings.TrimSpace(tokenEnvName)
+	if envName == "" {
+		envName = defaultTokenEnvVar
+	}
+
+	token = strings.TrimSpace(os.Getenv(envName))
+	if token != "" {
+		return token, nil
+	}
+
+	return "", fmt.Errorf("missing token: provide --token or set %s", envName)
 }

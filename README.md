@@ -58,8 +58,8 @@ make test   # 运行所有测试
 推荐先打开管理后台的“连接设置”页面。页面里现在有三种入口：
 
 - **云端模式（推荐）**：Claude Code / Codex 通过远程 HTTP MCP + 浏览器 OAuth 授权接入，默认写入全局配置
-- **本地模式**：通过本地 `agenthub-mcp` binary + scoped token 接入，适合本地开发或内网环境
-- **高级模式**：给任意 MCP 客户端提供 HTTP + Bearer Token 配置
+- **本地模式**：通过本地 `agenthub-mcp` binary + scoped token 接入，推荐用环境变量保存 token
+- **高级模式**：给任意 MCP 客户端提供 HTTP + Bearer Token 配置，推荐优先使用环境变量
 
 云端模式（推荐）：
 
@@ -77,12 +77,25 @@ codex mcp login agenthub
 
 ```bash
 # 先在“连接设置”页面生成一个 scoped token
+export AGENTHUB_TOKEN=aht_xxxxx
 
 # Claude Code
-claude mcp add -s user agenthub --transport stdio -- agenthub-mcp --token aht_xxxxx
+claude mcp add -s user agenthub -- agenthub-mcp --token-env AGENTHUB_TOKEN
 
 # Codex CLI
-codex mcp add agenthub -- agenthub-mcp --token aht_xxxxx
+codex mcp add agenthub -- agenthub-mcp --token-env AGENTHUB_TOKEN
+```
+
+高级模式（HTTP + 静态 Bearer / 环境变量）：
+
+```bash
+# 推荐：先把 Bearer Token 存进环境变量
+export AGENTHUB_TOKEN=aht_xxxxx
+
+# Codex CLI 可直接引用环境变量，不把 secret 写进配置
+codex mcp add agenthub --url https://hub.example.com/mcp --bearer-token-env-var AGENTHUB_TOKEN
+
+# 其他客户端如果暂不支持 env 方式，再退回静态 Bearer header
 ```
 
 接入后 Claude Code / Codex 会自动发现 Agent Hub 的 MCP 工具；云端模式授权完成后，对应平台连接也会出现在“连接管理”中。

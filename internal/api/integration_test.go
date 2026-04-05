@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 )
 
 // ---------------------------------------------------------------------------
@@ -331,6 +332,8 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 		}
 	})
 
+	var projectUpdatedAt string
+
 	t.Run("Projects_List", func(t *testing.T) {
 		status, body := apiCall(t, "GET", "/api/projects", jwt, nil)
 		if status != 200 {
@@ -340,15 +343,37 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 		if len(projects) != 1 {
 			t.Errorf("expected 1 project, got %d", len(projects))
 		}
+		project, _ := projects[0].(map[string]any)
+		projectUpdatedAt = mustStr(t, project, "updated_at")
+		if projectUpdatedAt == "" {
+			t.Fatal("expected project updated_at to be populated")
+		}
 	})
 
 	t.Run("Projects_AppendLog", func(t *testing.T) {
+		time.Sleep(5 * time.Millisecond)
 		status, _ := apiCall(t, "POST", "/api/projects/test-project/log", jwt, map[string]any{
 			"source": "claude", "action": "wrote_article", "summary": "写了一篇测试文章",
 			"tags": []string{"writing", "test"},
 		})
 		if status != 201 {
 			t.Fatalf("expected 201, got %d", status)
+		}
+	})
+
+	t.Run("Projects_ListAfterLog", func(t *testing.T) {
+		status, body := apiCall(t, "GET", "/api/projects", jwt, nil)
+		if status != 200 {
+			t.Fatalf("expected 200, got %d: %v", status, body)
+		}
+		projects, _ := body["projects"].([]any)
+		if len(projects) != 1 {
+			t.Fatalf("expected 1 project, got %d", len(projects))
+		}
+		project, _ := projects[0].(map[string]any)
+		updatedAt := mustStr(t, project, "updated_at")
+		if updatedAt == projectUpdatedAt {
+			t.Fatalf("expected project updated_at to change after append log, still %q", updatedAt)
 		}
 	})
 

@@ -6,6 +6,7 @@ interface Project {
   status: string
   description?: string
   last_activity?: string
+  updated_at?: string
   context_md?: string
   logs?: LogEntry[]
 }
@@ -143,6 +144,8 @@ export default function ProjectsPage() {
     return <div className="page-loading">加载中...</div>
   }
 
+  const getProjectLastActivity = (project: Project) => project.last_activity || project.updated_at
+
   return (
     <div className="page">
       <div className="page-header">
@@ -227,7 +230,7 @@ export default function ProjectsPage() {
                   <p className="project-desc">{project.description}</p>
                 )}
                 <div className="project-meta">
-                  <span>最后活动：{formatTime(project.last_activity)}</span>
+                  <span>最后活动：{formatTime(getProjectLastActivity(project))}</span>
                 </div>
               </div>
 

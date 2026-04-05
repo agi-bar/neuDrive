@@ -55,6 +55,9 @@ const EMPTY_MODE_STATE: Record<ModeKey, boolean> = {
   advanced: false,
 }
 
+const TOKEN_ENV_NAME = 'AGENTHUB_TOKEN'
+const TOKEN_PLACEHOLDER = '<YOUR_AGENTHUB_TOKEN>'
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
@@ -183,15 +186,15 @@ export default function SetupPage() {
   const codexCloudCommand = `codex mcp add agenthub --url ${baseUrl}/mcp`
   const codexLoginCommand = 'codex mcp login agenthub'
   const codexStatusCommand = 'codex mcp list'
-  const localClaudeCommand = modeTokens.local
-    ? `claude mcp add -s user agenthub \\
-  --transport stdio \\
-  -- agenthub-mcp \\
-  --token ${modeTokens.local.token}`
-    : ''
-  const localCodexCommand = modeTokens.local
-    ? `codex mcp add agenthub -- agenthub-mcp --token ${modeTokens.local.token}`
-    : ''
+  const localSessionToken = modeTokens.local?.token ?? ''
+  const advancedSessionToken = modeTokens.advanced?.token ?? ''
+  const localTokenText = modeTokens.local?.token ?? TOKEN_PLACEHOLDER
+  const advancedTokenText = modeTokens.advanced?.token ?? TOKEN_PLACEHOLDER
+  const localEnvCommand = `export ${TOKEN_ENV_NAME}=${localTokenText}`
+  const advancedEnvCommand = `export ${TOKEN_ENV_NAME}=${advancedTokenText}`
+  const localClaudeCommand = `claude mcp add -s user agenthub -- agenthub-mcp --token-env ${TOKEN_ENV_NAME}`
+  const localCodexCommand = `codex mcp add agenthub -- agenthub-mcp --token-env ${TOKEN_ENV_NAME}`
+  const advancedCodexCommand = `codex mcp add agenthub --url ${baseUrl}/mcp --bearer-token-env-var ${TOKEN_ENV_NAME}`
 
   const buildModeTokenRequest = (mode: ModeKey): CreateTokenRequest => {
     const defaults = MODE_DEFAULTS[mode]
@@ -208,9 +211,12 @@ export default function SetupPage() {
     }
   }
 
-  const ensureModeToken = async (mode: ModeKey): Promise<ModeTokenState | null> => {
+  const provisionModeToken = async (mode: ModeKey, force = false): Promise<ModeTokenState | null> => {
     const existing = modeTokens[mode]
-    if (existing) return existing
+    if (existing && !force) {
+      setOpenModes((prev) => ({ ...prev, [mode]: true }))
+      return existing
+    }
 
     setProvisioningMode(mode)
     setError('')
@@ -222,6 +228,7 @@ export default function SetupPage() {
         token: resp.token,
       }
       setModeTokens((prev) => ({ ...prev, [mode]: createdToken }))
+      setOpenModes((prev) => ({ ...prev, [mode]: true }))
       await loadTokens()
       return createdToken
     } catch (e: any) {
@@ -232,38 +239,31 @@ export default function SetupPage() {
     }
   }
 
-  const toggleMode = async (mode: ModeKey) => {
+  const toggleMode = (mode: ModeKey) => {
     const shouldOpen = !openModes[mode]
     setOpenModes((prev) => ({ ...prev, [mode]: shouldOpen }))
-    if (shouldOpen) {
-      await ensureModeToken(mode)
-    }
   }
 
-  const localConfig = modeTokens.local
-    ? JSON.stringify({
-        mcpServers: {
-          agenthub: {
-            command: 'agenthub-mcp',
-            args: ['--token', modeTokens.local.token],
-          },
-        },
-      }, null, 2)
-    : ''
+  const localConfig = JSON.stringify({
+    mcpServers: {
+      agenthub: {
+        command: 'agenthub-mcp',
+        args: ['--token-env', TOKEN_ENV_NAME],
+      },
+    },
+  }, null, 2)
 
-  const advancedConfig = modeTokens.advanced
-    ? JSON.stringify({
-        mcpServers: {
-          agenthub: {
-            type: 'http',
-            url: `${baseUrl}/mcp`,
-            headers: {
-              Authorization: `Bearer ${modeTokens.advanced.token}`,
-            },
-          },
+  const advancedConfig = JSON.stringify({
+    mcpServers: {
+      agenthub: {
+        type: 'http',
+        url: `${baseUrl}/mcp`,
+        headers: {
+          Authorization: `Bearer ${advancedTokenText}`,
         },
-      }, null, 2)
-    : ''
+      },
+    },
+  }, null, 2)
 
   const gptTokenText = newToken || '在下方创建一个新的 Bearer Token 后填入这里'
 
@@ -517,7 +517,7 @@ export default function SetupPage() {
         </div>
 
         <p className="setup-note">
-          首次展开会自动创建一个本地 MCP token，并把它加入下方的 Token 列表；同一个 token 可以在 Claude Code 和 Codex CLI 之间复用，也可以稍后在列表里改名。
+          说明默认直接可看，不会自动创建 token。推荐把 token 放进环境变量 <code>{TOKEN_ENV_NAME}</code>，再让 Claude Code 或 Codex CLI 在启动本地 MCP binary 时读取它。
         </p>
 
         <div className="setup-tabs" role="tablist" aria-label="本地模式平台">
@@ -545,27 +545,68 @@ export default function SetupPage() {
           <button
             className="btn btn-primary"
             onClick={() => toggleMode('local')}
-            disabled={provisioningMode === 'local'}
           >
-            {provisioningMode === 'local'
-              ? '生成中...'
-              : openModes.local
-                ? '隐藏本地模式配置'
-                : '生成并显示本地模式配置'}
+            {openModes.local ? '隐藏本地模式配置' : '查看本地模式配置'}
           </button>
+          {openModes.local && (
+            <button
+              className="btn btn-outline"
+              onClick={() => provisionModeToken('local', !!modeTokens.local)}
+              disabled={provisioningMode === 'local'}
+            >
+              {provisioningMode === 'local'
+                ? '生成中...'
+                : modeTokens.local
+                  ? '重新生成 Token'
+                  : '创建本模式 Token'}
+            </button>
+          )}
         </div>
 
-        {openModes.local && modeTokens.local && (
+        {openModes.local && (
           <div className="setup-tab-panel">
+            {modeTokens.local ? (
+              <>
+                <div className="alert alert-success">
+                  已为本地模式创建一个新的 token。推荐下一步把它保存到环境变量 <code>{TOKEN_ENV_NAME}</code>；完整值只会在当前页面会话里显示一次，丢失后需要重新生成。
+                </div>
+                <div className="code-block">
+                  <div className="code-block-label">刚创建的 Token（仅当前会话可见）</div>
+                  <pre>{localSessionToken}</pre>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyToClipboard(localSessionToken, 'local-token')}
+                  >
+                    {copied === 'local-token' ? '已复制' : '复制 Token'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="alert alert-warn">
+                当前显示的是环境变量和配置模板，里面的 <code>{TOKEN_PLACEHOLDER}</code> 只是占位符。查看接法不需要新建 token；如果你要立即接入，再点上面的“创建本模式 Token”即可。
+              </div>
+            )}
+
             {localPlatform === 'claude' ? (
               <>
                 <h4 className="setup-platform-title">Claude Code</h4>
                 <p className="setup-note setup-note-first">
-                  把 Agent Hub 添加到 Claude Code 的全局 MCP 配置中，命令会通过本地 <code>agenthub-mcp</code> binary 启动服务，并使用下方自动创建的 token。
+                  先在启动 Claude Code 的同一 shell、shell profile 或 launcher 里设置 <code>{TOKEN_ENV_NAME}</code>，再把 Agent Hub 注册为全局 stdio MCP server。
                 </p>
 
                 <div className="code-block">
-                  <div className="code-block-label">一键配置（全局）</div>
+                  <div className="code-block-label">步骤 1：设置环境变量</div>
+                  <pre>{localEnvCommand}</pre>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyToClipboard(localEnvCommand, 'local-env')}
+                  >
+                    {copied === 'local-env' ? '已复制' : '复制'}
+                  </button>
+                </div>
+
+                <div className="code-block">
+                  <div className="code-block-label">步骤 2：注册本地 MCP Server（全局）</div>
                   <pre>{localClaudeCommand}</pre>
                   <button
                     className="copy-btn"
@@ -591,11 +632,22 @@ export default function SetupPage() {
               <>
                 <h4 className="setup-platform-title">Codex CLI</h4>
                 <p className="setup-note setup-note-first">
-                  把 Agent Hub 添加到 Codex 的 stdio MCP 配置中。Codex 会直接通过本地 <code>agenthub-mcp</code> binary 启动服务，并复用同一个 scoped token。
+                  先在启动 Codex CLI 的同一 shell、shell profile 或 launcher 里设置 <code>{TOKEN_ENV_NAME}</code>，再把 Agent Hub 添加到 Codex 的 stdio MCP 配置中。
                 </p>
 
                 <div className="code-block">
-                  <div className="code-block-label">一键配置</div>
+                  <div className="code-block-label">步骤 1：设置环境变量</div>
+                  <pre>{localEnvCommand}</pre>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyToClipboard(localEnvCommand, 'local-env-codex')}
+                  >
+                    {copied === 'local-env-codex' ? '已复制' : '复制'}
+                  </button>
+                </div>
+
+                <div className="code-block">
+                  <div className="code-block-label">步骤 2：注册本地 MCP Server</div>
                   <pre>{localCodexCommand}</pre>
                   <button
                     className="copy-btn"
@@ -624,34 +676,88 @@ export default function SetupPage() {
         </div>
 
         <p className="setup-note">
-          首次展开会自动创建一个名为 <code>MCP HTTP</code> 的 Agent 权限 token。这个模式不会触发浏览器 OAuth，而是由客户端直接携带 Bearer Token 发起请求。
+          说明默认直接可看，不会自动创建 token。推荐优先把 Bearer Token 放进环境变量 <code>{TOKEN_ENV_NAME}</code>；只有客户端不支持 env 方式时，再退回静态 Bearer header。
         </p>
 
         <div className="setup-mode-actions">
           <button
             className="btn btn-primary"
             onClick={() => toggleMode('advanced')}
-            disabled={provisioningMode === 'advanced'}
           >
-            {provisioningMode === 'advanced'
-              ? '生成中...'
-              : openModes.advanced
-                ? '隐藏高级模式配置'
-                : '生成并显示高级模式配置'}
+            {openModes.advanced ? '隐藏高级模式配置' : '查看高级模式配置'}
           </button>
+          {openModes.advanced && (
+            <button
+              className="btn btn-outline"
+              onClick={() => provisionModeToken('advanced', !!modeTokens.advanced)}
+              disabled={provisioningMode === 'advanced'}
+            >
+              {provisioningMode === 'advanced'
+                ? '生成中...'
+                : modeTokens.advanced
+                  ? '重新生成 Token'
+                  : '创建本模式 Token'}
+            </button>
+          )}
         </div>
 
-        {openModes.advanced && modeTokens.advanced && (
-          <div className="code-block">
-            <div className="code-block-label">通用 MCP HTTP 配置（Bearer）</div>
-            <pre>{advancedConfig}</pre>
-            <button
-              className="copy-btn"
-              onClick={() => copyToClipboard(advancedConfig, 'advanced-json')}
-            >
-              {copied === 'advanced-json' ? '已复制' : '复制'}
-            </button>
-          </div>
+        {openModes.advanced && (
+          <>
+            {modeTokens.advanced ? (
+              <>
+                <div className="alert alert-success">
+                  已为高级模式创建一个新的 Bearer Token。推荐下一步把它保存到环境变量 <code>{TOKEN_ENV_NAME}</code>；完整值只会在当前页面会话里显示一次。
+                </div>
+                <div className="code-block">
+                  <div className="code-block-label">刚创建的 Token（仅当前会话可见）</div>
+                  <pre>{advancedSessionToken}</pre>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyToClipboard(advancedSessionToken, 'advanced-token')}
+                  >
+                    {copied === 'advanced-token' ? '已复制' : '复制 Token'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="alert alert-warn">
+                当前显示的是环境变量和配置模板，里面的 <code>{TOKEN_PLACEHOLDER}</code> 只是占位符。只有在你明确点击“创建本模式 Token”时，才会生成新的 Bearer Token。
+              </div>
+            )}
+
+            <div className="code-block">
+              <div className="code-block-label">步骤 1：设置环境变量</div>
+              <pre>{advancedEnvCommand}</pre>
+              <button
+                className="copy-btn"
+                onClick={() => copyToClipboard(advancedEnvCommand, 'advanced-env')}
+              >
+                {copied === 'advanced-env' ? '已复制' : '复制'}
+              </button>
+            </div>
+
+            <div className="code-block">
+              <div className="code-block-label">步骤 2：Codex CLI 直接接入（推荐）</div>
+              <pre>{advancedCodexCommand}</pre>
+              <button
+                className="copy-btn"
+                onClick={() => copyToClipboard(advancedCodexCommand, 'advanced-codex-cmd')}
+              >
+                {copied === 'advanced-codex-cmd' ? '已复制' : '复制'}
+              </button>
+            </div>
+
+            <div className="code-block">
+              <div className="code-block-label">步骤 3：通用 MCP HTTP 配置（静态 Bearer，兜底方案）</div>
+              <pre>{advancedConfig}</pre>
+              <button
+                className="copy-btn"
+                onClick={() => copyToClipboard(advancedConfig, 'advanced-json')}
+              >
+                {copied === 'advanced-json' ? '已复制' : '复制'}
+              </button>
+            </div>
+          </>
         )}
       </div>
 
@@ -851,7 +957,7 @@ export default function SetupPage() {
         {tokens.length === 0 ? (
           <div className="empty-state">
             <p>暂无 Token</p>
-            <p className="empty-hint">展开上方本地模式 / 高级模式会自动创建，或在这里手动创建一个新的 Token</p>
+            <p className="empty-hint">你可以先查看上方连接模板；需要真实 secret 时，再在上方模式里创建或在这里手动创建一个新的 Token</p>
           </div>
         ) : (
           <div className="token-list">

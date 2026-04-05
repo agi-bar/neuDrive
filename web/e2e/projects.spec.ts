@@ -12,6 +12,7 @@ test.describe('Projects Page', () => {
 
     await expect(page.getByText('test-project')).toBeVisible({ timeout: 5000 })
     await expect(page.getByText('进行中')).toBeVisible()
+    await expect(page.locator('.project-meta').filter({ hasText: '最后活动：-' })).toHaveCount(0)
   })
 
   test('project detail shows empty state', async ({ page, request }) => {

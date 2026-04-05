@@ -7,7 +7,7 @@ test.describe('Setup Page — Token Management', () => {
     await page.goto('/setup')
     const cloudTabs = page.locator('[aria-label="云端模式平台"]')
     await expect(page.getByText('云端模式（浏览器授权）')).toBeVisible()
-    await expect(page.getByText('推荐')).toBeVisible()
+    await expect(page.getByText('推荐', { exact: true })).toBeVisible()
     await expect(page.getByText('默认添加到全局配置')).toBeVisible()
     await expect(cloudTabs.getByRole('tab', { name: 'Claude' })).toHaveAttribute('aria-selected', 'true')
     await expect(cloudTabs.getByRole('tab', { name: 'Codex' })).toBeVisible()
@@ -28,27 +28,39 @@ test.describe('Setup Page — Token Management', () => {
     await expect(page.locator('pre').filter({ hasText: 'codex mcp list' })).toBeVisible()
   })
 
-  test('local mode supports Claude and Codex tabs with lazy token generation', async ({ page, request }) => {
+  test('local mode supports Claude and Codex tabs without auto-generating a token', async ({ page, request }) => {
     await setupUser(page, request)
     await page.goto('/setup')
     const localTabs = page.locator('[aria-label="本地模式平台"]')
-    await page.getByRole('button', { name: '生成并显示本地模式配置' }).click()
+    await page.getByRole('button', { name: '查看本地模式配置' }).click()
     await expect(localTabs.getByRole('tab', { name: 'Claude' })).toHaveAttribute('aria-selected', 'true')
-    await expect(page.locator('pre').filter({ hasText: /claude mcp add -s user agenthub[\s\S]*--transport stdio[\s\S]*agenthub-mcp/ })).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('pre').filter({ hasText: 'export AGENTHUB_TOKEN=<YOUR_AGENTHUB_TOKEN>' })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /claude mcp add -s user agenthub -- agenthub-mcp --token-env AGENTHUB_TOKEN/ })).toBeVisible()
     await expect(page.locator('pre').filter({ hasText: /"mcpServers"/ })).toBeVisible()
-    await expect(page.locator('.token-list-name', { hasText: 'Claude Code' })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /"--token-env",\s*"AGENTHUB_TOKEN"/ })).toBeVisible()
+    await expect(page.locator('.token-list-name', { hasText: 'Claude Code' })).toHaveCount(0)
+
+    await page.getByRole('button', { name: '创建本模式 Token' }).click()
+    await expect(page.locator('.token-list-name', { hasText: 'Claude Code' })).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('pre').filter({ hasText: /export AGENTHUB_TOKEN=aht_/ })).toBeVisible()
 
     await localTabs.getByRole('tab', { name: 'Codex' }).click()
     await expect(localTabs.getByRole('tab', { name: 'Codex' })).toHaveAttribute('aria-selected', 'true')
-    await expect(page.locator('pre').filter({ hasText: /codex mcp add agenthub -- agenthub-mcp --token aht_/ })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /codex mcp add agenthub -- agenthub-mcp --token-env AGENTHUB_TOKEN/ })).toBeVisible()
   })
 
-  test('advanced mode lazily generates bearer config', async ({ page, request }) => {
+  test('advanced mode shows template first and only creates a token on demand', async ({ page, request }) => {
     await setupUser(page, request)
     await page.goto('/setup')
-    await page.getByRole('button', { name: '生成并显示高级模式配置' }).click()
-    await expect(page.getByText('Authorization')).toBeVisible({ timeout: 10000 })
-    await expect(page.locator('pre').filter({ hasText: /"Authorization": "Bearer aht_/ })).toBeVisible()
+    await page.getByRole('button', { name: '查看高级模式配置' }).click()
+    await expect(page.locator('pre').filter({ hasText: 'export AGENTHUB_TOKEN=<YOUR_AGENTHUB_TOKEN>' })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /codex mcp add agenthub --url .* --bearer-token-env-var AGENTHUB_TOKEN/ })).toBeVisible()
+    await expect(page.locator('pre').filter({ hasText: /"Authorization": "Bearer <YOUR_AGENTHUB_TOKEN>"/ })).toBeVisible()
+    await expect(page.locator('.token-list-name', { hasText: 'MCP HTTP' })).toHaveCount(0)
+
+    await page.getByRole('button', { name: '创建本模式 Token' }).click()
+    await expect(page.locator('pre').filter({ hasText: /export AGENTHUB_TOKEN=aht_/ })).toBeVisible({ timeout: 10000 })
+    await expect(page.locator('pre').filter({ hasText: /"Authorization": "Bearer aht_/ })).toBeVisible({ timeout: 10000 })
     await expect(page.getByText('"type": "http"')).toBeVisible()
     await expect(page.locator('.token-list-name', { hasText: 'MCP HTTP' })).toBeVisible()
   })

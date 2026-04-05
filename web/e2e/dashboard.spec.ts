@@ -171,20 +171,20 @@ test.describe('Info Page', () => {
 })
 
 test.describe('Setup Page', () => {
-  test('shows three setup entrypoints', async ({ page, request }) => {
+  test('shows setup submenu and default web apps page', async ({ page, request }) => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
     await page.goto('/setup')
+    await expect(page).toHaveURL(/\/setup\/web-apps/)
 
-    await expect(page.getByText('云端模式（浏览器授权）')).toBeVisible()
-    await expect(page.locator('[aria-label="云端模式平台"]').getByRole('tab', { name: 'Claude' })).toBeVisible()
-    await expect(page.locator('[aria-label="云端模式平台"]').getByRole('tab', { name: 'Codex' })).toBeVisible()
-    await expect(page.getByText('本地模式（stdio + Token）')).toBeVisible()
-    await expect(page.locator('[aria-label="本地模式平台"]').getByRole('tab', { name: 'Claude' })).toBeVisible()
-    await expect(page.locator('[aria-label="本地模式平台"]').getByRole('tab', { name: 'Codex' })).toBeVisible()
-    await expect(page.getByText('高级模式（HTTP + 手动 Bearer Token）')).toBeVisible()
-    await expect(page.getByText('ChatGPT GPT Actions')).toBeVisible()
+    await expect(page.getByRole('link', { name: '网页应用' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '云端模式' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '本地模式' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '高级模式' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'ChatGPT Actions' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Token 管理' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '网页应用连接' })).toBeVisible()
   })
 })
 
@@ -208,7 +208,12 @@ test.describe('Navigation', () => {
 
     const links = [
       { text: '概览', url: '/' },
-      { text: '连接设置', url: '/setup' },
+      { text: '连接设置', url: '/setup/web-apps' },
+      { text: '云端模式', url: '/setup/cloud' },
+      { text: '本地模式', url: '/setup/local' },
+      { text: '高级模式', url: '/setup/advanced' },
+      { text: 'ChatGPT Actions', url: '/setup/gpt-actions' },
+      { text: 'Token 管理', url: '/setup/tokens' },
       { text: '连接管理', url: '/connections' },
       { text: '信息配置', url: '/info' },
       { text: '项目', url: '/projects' },

@@ -9,6 +9,12 @@ import ProjectsPage from './pages/ProjectsPage'
 import SetupPage from './pages/SetupPage'
 import CollaborationsPage from './pages/CollaborationsPage'
 import OAuthAuthorizePage from './pages/OAuthAuthorizePage'
+import SetupWebAppsPage from './pages/setup/SetupWebAppsPage'
+import SetupCloudPage from './pages/setup/SetupCloudPage'
+import SetupLocalPage from './pages/setup/SetupLocalPage'
+import SetupAdvancedPage from './pages/setup/SetupAdvancedPage'
+import SetupGptActionsPage from './pages/setup/SetupGptActionsPage'
+import SetupTokensPage from './pages/setup/SetupTokensPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -70,6 +76,8 @@ function App() {
     navigate('/login')
   }
 
+  const isSetupRoute = location.pathname.startsWith('/setup')
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -106,10 +114,32 @@ function App() {
             <span className="nav-icon">&#9632;</span>
             <span>概览</span>
           </NavLink>
-          <NavLink to="/setup" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <span className="nav-icon">&#9889;</span>
-            <span>连接设置</span>
-          </NavLink>
+          <div className="nav-group">
+            <NavLink to="/setup/web-apps" className={isSetupRoute ? 'nav-item nav-item-parent active' : 'nav-item nav-item-parent'}>
+              <span className="nav-icon">&#9889;</span>
+              <span>连接设置</span>
+            </NavLink>
+            <div className="nav-submenu" aria-label="连接设置子菜单">
+              <NavLink to="/setup/web-apps" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                网页应用
+              </NavLink>
+              <NavLink to="/setup/cloud" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                云端模式
+              </NavLink>
+              <NavLink to="/setup/local" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                本地模式
+              </NavLink>
+              <NavLink to="/setup/advanced" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                高级模式
+              </NavLink>
+              <NavLink to="/setup/gpt-actions" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                ChatGPT Actions
+              </NavLink>
+              <NavLink to="/setup/tokens" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                Token 管理
+              </NavLink>
+            </div>
+          </div>
           <NavLink to="/connections" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9670;</span>
             <span>连接管理</span>
@@ -139,7 +169,15 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<DashboardPage />} />
-          <Route path="/setup" element={<SetupPage />} />
+          <Route path="/setup" element={<SetupPage />}>
+            <Route index element={<Navigate to="web-apps" replace />} />
+            <Route path="web-apps" element={<SetupWebAppsPage />} />
+            <Route path="cloud" element={<SetupCloudPage />} />
+            <Route path="local" element={<SetupLocalPage />} />
+            <Route path="advanced" element={<SetupAdvancedPage />} />
+            <Route path="gpt-actions" element={<SetupGptActionsPage />} />
+            <Route path="tokens" element={<SetupTokensPage />} />
+          </Route>
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/info" element={<InfoPage />} />
           <Route path="/projects" element={<ProjectsPage />} />

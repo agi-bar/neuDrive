@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/oauth/token",
+  "headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "Python/3.12 aiohttp/3.13.3"
+  },
+  "body": "grant_type=authorization_code&code=captured_chatgpt_auth_code&redirect_uri=https%3A%2F%2Fchatgpt.com%2Fconnector%2Foauth%2FCAPTURED_CHATGPT_CONNECTOR&code_verifier=CAPTURED_CHATGPT_CODE_VERIFIER&client_id=ahc_captured_chatgpt_client&client_secret=ahs_captured_chatgpt_secret&resource=https%3A%2F%2Fatmospheric-intellectual-sleeping-conducting.trycloudflare.com%2Fmcp"
+}

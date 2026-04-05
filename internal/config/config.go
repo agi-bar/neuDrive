@@ -20,6 +20,8 @@ type Config struct {
 	MaxBodySize        int64 // max request body in bytes
 	LogLevel           string
 	LogFormat          string
+	CaptureOAuth       bool
+	CaptureDir         string
 }
 
 func Load() (*Config, error) {
@@ -36,6 +38,8 @@ func Load() (*Config, error) {
 		MaxBodySize:        int64(getEnvInt("MAX_BODY_SIZE", 10*1024*1024)),
 		LogLevel:           getEnv("LOG_LEVEL", "info"),
 		LogFormat:          getEnv("LOG_FORMAT", "text"),
+		CaptureOAuth:       getEnvBool("AGENTHUB_CAPTURE_OAUTH", false),
+		CaptureDir:         getEnv("AGENTHUB_CAPTURE_DIR", "tmp/oauth-captures"),
 	}
 
 	if cfg.JWTSecret == "" {
@@ -66,4 +70,19 @@ func getEnvInt(key string, fallback int) int {
 		return fallback
 	}
 	return v
+}
+
+func getEnvBool(key string, fallback bool) bool {
+	s := strings.TrimSpace(strings.ToLower(getEnv(key, "")))
+	if s == "" {
+		return fallback
+	}
+	switch s {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return fallback
+	}
 }

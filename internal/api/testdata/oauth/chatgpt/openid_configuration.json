@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/openid-configuration",
+  "headers": {
+    "Accept": "*/*",
+    "User-Agent": "Python/3.12 aiohttp/3.13.3"
+  }
+}

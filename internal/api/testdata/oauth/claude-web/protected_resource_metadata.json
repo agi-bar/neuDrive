@@ -4,6 +4,6 @@
   "headers": {
     "Accept": "*/*",
     "Mcp-Protocol-Version": "2025-11-25",
-    "User-Agent": "claude-code/2.1.84 (cli)"
+    "User-Agent": "python-httpx/0.28.1"
   }
 }

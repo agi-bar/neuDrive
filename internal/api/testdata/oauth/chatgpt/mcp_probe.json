@@ -1,0 +1,9 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "*/*",
+    "Content-Type": "application/octet-stream",
+    "User-Agent": "Python/3.12 aiohttp/3.13.3"
+  }
+}

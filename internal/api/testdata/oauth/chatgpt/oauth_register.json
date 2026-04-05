@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/oauth/register",
+  "headers": {
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "User-Agent": "Python/3.12 aiohttp/3.13.3"
+  },
+  "body": "{\"client_name\":\"ChatGPT\",\"redirect_uris\":[\"https://chatgpt.com/connector/oauth/CAPTURED_CHATGPT_CONNECTOR\"],\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\"}"
+}

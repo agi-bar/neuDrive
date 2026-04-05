@@ -1,6 +1,6 @@
 {
   "method": "GET",
-  "url": "http://127.0.0.1:8765/.well-known/oauth-authorization-server",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/oauth-authorization-server/mcp",
   "headers": {
     "Accept": "*/*",
     "Mcp-Protocol-Version": "2024-11-05"

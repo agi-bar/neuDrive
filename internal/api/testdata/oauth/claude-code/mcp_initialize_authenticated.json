@@ -3,6 +3,7 @@
   "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
   "headers": {
     "Accept": "application/json, text/event-stream",
+    "Authorization": "Bearer CAPTURED_CLAUDE_CODE_ACCESS_TOKEN",
     "Content-Type": "application/json",
     "User-Agent": "claude-code/2.1.84 (cli)"
   },

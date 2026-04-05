@@ -131,6 +131,7 @@ func (s *Server) setupRoutes() {
 	r.Use(CORSMiddleware(s.Config.CORSOrigins))
 	r.Use(rl.Middleware)
 	r.Use(RequestIDMiddleware)
+	r.Use(CaptureOAuthMiddleware(s.Config))
 	r.Use(LoggingMiddleware)
 	r.Use(MaxBodySizeMiddleware(s.Config.MaxBodySize))
 

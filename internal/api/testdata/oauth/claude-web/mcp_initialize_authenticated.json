@@ -1,0 +1,11 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "application/json, text/event-stream",
+    "Authorization": "Bearer CAPTURED_CLAUDE_WEB_ACCESS_TOKEN",
+    "Content-Type": "application/json",
+    "User-Agent": "Claude-User"
+  },
+  "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Anthropic/Toolbox\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}"
+}

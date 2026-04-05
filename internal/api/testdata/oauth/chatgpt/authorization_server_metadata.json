@@ -3,7 +3,6 @@
   "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/oauth-authorization-server",
   "headers": {
     "Accept": "application/json",
-    "Mcp-Protocol-Version": "2025-11-25",
-    "User-Agent": "claude-code/2.1.84 (cli)"
+    "User-Agent": "Python/3.12 aiohttp/3.13.3"
   }
 }

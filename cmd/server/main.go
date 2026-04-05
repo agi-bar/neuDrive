@@ -39,6 +39,9 @@ func main() {
 	// ---------------------------------------------------------------
 	logger.Init(cfg.LogLevel, cfg.LogFormat)
 	slog.Info("starting Agent Hub server...")
+	if cfg.CaptureOAuth {
+		slog.Info("oauth capture enabled", "dir", cfg.CaptureDir)
+	}
 
 	// ---------------------------------------------------------------
 	// Database

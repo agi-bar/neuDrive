@@ -2,8 +2,8 @@
   "method": "GET",
   "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/oauth-authorization-server",
   "headers": {
-    "Accept": "application/json",
+    "Accept": "*/*",
     "Mcp-Protocol-Version": "2025-11-25",
-    "User-Agent": "claude-code/2.1.84 (cli)"
+    "User-Agent": "python-httpx/0.28.1"
   }
 }

@@ -1,9 +1,9 @@
 {
   "method": "POST",
-  "url": "http://127.0.0.1:8765/oauth/register",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/oauth/register",
   "headers": {
     "Accept": "*/*",
     "Content-Type": "application/json"
   },
-  "body": "{\"client_name\":\"Codex\",\"redirect_uris\":[\"http://127.0.0.1:51431/callback\"],\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"token_endpoint_auth_method\":\"none\",\"response_types\":[\"code\"]}"
+  "body": "{\"client_name\":\"Codex\",\"redirect_uris\":[\"http://127.0.0.1:57463/callback\"],\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"token_endpoint_auth_method\":\"none\",\"response_types\":[\"code\"]}"
 }

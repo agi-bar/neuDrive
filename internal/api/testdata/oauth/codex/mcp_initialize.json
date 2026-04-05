@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "text/event-stream, application/json",
+    "Authorization": "Bearer CAPTURED_OAUTH_ACCESS_TOKEN",
+    "Content-Type": "application/json"
+  },
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":0,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"codex-mcp-client\",\"title\":\"Codex\",\"version\":\"0.118.0\"}}}"
+}

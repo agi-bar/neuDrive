@@ -1,0 +1,11 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Mcp-Protocol-Version": "2025-11-25",
+    "User-Agent": "python-httpx/0.28.1"
+  },
+  "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{},\"clientInfo\":{\"name\":\"Anthropic\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":1}"
+}

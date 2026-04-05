@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/oauth-protected-resource",
+  "headers": {
+    "Accept": "application/json",
+    "Mcp-Protocol-Version": "2025-03-26",
+    "User-Agent": "Go-http-client/2.0"
+  }
+}

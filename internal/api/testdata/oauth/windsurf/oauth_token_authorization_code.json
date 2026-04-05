@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/oauth/token",
+  "headers": {
+    "Accept": "application/json",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "User-Agent": "Go-http-client/2.0"
+  },
+  "body": "client_id=ahc_captured_windsurf_client&client_secret=ahs_captured_windsurf_secret&code=captured_windsurf_auth_code&code_verifier=CAPTURED_WINDSURF_CODE_VERIFIER&grant_type=authorization_code&redirect_uri=http%3A%2F%2F127.0.0.1%3A8765%2Fauth%2Fcallback"
+}

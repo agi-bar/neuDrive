@@ -86,6 +86,16 @@ func TestInferCaptureSourceFromCapturedFixtures(t *testing.T) {
 			expected: "cursor",
 		},
 		{
+			name:     "windsurf dynamic register",
+			fixture:  "testdata/oauth/windsurf/oauth_register.json",
+			expected: "windsurf",
+		},
+		{
+			name:     "windsurf authenticated initialize",
+			fixture:  "testdata/oauth/windsurf/mcp_initialize_authenticated.json",
+			expected: "windsurf",
+		},
+		{
 			name:     "codex initialize",
 			fixture:  "testdata/oauth/codex/mcp_initialize.json",
 			expected: "codex",

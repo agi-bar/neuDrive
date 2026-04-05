@@ -150,6 +150,7 @@ func (s *Server) setupRoutes() {
 	r.Get("/.well-known/oauth-authorization-server/*", s.handleAuthorizationServerMetadata)
 	r.Get("/.well-known/openid-configuration", s.handleAuthorizationServerMetadata)
 	r.HandleFunc("/oauth/register", s.handleOAuthDynamicRegister)
+	r.Post("/api/adapters/feishu/{slug}/events", s.handleFeishuEventCallback)
 
 	// Auth (public)
 	r.Post("/api/auth/register", s.AuthHandler.HandleRegister)

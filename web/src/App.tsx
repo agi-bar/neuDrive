@@ -13,6 +13,7 @@ import SetupWebAppsPage from './pages/setup/SetupWebAppsPage'
 import SetupCloudPage from './pages/setup/SetupCloudPage'
 import SetupLocalPage from './pages/setup/SetupLocalPage'
 import SetupAdvancedPage from './pages/setup/SetupAdvancedPage'
+import SetupAdaptersPage from './pages/setup/SetupAdaptersPage'
 import SetupGptActionsPage from './pages/setup/SetupGptActionsPage'
 import SetupTokensPage from './pages/setup/SetupTokensPage'
 
@@ -126,6 +127,9 @@ function App() {
               <NavLink to="/setup/cloud" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                 CLI Apps
               </NavLink>
+              <NavLink to="/setup/adapters" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                Adapters
+              </NavLink>
               <NavLink to="/setup/local" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                 本地模式
               </NavLink>
@@ -173,6 +177,7 @@ function App() {
             <Route index element={<Navigate to="web-apps" replace />} />
             <Route path="web-apps" element={<SetupWebAppsPage />} />
             <Route path="cloud" element={<SetupCloudPage />} />
+            <Route path="adapters" element={<SetupAdaptersPage />} />
             <Route path="local" element={<SetupLocalPage />} />
             <Route path="advanced" element={<SetupAdvancedPage />} />
             <Route path="gpt-actions" element={<SetupGptActionsPage />} />

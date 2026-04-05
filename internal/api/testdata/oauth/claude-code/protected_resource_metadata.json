@@ -1,0 +1,9 @@
+{
+  "method": "GET",
+  "url": "http://127.0.0.1:8765/.well-known/oauth-protected-resource",
+  "headers": {
+    "Accept": "*/*",
+    "Mcp-Protocol-Version": "2025-11-25",
+    "User-Agent": "claude-code/2.1.81 (sdk-cli)"
+  }
+}

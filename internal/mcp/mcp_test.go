@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -136,6 +137,10 @@ func TestInitialize(t *testing.T) {
 	if serverInfo["name"] != "agenthub" {
 		t.Errorf("expected server name=agenthub, got %v", serverInfo["name"])
 	}
+	instructions, _ := serverInfo["instructions"].(string)
+	if !strings.Contains(instructions, "/skills/portability/<platform>/SKILL.md") {
+		t.Fatalf("expected portability instructions in serverInfo, got %q", instructions)
+	}
 
 	caps, ok := result["capabilities"].(map[string]interface{})
 	if !ok {
@@ -146,6 +151,52 @@ func TestInitialize(t *testing.T) {
 	}
 	if _, ok := caps["resources"]; !ok {
 		t.Error("expected resources capability")
+	}
+}
+
+func TestListSkillsIncludesSystemPortabilityManuals(t *testing.T) {
+	s := &MCPServer{
+		UserID:     testUserID,
+		TrustLevel: models.TrustLevelGuest,
+		FileTree:   &services.FileTreeService{},
+	}
+
+	text, isErr := s.callTool(ToolCallParams{
+		Name:      "list_skills",
+		Arguments: map[string]interface{}{},
+	})
+	if isErr {
+		t.Fatalf("list_skills error: %s", text)
+	}
+	if !strings.Contains(text, "portability/chatgpt") {
+		t.Fatalf("expected portability/chatgpt in list_skills output, got %s", text)
+	}
+	if !strings.Contains(text, "\"read_only\": true") {
+		t.Fatalf("expected read_only flag in list_skills output, got %s", text)
+	}
+}
+
+func TestReadSkillRendersSystemPortabilityManual(t *testing.T) {
+	s := &MCPServer{
+		UserID:     testUserID,
+		TrustLevel: models.TrustLevelGuest,
+		FileTree:   &services.FileTreeService{},
+	}
+
+	text, isErr := s.callTool(ToolCallParams{
+		Name: "read_skill",
+		Arguments: map[string]interface{}{
+			"name": "portability/chatgpt",
+		},
+	})
+	if isErr {
+		t.Fatalf("read_skill error: %s", text)
+	}
+	if !strings.Contains(text, "## Current User Snapshot") {
+		t.Fatalf("expected rendered snapshot block, got %s", text)
+	}
+	if !strings.Contains(text, "Connected to ChatGPT: unknown") {
+		t.Fatalf("expected default ChatGPT snapshot, got %s", text)
 	}
 }
 

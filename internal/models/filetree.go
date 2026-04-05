@@ -71,6 +71,7 @@ type SkillSummary struct {
 	Name          string                 `json:"name"`
 	Path          string                 `json:"path"`
 	Source        string                 `json:"source"`
+	ReadOnly      bool                   `json:"read_only,omitempty"`
 	Description   string                 `json:"description,omitempty"`
 	WhenToUse     string                 `json:"when_to_use,omitempty"`
 	AllowedTools  []string               `json:"allowed_tools,omitempty"`

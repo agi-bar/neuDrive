@@ -1,0 +1,76 @@
+{
+  "platform": "chatgpt",
+  "display_name": "ChatGPT",
+  "mappings": [
+    {
+      "source_feature": "Custom Instructions",
+      "agenthub_target": [
+        "/memory/profile/preferences.md",
+        "/memory/profile/principles.md"
+      ],
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Saved Memory",
+      "agenthub_target": [
+        "/memory/profile/*",
+        "/memory/scratch/*"
+      ],
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Projects",
+      "agenthub_target": [
+        "/projects/<name>/context.md",
+        "/projects/<name>/log.jsonl"
+      ],
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "Chats / conversation history",
+      "agenthub_target": [
+        "conversation_archive"
+      ],
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "Library / Knowledge uploads",
+      "agenthub_target": [
+        "knowledge_assets",
+        "file_archive"
+      ],
+      "restore_strategy": "manual_upload"
+    },
+    {
+      "source_feature": "Custom GPT configuration",
+      "agenthub_target": [
+        "tool_shadow",
+        "connection_shadow"
+      ],
+      "restore_strategy": "draft_config"
+    },
+    {
+      "source_feature": "GPT Actions",
+      "agenthub_target": [
+        "tool_metadata",
+        "connection_metadata"
+      ],
+      "restore_strategy": "draft_config"
+    },
+    {
+      "source_feature": "Connectors / integrations",
+      "agenthub_target": [
+        "connection_metadata",
+        "vault_scope_references"
+      ],
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "Automations / scheduled behaviors",
+      "agenthub_target": [
+        "automation_shadow"
+      ],
+      "restore_strategy": "manual_recreation"
+    }
+  ]
+}

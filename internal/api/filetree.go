@@ -101,10 +101,14 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	if req.IsDir {
 		entry, err := s.FileTreeService.EnsureDirectoryWithMetadata(r.Context(), userID, path, req.Metadata, req.MinTrustLevel)
 		if err != nil {
+			if errors.Is(err, services.ErrReadOnlyPath) {
+				respondForbidden(w, err.Error())
+				return
+			}
 			respondInternalError(w, err)
 			return
 		}
-		respondOK(w, fileTreeEntryToNode(entry))
+		respondOK(w, fileTreeEntryToNode(s.renderSystemSkillEntry(r.Context(), userID, trustLevelFromCtx(r.Context()), entry)))
 		return
 	}
 
@@ -128,11 +132,15 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 			respondError(w, http.StatusConflict, ErrCodeConflict, err.Error())
 			return
 		}
+		if errors.Is(err, services.ErrReadOnlyPath) {
+			respondForbidden(w, err.Error())
+			return
+		}
 		respondInternalError(w, err)
 		return
 	}
 
-	respondOK(w, fileTreeEntryToNode(entry))
+	respondOK(w, fileTreeEntryToNode(s.renderSystemSkillEntry(r.Context(), userID, trustLevelFromCtx(r.Context()), entry)))
 }
 
 func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
@@ -149,6 +157,10 @@ func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.FileTreeService.Delete(r.Context(), userID, path); err != nil {
+		if errors.Is(err, services.ErrReadOnlyPath) {
+			respondForbidden(w, err.Error())
+			return
+		}
 		respondNotFound(w, "file")
 		return
 	}
@@ -292,7 +304,7 @@ func (s *Server) readOrListTreePath(ctx context.Context, userID uuid.UUID, trust
 
 	entry, err := s.FileTreeService.Read(ctx, userID, storagePath, trustLevel)
 	if err == nil {
-		return fileTreeEntryToNode(entry), nil
+		return fileTreeEntryToNode(s.renderSystemSkillEntry(ctx, userID, trustLevel, entry)), nil
 	}
 
 	// Only fall through to directory listing if the read error indicates "not found".
@@ -318,7 +330,8 @@ func (s *Server) listTreeNode(ctx context.Context, userID uuid.UUID, trustLevel 
 
 	children := make([]*FileNode, 0, len(entries))
 	for _, e := range entries {
-		children = append(children, fileTreeEntryToNode(&e))
+		rendered := s.renderSystemSkillEntry(ctx, userID, trustLevel, &e)
+		children = append(children, fileTreeEntryToNode(rendered))
 	}
 
 	return &FileNode{

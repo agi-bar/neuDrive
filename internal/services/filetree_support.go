@@ -19,6 +19,7 @@ var (
 	ErrEntryNotFound          = errors.New("entry not found")
 	ErrOptimisticLockConflict = errors.New("entry version conflict")
 	ErrSkillMetadataMalformed = errors.New("skill metadata malformed")
+	ErrReadOnlyPath           = errors.New("path is read-only")
 )
 
 func entryChecksum(path, content, contentType string, metadata map[string]interface{}) string {

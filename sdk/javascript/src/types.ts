@@ -141,6 +141,7 @@ export interface Skill {
   name: string
   path?: string
   source?: string
+  read_only?: boolean
   description?: string
   when_to_use?: string
   allowed_tools?: string[]

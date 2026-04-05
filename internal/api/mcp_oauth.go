@@ -8,6 +8,17 @@ import (
 	"github.com/google/uuid"
 )
 
+type oauthDynamicRegisterRequest struct {
+	ClientName              string   `json:"client_name"`
+	RedirectURIs            []string `json:"redirect_uris"`
+	GrantTypes              []string `json:"grant_types"`
+	Scope                   string   `json:"scope"`
+	ClientID                string   `json:"client_id"`
+	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+	ApplicationType         string   `json:"application_type"`
+	ResponseTypes           []string `json:"response_types"`
+}
+
 // ---------------------------------------------------------------------------
 // OAuth 2.0 Protected Resource Metadata (RFC 9728) for MCP
 //
@@ -67,7 +78,7 @@ func (s *Server) handleAuthorizationServerMetadata(w http.ResponseWriter, r *htt
 		},
 		"response_types_supported":              []string{"code"},
 		"grant_types_supported":                 []string{"authorization_code", "refresh_token"},
-		"token_endpoint_auth_methods_supported": []string{"client_secret_post", "none"},
+		"token_endpoint_auth_methods_supported": []string{"client_secret_basic", "client_secret_post", "none"},
 		"code_challenge_methods_supported":      []string{"S256"},
 		"client_id_metadata_document_supported": true,
 	}
@@ -88,16 +99,8 @@ func (s *Server) handleOAuthDynamicRegister(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var req struct {
-		ClientName              string   `json:"client_name"`
-		RedirectURIs            []string `json:"redirect_uris"`
-		GrantTypes              []string `json:"grant_types"`
-		Scope                   string   `json:"scope"`
-		ClientID                string   `json:"client_id"`
-		TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-		ApplicationType         string   `json:"application_type"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	req, err := parseOAuthDynamicRegisterRequest(r)
+	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(map[string]string{"error": "invalid_request"})
 		return
@@ -132,6 +135,14 @@ func (s *Server) handleOAuthDynamicRegister(w http.ResponseWriter, r *http.Reque
 		"grant_types":                req.GrantTypes,
 		"token_endpoint_auth_method": "client_secret_post",
 	})
+}
+
+func parseOAuthDynamicRegisterRequest(r *http.Request) (oauthDynamicRegisterRequest, error) {
+	var req oauthDynamicRegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return req, err
+	}
+	return req, nil
 }
 
 func (s *Server) baseURL(r *http.Request) string {

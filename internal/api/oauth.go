@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
 	"strings"
@@ -16,6 +17,8 @@ import (
 // ---------------------------------------------------------------------------
 // OAuth 2.0 Provider Endpoints
 // ---------------------------------------------------------------------------
+
+var errOAuthConflictingClientAuth = errors.New("conflicting client authentication parameters")
 
 // handleOAuthAuthorizeGet renders the consent page for GET /oauth/authorize.
 func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request) {
@@ -242,32 +245,21 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 
 // handleOAuthToken handles POST /oauth/token (code exchange).
 func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
-	contentType := r.Header.Get("Content-Type")
-
-	var req models.OAuthTokenRequest
-
-	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
-		if err := r.ParseForm(); err != nil {
+	req, err := parseOAuthTokenRequest(r)
+	if err != nil {
+		switch {
+		case errors.Is(err, errOAuthConflictingClientAuth):
+			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Conflicting client authentication parameters.")
+		case strings.Contains(r.Header.Get("Content-Type"), "application/x-www-form-urlencoded"):
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Failed to parse form data.")
-			return
-		}
-		req.GrantType = r.FormValue("grant_type")
-		req.Code = r.FormValue("code")
-		req.ClientID = r.FormValue("client_id")
-		req.ClientSecret = r.FormValue("client_secret")
-		req.RedirectURI = r.FormValue("redirect_uri")
-		req.CodeVerifier = r.FormValue("code_verifier")
-		req.RefreshToken = r.FormValue("refresh_token")
-	} else {
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		default:
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "Invalid request body.")
-			return
 		}
+		return
 	}
 
 	var (
 		resp *models.OAuthTokenResponse
-		err  error
 	)
 
 	switch req.GrantType {
@@ -297,6 +289,42 @@ func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Pragma", "no-cache")
 	json.NewEncoder(w).Encode(resp)
+}
+
+func parseOAuthTokenRequest(r *http.Request) (models.OAuthTokenRequest, error) {
+	contentType := r.Header.Get("Content-Type")
+
+	var req models.OAuthTokenRequest
+
+	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
+		if err := r.ParseForm(); err != nil {
+			return req, err
+		}
+		req.GrantType = r.FormValue("grant_type")
+		req.Code = r.FormValue("code")
+		req.ClientID = r.FormValue("client_id")
+		req.ClientSecret = r.FormValue("client_secret")
+		req.RedirectURI = r.FormValue("redirect_uri")
+		req.CodeVerifier = r.FormValue("code_verifier")
+		req.RefreshToken = r.FormValue("refresh_token")
+	} else {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			return req, err
+		}
+	}
+
+	if basicID, basicSecret, ok := r.BasicAuth(); ok {
+		if req.ClientID != "" && req.ClientID != basicID {
+			return req, errOAuthConflictingClientAuth
+		}
+		if req.ClientSecret != "" && req.ClientSecret != basicSecret {
+			return req, errOAuthConflictingClientAuth
+		}
+		req.ClientID = basicID
+		req.ClientSecret = basicSecret
+	}
+
+	return req, nil
 }
 
 // handleOAuthUserInfo handles GET /oauth/userinfo.

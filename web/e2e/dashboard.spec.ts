@@ -28,13 +28,19 @@ test.describe('Dashboard Page', () => {
     await expect(page.getByText('设备', { exact: true })).toBeVisible()
     await expect(page.getByText('活跃项目')).toBeVisible()
 
+    // User content panels visible
+    await expect(page.getByText('我的资料')).toBeVisible()
+    await expect(page.getByText('Hub 文件')).toBeVisible()
+
     // Status banner
     await expect(page.getByText('一切正常')).toBeVisible()
 
     // Quick links
-    await expect(page.getByText('管理连接')).toBeVisible()
-    await expect(page.getByText('个人偏好')).toBeVisible()
-    await expect(page.getByText('查看项目')).toBeVisible()
+    const quickLinks = page.locator('.quick-links')
+    await expect(quickLinks.getByRole('link', { name: /管理连接/ })).toBeVisible()
+    await expect(quickLinks.getByRole('link', { name: /个人偏好/ })).toBeVisible()
+    await expect(quickLinks.getByRole('link', { name: /查看项目/ })).toBeVisible()
+    await expect(quickLinks.getByRole('link', { name: /连接设置/ })).toBeVisible()
   })
 
   test('quick links navigate correctly', async ({ page, request }) => {
@@ -171,20 +177,20 @@ test.describe('Info Page', () => {
 })
 
 test.describe('Setup Page', () => {
-  test('shows three setup entrypoints', async ({ page, request }) => {
+  test('shows setup submenu and default web apps page', async ({ page, request }) => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
     await page.goto('/setup')
+    await expect(page).toHaveURL(/\/setup\/web-apps/)
 
-    await expect(page.getByText('云端模式（浏览器授权）')).toBeVisible()
-    await expect(page.locator('[aria-label="云端模式平台"]').getByRole('tab', { name: 'Claude' })).toBeVisible()
-    await expect(page.locator('[aria-label="云端模式平台"]').getByRole('tab', { name: 'Codex' })).toBeVisible()
-    await expect(page.getByText('本地模式（stdio + Token）')).toBeVisible()
-    await expect(page.locator('[aria-label="本地模式平台"]').getByRole('tab', { name: 'Claude' })).toBeVisible()
-    await expect(page.locator('[aria-label="本地模式平台"]').getByRole('tab', { name: 'Codex' })).toBeVisible()
-    await expect(page.getByText('高级模式（HTTP + 手动 Bearer Token）')).toBeVisible()
-    await expect(page.getByText('ChatGPT GPT Actions')).toBeVisible()
+    await expect(page.getByRole('link', { name: '网页应用' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '云端模式' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '本地模式' })).toBeVisible()
+    await expect(page.getByRole('link', { name: '高级模式' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'ChatGPT Actions' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Token 管理' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '网页应用连接' })).toBeVisible()
   })
 })
 
@@ -208,7 +214,12 @@ test.describe('Navigation', () => {
 
     const links = [
       { text: '概览', url: '/' },
-      { text: '连接设置', url: '/setup' },
+      { text: '连接设置', url: '/setup/web-apps' },
+      { text: '云端模式', url: '/setup/cloud' },
+      { text: '本地模式', url: '/setup/local' },
+      { text: '高级模式', url: '/setup/advanced' },
+      { text: 'ChatGPT Actions', url: '/setup/gpt-actions' },
+      { text: 'Token 管理', url: '/setup/tokens' },
       { text: '连接管理', url: '/connections' },
       { text: '信息配置', url: '/info' },
       { text: '项目', url: '/projects' },

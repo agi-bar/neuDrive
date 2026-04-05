@@ -121,10 +121,10 @@ function App() {
             </NavLink>
             <div className="nav-submenu" aria-label="连接设置子菜单">
               <NavLink to="/setup/web-apps" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                网页应用
+                Web / Desktop Apps
               </NavLink>
               <NavLink to="/setup/cloud" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                云端模式
+                CLI Apps
               </NavLink>
               <NavLink to="/setup/local" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                 本地模式

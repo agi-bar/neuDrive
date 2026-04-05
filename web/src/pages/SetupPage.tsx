@@ -25,7 +25,8 @@ export const EXPIRY_OPTIONS = [
 
 export type Preset = 'agent' | 'readonly' | 'custom'
 export type ModeKey = 'local' | 'advanced'
-export type PlatformTab = 'claude' | 'codex'
+export type CloudPlatformTab = 'claude' | 'codex' | 'gemini'
+export type LocalPlatformTab = 'claude' | 'codex'
 
 interface ScopeInfo {
   scopes: string[]
@@ -66,10 +67,10 @@ export interface SetupOutletContext {
   activeTokens: ScopedTokenResponse[]
   scopeInfo: ScopeInfo | null
   copied: string | null
-  cloudPlatform: PlatformTab
-  setCloudPlatform: Dispatch<SetStateAction<PlatformTab>>
-  localPlatform: PlatformTab
-  setLocalPlatform: Dispatch<SetStateAction<PlatformTab>>
+  cloudPlatform: CloudPlatformTab
+  setCloudPlatform: Dispatch<SetStateAction<CloudPlatformTab>>
+  localPlatform: LocalPlatformTab
+  setLocalPlatform: Dispatch<SetStateAction<LocalPlatformTab>>
   openModes: Record<ModeKey, boolean>
   modeTokens: Partial<Record<ModeKey, ModeTokenState>>
   provisioningMode: ModeKey | null
@@ -92,7 +93,9 @@ export interface SetupOutletContext {
   cloudModeNeedsPublicUrl: boolean
   claudeCloudCommand: string
   codexCloudCommand: string
+  geminiCloudCommand: string
   codexLoginCommand: string
+  geminiAuthCommand: string
   codexStatusCommand: string
   localSessionToken: string
   advancedSessionToken: string
@@ -142,8 +145,8 @@ export default function SetupPage() {
   const [openModes, setOpenModes] = useState<Record<ModeKey, boolean>>(EMPTY_MODE_STATE)
   const [modeTokens, setModeTokens] = useState<Partial<Record<ModeKey, ModeTokenState>>>({})
   const [provisioningMode, setProvisioningMode] = useState<ModeKey | null>(null)
-  const [cloudPlatform, setCloudPlatform] = useState<PlatformTab>('claude')
-  const [localPlatform, setLocalPlatform] = useState<PlatformTab>('claude')
+  const [cloudPlatform, setCloudPlatform] = useState<CloudPlatformTab>('claude')
+  const [localPlatform, setLocalPlatform] = useState<LocalPlatformTab>('claude')
   const [editingTokenId, setEditingTokenId] = useState<string | null>(null)
   const [editingTokenName, setEditingTokenName] = useState('')
   const [renamingTokenId, setRenamingTokenId] = useState<string | null>(null)
@@ -237,7 +240,9 @@ export default function SetupPage() {
   const claudeCloudCommand = `claude mcp add -s user --transport http agenthub \\
   ${baseUrl}/mcp`
   const codexCloudCommand = `codex mcp add agenthub --url ${baseUrl}/mcp`
+  const geminiCloudCommand = `gemini mcp add --transport http agenthub ${baseUrl}/mcp`
   const codexLoginCommand = 'codex mcp login agenthub'
+  const geminiAuthCommand = '/mcp auth agenthub'
   const codexStatusCommand = 'codex mcp list'
   const localSessionToken = modeTokens.local?.token ?? ''
   const advancedSessionToken = modeTokens.advanced?.token ?? ''
@@ -447,7 +452,9 @@ export default function SetupPage() {
           cloudModeNeedsPublicUrl,
           claudeCloudCommand,
           codexCloudCommand,
+          geminiCloudCommand,
           codexLoginCommand,
+          geminiAuthCommand,
           codexStatusCommand,
           localSessionToken,
           advancedSessionToken,

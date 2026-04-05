@@ -1,0 +1,12 @@
+{
+  "method": "POST",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/mcp",
+  "headers": {
+    "Accept": "application/json, text/event-stream",
+    "Authorization": "Bearer CAPTURED_CURSOR_ACCESS_TOKEN",
+    "Content-Type": "application/json",
+    "Mcp-Protocol-Version": "2024-11-05",
+    "User-Agent": "Cursor/3.0.12 (darwin arm64)"
+  },
+  "body": "{\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\",\"capabilities\":{\"elicitation\":{\"form\":{}},\"roots\":{\"listChanged\":false},\"extensions\":{\"io.modelcontextprotocol/ui\":{\"mimeTypes\":[\"text/html;profile=mcp-app\"]}}},\"clientInfo\":{\"name\":\"cursor-vscode\",\"version\":\"1.0.0\"}},\"jsonrpc\":\"2.0\",\"id\":0}"
+}

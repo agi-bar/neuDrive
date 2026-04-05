@@ -11,25 +11,27 @@ export default function SetupCloudPage() {
     copyToClipboard,
     claudeCloudCommand,
     codexCloudCommand,
+    geminiCloudCommand,
     codexLoginCommand,
+    geminiAuthCommand,
     codexStatusCommand,
   } = useSetup()
 
   return (
     <SetupSection
       icon={<>&#9729;</>}
-      title="云端模式（浏览器授权）"
-      description="通过远程 HTTP MCP Server 连接 Agent Hub。默认添加到全局配置，设置一次，可在多个项目中复用。"
+      title="CLI Apps"
+      description="给命令行应用配置远程 HTTP MCP + OAuth。适合 Claude Code、Codex CLI 和 Gemini CLI。"
       badge="推荐"
       highlight
     >
       {cloudModeNeedsPublicUrl && (
         <div className="alert alert-warn">
-          当前地址是 <code>{baseUrl}</code>。云端模式需要可公开访问的 HTTPS Hub URL；如果你现在在本地开发，建议先用本地模式，或通过公网域名 / 隧道暴露这个 Hub。
+          当前地址是 <code>{baseUrl}</code>。CLI Apps 需要一个可公开访问的 HTTPS Hub URL；如果你现在在本地开发，建议先用本地模式，或通过公网域名 / 隧道暴露这个 Hub。
         </div>
       )}
 
-      <div className="setup-tabs" role="tablist" aria-label="云端模式平台">
+      <div className="setup-tabs" role="tablist" aria-label="CLI Apps 平台">
         <button
           type="button"
           role="tab"
@@ -47,6 +49,15 @@ export default function SetupCloudPage() {
           onClick={() => setCloudPlatform('codex')}
         >
           Codex
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={`setup-tab ${cloudPlatform === 'gemini' ? 'setup-tab-active' : ''}`}
+          aria-selected={cloudPlatform === 'gemini'}
+          onClick={() => setCloudPlatform('gemini')}
+        >
+          Gemini
         </button>
       </div>
 
@@ -85,7 +96,7 @@ export default function SetupCloudPage() {
               授权完成后，你可以在 Claude Code 的 <code>/mcp</code> 菜单里重新认证或清除认证；Agent Hub 侧也会在“连接管理”中显示这条平台连接。
             </p>
           </>
-        ) : (
+        ) : cloudPlatform === 'codex' ? (
           <>
             <h4 className="setup-platform-title">Codex CLI</h4>
             <p className="setup-note setup-note-first">
@@ -127,11 +138,45 @@ export default function SetupCloudPage() {
               授权完成后，Agent Hub 侧会在“连接管理”中显示这条平台连接；需要重新认证时，可再次运行 <code>codex mcp login agenthub</code>。
             </p>
           </>
+        ) : (
+          <>
+            <h4 className="setup-platform-title">Gemini CLI</h4>
+            <p className="setup-note setup-note-first">
+              把 Agent Hub 添加到 Gemini 的远程 MCP 配置中，然后在 Gemini 里发起 OAuth 授权。
+            </p>
+
+            <SetupCodeBlock
+              label="步骤 1：添加远程 MCP Server"
+              content={geminiCloudCommand}
+              copied={copied}
+              copyKey="cloud-gemini-add"
+              onCopy={copyToClipboard}
+            />
+
+            <SetupCodeBlock
+              label="步骤 2：在 Gemini 中发起授权"
+              content={geminiAuthCommand}
+              copied={copied}
+              copyKey="cloud-gemini-auth"
+              onCopy={copyToClipboard}
+            />
+
+            <ol className="setup-steps">
+              <li>运行 add 命令时一定要带上 <code>--transport http</code>；不带这个参数时，Gemini 会把 URL 当成本地 command，而不是远程 MCP server。</li>
+              <li>添加完成后，打开 Gemini，执行 <code>/mcp auth agenthub</code>；如果你用了别的 server 名称，把 <code>agenthub</code> 换成你自己的名称。</li>
+              <li>浏览器会跳转到 Agent Hub 的登录与授权页；完成登录和批准后，Gemini 会保存 OAuth 凭证。</li>
+              <li>接通后，你可以在 Gemini 里继续使用 <code>/mcp</code> 查看状态，或直接开始调用 Agent Hub 的工具。</li>
+            </ol>
+
+            <p className="setup-note">
+              Gemini CLI 当前已验证 Remote MCP + OAuth 可用，真实请求形态是 dynamic registration + <code>client_secret_post</code> token exchange。
+            </p>
+          </>
         )}
       </div>
 
       <p className="setup-note">
-        如果你本机已经有一个同名的本地 MCP 配置，例如旧的 <code>agenthub</code> stdio 配置，建议先删除或改名，避免在平台列表中和云端连接混淆。
+        如果你本机已经有一个同名的本地 MCP 配置，例如旧的 <code>agenthub</code> stdio 配置，建议先删除或改名，避免在平台列表中和远程 OAuth 连接混淆。
       </p>
     </SetupSection>
   )

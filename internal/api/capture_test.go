@@ -66,6 +66,16 @@ func TestInferCaptureSourceFromCapturedFixtures(t *testing.T) {
 			expected: "gemini-cli",
 		},
 		{
+			name:     "cursor desktop dynamic register",
+			fixture:  "testdata/oauth/cursor-desktop/oauth_register.json",
+			expected: "cursor",
+		},
+		{
+			name:     "cursor desktop authenticated initialize",
+			fixture:  "testdata/oauth/cursor-desktop/mcp_initialize_authenticated.json",
+			expected: "cursor",
+		},
+		{
 			name:     "codex initialize",
 			fixture:  "testdata/oauth/codex/mcp_initialize.json",
 			expected: "codex",

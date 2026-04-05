@@ -218,6 +218,8 @@ func inferCaptureSource(r *http.Request, body []byte) string {
 		return "claude-code"
 	case strings.Contains(userAgent, "claude-user"):
 		return "claude-web"
+	case strings.Contains(userAgent, "cursor/"):
+		return "cursor"
 	case strings.Contains(userAgent, "gemini"):
 		return "gemini-cli"
 	case strings.Contains(userAgent, "chatgpt"):
@@ -263,6 +265,8 @@ func inferCaptureSource(r *http.Request, body []byte) string {
 	switch {
 	case strings.Contains(joined, "codex"):
 		return "codex"
+	case strings.Contains(joined, "cursor-vscode") || strings.Contains(joined, "cursor://anysphere.cursor-mcp") || strings.Contains(joined, "\"cursor\""):
+		return "cursor"
 	case strings.Contains(joined, "gemini"):
 		return "gemini-cli"
 	case strings.Contains(joined, "claude-code"):

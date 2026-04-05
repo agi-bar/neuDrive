@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useSetup } from '../SetupPage'
 import { SetupCodeBlock, SetupScreenshotPlaceholder, SetupSection } from './SetupShared'
 
-type WebAppTab = 'claude' | 'chatgpt'
+type WebAppTab = 'claude' | 'chatgpt' | 'cursor'
 
 export default function SetupWebAppsPage() {
   const { baseUrl, cloudModeNeedsPublicUrl, copied, copyToClipboard } = useSetup()
@@ -12,21 +12,21 @@ export default function SetupWebAppsPage() {
   return (
     <SetupSection
       icon={<>&#127760;</>}
-      title="网页应用连接"
-      description="在 Claude 和 ChatGPT 的网页应用里，把 Agent Hub 添加成远程 MCP Server。"
+      title="Web / Desktop Apps"
+      description="在网页应用或桌面图形应用里，把 Agent Hub 添加成远程 MCP Server。"
       highlight
     >
       {cloudModeNeedsPublicUrl && (
         <div className="alert alert-warn">
-          当前地址是 <code>{baseUrl}</code>。网页应用连接需要一个可公开访问的 HTTPS MCP 地址；如果你现在在本地开发，请先切到公网域名或隧道地址。
+          当前地址是 <code>{baseUrl}</code>。Web / Desktop Apps 需要一个可公开访问的 HTTPS MCP 地址；如果你现在在本地开发，请先切到公网域名或隧道地址。
         </div>
       )}
 
       <p className="setup-note setup-note-first">
-        这一页面向直接在浏览器里使用 Agent Hub 的场景，不需要安装本地 CLI，也不需要手动创建 Bearer Token。
+        这一页面面向通过图形界面完成连接的场景，包括浏览器里的 Apps / Connectors，以及像 Cursor 这样的桌面应用。
       </p>
 
-      <div className="setup-tabs" role="tablist" aria-label="网页应用平台">
+      <div className="setup-tabs" role="tablist" aria-label="Web / Desktop Apps 平台">
         <button
           type="button"
           role="tab"
@@ -44,6 +44,15 @@ export default function SetupWebAppsPage() {
           onClick={() => setPlatform('chatgpt')}
         >
           ChatGPT
+        </button>
+        <button
+          type="button"
+          role="tab"
+          className={`setup-tab ${platform === 'cursor' ? 'setup-tab-active' : ''}`}
+          aria-selected={platform === 'cursor'}
+          onClick={() => setPlatform('cursor')}
+        >
+          Cursor
         </button>
       </div>
 
@@ -88,7 +97,7 @@ export default function SetupWebAppsPage() {
               如果你使用的是团队版或企业版 Claude，Connectors 的入口位置可能由管理员策略决定；看不到自定义 connector 入口时，请先确认当前账号支持 Remote MCP Custom Connectors。
             </p>
           </>
-        ) : (
+        ) : platform === 'chatgpt' ? (
           <>
             <h4 className="setup-platform-title">ChatGPT Apps</h4>
             <p className="setup-note setup-note-first">
@@ -128,6 +137,47 @@ export default function SetupWebAppsPage() {
 
             <p className="setup-note">
               创建完成后，你可以回到 ChatGPT 对话中直接要求它使用 Agent Hub，例如“从 Agent Hub 中读取我的 profile”。
+            </p>
+          </>
+        ) : (
+          <>
+            <h4 className="setup-platform-title">Cursor Desktop</h4>
+            <p className="setup-note setup-note-first">
+              在 Cursor Desktop 里添加一个自定义 Remote MCP Server，然后通过浏览器 OAuth 完成授权。
+            </p>
+
+            <SetupCodeBlock
+              label="Remote MCP Server URL"
+              content={mcpUrl}
+              copied={copied}
+              copyKey="webapp-cursor-url"
+              onCopy={copyToClipboard}
+            />
+
+            <SetupCodeBlock
+              label="可选：~/.cursor/mcp.json"
+              content={JSON.stringify({
+                mcpServers: {
+                  agenthub: {
+                    url: mcpUrl,
+                  },
+                },
+              }, null, 2)}
+              copied={copied}
+              copyKey="webapp-cursor-json"
+              onCopy={copyToClipboard}
+            />
+
+            <ol className="setup-steps">
+              <li>打开 Cursor，进入 <code>Settings -&gt; Tools &amp; MCPs</code>，点击 <code>Add Custom MCP</code>。</li>
+              <li>如果界面要求填写 URL，就把 <code>Remote MCP Server URL</code> 设为 <code>{mcpUrl}</code>；如果要求粘贴配置，也可以直接使用上面的 <code>~/.cursor/mcp.json</code> 片段。</li>
+              <li>保存后点击 <code>Connect</code> 或 <code>Authenticate</code>；Cursor 会自动发现 Agent Hub 的 OAuth metadata。</li>
+              <li>浏览器会跳转到 Agent Hub 的登录与授权页；完成登录和批准后，Cursor 会回到已连接状态。</li>
+              <li>接通后，Cursor 会立即拉取工具和资源列表；你可以直接在对话里让它读取 profile、项目、技能或调用设备。</li>
+            </ol>
+
+            <p className="setup-note">
+              Cursor Desktop 当前已验证 Remote MCP + OAuth 可用，真实请求形态是 dynamic registration + <code>client_secret_post</code> token exchange。
             </p>
           </>
         )}

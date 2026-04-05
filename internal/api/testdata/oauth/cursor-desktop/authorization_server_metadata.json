@@ -1,0 +1,8 @@
+{
+  "method": "GET",
+  "url": "https://atmospheric-intellectual-sleeping-conducting.trycloudflare.com/.well-known/oauth-authorization-server",
+  "headers": {
+    "Accept": "*/*",
+    "User-Agent": "Cursor/3.0.12 (darwin arm64)"
+  }
+}

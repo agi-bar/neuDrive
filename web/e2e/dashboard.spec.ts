@@ -28,13 +28,19 @@ test.describe('Dashboard Page', () => {
     await expect(page.getByText('设备', { exact: true })).toBeVisible()
     await expect(page.getByText('活跃项目')).toBeVisible()
 
+    // User content panels visible
+    await expect(page.getByText('我的资料')).toBeVisible()
+    await expect(page.getByText('Hub 文件')).toBeVisible()
+
     // Status banner
     await expect(page.getByText('一切正常')).toBeVisible()
 
     // Quick links
-    await expect(page.getByText('管理连接')).toBeVisible()
-    await expect(page.getByText('个人偏好')).toBeVisible()
-    await expect(page.getByText('查看项目')).toBeVisible()
+    const quickLinks = page.locator('.quick-links')
+    await expect(quickLinks.getByRole('link', { name: /管理连接/ })).toBeVisible()
+    await expect(quickLinks.getByRole('link', { name: /个人偏好/ })).toBeVisible()
+    await expect(quickLinks.getByRole('link', { name: /查看项目/ })).toBeVisible()
+    await expect(quickLinks.getByRole('link', { name: /连接设置/ })).toBeVisible()
   })
 
   test('quick links navigate correctly', async ({ page, request }) => {

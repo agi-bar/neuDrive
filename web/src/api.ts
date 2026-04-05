@@ -61,6 +61,30 @@ export interface OAuthGrantResponse {
   created_at: string
 }
 
+export interface FileNode {
+  path: string
+  name: string
+  is_dir: boolean
+  kind?: string
+  content?: string
+  mime_type?: string
+  size?: number
+  version?: number
+  checksum?: string
+  metadata?: Record<string, any>
+  children?: FileNode[]
+  created_at?: string
+  updated_at?: string
+  deleted_at?: string
+}
+
+export interface TreeSnapshotResponse {
+  path: string
+  cursor: number
+  root_checksum: string
+  entries: FileNode[]
+}
+
 // ---------------------------------------------------------------------------
 // Token refresh logic
 // ---------------------------------------------------------------------------
@@ -268,6 +292,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // File tree
+  getTree: (path = '/'): Promise<FileNode> => {
+    const normalized = path.startsWith('/') ? path : `/${path}`
+    return request<FileNode>(`/tree${normalized}`)
+  },
+  getTreeSnapshot: (path = '/'): Promise<TreeSnapshotResponse> =>
+    request<TreeSnapshotResponse>(`/tree/snapshot?path=${encodeURIComponent(path)}`),
 
   // Memory conflicts
   getConflicts: () => request<{ conflicts: MemoryConflict[] }>('/memory/conflicts').then(r => r.conflicts),

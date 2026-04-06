@@ -61,7 +61,10 @@ def _create_scoped_token(jwt_token: str, scopes: list[str]) -> str:
         timeout=30.0,
     )
     response.raise_for_status()
-    return response.json()["token"]
+    body = response.json()
+    if isinstance(body, dict) and body.get("ok") is True and isinstance(body.get("data"), dict):
+        return body["data"]["token"]
+    return body["token"]
 
 
 @unittest.skipIf(not BASE_URL, "AGENTHUB_TEST_URL not set")
@@ -149,8 +152,8 @@ class TestPythonSyncIntegration(unittest.TestCase):
 
         with AgentHub(BASE_URL, read_token) as hub:
             exported = hub.export_bundle("json")
-            self.assertIn("skills", exported)
-            self.assertEqual(hub.list_sync_jobs(), [])
+            self.assertEqual(exported.get("version"), "ahub.bundle/v1")
+            self.assertGreaterEqual(len(hub.list_sync_jobs()), 1)
             with self.assertRaises(Exception):
                 hub.import_bundle(bundle)
 

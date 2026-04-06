@@ -53,7 +53,10 @@ def register_user() -> str:
         timeout=30.0,
     )
     scoped.raise_for_status()
-    return scoped.json()["token"]
+    body = scoped.json()
+    if isinstance(body, dict) and body.get("ok") is True and isinstance(body.get("data"), dict):
+        return body["data"]["token"]
+    return body["token"]
 
 
 @unittest.skipIf(not BASE_URL, "AGENTHUB_TEST_URL not set")

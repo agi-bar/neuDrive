@@ -83,7 +83,7 @@ async function registerUser() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slug, email, password }),
   })
-  assert.equal(registerRes.status, 200)
+  assert.equal(registerRes.status, 201)
   const registerBody = await registerRes.json()
   const jwtToken = registerBody.access_token
 
@@ -102,7 +102,7 @@ async function registerUser() {
   })
   assert.equal(tokenRes.status, 201)
   const tokenBody = await tokenRes.json()
-  return tokenBody.token
+  return tokenBody.data ? tokenBody.data.token : tokenBody.token
 }
 
 function readManifestFromArchive(archivePath) {

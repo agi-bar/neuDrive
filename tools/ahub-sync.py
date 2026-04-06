@@ -220,13 +220,21 @@ def archive_manifest_hash(manifest: dict[str, Any]) -> str:
     clean["archive_sha256"] = ""
     parts: list[str] = [
         str(clean.get("version", "")),
+        "|",
         str(clean.get("created_at", "")),
+        "|",
         str(clean.get("source", "")),
+        "|",
         str(clean.get("mode", "")),
-        ",".join(sorted(clean.get("domains", []))),
-        ",".join(sorted(clean.get("filters", {}).get("include_domains", []))),
-        ",".join(sorted(clean.get("filters", {}).get("include_skills", []))),
-        ",".join(sorted(clean.get("filters", {}).get("exclude_skills", []))),
+        "|",
+        "".join(f"{value.strip()}," for value in sorted(clean.get("domains", []))),
+        "|",
+        "".join(f"{value.strip()}," for value in sorted(clean.get("filters", {}).get("include_domains", []))),
+        "|",
+        "".join(f"{value.strip()}," for value in sorted(clean.get("filters", {}).get("include_skills", []))),
+        "|",
+        "".join(f"{value.strip()}," for value in sorted(clean.get("filters", {}).get("exclude_skills", []))),
+        "|",
     ]
 
     profile_files = clean.get("profile_files", {})

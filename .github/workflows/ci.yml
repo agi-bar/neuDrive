@@ -42,6 +42,7 @@ jobs:
       - run: go test ./... -v -race -coverprofile=coverage.out
         env:
           DATABASE_URL: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
+          AGENTHUB_TEST_DB: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
           JWT_SECRET: test-jwt-secret
           VAULT_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       - name: Upload coverage
@@ -70,9 +71,68 @@ jobs:
       - run: cd web && npm ci && npm run build
       - run: cd web && npx tsc --noEmit
 
+  sync-integration:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: agenthub
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: agenthub_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - run: cd sdk/javascript && npm ci
+      - run: cd web && npm ci
+      - run: python -m pip install --upgrade pip
+      - run: python -m pip install 'httpx>=0.25.0'
+      - run: npx playwright install --with-deps chromium
+        working-directory: web
+      - run: go run ./cmd/server > /tmp/agenthub-server.log 2>&1 &
+        env:
+          DATABASE_URL: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
+          JWT_SECRET: test-jwt-secret
+          VAULT_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+          PORT: '8080'
+      - run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/health >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          cat /tmp/agenthub-server.log
+          exit 1
+      - run: python -m unittest sdk/python/tests/test_sync_integration.py tools/test_ahub_sync_integration.py
+        env:
+          AGENTHUB_TEST_URL: http://localhost:8080
+      - run: npm test --prefix sdk/javascript
+        env:
+          AGENTHUB_TEST_URL: http://localhost:8080
+      - run: npx playwright test web/e2e/sync.spec.ts
+        working-directory: web
+        env:
+          AGENTHUB_TEST_URL: http://localhost:8080
+
   docker:
     runs-on: ubuntu-latest
-    needs: [lint, test, build, frontend]
+    needs: [lint, test, build, frontend, sync-integration]
     steps:
       - uses: actions/checkout@v4
       - run: docker build -t agenthub:test .

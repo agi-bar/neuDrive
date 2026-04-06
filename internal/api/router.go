@@ -51,6 +51,7 @@ type Server struct {
 	TokenService         *services.TokenService
 	ImportService        *services.ImportService
 	ExportService        *services.ExportService
+	SyncService          *services.SyncService
 	CollaborationService *services.CollaborationService
 	WebhookService       *services.WebhookService
 	OAuthService         *services.OAuthService
@@ -80,6 +81,7 @@ func NewServer(
 	tokenSvc *services.TokenService,
 	importSvc *services.ImportService,
 	exportSvc *services.ExportService,
+	syncSvc *services.SyncService,
 	collabSvc *services.CollaborationService,
 	webhookSvc *services.WebhookService,
 	oauthSvc *services.OAuthService,
@@ -104,6 +106,7 @@ func NewServer(
 		DashboardService:     dashboardSvc,
 		TokenService:         tokenSvc,
 		ImportService:        importSvc,
+		SyncService:          syncSvc,
 		CollaborationService: collabSvc,
 		WebhookService:       webhookSvc,
 		OAuthService:         oauthSvc,
@@ -272,6 +275,7 @@ func (s *Server) setupRoutes() {
 
 		// Tokens (scoped access tokens)
 		r.Post("/api/tokens", s.handleCreateToken)
+		r.Post("/api/tokens/sync", s.handleCreateSyncToken)
 		r.Get("/api/tokens", s.handleListTokens)
 		r.Get("/api/tokens/scopes", s.handleListScopes)
 		r.Get("/api/tokens/{id}", s.handleGetToken)
@@ -332,6 +336,13 @@ func (s *Server) setupRoutes() {
 		r.Post("/agent/import/bulk", s.handleAgentImportBulk)
 		r.With(MaxBodySizeMiddleware(50<<20)).Post("/agent/import/preview", s.handleAgentPreviewBundle)
 		r.With(MaxBodySizeMiddleware(50<<20)).Post("/agent/import/bundle", s.handleAgentImportBundle)
+		r.Post("/agent/import/session", s.handleAgentStartSyncSession)
+		r.With(MaxBodySizeMiddleware(8<<20)).Put("/agent/import/session/{id}/parts/{index}", s.handleAgentUploadSyncPart)
+		r.Get("/agent/import/session/{id}", s.handleAgentGetSyncSession)
+		r.Post("/agent/import/session/{id}/commit", s.handleAgentCommitSyncSession)
+		r.Delete("/agent/import/session/{id}", s.handleAgentDeleteSyncSession)
+		r.Get("/agent/sync/jobs", s.handleAgentListSyncJobs)
+		r.Get("/agent/sync/jobs/{id}", s.handleAgentGetSyncJob)
 		r.Get("/agent/export/all", s.handleAgentExportAll)
 		r.Get("/agent/export/bundle", s.handleAgentExportBundle)
 	})

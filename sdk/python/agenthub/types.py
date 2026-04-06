@@ -87,3 +87,41 @@ class TreeSnapshot:
     cursor: int
     root_checksum: str
     entries: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class BundleFilters:
+    include_domains: list[str] = field(default_factory=list)
+    include_skills: list[str] = field(default_factory=list)
+    exclude_skills: list[str] = field(default_factory=list)
+
+
+@dataclass
+class SyncSessionStatus:
+    session_id: str
+    job_id: str
+    status: str
+    chunk_size_bytes: int
+    total_parts: int
+    expires_at: str
+    mode: str = "merge"
+    summary: dict[str, Any] = field(default_factory=dict)
+    received_parts: list[int] = field(default_factory=list)
+    missing_parts: list[int] = field(default_factory=list)
+
+
+@dataclass
+class SyncJob:
+    id: str
+    user_id: str
+    direction: str
+    transport: str
+    status: str
+    source: str = ""
+    mode: str = "merge"
+    filters: dict[str, Any] = field(default_factory=dict)
+    summary: dict[str, Any] = field(default_factory=dict)
+    error: str = ""
+    created_at: str = ""
+    updated_at: str = ""
+    completed_at: Optional[str] = None

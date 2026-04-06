@@ -853,6 +853,61 @@ a:hover {
   gap: 8px;
 }
 
+.data-sync-card {
+  margin-bottom: 16px;
+}
+
+.data-sync-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 12px;
+}
+
+.data-sync-row input[type="file"] {
+  max-width: 320px;
+}
+
+.data-sync-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.data-sync-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+
+.data-sync-token-box {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.data-sync-token {
+  display: block;
+  margin-top: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  word-break: break-all;
+}
+
+.data-sync-preview {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border-light);
+}
+
 .stat-card {
   background: var(--color-surface);
   border: 1px solid var(--color-border);

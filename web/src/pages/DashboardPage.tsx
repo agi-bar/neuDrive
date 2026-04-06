@@ -256,9 +256,12 @@ export default function DashboardPage() {
       <div className="card">
         <h3 className="card-title">数据管理</h3>
         <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
-          下载你所有的 Hub 数据，包括资料、文件树、技能、项目、设备和记忆。
+          下载你所有的 Hub 数据，或进入新的 Bundle Sync 页面执行 `.ahub` / `.ahubz` 的导入、导出和历史查看。
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Link to="/data/sync" className="btn">
+            打开 Bundle Sync
+          </Link>
           <button
             className="btn btn-primary"
             disabled={exporting}

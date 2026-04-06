@@ -1,0 +1,57 @@
+{
+  "skill_names": [
+    "atlas-brief",
+    "atlas-layout",
+    "atlas-cover",
+    "atlas-publish",
+    "atlas-illustration",
+    "atlas-svg",
+    "atlas-identity",
+    "atlas-policy",
+    "atlas-evaluator",
+    "atlas-kb",
+    "atlas-lark"
+  ],
+  "extra_text_files": [
+    {
+      "path": "references/style-guide.md",
+      "source": "scripts/ahub-sync.py",
+      "repeat": 10
+    },
+    {
+      "path": "knowledge/policy-index.md",
+      "source": "spec/api.md",
+      "repeat": 28
+    },
+    {
+      "path": "templates/checklist.md",
+      "source": "SKILL.md",
+      "repeat": 14
+    },
+    {
+      "path": "references/mcp-notes.md",
+      "source": "spec/mcp-tool.md",
+      "repeat": 22
+    }
+  ],
+  "binary_assignments": {
+    "atlas-cover": [
+      "assets/cover-preview.png"
+    ],
+    "atlas-illustration": [
+      "assets/illustration-preview.png"
+    ],
+    "atlas-identity": [
+      "assets/identity-scan.png"
+    ],
+    "atlas-evaluator": [
+      "assets/evaluator-preview.png"
+    ],
+    "atlas-kb": [
+      "assets/kb-preview.png"
+    ],
+    "atlas-lark": [
+      "assets/router-preview.png"
+    ]
+  }
+}

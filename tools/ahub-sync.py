@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """
-ahub-sync: export/push/pull Agent Hub bundles.
+ahub-sync: V2 bundle sync helper for Agent Hub.
 
 Examples:
   python3 tools/ahub-sync.py export --source /path/to/skills -o backup.ahub
-  python3 tools/ahub-sync.py preview --token aht_xxx --bundle backup.ahub
-  python3 tools/ahub-sync.py push --token aht_xxx --bundle backup.ahub --api-base https://hub.example.com
-  python3 tools/ahub-sync.py push --token aht_xxx --source /path/to/skills --mode mirror
-  python3 tools/ahub-sync.py pull --token aht_xxx -o backup.ahub
+  python3 tools/ahub-sync.py export --source /path/to/skills --format archive -o backup.ahubz
+  python3 tools/ahub-sync.py preview --token aht_xxx --bundle backup.ahubz
+  python3 tools/ahub-sync.py push --token aht_xxx --bundle backup.ahub --transport auto
+  python3 tools/ahub-sync.py pull --token aht_xxx --format archive -o backup.ahubz
+  python3 tools/ahub-sync.py resume --token aht_xxx --bundle backup.ahubz
+  python3 tools/ahub-sync.py history --token aht_xxx
 """
 
 from __future__ import annotations
@@ -15,17 +17,25 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import io
 import json
 import mimetypes
 import os
 import sys
 import time
+import zipfile
 from pathlib import Path
 from typing import Any
-from urllib import error, request
 
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SDK_ROOT = REPO_ROOT / "sdk" / "python"
+if str(SDK_ROOT) not in sys.path:
+    sys.path.insert(0, str(SDK_ROOT))
+
+from agenthub import AgentHub  # noqa: E402
 
 DEFAULT_API_BASE = os.environ.get("AGENTHUB_API_BASE", "http://localhost:8080")
+AUTO_THRESHOLD = 8 << 20
 BINARY_EXTS = {
     ".png",
     ".jpg",
@@ -42,24 +52,6 @@ BINARY_EXTS = {
 }
 
 
-def http_json(method: str, url: str, token: str | None = None, payload: dict[str, Any] | None = None, timeout: int = 120) -> dict[str, Any]:
-    headers = {"Content-Type": "application/json"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8") if payload is not None else None
-    req = request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with request.urlopen(req, timeout=timeout) as resp:
-            return json.loads(resp.read().decode("utf-8"))
-    except error.HTTPError as exc:
-        raw = exc.read().decode("utf-8", errors="replace")
-        try:
-            parsed = json.loads(raw)
-        except Exception:
-            parsed = {"error": raw}
-        raise RuntimeError(f"HTTP {exc.code}: {parsed}") from exc
-
-
 def read_text_file(path: Path) -> str:
     for encoding in ("utf-8", "gbk", "latin-1"):
         try:
@@ -67,6 +59,10 @@ def read_text_file(path: Path) -> str:
         except UnicodeDecodeError:
             continue
     raise RuntimeError(f"unable to decode text file: {path}")
+
+
+def sha256_hex(data: bytes) -> str:
+    return hashlib.sha256(data).hexdigest()
 
 
 def build_bundle(source_dir: str, mode: str) -> dict[str, Any]:
@@ -101,13 +97,12 @@ def build_bundle(source_dir: str, mode: str) -> dict[str, Any]:
             ext = file_path.suffix.lower()
             if ext in BINARY_EXTS:
                 data = file_path.read_bytes()
-                sha256 = hashlib.sha256(data).hexdigest()
                 content_type = mimetypes.guess_type(file_path.name)[0] or "application/octet-stream"
                 skill["binary_files"][rel_path] = {
                     "content_base64": base64.b64encode(data).decode("ascii"),
                     "content_type": content_type,
                     "size_bytes": len(data),
-                    "sha256": sha256,
+                    "sha256": sha256_hex(data),
                 }
                 bundle["stats"]["binary_files"] += 1
                 bundle["stats"]["total_bytes"] += len(data)
@@ -126,6 +121,56 @@ def build_bundle(source_dir: str, mode: str) -> dict[str, Any]:
     return bundle
 
 
+def apply_filters_to_bundle(bundle: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    include_domains = set(args.include_domain or [])
+    include_skills = set(args.include_skill or [])
+    exclude_skills = set(args.exclude_skill or [])
+
+    if include_domains and "profile" not in include_domains:
+        bundle["profile"] = {}
+    if include_domains and "memory" not in include_domains:
+        bundle["memory"] = []
+    if include_domains and "skills" not in include_domains:
+        bundle["skills"] = {}
+
+    if bundle.get("skills"):
+        filtered_skills: dict[str, Any] = {}
+        for skill_name, skill in bundle["skills"].items():
+            if include_skills and skill_name not in include_skills:
+                continue
+            if skill_name in exclude_skills:
+                continue
+            filtered_skills[skill_name] = skill
+        bundle["skills"] = filtered_skills
+
+    bundle["stats"] = calculate_bundle_stats(bundle)
+    return bundle
+
+
+def calculate_bundle_stats(bundle: dict[str, Any]) -> dict[str, int]:
+    stats = {
+        "total_skills": len(bundle.get("skills", {})),
+        "total_files": 0,
+        "total_bytes": 0,
+        "binary_files": 0,
+        "profile_items": len(bundle.get("profile", {})),
+        "memory_items": len(bundle.get("memory", [])),
+    }
+    for content in bundle.get("profile", {}).values():
+        stats["total_bytes"] += len(content.encode("utf-8"))
+    for item in bundle.get("memory", []):
+        stats["total_bytes"] += len((item.get("content") or "").encode("utf-8"))
+    for skill in bundle.get("skills", {}).values():
+        for content in skill.get("files", {}).values():
+            stats["total_files"] += 1
+            stats["total_bytes"] += len(content.encode("utf-8"))
+        for blob in skill.get("binary_files", {}).values():
+            stats["total_files"] += 1
+            stats["binary_files"] += 1
+            stats["total_bytes"] += int(blob.get("size_bytes") or 0)
+    return stats
+
+
 def print_bundle_stats(bundle: dict[str, Any]) -> None:
     stats = bundle.get("stats", {})
     print(
@@ -136,78 +181,379 @@ def print_bundle_stats(bundle: dict[str, Any]) -> None:
     )
 
 
-def unwrap_response(response: dict[str, Any]) -> dict[str, Any]:
-    if response.get("ok") is True and "data" in response:
-        return response["data"]
-    return response
+def archive_entry_for_payload(archive_path: str, binary: bool, content_type: str, data: bytes) -> dict[str, Any]:
+    return {
+        "archive_path": archive_path,
+        "binary": binary,
+        "content_type": content_type,
+        "size_bytes": len(data),
+        "sha256": sha256_hex(data),
+    }
+
+
+def manifest_domains(bundle: dict[str, Any]) -> list[str]:
+    domains: list[str] = []
+    if bundle.get("profile"):
+        domains.append("profile")
+    if bundle.get("memory"):
+        domains.append("memory")
+    if bundle.get("skills"):
+        domains.append("skills")
+    return domains
+
+
+def archive_entry_hash(entry: dict[str, Any]) -> str:
+    return "|".join(
+        [
+            str(entry.get("archive_path", "")),
+            "1" if entry.get("binary") else "0",
+            str(entry.get("content_type", "")),
+            str(entry.get("size_bytes", 0)),
+            str(entry.get("sha256", "")),
+        ]
+    )
+
+
+def archive_manifest_hash(manifest: dict[str, Any]) -> str:
+    clean = dict(manifest)
+    clean["archive_sha256"] = ""
+    parts: list[str] = [
+        str(clean.get("version", "")),
+        str(clean.get("created_at", "")),
+        str(clean.get("source", "")),
+        str(clean.get("mode", "")),
+        ",".join(sorted(clean.get("domains", []))),
+        ",".join(sorted(clean.get("filters", {}).get("include_domains", []))),
+        ",".join(sorted(clean.get("filters", {}).get("include_skills", []))),
+        ",".join(sorted(clean.get("filters", {}).get("exclude_skills", []))),
+    ]
+
+    profile_files = clean.get("profile_files", {})
+    for category in sorted(profile_files):
+        parts.append(f"{category}={archive_entry_hash(profile_files[category])};")
+    parts.append("|")
+
+    for item in sorted(clean.get("memory_items", []), key=lambda item: item.get("id", "")):
+        parts.append(
+            "|".join(
+                [
+                    str(item.get("id", "")),
+                    str(item.get("title", "")),
+                    str(item.get("source", "")),
+                    str(item.get("created_at", "")),
+                    str(item.get("expires_at", "")),
+                    str(item.get("archive_path", "")),
+                    str(item.get("content_type", "")),
+                    str(item.get("size_bytes", 0)),
+                    str(item.get("sha256", "")),
+                ]
+            )
+            + ";"
+        )
+    parts.append("|")
+
+    skill_files = clean.get("skill_files", {})
+    for skill_name in sorted(skill_files):
+        parts.append(skill_name + "{")
+        for rel_path in sorted(skill_files[skill_name]):
+            parts.append(f"{rel_path}={archive_entry_hash(skill_files[skill_name][rel_path])};")
+        parts.append("}")
+    parts.append("|")
+
+    stats = clean.get("stats", {})
+    parts.append(
+        "|".join(
+            [
+                str(stats.get("total_skills", 0)),
+                str(stats.get("total_files", 0)),
+                str(stats.get("total_bytes", 0)),
+                str(stats.get("binary_files", 0)),
+                str(stats.get("profile_items", 0)),
+                str(stats.get("memory_items", 0)),
+            ]
+        )
+    )
+    return sha256_hex("".join(parts).encode("utf-8"))
+
+
+def build_archive(bundle: dict[str, Any], filters: dict[str, Any]) -> tuple[bytes, dict[str, Any]]:
+    payloads: dict[str, bytes] = {}
+    manifest: dict[str, Any] = {
+        "version": "ahub.bundle/v2",
+        "created_at": bundle.get("created_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "source": bundle.get("source", "manual"),
+        "mode": bundle.get("mode", "merge"),
+        "domains": manifest_domains(bundle),
+        "filters": filters,
+        "profile_files": {},
+        "memory_items": [],
+        "skill_files": {},
+        "stats": bundle.get("stats", calculate_bundle_stats(bundle)),
+        "archive_sha256": "",
+    }
+
+    for category in sorted(bundle.get("profile", {})):
+        data = bundle["profile"][category].encode("utf-8")
+        archive_path = f"payload/profile/{category}.md"
+        payloads[archive_path] = data
+        manifest["profile_files"][category] = archive_entry_for_payload(archive_path, False, "text/markdown", data)
+
+    for item in bundle.get("memory", []):
+        created_at = item.get("created_at") or time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        memory_id = hashlib.sha1(f"{item.get('source', '')}:{item.get('title', '')}:{created_at}".encode("utf-8")).hexdigest()
+        archive_path = f"payload/memory/{memory_id}.md"
+        data = (item.get("content") or "").encode("utf-8")
+        payloads[archive_path] = data
+        manifest["memory_items"].append(
+            {
+                "id": memory_id,
+                "title": item.get("title", ""),
+                "source": item.get("source", ""),
+                "created_at": created_at,
+                "expires_at": item.get("expires_at", ""),
+                "archive_path": archive_path,
+                "content_type": "text/markdown",
+                "size_bytes": len(data),
+                "sha256": sha256_hex(data),
+            }
+        )
+
+    for skill_name in sorted(bundle.get("skills", {})):
+        manifest["skill_files"][skill_name] = {}
+        skill = bundle["skills"][skill_name]
+        for rel_path in sorted(skill.get("files", {})):
+            data = skill["files"][rel_path].encode("utf-8")
+            archive_path = f"payload/skills/{skill_name}/{rel_path}"
+            payloads[archive_path] = data
+            content_type = mimetypes.guess_type(rel_path)[0] or "text/plain"
+            if rel_path.endswith(".md"):
+                content_type = "text/markdown"
+            manifest["skill_files"][skill_name][rel_path] = archive_entry_for_payload(archive_path, False, content_type, data)
+        for rel_path in sorted(skill.get("binary_files", {})):
+            blob = skill["binary_files"][rel_path]
+            data = base64.b64decode(blob["content_base64"])
+            archive_path = f"payload/skills/{skill_name}/{rel_path}"
+            payloads[archive_path] = data
+            manifest["skill_files"][skill_name][rel_path] = archive_entry_for_payload(
+                archive_path,
+                True,
+                blob.get("content_type") or "application/octet-stream",
+                data,
+            )
+
+    manifest["archive_sha256"] = archive_manifest_hash(manifest)
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("manifest.json", json.dumps(manifest, ensure_ascii=False, indent=2))
+        for payload_path in sorted(payloads):
+            zf.writestr(payload_path, payloads[payload_path])
+    return buffer.getvalue(), manifest
+
+
+def parse_archive(data: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
+    with zipfile.ZipFile(io.BytesIO(data), "r") as zf:  # type: ignore[name-defined]
+        manifest = json.loads(zf.read("manifest.json").decode("utf-8"))
+        if archive_manifest_hash(manifest) != manifest.get("archive_sha256"):
+            raise RuntimeError("archive manifest hash mismatch")
+        bundle: dict[str, Any] = {
+            "version": "ahub.bundle/v1",
+            "created_at": manifest.get("created_at"),
+            "source": manifest.get("source", "manual"),
+            "mode": manifest.get("mode", "merge"),
+            "profile": {},
+            "skills": {},
+            "memory": [],
+            "stats": manifest.get("stats", {}),
+        }
+        for category, entry in manifest.get("profile_files", {}).items():
+            payload = zf.read(entry["archive_path"])
+            bundle["profile"][category] = payload.decode("utf-8")
+        for item in manifest.get("memory_items", []):
+            payload = zf.read(item["archive_path"])
+            bundle["memory"].append(
+                {
+                    "content": payload.decode("utf-8"),
+                    "title": item.get("title", ""),
+                    "source": item.get("source", ""),
+                    "created_at": item.get("created_at", ""),
+                    "expires_at": item.get("expires_at", ""),
+                }
+            )
+        for skill_name, files in manifest.get("skill_files", {}).items():
+            skill = {"files": {}, "binary_files": {}}
+            for rel_path, entry in files.items():
+                payload = zf.read(entry["archive_path"])
+                if entry.get("binary"):
+                    skill["binary_files"][rel_path] = {
+                        "content_base64": base64.b64encode(payload).decode("ascii"),
+                        "content_type": entry.get("content_type", "application/octet-stream"),
+                        "size_bytes": len(payload),
+                        "sha256": sha256_hex(payload),
+                    }
+                else:
+                    skill["files"][rel_path] = payload.decode("utf-8")
+            bundle["skills"][skill_name] = skill
+        bundle["stats"] = calculate_bundle_stats(bundle)
+        return bundle, manifest
+
+
+def build_filters(args: argparse.Namespace) -> dict[str, Any]:
+    return {
+        "include_domains": args.include_domain or [],
+        "include_skills": args.include_skill or [],
+        "exclude_skills": args.exclude_skill or [],
+    }
+
+
+def default_session_file(bundle_path: Path) -> Path:
+    return bundle_path.with_name(bundle_path.name + ".session.json")
+
+
+def save_session_file(path: Path, payload: dict[str, Any]) -> None:
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def load_session_file(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def load_input_payload(args: argparse.Namespace) -> tuple[str, dict[str, Any] | None, bytes | None, dict[str, Any] | None, Path | None]:
+    if getattr(args, "source", None):
+        bundle = apply_filters_to_bundle(build_bundle(args.source, args.mode), args)
+        return "bundle", bundle, None, None, None
+
+    bundle_path = Path(args.bundle)
+    data = bundle_path.read_bytes()
+    if bundle_path.suffix == ".ahubz":
+        bundle, manifest = parse_archive(data)
+        return "archive", bundle, data, manifest, bundle_path
+    bundle = json.loads(data.decode("utf-8"))
+    bundle = apply_filters_to_bundle(bundle, args)
+    return "bundle", bundle, None, None, bundle_path
+
+
+def unwrap_import_result(result: dict[str, Any]) -> dict[str, Any]:
+    return result.get("data", result) if isinstance(result, dict) else result
 
 
 def cmd_export(args: argparse.Namespace) -> int:
-    bundle = build_bundle(args.source, args.mode)
+    bundle = apply_filters_to_bundle(build_bundle(args.source, args.mode), args)
     print_bundle_stats(bundle)
-    with open(args.output, "w", encoding="utf-8") as fh:
-        json.dump(bundle, fh, ensure_ascii=False, indent=2)
-        fh.write("\n")
-    print(f"saved bundle to {args.output}")
-    return 0
-
-
-def cmd_push(args: argparse.Namespace) -> int:
-    if args.bundle:
-        with open(args.bundle, "r", encoding="utf-8") as fh:
-            bundle = json.load(fh)
+    filters = build_filters(args)
+    output = Path(args.output)
+    if args.format == "archive":
+        archive, manifest = build_archive(bundle, filters)
+        output.write_bytes(archive)
+        print(json.dumps({"manifest": manifest, "bytes": len(archive)}, ensure_ascii=False, indent=2))
     else:
-        bundle = build_bundle(args.source, args.mode)
-
-    if args.mode:
-        bundle["mode"] = args.mode
-
-    print_bundle_stats(bundle)
-    response = http_json(
-        "POST",
-        f"{args.api_base.rstrip('/')}/agent/import/bundle",
-        token=args.token,
-        payload=bundle,
-    )
-    result = unwrap_response(response)
-    print(json.dumps(result, ensure_ascii=False, indent=2))
+        output.write_text(json.dumps(bundle, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"saved export to {output}")
     return 0
 
 
 def cmd_preview(args: argparse.Namespace) -> int:
-    if args.bundle:
-        with open(args.bundle, "r", encoding="utf-8") as fh:
-            bundle = json.load(fh)
-    else:
-        bundle = build_bundle(args.source, args.mode)
-
-    if args.mode:
-        bundle["mode"] = args.mode
-
-    print_bundle_stats(bundle)
-    response = http_json(
-        "POST",
-        f"{args.api_base.rstrip('/')}/agent/import/preview",
-        token=args.token,
-        payload=bundle,
-    )
-    result = unwrap_response(response)
+    kind, bundle, _, manifest, _ = load_input_payload(args)
+    with AgentHub(args.api_base, args.token) as hub:
+        result = hub.preview_bundle(bundle=bundle if kind == "bundle" else None, manifest=manifest if kind == "archive" else None)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return 0
 
 
+def cmd_push(args: argparse.Namespace) -> int:
+    kind, bundle, archive_bytes, manifest, bundle_path = load_input_payload(args)
+    filters = build_filters(args)
+    with AgentHub(args.api_base, args.token) as hub:
+        transport = args.transport
+        if transport == "auto":
+            if kind == "archive":
+                transport = "archive"
+            else:
+                encoded = json.dumps(bundle, ensure_ascii=False).encode("utf-8")
+                transport = "json" if len(encoded) <= AUTO_THRESHOLD else "archive"
+
+        if transport == "json":
+            if bundle is None:
+                raise RuntimeError("json transport requires a JSON bundle or source directory")
+            result = hub.import_bundle(bundle)
+            print(json.dumps(unwrap_import_result(result), ensure_ascii=False, indent=2))
+            return 0
+
+        if archive_bytes is None or manifest is None:
+            if bundle is None:
+                raise RuntimeError("archive transport requires a bundle or archive file")
+            archive_bytes, manifest = build_archive(bundle, filters)
+
+        if bundle_path is None or bundle_path.suffix != ".ahubz":
+            stem = Path(args.source).name if getattr(args, "source", None) else (bundle_path.stem if bundle_path else "bundle")
+            archive_path = Path(f"{stem}.ahubz")
+            archive_path.write_bytes(archive_bytes)
+            bundle_path = archive_path
+
+        session = hub.start_sync_session(
+            {
+                "transport_version": "ahub.sync/v1",
+                "format": "archive",
+                "mode": manifest.get("mode", args.mode),
+                "manifest": manifest,
+                "archive_size_bytes": len(archive_bytes),
+                "archive_sha256": manifest["archive_sha256"],
+            }
+        )
+        session_file = Path(args.session_file) if args.session_file else default_session_file(bundle_path or Path(args.bundle or "bundle.ahubz"))
+        save_session_file(
+            session_file,
+            {
+                "api_base": args.api_base,
+                "bundle_path": str(bundle_path),
+                "session_id": session.session_id,
+                "preview_fingerprint": "",
+                "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            },
+        )
+
+        state = hub.resume_session(session.session_id, archive_bytes)
+        if state.status != "ready":
+            state = hub.get_sync_session(session.session_id)
+        result = hub.commit_session(session.session_id)
+        session_file.unlink(missing_ok=True)
+        print(json.dumps(unwrap_import_result(result), ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_pull(args: argparse.Namespace) -> int:
-    response = http_json(
-        "GET",
-        f"{args.api_base.rstrip('/')}/agent/export/bundle",
-        token=args.token,
-    )
-    bundle = unwrap_response(response)
-    with open(args.output, "w", encoding="utf-8") as fh:
-        json.dump(bundle, fh, ensure_ascii=False, indent=2)
-        fh.write("\n")
-    print_bundle_stats(bundle)
-    print(f"saved bundle to {args.output}")
+    filters = build_filters(args)
+    with AgentHub(args.api_base, args.token) as hub:
+        exported = hub.export_bundle(args.format, filters)
+    output = Path(args.output)
+    if args.format == "archive":
+        output.write_bytes(bytes(exported))
+        print(f"saved archive to {output} ({len(exported)} bytes)")
+    else:
+        output.write_text(json.dumps(exported, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        print_bundle_stats(exported)
+        print(f"saved bundle to {output}")
+    return 0
+
+
+def cmd_resume(args: argparse.Namespace) -> int:
+    session_file = Path(args.session_file) if args.session_file else default_session_file(Path(args.bundle))
+    state = load_session_file(session_file)
+    bundle_path = Path(state["bundle_path"])
+    archive_bytes = bundle_path.read_bytes()
+    with AgentHub(args.api_base, args.token) as hub:
+        session = hub.resume_session(state["session_id"], archive_bytes)
+        if session.status != "ready":
+            session = hub.get_sync_session(state["session_id"])
+        result = hub.commit_session(state["session_id"], state.get("preview_fingerprint") or None)
+    session_file.unlink(missing_ok=True)
+    print(json.dumps({"session": session.__dict__, "result": unwrap_import_result(result)}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def cmd_history(args: argparse.Namespace) -> int:
+    with AgentHub(args.api_base, args.token) as hub:
+        jobs = hub.list_sync_jobs()
+    print(json.dumps([job.__dict__ for job in jobs], ensure_ascii=False, indent=2))
     return 0
 
 
@@ -215,19 +561,28 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Agent Hub bundle sync helper")
     sub = parser.add_subparsers(dest="command", required=True)
 
-    export_cmd = sub.add_parser("export", help="build a local .ahub bundle from a skills directory")
+    export_cmd = sub.add_parser("export", help="build a local bundle or archive from a skills directory")
     export_cmd.add_argument("--source", required=True, help="directory containing skill subdirectories")
     export_cmd.add_argument("--mode", default="merge", choices=("merge", "mirror"))
+    export_cmd.add_argument("--format", default="json", choices=("json", "archive"))
+    export_cmd.add_argument("--include-domain", action="append", choices=("profile", "memory", "skills"))
+    export_cmd.add_argument("--include-skill", action="append")
+    export_cmd.add_argument("--exclude-skill", action="append")
     export_cmd.add_argument("-o", "--output", default="backup.ahub")
     export_cmd.set_defaults(func=cmd_export)
 
-    push_cmd = sub.add_parser("push", help="push a bundle into Agent Hub")
+    push_cmd = sub.add_parser("push", help="push a bundle or archive into Agent Hub")
     push_cmd.add_argument("--token", required=True)
     push_cmd.add_argument("--api-base", default=DEFAULT_API_BASE)
     push_group = push_cmd.add_mutually_exclusive_group(required=True)
     push_group.add_argument("--source", help="directory containing skill subdirectories")
-    push_group.add_argument("--bundle", help="existing .ahub bundle file")
+    push_group.add_argument("--bundle", help="existing .ahub or .ahubz bundle file")
     push_cmd.add_argument("--mode", default="merge", choices=("merge", "mirror"))
+    push_cmd.add_argument("--transport", default="auto", choices=("auto", "json", "archive"))
+    push_cmd.add_argument("--include-domain", action="append", choices=("profile", "memory", "skills"))
+    push_cmd.add_argument("--include-skill", action="append")
+    push_cmd.add_argument("--exclude-skill", action="append")
+    push_cmd.add_argument("--session-file")
     push_cmd.set_defaults(func=cmd_push)
 
     preview_cmd = sub.add_parser("preview", help="preview bundle changes before importing into Agent Hub")
@@ -235,15 +590,34 @@ def build_parser() -> argparse.ArgumentParser:
     preview_cmd.add_argument("--api-base", default=DEFAULT_API_BASE)
     preview_group = preview_cmd.add_mutually_exclusive_group(required=True)
     preview_group.add_argument("--source", help="directory containing skill subdirectories")
-    preview_group.add_argument("--bundle", help="existing .ahub bundle file")
+    preview_group.add_argument("--bundle", help="existing .ahub or .ahubz bundle file")
     preview_cmd.add_argument("--mode", default="merge", choices=("merge", "mirror"))
+    preview_cmd.add_argument("--include-domain", action="append", choices=("profile", "memory", "skills"))
+    preview_cmd.add_argument("--include-skill", action="append")
+    preview_cmd.add_argument("--exclude-skill", action="append")
     preview_cmd.set_defaults(func=cmd_preview)
 
     pull_cmd = sub.add_parser("pull", help="export a bundle from Agent Hub")
     pull_cmd.add_argument("--token", required=True)
     pull_cmd.add_argument("--api-base", default=DEFAULT_API_BASE)
+    pull_cmd.add_argument("--format", default="json", choices=("json", "archive"))
+    pull_cmd.add_argument("--include-domain", action="append", choices=("profile", "memory", "skills"))
+    pull_cmd.add_argument("--include-skill", action="append")
+    pull_cmd.add_argument("--exclude-skill", action="append")
     pull_cmd.add_argument("-o", "--output", default="backup.ahub")
     pull_cmd.set_defaults(func=cmd_pull)
+
+    resume_cmd = sub.add_parser("resume", help="resume an in-flight archive upload using the sidecar session file")
+    resume_cmd.add_argument("--token", required=True)
+    resume_cmd.add_argument("--api-base", default=DEFAULT_API_BASE)
+    resume_cmd.add_argument("--bundle", required=True, help="existing .ahubz archive bundle file")
+    resume_cmd.add_argument("--session-file")
+    resume_cmd.set_defaults(func=cmd_resume)
+
+    history_cmd = sub.add_parser("history", help="show sync import/export history")
+    history_cmd.add_argument("--token", required=True)
+    history_cmd.add_argument("--api-base", default=DEFAULT_API_BASE)
+    history_cmd.set_defaults(func=cmd_history)
 
     return parser
 

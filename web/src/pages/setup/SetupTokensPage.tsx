@@ -108,6 +108,19 @@ export default function SetupTokensPage() {
                   <span className="preset-radio-desc">仅读取 Profile、Memory、Skills、Projects、Tree</span>
                 </div>
               </label>
+              <label className={`preset-radio ${preset === 'sync' ? 'preset-radio-active' : ''}`}>
+                <input
+                  type="radio"
+                  name="preset"
+                  checked={preset === 'sync'}
+                  onChange={() => { setPreset('sync'); setTrustLevel(3); setExpiryDays(30) }}
+                />
+                <span className="preset-radio-dot" />
+                <div>
+                  <strong>Bundle Sync</strong>
+                  <span className="preset-radio-desc">仅开放 read:bundle / write:bundle，适合导入导出和迁移脚本</span>
+                </div>
+              </label>
               <label className={`preset-radio ${preset === 'custom' ? 'preset-radio-active' : ''}`}>
                 <input
                   type="radio"

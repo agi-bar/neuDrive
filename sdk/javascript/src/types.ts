@@ -185,6 +185,52 @@ export interface DashboardStats {
   pending: { type: string; count: number; message: string }[]
 }
 
+export interface BundleFilters {
+  include_domains?: string[]
+  include_skills?: string[]
+  exclude_skills?: string[]
+}
+
+export interface BundlePreviewResult {
+  version: string
+  mode: string
+  fingerprint?: string
+  summary: Record<string, number>
+  profile?: Array<{ path: string; action: string; kind?: string }>
+  memory?: Array<{ path: string; action: string; kind?: string }>
+  skills?: Record<string, { summary: Record<string, number>; files?: Array<{ path: string; action: string; kind?: string }> }>
+}
+
+export interface SyncSessionStatus {
+  session_id: string
+  job_id: string
+  status: string
+  chunk_size_bytes: number
+  total_parts: number
+  expires_at: string
+  mode?: string
+  summary: Record<string, unknown>
+  received_parts?: number[]
+  missing_parts?: number[]
+}
+
+export interface SyncJob {
+  id: string
+  user_id: string
+  session_id?: string
+  direction: string
+  transport: string
+  status: string
+  source?: string
+  mode?: string
+  filters?: BundleFilters
+  summary?: Record<string, unknown>
+  error?: string
+  created_at: string
+  updated_at: string
+  completed_at?: string
+}
+
 // ---------------------------------------------------------------------------
 // Auth types
 // ---------------------------------------------------------------------------

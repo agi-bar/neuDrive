@@ -14,7 +14,11 @@ export type {
   FileTreeEntry,
   SearchResult,
   Skill,
+  BundleFilters,
+  BundlePreviewResult,
   DashboardStats,
+  SyncJob,
+  SyncSessionStatus,
   AuthTokenResponse,
   APIResponse,
 } from './types'

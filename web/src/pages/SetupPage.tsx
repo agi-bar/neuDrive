@@ -23,7 +23,7 @@ export const EXPIRY_OPTIONS = [
   { value: 0, label: '永不过期' },
 ]
 
-export type Preset = 'agent' | 'readonly' | 'custom'
+export type Preset = 'agent' | 'readonly' | 'sync' | 'custom'
 export type ModeKey = 'local' | 'advanced'
 export type CloudPlatformTab = 'claude' | 'codex' | 'gemini' | 'cursor'
 export type LocalPlatformTab = 'claude' | 'codex'
@@ -197,6 +197,9 @@ export default function SetupPage() {
         'read:projects', 'read:tree', 'search',
       ]
     }
+    if (selectedPreset === 'sync') {
+      return ['read:bundle', 'write:bundle']
+    }
     return selectedCustomScopes
   }, [customScopes, preset, scopeInfo])
 
@@ -229,6 +232,7 @@ export default function SetupPage() {
   const presetLabel = useCallback((token: ScopedTokenResponse): string => {
     const scopes = token.scopes
     if (scopes.includes('admin')) return 'Full'
+    if (scopes.length === 2 && scopes.includes('read:bundle') && scopes.includes('write:bundle')) return 'Sync'
     if (scopes.length >= 13) return 'Agent完整'
     if (scopes.length <= 6 && scopes.every((scope) => scope.startsWith('read:') || scope === 'search')) return '只读'
     return `${scopes.length}项权限`

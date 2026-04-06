@@ -113,6 +113,7 @@ func main() {
 	tokenSvc := services.NewTokenService(pool)
 	importSvc := services.NewImportService(pool, fileTreeSvc, memorySvc, vaultSvc)
 	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	syncSvc := services.NewSyncService(pool, importSvc, exportSvc, fileTreeSvc, memorySvc)
 	collabSvc := services.NewCollaborationService(pool)
 	webhookSvc := services.NewWebhookService(pool)
 	oauthSvc := services.NewOAuthService(pool, cfg.JWTSecret)
@@ -146,6 +147,7 @@ func main() {
 		tokenSvc,
 		importSvc,
 		exportSvc,
+		syncSvc,
 		collabSvc,
 		webhookSvc,
 		oauthSvc,

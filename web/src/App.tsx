@@ -22,6 +22,7 @@ import DataMemoryPage from './pages/data/DataMemoryPage'
 import DataDevicesPage from './pages/data/DataDevicesPage'
 import DataRolesPage from './pages/data/DataRolesPage'
 import DataInboxPage from './pages/data/DataInboxPage'
+import DataSyncPage from './pages/data/DataSyncPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -243,6 +244,9 @@ function App() {
                 <NavLink to="/data/inbox" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   Inbox
                 </NavLink>
+                <NavLink to="/data/sync" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  Sync
+                </NavLink>
               </div>
             )}
           </div>
@@ -283,6 +287,7 @@ function App() {
             <Route path="devices" element={<DataDevicesPage />} />
             <Route path="roles" element={<DataRolesPage />} />
             <Route path="inbox" element={<DataInboxPage />} />
+            <Route path="sync" element={<DataSyncPage />} />
           </Route>
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/info" element={<Navigate to="/data/profile" replace />} />

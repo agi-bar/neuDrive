@@ -5,7 +5,18 @@ from __future__ import annotations
 import httpx
 from typing import Any, Optional
 
-from .types import Device, ImportResult, InboxMessage, Profile, Project, TreeSnapshot, VaultScope
+from .types import (
+    BundleFilters,
+    Device,
+    ImportResult,
+    InboxMessage,
+    Profile,
+    Project,
+    SyncJob,
+    SyncSessionStatus,
+    TreeSnapshot,
+    VaultScope,
+)
 
 
 class AgentHub:
@@ -39,6 +50,11 @@ class AgentHub:
         if isinstance(data, dict) and data.get("ok") is True and "data" in data:
             return data["data"]
         return data
+
+    def _request_bytes(self, method: str, path: str, **kwargs: Any) -> bytes:
+        resp = self._client.request(method, path, **kwargs)
+        resp.raise_for_status()
+        return resp.content
 
     @staticmethod
     def _file_path(path: str) -> str:
@@ -300,6 +316,100 @@ class AgentHub:
         """Export all Hub data as a JSON dict."""
         return self._request("GET", "/agent/export/all")
 
+    def preview_bundle(
+        self,
+        bundle: Optional[dict[str, Any]] = None,
+        manifest: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        """Preview a JSON bundle or archive manifest before import."""
+        payload: dict[str, Any] | dict[str, Any]
+        if bundle is not None and manifest is None:
+            payload = bundle
+        elif manifest is not None and bundle is None:
+            payload = {"manifest": manifest}
+        elif bundle is not None and manifest is not None:
+            payload = {"bundle": bundle, "manifest": manifest}
+        else:
+            raise ValueError("preview_bundle requires bundle or manifest")
+        return self._request("POST", "/agent/import/preview", json=payload)
+
+    def import_bundle(self, bundle: dict[str, Any]) -> dict[str, Any]:
+        """Import a V1 JSON bundle."""
+        return self._request("POST", "/agent/import/bundle", json=bundle)
+
+    def export_bundle(
+        self,
+        format: str = "json",
+        filters: Optional[BundleFilters | dict[str, Any]] = None,
+    ) -> dict[str, Any] | bytes:
+        """Export a bundle as JSON or archive bytes."""
+        params = _bundle_filter_params(filters)
+        params["format"] = format
+        if format == "archive":
+            return self._request_bytes("GET", "/agent/export/bundle", params=params)
+        return self._request("GET", "/agent/export/bundle", params=params)
+
+    def start_sync_session(self, request_data: dict[str, Any]) -> SyncSessionStatus:
+        """Start a resumable archive import session."""
+        data = self._request("POST", "/agent/import/session", json=request_data)
+        return _parse_sync_session(data)
+
+    def upload_part(self, session_id: str, index: int, data: bytes) -> SyncSessionStatus:
+        """Upload a single archive part to an existing session."""
+        response = self._client.request(
+            "PUT",
+            f"/agent/import/session/{session_id}/parts/{index}",
+            content=data,
+            headers={
+                "Authorization": self._client.headers["Authorization"],
+                "Content-Type": "application/octet-stream",
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+        inner = body.get("data", body) if isinstance(body, dict) else body
+        return _parse_sync_session(inner)
+
+    def get_sync_session(self, session_id: str) -> SyncSessionStatus:
+        """Inspect the current state of a sync session."""
+        data = self._request("GET", f"/agent/import/session/{session_id}")
+        return _parse_sync_session(data)
+
+    def commit_session(
+        self,
+        session_id: str,
+        preview_fingerprint: Optional[str] = None,
+    ) -> dict[str, Any]:
+        """Commit an uploaded archive session."""
+        payload: dict[str, Any] = {}
+        if preview_fingerprint:
+            payload["preview_fingerprint"] = preview_fingerprint
+        return self._request("POST", f"/agent/import/session/{session_id}/commit", json=payload)
+
+    def abort_session(self, session_id: str) -> dict[str, Any]:
+        """Abort a sync session and delete its uploaded parts."""
+        return self._request("DELETE", f"/agent/import/session/{session_id}")
+
+    def resume_session(self, session_id: str, archive_bytes: bytes) -> SyncSessionStatus:
+        """Upload missing parts for a session using the provided archive bytes."""
+        state = self.get_sync_session(session_id)
+        chunk = max(state.chunk_size_bytes, 1)
+        for index in state.missing_parts:
+            start = index * chunk
+            end = min(len(archive_bytes), start + chunk)
+            state = self.upload_part(session_id, index, archive_bytes[start:end])
+        return state
+
+    def list_sync_jobs(self) -> list[SyncJob]:
+        """List sync import/export history entries."""
+        data = self._request("GET", "/agent/sync/jobs")
+        return [_parse_sync_job(item) for item in data.get("jobs") or []]
+
+    def get_sync_job(self, job_id: str) -> SyncJob:
+        """Get a single sync history entry."""
+        data = self._request("GET", f"/agent/sync/jobs/{job_id}")
+        return _parse_sync_job(data)
+
     @staticmethod
     def _parse_import_result(data: dict) -> ImportResult:
         """Normalise both legacy and v2 import response formats."""
@@ -368,6 +478,11 @@ class AsyncAgentHub:
         if isinstance(data, dict) and data.get("ok") is True and "data" in data:
             return data["data"]
         return data
+
+    async def _request_bytes(self, method: str, path: str, **kwargs: Any) -> bytes:
+        resp = await self._client.request(method, path, **kwargs)
+        resp.raise_for_status()
+        return resp.content
 
     @staticmethod
     def _file_path(path: str) -> str:
@@ -609,6 +724,89 @@ class AsyncAgentHub:
     async def export_all(self) -> dict:
         return await self._request("GET", "/agent/export/all")
 
+    async def preview_bundle(
+        self,
+        bundle: Optional[dict[str, Any]] = None,
+        manifest: Optional[dict[str, Any]] = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] | dict[str, Any]
+        if bundle is not None and manifest is None:
+            payload = bundle
+        elif manifest is not None and bundle is None:
+            payload = {"manifest": manifest}
+        elif bundle is not None and manifest is not None:
+            payload = {"bundle": bundle, "manifest": manifest}
+        else:
+            raise ValueError("preview_bundle requires bundle or manifest")
+        return await self._request("POST", "/agent/import/preview", json=payload)
+
+    async def import_bundle(self, bundle: dict[str, Any]) -> dict[str, Any]:
+        return await self._request("POST", "/agent/import/bundle", json=bundle)
+
+    async def export_bundle(
+        self,
+        format: str = "json",
+        filters: Optional[BundleFilters | dict[str, Any]] = None,
+    ) -> dict[str, Any] | bytes:
+        params = _bundle_filter_params(filters)
+        params["format"] = format
+        if format == "archive":
+            return await self._request_bytes("GET", "/agent/export/bundle", params=params)
+        return await self._request("GET", "/agent/export/bundle", params=params)
+
+    async def start_sync_session(self, request_data: dict[str, Any]) -> SyncSessionStatus:
+        data = await self._request("POST", "/agent/import/session", json=request_data)
+        return _parse_sync_session(data)
+
+    async def upload_part(self, session_id: str, index: int, data: bytes) -> SyncSessionStatus:
+        response = await self._client.request(
+            "PUT",
+            f"/agent/import/session/{session_id}/parts/{index}",
+            content=data,
+            headers={
+                "Authorization": self._client.headers["Authorization"],
+                "Content-Type": "application/octet-stream",
+            },
+        )
+        response.raise_for_status()
+        body = response.json()
+        inner = body.get("data", body) if isinstance(body, dict) else body
+        return _parse_sync_session(inner)
+
+    async def get_sync_session(self, session_id: str) -> SyncSessionStatus:
+        data = await self._request("GET", f"/agent/import/session/{session_id}")
+        return _parse_sync_session(data)
+
+    async def commit_session(
+        self,
+        session_id: str,
+        preview_fingerprint: Optional[str] = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {}
+        if preview_fingerprint:
+            payload["preview_fingerprint"] = preview_fingerprint
+        return await self._request("POST", f"/agent/import/session/{session_id}/commit", json=payload)
+
+    async def abort_session(self, session_id: str) -> dict[str, Any]:
+        return await self._request("DELETE", f"/agent/import/session/{session_id}")
+
+    async def resume_session(self, session_id: str, archive_bytes: bytes) -> SyncSessionStatus:
+        state = await self.get_sync_session(session_id)
+        chunk = max(state.chunk_size_bytes, 1)
+        for index in state.missing_parts:
+            start = index * chunk
+            end = min(len(archive_bytes), start + chunk)
+            state = await self.upload_part(session_id, index, archive_bytes[start:end])
+        return state
+
+    async def list_sync_jobs(self) -> list[SyncJob]:
+        data = await self._request("GET", "/agent/sync/jobs")
+        return [_parse_sync_job(item) for item in data.get("jobs") or []]
+
+    async def get_sync_job(self, job_id: str) -> SyncJob:
+        data = await self._request("GET", f"/agent/sync/jobs/{job_id}")
+        return _parse_sync_job(data)
+
     @staticmethod
     def _parse_import_result(data: dict) -> ImportResult:
         inner = data.get("data", data)
@@ -636,3 +834,57 @@ class AsyncAgentHub:
     async def close(self) -> None:
         """Close the underlying async HTTP client."""
         await self._client.aclose()
+
+
+def _bundle_filter_params(filters: Optional[BundleFilters | dict[str, Any]]) -> dict[str, list[str] | str]:
+    if filters is None:
+        return {}
+    if isinstance(filters, BundleFilters):
+        raw = {
+            "include_domains": filters.include_domains,
+            "include_skills": filters.include_skills,
+            "exclude_skills": filters.exclude_skills,
+        }
+    else:
+        raw = filters
+    params: dict[str, list[str] | str] = {}
+    if raw.get("include_domains"):
+        params["include_domain"] = list(raw["include_domains"])
+    if raw.get("include_skills"):
+        params["include_skill"] = list(raw["include_skills"])
+    if raw.get("exclude_skills"):
+        params["exclude_skill"] = list(raw["exclude_skills"])
+    return params
+
+
+def _parse_sync_session(data: dict[str, Any]) -> SyncSessionStatus:
+    return SyncSessionStatus(
+        session_id=str(data.get("session_id", "")),
+        job_id=str(data.get("job_id", "")),
+        status=str(data.get("status", "")),
+        chunk_size_bytes=int(data.get("chunk_size_bytes", 0)),
+        total_parts=int(data.get("total_parts", 0)),
+        expires_at=str(data.get("expires_at", "")),
+        mode=str(data.get("mode", "merge")),
+        summary=data.get("summary") or {},
+        received_parts=[int(item) for item in data.get("received_parts") or []],
+        missing_parts=[int(item) for item in data.get("missing_parts") or []],
+    )
+
+
+def _parse_sync_job(data: dict[str, Any]) -> SyncJob:
+    return SyncJob(
+        id=str(data.get("id", "")),
+        user_id=str(data.get("user_id", "")),
+        direction=str(data.get("direction", "")),
+        transport=str(data.get("transport", "")),
+        status=str(data.get("status", "")),
+        source=str(data.get("source", "")),
+        mode=str(data.get("mode", "merge")),
+        filters=data.get("filters") or {},
+        summary=data.get("summary") or {},
+        error=str(data.get("error", "")),
+        created_at=str(data.get("created_at", "")),
+        updated_at=str(data.get("updated_at", "")),
+        completed_at=data.get("completed_at"),
+    )

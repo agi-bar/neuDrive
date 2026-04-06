@@ -1,6 +1,9 @@
 package models
 
-const BundleVersionV1 = "ahub.bundle/v1"
+const (
+	BundleVersionV1 = "ahub.bundle/v1"
+	BundleVersionV2 = "ahub.bundle/v2"
+)
 
 type Bundle struct {
 	Version   string                 `json:"version"`
@@ -72,10 +75,11 @@ type BundleSkillPreview struct {
 }
 
 type BundlePreviewResult struct {
-	Version string                        `json:"version"`
-	Mode    string                        `json:"mode"`
-	Summary BundlePreviewSummary          `json:"summary"`
-	Profile []BundlePreviewEntry          `json:"profile,omitempty"`
-	Memory  []BundlePreviewEntry          `json:"memory,omitempty"`
-	Skills  map[string]BundleSkillPreview `json:"skills,omitempty"`
+	Version     string                        `json:"version"`
+	Mode        string                        `json:"mode"`
+	Fingerprint string                        `json:"fingerprint,omitempty"`
+	Summary     BundlePreviewSummary          `json:"summary"`
+	Profile     []BundlePreviewEntry          `json:"profile,omitempty"`
+	Memory      []BundlePreviewEntry          `json:"memory,omitempty"`
+	Skills      map[string]BundleSkillPreview `json:"skills,omitempty"`
 }

@@ -242,6 +242,47 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return json
 }
 
+async function agentRequest<T>(path: string, token: string, options?: RequestInit): Promise<T> {
+  const hasExplicitContentType =
+    !!options?.headers &&
+    typeof options.headers === 'object' &&
+    !Array.isArray(options.headers) &&
+    'Content-Type' in options.headers
+  const res = await fetch(path, {
+    ...options,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      ...(!hasExplicitContentType && !(options?.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+      ...options?.headers,
+    },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.message || err.error || res.statusText)
+  }
+  if (res.status === 204) {
+    return undefined as T
+  }
+  const json = await res.json()
+  if (json && json.ok === true && json.data !== undefined) {
+    return json.data
+  }
+  return json
+}
+
+async function agentRequestBytes(path: string, token: string): Promise<Blob> {
+  const res = await fetch(path, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: res.statusText }))
+    throw new Error(err.message || err.error || res.statusText)
+  }
+  return res.blob()
+}
+
 export const api = {
   // Auth
   register: (req: RegisterRequest): Promise<AuthResponse> =>
@@ -461,6 +502,12 @@ export const api = {
       body: JSON.stringify(req),
     }),
 
+  createSyncToken: (req: SyncTokenRequest): Promise<SyncTokenResponse> =>
+    request<SyncTokenResponse>('/tokens/sync', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
   updateToken: (id: string, req: UpdateTokenRequest): Promise<ScopedTokenResponse> =>
     request<ScopedTokenResponse>(`/tokens/${id}`, {
       method: 'PUT',
@@ -489,6 +536,62 @@ export const api = {
       }
       return res.json() as Promise<ImportResult>
     })
+  },
+
+  previewBundle: (token: string, payload: any): Promise<BundlePreviewResult> =>
+    agentRequest('/agent/import/preview', token, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  importBundle: (token: string, bundle: any): Promise<any> =>
+    agentRequest('/agent/import/bundle', token, {
+      method: 'POST',
+      body: JSON.stringify(bundle),
+    }),
+
+  startSyncSession: (token: string, payload: any): Promise<SyncSessionStatus> =>
+    agentRequest('/agent/import/session', token, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  uploadSyncPart: (token: string, sessionId: string, index: number, data: Uint8Array): Promise<SyncSessionStatus> =>
+    agentRequest(`/agent/import/session/${sessionId}/parts/${index}`, token, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/octet-stream',
+      },
+      body: data as BodyInit,
+    }),
+
+  getSyncSession: (token: string, sessionId: string): Promise<SyncSessionStatus> =>
+    agentRequest(`/agent/import/session/${sessionId}`, token),
+
+  commitSyncSession: (token: string, sessionId: string, previewFingerprint?: string): Promise<any> =>
+    agentRequest(`/agent/import/session/${sessionId}/commit`, token, {
+      method: 'POST',
+      body: JSON.stringify(previewFingerprint ? { preview_fingerprint: previewFingerprint } : {}),
+    }),
+
+  abortSyncSession: (token: string, sessionId: string): Promise<any> =>
+    agentRequest(`/agent/import/session/${sessionId}`, token, { method: 'DELETE' }),
+
+  listSyncJobs: (token: string): Promise<SyncJob[]> =>
+    agentRequest<{ jobs: SyncJob[] }>('/agent/sync/jobs', token).then((data) => data.jobs || []),
+
+  getSyncJob: (token: string, jobId: string): Promise<SyncJob> =>
+    agentRequest(`/agent/sync/jobs/${jobId}`, token),
+
+  exportBundle: (token: string, format: 'json' | 'archive', filters?: BundleFilters): Promise<any> => {
+    const params = new URLSearchParams()
+    params.set('format', format)
+    for (const domain of filters?.include_domains || []) params.append('include_domain', domain)
+    for (const skill of filters?.include_skills || []) params.append('include_skill', skill)
+    for (const skill of filters?.exclude_skills || []) params.append('exclude_skill', skill)
+    const path = `/agent/export/bundle?${params.toString()}`
+    if (format === 'archive') return agentRequestBytes(path, token)
+    return agentRequest(path, token)
   },
 }
 
@@ -591,6 +694,65 @@ export interface CreateTokenResponse {
   token: string
   token_prefix: string
   scoped_token: ScopedTokenResponse
+}
+
+export interface SyncTokenRequest {
+  access: 'push' | 'pull' | 'both'
+  ttl_minutes: number
+}
+
+export interface SyncTokenResponse {
+  token: string
+  expires_at: string
+  api_base: string
+  scopes: string[]
+  usage: string
+}
+
+export interface BundleFilters {
+  include_domains?: string[]
+  include_skills?: string[]
+  exclude_skills?: string[]
+}
+
+export interface BundlePreviewResult {
+  version: string
+  mode: string
+  fingerprint?: string
+  summary: Record<string, number>
+  profile?: Array<{ path: string; action: string; kind?: string }>
+  memory?: Array<{ path: string; action: string; kind?: string }>
+  skills?: Record<string, { summary: Record<string, number>; files?: Array<{ path: string; action: string; kind?: string }> }>
+}
+
+export interface SyncSessionStatus {
+  session_id: string
+  job_id: string
+  status: string
+  chunk_size_bytes: number
+  total_parts: number
+  expires_at: string
+  mode?: string
+  summary: Record<string, any>
+  received_parts?: number[]
+  missing_parts?: number[]
+}
+
+export interface SyncJob {
+  id: string
+  user_id: string
+  session_id?: string
+  direction: string
+  transport: string
+  status: string
+  source?: string
+  mode?: string
+  filters?: BundleFilters
+  summary?: Record<string, any>
+  error?: string
+  created_at: string
+  updated_at: string
+  completed_at?: string
 }
 
 // ---------------------------------------------------------------------------

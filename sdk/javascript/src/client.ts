@@ -10,7 +10,11 @@ import type {
   FileTreeEntry,
   SearchResult,
   Skill,
+  BundleFilters,
+  BundlePreviewResult,
   DashboardStats,
+  SyncJob,
+  SyncSessionStatus,
   TreeSnapshot,
   TreeChanges,
   WriteFileOptions,
@@ -72,11 +76,13 @@ export class AgentHub {
     method: string,
     path: string,
     body?: unknown,
+    initOverride?: RequestInit,
   ): Promise<T> {
     const url = `${this.baseURL}${path}`
     const init: RequestInit = {
       method,
       headers: this.headers(),
+      ...initOverride,
     }
     if (body !== undefined) {
       init.body = JSON.stringify(body)
@@ -110,6 +116,26 @@ export class AgentHub {
 
   private put<T = unknown>(path: string, body?: unknown): Promise<T> {
     return this.request<T>('PUT', path, body)
+  }
+
+  private async requestBytes(path: string): Promise<Uint8Array> {
+    const url = `${this.baseURL}${path}`
+    const res = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${this.token}`,
+      },
+    })
+    if (!res.ok) {
+      let errBody: unknown
+      try {
+        errBody = await res.json()
+      } catch {
+        errBody = await res.text()
+      }
+      throw new AgentHubError(res.status, errBody)
+    }
+    return new Uint8Array(await res.arrayBuffer())
   }
 
   // -------------------------------------------------------------------------
@@ -410,8 +436,94 @@ export class AgentHub {
     return this.get<DashboardStats>('/agent/dashboard/stats')
   }
 
+  // -------------------------------------------------------------------------
+  // Bundle Sync
+  // -------------------------------------------------------------------------
+
+  async previewBundle(payload: Record<string, unknown>): Promise<BundlePreviewResult> {
+    return this.post<BundlePreviewResult>('/agent/import/preview', payload)
+  }
+
+  async importBundle(bundle: Record<string, unknown>): Promise<Record<string, unknown>> {
+    return this.post<Record<string, unknown>>('/agent/import/bundle', bundle)
+  }
+
+  async exportBundle(
+    format: 'json' | 'archive' = 'json',
+    filters?: BundleFilters,
+  ): Promise<Record<string, unknown> | Uint8Array> {
+    const qs = this.bundleFilterQuery(filters)
+    const prefix = qs ? `&${qs}` : ''
+    if (format === 'archive') {
+      return this.requestBytes(`/agent/export/bundle?format=archive${prefix}`)
+    }
+    return this.get<Record<string, unknown>>(`/agent/export/bundle?format=json${prefix}`)
+  }
+
+  async startSyncSession(request: Record<string, unknown>): Promise<SyncSessionStatus> {
+    return this.post<SyncSessionStatus>('/agent/import/session', request)
+  }
+
+  async uploadPart(sessionId: string, index: number, data: Uint8Array): Promise<SyncSessionStatus> {
+    return this.request<SyncSessionStatus>(
+      'PUT',
+      `/agent/import/session/${encodeURIComponent(sessionId)}/parts/${index}`,
+      undefined,
+      {
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/octet-stream',
+        },
+        body: data as BodyInit,
+      },
+    )
+  }
+
+  async getSyncSession(sessionId: string): Promise<SyncSessionStatus> {
+    return this.get<SyncSessionStatus>(`/agent/import/session/${encodeURIComponent(sessionId)}`)
+  }
+
+  async commitSession(sessionId: string, previewFingerprint?: string): Promise<Record<string, unknown>> {
+    return this.post<Record<string, unknown>>(
+      `/agent/import/session/${encodeURIComponent(sessionId)}/commit`,
+      previewFingerprint ? { preview_fingerprint: previewFingerprint } : {},
+    )
+  }
+
+  async abortSession(sessionId: string): Promise<Record<string, unknown>> {
+    return this.request<Record<string, unknown>>('DELETE', `/agent/import/session/${encodeURIComponent(sessionId)}`)
+  }
+
+  async resumeSession(sessionId: string, archive: Uint8Array): Promise<SyncSessionStatus> {
+    let state = await this.getSyncSession(sessionId)
+    const chunkSize = Math.max(state.chunk_size_bytes || 1, 1)
+    for (const index of state.missing_parts ?? []) {
+      const start = index * chunkSize
+      const end = Math.min(archive.length, start + chunkSize)
+      state = await this.uploadPart(sessionId, index, archive.slice(start, end))
+    }
+    return state
+  }
+
+  async listSyncJobs(): Promise<SyncJob[]> {
+    const res = await this.get<{ jobs: SyncJob[] }>('/agent/sync/jobs')
+    return res.jobs ?? []
+  }
+
+  async getSyncJob(jobId: string): Promise<SyncJob> {
+    return this.get<SyncJob>(`/agent/sync/jobs/${encodeURIComponent(jobId)}`)
+  }
+
   private filePath(path: string): string {
     return path.startsWith('/') ? path : `/${path}`
+  }
+
+  private bundleFilterQuery(filters?: BundleFilters): string {
+    const params = new URLSearchParams()
+    for (const domain of filters?.include_domains ?? []) params.append('include_domain', domain)
+    for (const skill of filters?.include_skills ?? []) params.append('include_skill', skill)
+    for (const skill of filters?.exclude_skills ?? []) params.append('exclude_skill', skill)
+    return params.toString()
   }
 
   private directoryPath(path: string): string {

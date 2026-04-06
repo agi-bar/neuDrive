@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import copy
 import hashlib
 import io
 import json
@@ -397,6 +398,20 @@ def parse_archive(data: bytes) -> tuple[dict[str, Any], dict[str, Any]]:
         return bundle, manifest
 
 
+def load_bundle_file(path: Path) -> tuple[dict[str, Any], dict[str, Any] | None]:
+    data = path.read_bytes()
+    if path.suffix == ".ahubz":
+        bundle, manifest = parse_archive(data)
+        return bundle, manifest
+    try:
+        bundle = json.loads(data.decode("utf-8"))
+    except UnicodeDecodeError as exc:
+        raise RuntimeError(f"unable to decode bundle file {path}: {exc}") from exc
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"invalid bundle json {path}: {exc}") from exc
+    return bundle, None
+
+
 def build_filters(args: argparse.Namespace) -> dict[str, Any]:
     return {
         "include_domains": args.include_domain or [],
@@ -423,17 +438,333 @@ def load_input_payload(args: argparse.Namespace) -> tuple[str, dict[str, Any] | 
         return "bundle", bundle, None, None, None
 
     bundle_path = Path(args.bundle)
-    data = bundle_path.read_bytes()
+    bundle, manifest = load_bundle_file(bundle_path)
     if bundle_path.suffix == ".ahubz":
-        bundle, manifest = parse_archive(data)
+        data = bundle_path.read_bytes()
         return "archive", bundle, data, manifest, bundle_path
-    bundle = json.loads(data.decode("utf-8"))
     bundle = apply_filters_to_bundle(bundle, args)
     return "bundle", bundle, None, None, bundle_path
 
 
 def unwrap_import_result(result: dict[str, Any]) -> dict[str, Any]:
     return result.get("data", result) if isinstance(result, dict) else result
+
+
+def _safe_label(value: str, fallback: str) -> str:
+    normalized = "".join(ch.lower() if ch.isalnum() else "-" for ch in (value or "").strip())
+    normalized = "-".join(part for part in normalized.split("-") if part)
+    return normalized[:48] or fallback
+
+
+def _memory_key(item: dict[str, Any]) -> tuple[str, str, str, str]:
+    return (
+        item.get("title", "") or "",
+        item.get("source", "") or "",
+        item.get("created_at", "") or "",
+        item.get("expires_at", "") or "",
+    )
+
+
+def _memory_identity(item: dict[str, Any]) -> str:
+    return json.dumps(
+        {
+            "title": item.get("title", "") or "",
+            "source": item.get("source", "") or "",
+            "created_at": item.get("created_at", "") or "",
+            "expires_at": item.get("expires_at", "") or "",
+            "content": item.get("content", "") or "",
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+    )
+
+
+def _memory_path(item: dict[str, Any]) -> str:
+    title = _safe_label(item.get("title", ""), "memory")
+    source = _safe_label(item.get("source", ""), "source")
+    created = _safe_label(item.get("created_at", ""), "created")
+    digest = sha256_hex(_memory_identity(item).encode("utf-8"))[:10]
+    return f"/memory/diff/{source}/{created}-{title}-{digest}.md"
+
+
+def _memory_group_path(key: tuple[str, str, str, str]) -> str:
+    title, source, created_at, expires_at = key
+    digest = sha256_hex("|".join([title, source, created_at, expires_at]).encode("utf-8"))[:10]
+    return (
+        f"/memory/diff/{_safe_label(source, 'source')}/"
+        f"{_safe_label(created_at, 'created')}-{_safe_label(title, 'memory')}-{digest}.md"
+    )
+
+
+def normalize_bundle_for_diff(bundle: dict[str, Any], filters: dict[str, Any]) -> dict[str, Any]:
+    working = copy.deepcopy(bundle)
+    args = argparse.Namespace(
+        include_domain=filters.get("include_domains") or [],
+        include_skill=filters.get("include_skills") or [],
+        exclude_skill=filters.get("exclude_skills") or [],
+    )
+    working = apply_filters_to_bundle(working, args)
+
+    normalized_skills: dict[str, dict[str, Any]] = {}
+    for skill_name, skill in sorted(working.get("skills", {}).items()):
+        files: dict[str, Any] = {}
+        for rel_path, content in sorted(skill.get("files", {}).items()):
+            files[rel_path] = {
+                "kind": "text",
+                "content": content,
+                "content_type": "text/markdown" if rel_path.endswith(".md") else (mimetypes.guess_type(rel_path)[0] or "text/plain"),
+                "size_bytes": len(content.encode("utf-8")),
+            }
+        for rel_path, blob in sorted(skill.get("binary_files", {}).items()):
+            data = base64.b64decode(blob["content_base64"])
+            files[rel_path] = {
+                "kind": "binary",
+                "sha256": blob.get("sha256") or sha256_hex(data),
+                "size_bytes": int(blob.get("size_bytes") or len(data)),
+                "content_type": blob.get("content_type") or "application/octet-stream",
+            }
+        normalized_skills[skill_name] = files
+
+    memory_groups: dict[tuple[str, str, str, str], list[dict[str, Any]]] = {}
+    for item in working.get("memory", []):
+        normalized_item = {
+            "title": item.get("title", "") or "",
+            "source": item.get("source", "") or "",
+            "created_at": item.get("created_at", "") or "",
+            "expires_at": item.get("expires_at", "") or "",
+            "content": item.get("content", "") or "",
+        }
+        memory_groups.setdefault(_memory_key(normalized_item), []).append(normalized_item)
+    for items in memory_groups.values():
+        items.sort(key=_memory_identity)
+
+    return {
+        "profile": {category: working.get("profile", {})[category] for category in sorted(working.get("profile", {}))},
+        "memory": memory_groups,
+        "skills": normalized_skills,
+    }
+
+
+def _fresh_counts() -> dict[str, int]:
+    return {"added": 0, "removed": 0, "changed": 0, "unchanged": 0}
+
+
+def compare_bundles(left: dict[str, Any], right: dict[str, Any]) -> dict[str, Any]:
+    result = {
+        "equal": True,
+        "summary": {
+            "skills": _fresh_counts(),
+            "files": _fresh_counts(),
+            "profile": _fresh_counts(),
+            "memory": _fresh_counts(),
+        },
+        "differences": [],
+    }
+
+    all_profile = sorted(set(left["profile"]) | set(right["profile"]))
+    for category in all_profile:
+        left_value = left["profile"].get(category)
+        right_value = right["profile"].get(category)
+        path = f"/memory/profile/{category}.md"
+        if left_value is None:
+            result["summary"]["profile"]["added"] += 1
+            result["differences"].append({"domain": "profile", "path": path, "status": "added", "kind": "profile"})
+            result["equal"] = False
+        elif right_value is None:
+            result["summary"]["profile"]["removed"] += 1
+            result["differences"].append({"domain": "profile", "path": path, "status": "removed", "kind": "profile"})
+            result["equal"] = False
+        elif left_value == right_value:
+            result["summary"]["profile"]["unchanged"] += 1
+        else:
+            result["summary"]["profile"]["changed"] += 1
+            result["differences"].append(
+                {
+                    "domain": "profile",
+                    "path": path,
+                    "status": "changed",
+                    "kind": "profile",
+                    "details": {
+                        "left_bytes": len(left_value.encode("utf-8")),
+                        "right_bytes": len(right_value.encode("utf-8")),
+                    },
+                }
+            )
+            result["equal"] = False
+
+    all_memory = sorted(set(left["memory"]) | set(right["memory"]))
+    for key in all_memory:
+        left_items = left["memory"].get(key, [])
+        right_items = right["memory"].get(key, [])
+        path = _memory_group_path(key)
+        left_identities = [_memory_identity(item) for item in left_items]
+        right_identities = [_memory_identity(item) for item in right_items]
+        if not left_items:
+            result["summary"]["memory"]["added"] += len(right_items)
+            for item in right_items:
+                result["differences"].append({"domain": "memory", "path": _memory_path(item), "status": "added", "kind": "memory"})
+            result["equal"] = False
+        elif not right_items:
+            result["summary"]["memory"]["removed"] += len(left_items)
+            for item in left_items:
+                result["differences"].append({"domain": "memory", "path": _memory_path(item), "status": "removed", "kind": "memory"})
+            result["equal"] = False
+        elif left_identities == right_identities:
+            result["summary"]["memory"]["unchanged"] += len(left_items)
+        else:
+            result["summary"]["memory"]["changed"] += max(len(left_items), len(right_items))
+            result["differences"].append(
+                {
+                    "domain": "memory",
+                    "path": path,
+                    "status": "changed",
+                    "kind": "memory",
+                    "details": {
+                        "left_items": len(left_items),
+                        "right_items": len(right_items),
+                    },
+                }
+            )
+            result["equal"] = False
+
+    all_skills = sorted(set(left["skills"]) | set(right["skills"]))
+    for skill_name in all_skills:
+        left_files = left["skills"].get(skill_name)
+        right_files = right["skills"].get(skill_name)
+        skill_status = "unchanged"
+        if left_files is None:
+            skill_status = "added"
+            result["summary"]["skills"]["added"] += 1
+            result["equal"] = False
+        elif right_files is None:
+            skill_status = "removed"
+            result["summary"]["skills"]["removed"] += 1
+            result["equal"] = False
+
+        all_files = sorted(set((left_files or {}).keys()) | set((right_files or {}).keys()))
+        for rel_path in all_files:
+            path = f"/skills/{skill_name}/{rel_path}"
+            left_entry = (left_files or {}).get(rel_path)
+            right_entry = (right_files or {}).get(rel_path)
+            if left_entry is None:
+                result["summary"]["files"]["added"] += 1
+                result["differences"].append({"domain": "skills", "path": path, "status": "added", "kind": right_entry["kind"]})
+                if skill_status == "unchanged":
+                    skill_status = "changed"
+                result["equal"] = False
+                continue
+            if right_entry is None:
+                result["summary"]["files"]["removed"] += 1
+                result["differences"].append({"domain": "skills", "path": path, "status": "removed", "kind": left_entry["kind"]})
+                if skill_status == "unchanged":
+                    skill_status = "changed"
+                result["equal"] = False
+                continue
+
+            if left_entry["kind"] == "text" and right_entry["kind"] == "text":
+                if left_entry["content"] == right_entry["content"]:
+                    result["summary"]["files"]["unchanged"] += 1
+                else:
+                    result["summary"]["files"]["changed"] += 1
+                    result["differences"].append(
+                        {
+                            "domain": "skills",
+                            "path": path,
+                            "status": "changed",
+                            "kind": "text",
+                            "details": {
+                                "left_bytes": left_entry["size_bytes"],
+                                "right_bytes": right_entry["size_bytes"],
+                            },
+                        }
+                    )
+                    if skill_status == "unchanged":
+                        skill_status = "changed"
+                    result["equal"] = False
+                continue
+
+            if left_entry["kind"] == "binary" and right_entry["kind"] == "binary":
+                if (
+                    left_entry["sha256"] == right_entry["sha256"]
+                    and left_entry["size_bytes"] == right_entry["size_bytes"]
+                    and left_entry["content_type"] == right_entry["content_type"]
+                ):
+                    result["summary"]["files"]["unchanged"] += 1
+                else:
+                    result["summary"]["files"]["changed"] += 1
+                    result["differences"].append(
+                        {
+                            "domain": "skills",
+                            "path": path,
+                            "status": "changed",
+                            "kind": "binary",
+                            "details": {
+                                "left_sha256": left_entry["sha256"],
+                                "right_sha256": right_entry["sha256"],
+                                "left_size_bytes": left_entry["size_bytes"],
+                                "right_size_bytes": right_entry["size_bytes"],
+                                "left_content_type": left_entry["content_type"],
+                                "right_content_type": right_entry["content_type"],
+                            },
+                        }
+                    )
+                    if skill_status == "unchanged":
+                        skill_status = "changed"
+                    result["equal"] = False
+                continue
+
+            result["summary"]["files"]["changed"] += 1
+            result["differences"].append(
+                {
+                    "domain": "skills",
+                    "path": path,
+                    "status": "changed",
+                    "kind": "file",
+                    "details": {
+                        "left_kind": left_entry["kind"],
+                        "right_kind": right_entry["kind"],
+                    },
+                }
+            )
+            if skill_status == "unchanged":
+                skill_status = "changed"
+            result["equal"] = False
+
+        if skill_status == "unchanged":
+            result["summary"]["skills"]["unchanged"] += 1
+        elif skill_status == "changed":
+            result["summary"]["skills"]["changed"] += 1
+
+    result["differences"].sort(key=lambda item: (item["domain"], item["status"], item["path"]))
+    return result
+
+
+def render_diff_text(diff: dict[str, Any], left_label: str, right_label: str) -> str:
+    lines = [
+        f"Diff: {left_label} -> {right_label}",
+        f"Equal: {'yes' if diff['equal'] else 'no'}",
+        "",
+        "Summary:",
+    ]
+    for section in ("skills", "files", "profile", "memory"):
+        counts = diff["summary"][section]
+        lines.append(
+            f"  {section}: added={counts['added']} removed={counts['removed']} changed={counts['changed']} unchanged={counts['unchanged']}"
+        )
+    lines.append("")
+    lines.append("Differences:")
+    if not diff["differences"]:
+        lines.append("  none")
+    else:
+        for item in diff["differences"]:
+            detail = ""
+            if item.get("details"):
+                compact = []
+                for key in sorted(item["details"]):
+                    compact.append(f"{key}={item['details'][key]}")
+                detail = " (" + ", ".join(compact) + ")"
+            lines.append(f"  [{item['status']}] {item['path']} [{item.get('kind', item['domain'])}]{detail}")
+    return "\n".join(lines)
 
 
 def cmd_export(args: argparse.Namespace) -> int:
@@ -557,6 +888,25 @@ def cmd_history(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_diff(args: argparse.Namespace) -> int:
+    filters = build_filters(args)
+    try:
+        left_bundle, _ = load_bundle_file(Path(args.left))
+        right_bundle, _ = load_bundle_file(Path(args.right))
+    except (OSError, RuntimeError, zipfile.BadZipFile, ValueError) as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+
+    left = normalize_bundle_for_diff(left_bundle, filters)
+    right = normalize_bundle_for_diff(right_bundle, filters)
+    diff = compare_bundles(left, right)
+    if args.format == "json":
+        print(json.dumps(diff, ensure_ascii=False, indent=2))
+    else:
+        print(render_diff_text(diff, args.left, args.right))
+    return 0 if diff["equal"] else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Agent Hub bundle sync helper")
     sub = parser.add_subparsers(dest="command", required=True)
@@ -618,6 +968,15 @@ def build_parser() -> argparse.ArgumentParser:
     history_cmd.add_argument("--token", required=True)
     history_cmd.add_argument("--api-base", default=DEFAULT_API_BASE)
     history_cmd.set_defaults(func=cmd_history)
+
+    diff_cmd = sub.add_parser("diff", help="compare two bundle/archive files")
+    diff_cmd.add_argument("--left", required=True, help="left bundle file (.ahub or .ahubz)")
+    diff_cmd.add_argument("--right", required=True, help="right bundle file (.ahub or .ahubz)")
+    diff_cmd.add_argument("--include-domain", action="append", choices=("profile", "memory", "skills"))
+    diff_cmd.add_argument("--include-skill", action="append")
+    diff_cmd.add_argument("--exclude-skill", action="append")
+    diff_cmd.add_argument("--format", default="text", choices=("text", "json"))
+    diff_cmd.set_defaults(func=cmd_diff)
 
     return parser
 

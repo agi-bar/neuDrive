@@ -83,6 +83,46 @@ npm install @agenthub/sdk
 | `importProfile(profile)` | Import profile fields |
 | `exportAll()` | Export all user data |
 | `getStats()` | Get dashboard statistics |
+| `previewBundle(payload)` | Preview a JSON bundle or archive manifest |
+| `importBundle(bundle)` | Import a V1 JSON bundle |
+| `exportBundle(format, filters?)` | Export a JSON or archive bundle |
+| `startSyncSession(request)` | Start an archive session |
+| `resumeSession(sessionId, archive)` | Upload missing archive parts |
+| `listSyncJobs()` | List sync history |
+
+### Bundle Sync Example
+
+```typescript
+import { AgentHub } from '@agenthub/sdk'
+
+const hub = new AgentHub({
+  baseURL: 'https://hub.example.com',
+  token: 'aht_xxxxx',
+})
+
+const preview = await hub.previewBundle({
+  version: 'ahub.bundle/v1',
+  created_at: new Date().toISOString(),
+  mode: 'merge',
+  profile: {},
+  skills: {},
+  memory: [],
+})
+
+const archive = await hub.exportBundle('archive')
+const session = await hub.startSyncSession({
+  transport_version: 'ahub.sync/v1',
+  format: 'archive',
+  mode: 'merge',
+  manifest: { /* ... */ },
+  archive_size_bytes: archive.length,
+  archive_sha256: '...',
+})
+await hub.resumeSession(session.session_id, archive)
+await hub.commitSession(session.session_id, preview.fingerprint)
+```
+
+For CLI and operational guidance, see [`docs/sync.md`](../../docs/sync.md).
 
 ### `AgentHubAuth` (OAuth helper)
 

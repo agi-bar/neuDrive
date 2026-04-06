@@ -44,6 +44,65 @@ function triggerDownload(blob: Blob, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+const PREVIEW_ACTION_ORDER: Record<string, number> = {
+  delete: 0,
+  update: 1,
+  create: 2,
+  conflict: 3,
+  skip: 4,
+}
+
+const PREVIEW_ACTION_LABEL: Record<string, string> = {
+  delete: 'delete',
+  update: 'update',
+  create: 'create',
+  conflict: 'conflict',
+  skip: 'skip',
+}
+
+function sortPreviewEntries(entries: Array<{ path: string; action: string; kind?: string }>) {
+  return [...entries].sort((left, right) => {
+    const actionDiff = (PREVIEW_ACTION_ORDER[left.action] ?? 99) - (PREVIEW_ACTION_ORDER[right.action] ?? 99)
+    if (actionDiff !== 0) return actionDiff
+    return left.path.localeCompare(right.path)
+  })
+}
+
+function previewSummaryBadges(summary: Record<string, number>) {
+  return ['delete', 'update', 'create', 'skip']
+    .filter((action) => (summary[action] || 0) > 0)
+    .map((action) => (
+      <span key={action} className={`token-list-prefix preview-action preview-action-${action}`}>
+        {PREVIEW_ACTION_LABEL[action]} {summary[action] || 0}
+      </span>
+    ))
+}
+
+function previewActionLabel(action: string) {
+  return PREVIEW_ACTION_LABEL[action] || action
+}
+
+function previewActionClass(action: string) {
+  return `preview-action preview-action-${action}`
+}
+
+function jobStatusLabel(job: SyncJob) {
+  switch (job.status) {
+    case 'succeeded':
+      return '已完成'
+    case 'failed':
+      return '失败'
+    case 'aborted':
+      return '已中止'
+    case 'running':
+      return '进行中'
+    case 'pending':
+      return '排队中'
+    default:
+      return job.status
+  }
+}
+
 export default function DataSyncPage() {
   const [syncToken, setSyncToken] = useState<SyncTokenResponse | null>(null)
   const [ttlMinutes, setTTLMinutes] = useState(30)
@@ -144,6 +203,9 @@ export default function DataSyncPage() {
     setImportError('')
     setImportMessage('')
     try {
+      if (resumeSessionId && !importFile.name.endsWith('.ahubz')) {
+        throw new Error('继续未完成 session 时，请重新选择原始 .ahubz 文件。')
+      }
       if (importFile.name.endsWith('.ahubz')) {
         const { bytes, manifest } = await readArchiveManifest(importFile)
         manifest.mode = importMode
@@ -219,7 +281,7 @@ export default function DataSyncPage() {
         </div>
         <p className="data-record-secondary">生成一个 30 分钟到 2 小时内有效的短命 token，供本页面或本地 CLI 调用 `/agent/*` 同步接口。</p>
         <div className="data-sync-row">
-          <select value={ttlMinutes} onChange={(e) => setTTLMinutes(Number(e.target.value))}>
+          <select aria-label="Sync token TTL" value={ttlMinutes} onChange={(e) => setTTLMinutes(Number(e.target.value))}>
             <option value={30}>30 分钟</option>
             <option value={60}>1 小时</option>
             <option value={120}>2 小时</option>
@@ -247,6 +309,7 @@ export default function DataSyncPage() {
         <div className="data-sync-row">
           <input
             type="file"
+            aria-label="Bundle file"
             accept=".ahub,.ahubz,application/json,application/zip"
             onChange={(e) => {
               setImportFile(e.target.files?.[0] || null)
@@ -255,7 +318,7 @@ export default function DataSyncPage() {
               setImportError('')
             }}
           />
-          <select value={importMode} onChange={(e) => setImportMode(e.target.value as 'merge' | 'mirror')}>
+          <select aria-label="Import mode" value={importMode} onChange={(e) => setImportMode(e.target.value as 'merge' | 'mirror')}>
             <option value="merge">merge</option>
             <option value="mirror">mirror</option>
           </select>
@@ -270,20 +333,70 @@ export default function DataSyncPage() {
         {importMode === 'mirror' && (
           <div className="alert alert-warn">`mirror` 会删除 bundle 中声明的 skill 里未出现的额外文件，执行前请确认 preview 结果。</div>
         )}
+        {resumeSessionId && (
+          <div className="alert alert-warn">
+            已选择继续未完成 session：{resumeSessionId}。请重新选择原始 `.ahubz` 文件，再点击“开始导入”。
+          </div>
+        )}
         {preview && (
           <div className="data-sync-preview">
             <div className="data-record-title">Preview</div>
-            <div className="data-inline-list">
-              <span className="token-list-prefix">create {preview.summary.create || 0}</span>
-              <span className="token-list-prefix">update {preview.summary.update || 0}</span>
-              <span className="token-list-prefix">delete {preview.summary.delete || 0}</span>
-              <span className="token-list-prefix">skip {preview.summary.skip || 0}</span>
-            </div>
+            <div className="data-inline-list">{previewSummaryBadges(preview.summary)}</div>
             {(preview.summary.delete || 0) > 0 && (
               <div className="alert alert-warn" style={{ marginTop: 12 }}>
-                本次 preview 包含删除操作，请确认 `mirror` 目标正确。
+                本次 preview 包含删除操作。`mirror` 只会影响 bundle 中声明的 skill，不会全局删除其他 skill。
               </div>
             )}
+            <div className="data-sync-preview-sections">
+              {(preview.profile?.length || 0) > 0 && (
+                <div className="data-sync-preview-section">
+                  <div className="data-record-title">Profile</div>
+                  <div className="data-sync-preview-list">
+                    {sortPreviewEntries(preview.profile || []).map((entry) => (
+                      <div key={entry.path} className={`data-sync-preview-entry ${entry.action === 'delete' ? 'is-danger' : ''}`}>
+                        <span className={previewActionClass(entry.action)}>{previewActionLabel(entry.action)}</span>
+                        <code>{entry.path}</code>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(preview.memory?.length || 0) > 0 && (
+                <div className="data-sync-preview-section">
+                  <div className="data-record-title">Memory</div>
+                  <div className="data-sync-preview-list">
+                    {sortPreviewEntries(preview.memory || []).map((entry) => (
+                      <div key={entry.path} className={`data-sync-preview-entry ${entry.action === 'delete' ? 'is-danger' : ''}`}>
+                        <span className={previewActionClass(entry.action)}>{previewActionLabel(entry.action)}</span>
+                        <code>{entry.path}</code>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {Object.entries(preview.skills || {})
+                .sort(([left], [right]) => left.localeCompare(right))
+                .map(([skillName, skillPreview]) => (
+                  <details key={skillName} className="data-sync-preview-section" open>
+                    <summary className="data-sync-preview-summary">
+                      <div>
+                        <div className="data-record-title">{skillName}</div>
+                        <div className="data-record-secondary">仅展示将作用于该 skill 的文件变更</div>
+                      </div>
+                      <div className="data-inline-list">{previewSummaryBadges(skillPreview.summary || {})}</div>
+                    </summary>
+                    <div className="data-sync-preview-list">
+                      {sortPreviewEntries(skillPreview.files || []).map((entry) => (
+                        <div key={entry.path} className={`data-sync-preview-entry ${entry.action === 'delete' ? 'is-danger' : ''}`}>
+                          <span className={previewActionClass(entry.action)}>{previewActionLabel(entry.action)}</span>
+                          <code>{entry.path}</code>
+                          {entry.kind && <span className="data-record-secondary">{entry.kind}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+            </div>
           </div>
         )}
         {importMessage && <div className="alert alert-success">{summarizeText(importMessage, 220)}</div>}
@@ -321,7 +434,7 @@ export default function DataSyncPage() {
           />
         </div>
         <div className="data-sync-row">
-          <select value={exportFormat} onChange={(e) => setExportFormat(e.target.value as 'json' | 'archive')}>
+          <select aria-label="Export format" value={exportFormat} onChange={(e) => setExportFormat(e.target.value as 'json' | 'archive')}>
             <option value="json">JSON (.ahub)</option>
             <option value="archive">Archive (.ahubz)</option>
           </select>
@@ -351,19 +464,24 @@ export default function DataSyncPage() {
                   <div className="data-record-meta">{formatDateTime(job.created_at)}</div>
                 </div>
                 <div className="data-inline-list">
-                  <span className="token-list-prefix">status {job.status}</span>
+                  <span className="token-list-prefix">status {jobStatusLabel(job)}</span>
                   {job.session_id && <span className="token-list-prefix">session {job.session_id.slice(0, 8)}</span>}
                 </div>
                 {job.summary && <div className="data-record-secondary">{JSON.stringify(job.summary)}</div>}
                 {job.error && <div className="alert alert-error" style={{ marginTop: 12 }}>{job.error}</div>}
                 {job.session_id && job.status !== 'succeeded' && (
-                  <button
-                    className="btn"
-                    style={{ marginTop: 12 }}
-                    onClick={() => setResumeSessionId(job.session_id || '')}
-                  >
-                    继续这个 Session
-                  </button>
+                  <>
+                    <div className="data-record-secondary" style={{ marginTop: 12 }}>
+                      重新选择原始 `.ahubz` 文件后，可以继续这个未完成的 session。
+                    </div>
+                    <button
+                      className="btn"
+                      style={{ marginTop: 12 }}
+                      onClick={() => setResumeSessionId(job.session_id || '')}
+                    >
+                      选择并继续这个 Session
+                    </button>
+                  </>
                 )}
               </div>
             ))}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -284,4 +285,148 @@ func TestSyncService_SessionConflictAbortAndSelectiveExport(t *testing.T) {
 		}
 	}
 	t.Fatal("missing json import job in history")
+}
+
+func TestSyncService_ExpiredSessionCleanupAndHistory(t *testing.T) {
+	ctx, userID, syncSvc, _, _ := setupSyncIntegration(t)
+	_, archive, manifest := buildArchiveFixtureAtLeast(t, int(models.DefaultSyncChunkSize))
+
+	started, err := syncSvc.StartSession(ctx, userID, models.SyncStartSessionRequest{
+		TransportVersion: models.SyncTransportVersionV1,
+		Format:           models.BundleFormatArchive,
+		Mode:             bundleModeMerge,
+		Manifest:         *manifest,
+		ArchiveSizeBytes: int64(len(archive)),
+		ArchiveSHA256:    manifest.ArchiveSHA256,
+	})
+	if err != nil {
+		t.Fatalf("start session: %v", err)
+	}
+
+	part0 := archive[:int(syncSvc.chunkSize)]
+	if _, err := syncSvc.UploadPart(ctx, userID, started.SessionID, 0, part0); err != nil {
+		t.Fatalf("upload part: %v", err)
+	}
+
+	if _, err := syncSvc.db.Exec(ctx,
+		`UPDATE sync_sessions SET expires_at = $2 WHERE id = $1`,
+		started.SessionID, time.Now().UTC().Add(-2*time.Hour),
+	); err != nil {
+		t.Fatalf("expire session: %v", err)
+	}
+
+	cleanup, err := syncSvc.CleanExpiredSessions(ctx)
+	if err != nil {
+		t.Fatalf("clean expired sessions: %v", err)
+	}
+	if cleanup.ExpiredSessions != 1 {
+		t.Fatalf("expired sessions = %d, want 1", cleanup.ExpiredSessions)
+	}
+	if cleanup.DeletedParts != 1 {
+		t.Fatalf("deleted parts = %d, want 1", cleanup.DeletedParts)
+	}
+	if cleanup.DeletedBytes <= 0 {
+		t.Fatalf("deleted bytes = %d, want > 0", cleanup.DeletedBytes)
+	}
+
+	state, err := syncSvc.GetSession(ctx, userID, started.SessionID)
+	if err != nil {
+		t.Fatalf("get expired session: %v", err)
+	}
+	if state.Status != models.SyncSessionStatusExpired {
+		t.Fatalf("session status = %q, want expired", state.Status)
+	}
+	if len(state.ReceivedParts) != 0 {
+		t.Fatalf("expected parts to be deleted after cleanup, got %d", len(state.ReceivedParts))
+	}
+
+	if _, err := syncSvc.UploadPart(ctx, userID, started.SessionID, 1, part0); !errors.Is(err, ErrSyncSessionExpired) {
+		t.Fatalf("upload to expired session error = %v, want ErrSyncSessionExpired", err)
+	}
+
+	jobs, err := syncSvc.ListJobs(ctx, userID)
+	if err != nil {
+		t.Fatalf("list jobs: %v", err)
+	}
+	if len(jobs) == 0 {
+		t.Fatal("expected job history after cleanup")
+	}
+	if jobs[0].Status != models.SyncJobStatusFailed {
+		t.Fatalf("job status = %q, want failed", jobs[0].Status)
+	}
+	if jobs[0].Error != "sync session expired" {
+		t.Fatalf("job error = %q, want sync session expired", jobs[0].Error)
+	}
+}
+
+func TestSyncService_PreviewNoHistoryAndArchiveFailureDoesNotImport(t *testing.T) {
+	ctx, userID, syncSvc, fileTree, _ := setupSyncIntegration(t)
+	bundle, archive, manifest := buildArchiveFixtureAtLeast(t, 0)
+
+	preview, err := syncSvc.PreviewBundle(ctx, userID, bundle)
+	if err != nil {
+		t.Fatalf("preview bundle: %v", err)
+	}
+	if preview.Fingerprint == "" {
+		t.Fatal("expected preview fingerprint")
+	}
+
+	jobs, err := syncSvc.ListJobs(ctx, userID)
+	if err != nil {
+		t.Fatalf("list jobs after preview: %v", err)
+	}
+	if len(jobs) != 0 {
+		t.Fatalf("preview should not write history, got %d jobs", len(jobs))
+	}
+
+	corrupted := append([]byte(nil), archive...)
+	corrupted[len(corrupted)/2] ^= 0xFF
+
+	started, err := syncSvc.StartSession(ctx, userID, models.SyncStartSessionRequest{
+		TransportVersion: models.SyncTransportVersionV1,
+		Format:           models.BundleFormatArchive,
+		Mode:             bundleModeMerge,
+		Manifest:         *manifest,
+		ArchiveSizeBytes: int64(len(corrupted)),
+		ArchiveSHA256:    manifest.ArchiveSHA256,
+	})
+	if err != nil {
+		t.Fatalf("start corrupted session: %v", err)
+	}
+
+	for idx := 0; idx < started.TotalParts; idx++ {
+		start := idx * int(syncSvc.chunkSize)
+		end := start + int(syncSvc.chunkSize)
+		if end > len(corrupted) {
+			end = len(corrupted)
+		}
+		if _, err := syncSvc.UploadPart(ctx, userID, started.SessionID, idx, corrupted[start:end]); err != nil {
+			t.Fatalf("upload corrupted part %d: %v", idx, err)
+		}
+	}
+
+	if _, err := syncSvc.CommitSession(ctx, userID, started.SessionID, models.SyncCommitRequest{}); err == nil {
+		t.Fatal("expected corrupted archive commit to fail")
+	}
+
+	if _, err := fileTree.Read(ctx, userID, "/skills/atlas-brief/SKILL.md", models.TrustLevelFull); err == nil {
+		t.Fatal("corrupted archive should not partially import skills")
+	}
+
+	jobs, err = syncSvc.ListJobs(ctx, userID)
+	if err != nil {
+		t.Fatalf("list jobs after failed commit: %v", err)
+	}
+	if len(jobs) == 0 {
+		t.Fatal("expected failed archive job")
+	}
+	if jobs[0].Status != models.SyncJobStatusFailed {
+		t.Fatalf("latest job status = %q, want failed", jobs[0].Status)
+	}
+	if jobs[0].Error == "" {
+		t.Fatal("expected failure error to be recorded")
+	}
+	if strings.Contains(jobs[0].Error, "保持完整同步") || strings.Contains(jobs[0].Error, "导入前先预览") {
+		t.Fatalf("job error leaked bundle content: %q", jobs[0].Error)
+	}
 }

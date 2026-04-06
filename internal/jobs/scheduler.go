@@ -19,6 +19,7 @@ type JobConfig struct {
 type SchedulerConfig struct {
 	CleanExpiredScratch    JobConfig
 	CleanExpiredTokens     JobConfig
+	CleanExpiredSync       JobConfig
 	ArchiveExpiredMessages JobConfig
 	GenerateDailyScratch   JobConfig
 }
@@ -31,6 +32,10 @@ func DefaultSchedulerConfig() SchedulerConfig {
 			Interval: 6 * time.Hour,
 		},
 		CleanExpiredTokens: JobConfig{
+			Enabled:  true,
+			Interval: 1 * time.Hour,
+		},
+		CleanExpiredSync: JobConfig{
 			Enabled:  true,
 			Interval: 1 * time.Hour,
 		},
@@ -50,6 +55,7 @@ type Scheduler struct {
 	memory *services.MemoryService
 	token  *services.TokenService
 	inbox  *services.InboxService
+	sync   *services.SyncService
 	logger *slog.Logger
 	config SchedulerConfig
 	stop   chan struct{}
@@ -57,11 +63,12 @@ type Scheduler struct {
 }
 
 // NewScheduler creates a new Scheduler with default configuration.
-func NewScheduler(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, logger *slog.Logger) *Scheduler {
+func NewScheduler(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, syncSvc *services.SyncService, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
 		memory: memory,
 		token:  token,
 		inbox:  inbox,
+		sync:   syncSvc,
 		logger: logger,
 		config: DefaultSchedulerConfig(),
 		stop:   make(chan struct{}),
@@ -69,11 +76,12 @@ func NewScheduler(memory *services.MemoryService, token *services.TokenService, 
 }
 
 // NewSchedulerWithConfig creates a new Scheduler with the given configuration.
-func NewSchedulerWithConfig(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, logger *slog.Logger, config SchedulerConfig) *Scheduler {
+func NewSchedulerWithConfig(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, syncSvc *services.SyncService, logger *slog.Logger, config SchedulerConfig) *Scheduler {
 	return &Scheduler{
 		memory: memory,
 		token:  token,
 		inbox:  inbox,
+		sync:   syncSvc,
 		logger: logger,
 		config: config,
 		stop:   make(chan struct{}),
@@ -89,6 +97,9 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}
 	if s.config.CleanExpiredTokens.Enabled {
 		s.startJob(ctx, "CleanExpiredTokens", s.config.CleanExpiredTokens.Interval, s.cleanExpiredTokens)
+	}
+	if s.config.CleanExpiredSync.Enabled && s.sync != nil {
+		s.startJob(ctx, "CleanExpiredSyncSessions", s.config.CleanExpiredSync.Interval, s.cleanExpiredSyncSessions)
 	}
 	if s.config.ArchiveExpiredMessages.Enabled {
 		s.startJob(ctx, "ArchiveExpiredMessages", s.config.ArchiveExpiredMessages.Interval, s.archiveExpiredMessages)
@@ -167,6 +178,34 @@ func (s *Scheduler) cleanExpiredTokens(ctx context.Context) {
 	}
 
 	s.logger.Info("job completed", "job", name, "affected", count, "duration", duration.String())
+}
+
+func (s *Scheduler) cleanExpiredSyncSessions(ctx context.Context) {
+	name := "CleanExpiredSyncSessions"
+	start := time.Now()
+	s.logger.Info("job started", "job", name)
+
+	if s.sync == nil {
+		s.logger.Info("job skipped", "job", name, "reason", "sync service not configured")
+		return
+	}
+
+	result, err := s.sync.CleanExpiredSessions(ctx)
+	duration := time.Since(start)
+
+	if err != nil {
+		s.logger.Error("job failed", "job", name, "error", err, "duration", duration.String())
+		return
+	}
+
+	s.logger.Info(
+		"job completed",
+		"job", name,
+		"expired_sessions", result.ExpiredSessions,
+		"deleted_parts", result.DeletedParts,
+		"deleted_bytes", result.DeletedBytes,
+		"duration", duration.String(),
+	)
 }
 
 func (s *Scheduler) archiveExpiredMessages(ctx context.Context) {

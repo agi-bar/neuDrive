@@ -132,6 +132,33 @@ hub.import_profile(preferences="...", principles="...")
 data = hub.export_all()
 ```
 
+### Bundle Sync
+
+```python
+from agenthub import AgentHub
+
+with AgentHub("https://hub.example.com", token="aht_xxx") as hub:
+    preview = hub.preview_bundle(bundle={"version": "ahub.bundle/v1", "created_at": "...", "mode": "merge", "skills": {}, "profile": {}, "memory": []})
+    print(preview["fingerprint"])
+
+    exported = hub.export_bundle("archive")
+    session = hub.start_sync_session({
+        "transport_version": "ahub.sync/v1",
+        "format": "archive",
+        "mode": "merge",
+        "manifest": {...},
+        "archive_size_bytes": len(exported),
+        "archive_sha256": "...",
+    })
+    hub.resume_session(session.session_id, exported)
+    hub.commit_session(session.session_id)
+
+    jobs = hub.list_sync_jobs()
+    print(jobs[0].status)
+```
+
+For CLI workflows and acceptance steps, see [`docs/sync.md`](../../docs/sync.md).
+
 ### Dashboard
 
 ```python

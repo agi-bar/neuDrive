@@ -32,6 +32,12 @@ var (
 	ErrSyncPreviewDrift      = errors.New("sync preview drift detected")
 )
 
+type SyncCleanupResult struct {
+	ExpiredSessions int64
+	DeletedParts    int64
+	DeletedBytes    int64
+}
+
 type SyncService struct {
 	db            *pgxpool.Pool
 	importSvc     *ImportService
@@ -442,6 +448,9 @@ func (s *SyncService) UploadPart(ctx context.Context, userID, sessionID uuid.UUI
 		return nil, err
 	}
 	if err := ensureActiveSession(session); err != nil {
+		if errors.Is(err, ErrSyncSessionExpired) {
+			_ = s.markSessionExpired(ctx, session)
+		}
 		return nil, err
 	}
 	if index < 0 || index >= session.TotalParts {
@@ -519,7 +528,7 @@ func (s *SyncService) GetSession(ctx context.Context, userID, sessionID uuid.UUI
 		return nil, err
 	}
 	if session.Status != models.SyncSessionStatusCommitted && time.Now().UTC().After(session.ExpiresAt) {
-		if err := s.updateSessionStatus(ctx, session.ID, userID, models.SyncSessionStatusExpired, nil); err == nil {
+		if err := s.markSessionExpired(ctx, session); err == nil {
 			session.Status = models.SyncSessionStatusExpired
 		}
 	}
@@ -580,6 +589,9 @@ func (s *SyncService) CommitSession(ctx context.Context, userID, sessionID uuid.
 		return nil, err
 	}
 	if err := ensureActiveSession(session); err != nil {
+		if errors.Is(err, ErrSyncSessionExpired) {
+			_ = s.markSessionExpired(ctx, session)
+		}
 		return nil, err
 	}
 	if len(received) != session.TotalParts {
@@ -714,6 +726,117 @@ func (s *SyncService) GetJob(ctx context.Context, userID, jobID uuid.UUID) (*mod
 	return &job, nil
 }
 
+func (s *SyncService) CleanExpiredSessions(ctx context.Context) (*SyncCleanupResult, error) {
+	if s.db == nil {
+		return nil, fmt.Errorf("sync.CleanExpiredSessions: database not configured")
+	}
+
+	now := time.Now().UTC()
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("sync.CleanExpiredSessions: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	rows, err := tx.Query(ctx,
+		`SELECT id, user_id, job_id
+		 FROM sync_sessions
+		 WHERE status NOT IN ($1, $2, $3)
+		   AND expires_at < $4`,
+		models.SyncSessionStatusCommitted,
+		models.SyncSessionStatusAborted,
+		models.SyncSessionStatusExpired,
+		now,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("sync.CleanExpiredSessions: load expired sessions: %w", err)
+	}
+
+	type expiredSession struct {
+		ID     uuid.UUID
+		UserID uuid.UUID
+		JobID  uuid.UUID
+	}
+	var expired []expiredSession
+	for rows.Next() {
+		var item expiredSession
+		if err := rows.Scan(&item.ID, &item.UserID, &item.JobID); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("sync.CleanExpiredSessions: scan expired session: %w", err)
+		}
+		expired = append(expired, item)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("sync.CleanExpiredSessions: expired rows: %w", err)
+	}
+	rows.Close()
+
+	result := &SyncCleanupResult{}
+	if len(expired) > 0 {
+		expiredIDs := make([]uuid.UUID, 0, len(expired))
+		jobIDs := make([]uuid.UUID, 0, len(expired))
+		for _, item := range expired {
+			expiredIDs = append(expiredIDs, item.ID)
+			jobIDs = append(jobIDs, item.JobID)
+		}
+		tag, err := tx.Exec(ctx,
+			`UPDATE sync_sessions
+			 SET status = $2, updated_at = $3
+			 WHERE id = ANY($1::uuid[])`,
+			expiredIDs, models.SyncSessionStatusExpired, now,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("sync.CleanExpiredSessions: expire sessions: %w", err)
+		}
+		result.ExpiredSessions = tag.RowsAffected()
+		if _, err := tx.Exec(ctx,
+			`UPDATE sync_jobs
+			 SET status = $2,
+			     error = CASE WHEN error = '' THEN 'sync session expired' ELSE error END,
+			     updated_at = $3,
+			     completed_at = COALESCE(completed_at, $3)
+			 WHERE id = ANY($1::uuid[])
+			   AND status = $4`,
+			jobIDs, models.SyncJobStatusFailed, now, models.SyncJobStatusRunning,
+		); err != nil {
+			return nil, fmt.Errorf("sync.CleanExpiredSessions: update jobs: %w", err)
+		}
+	}
+
+	if err := tx.QueryRow(ctx,
+		`SELECT COUNT(*), COALESCE(SUM(p.size_bytes), 0)
+		 FROM sync_session_parts p
+		 JOIN sync_sessions s ON s.id = p.session_id
+		 WHERE s.status IN ($1, $2, $3)
+		    OR s.expires_at < $4`,
+		models.SyncSessionStatusCommitted,
+		models.SyncSessionStatusAborted,
+		models.SyncSessionStatusExpired,
+		now,
+	).Scan(&result.DeletedParts, &result.DeletedBytes); err != nil {
+		return nil, fmt.Errorf("sync.CleanExpiredSessions: aggregate parts: %w", err)
+	}
+
+	if _, err := tx.Exec(ctx,
+		`DELETE FROM sync_session_parts p
+		 USING sync_sessions s
+		 WHERE p.session_id = s.id
+		   AND (s.status IN ($1, $2, $3) OR s.expires_at < $4)`,
+		models.SyncSessionStatusCommitted,
+		models.SyncSessionStatusAborted,
+		models.SyncSessionStatusExpired,
+		now,
+	); err != nil {
+		return nil, fmt.Errorf("sync.CleanExpiredSessions: delete parts: %w", err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("sync.CleanExpiredSessions: commit tx: %w", err)
+	}
+	return result, nil
+}
+
 func (s *SyncService) exportBundle(ctx context.Context, userID uuid.UUID, filters models.BundleFilters) (*models.Bundle, error) {
 	if s.exportSvc == nil {
 		return nil, fmt.Errorf("sync.exportBundle: export service not configured")
@@ -826,6 +949,53 @@ func ensureActiveSession(session *models.SyncSession) error {
 	if session.Status == models.SyncSessionStatusExpired || time.Now().UTC().After(session.ExpiresAt) {
 		return ErrSyncSessionExpired
 	}
+	return nil
+}
+
+func (s *SyncService) markSessionExpired(ctx context.Context, session *models.SyncSession) error {
+	if s.db == nil {
+		return fmt.Errorf("sync.markSessionExpired: database not configured")
+	}
+	if session == nil {
+		return nil
+	}
+	if session.Status == models.SyncSessionStatusCommitted || session.Status == models.SyncSessionStatusAborted {
+		return nil
+	}
+	now := time.Now().UTC()
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("sync.markSessionExpired: begin tx: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	if _, err := tx.Exec(ctx,
+		`UPDATE sync_sessions
+		 SET status = $3, updated_at = $4
+		 WHERE id = $1 AND user_id = $2
+		   AND status NOT IN ($5, $6)`,
+		session.ID, session.UserID, models.SyncSessionStatusExpired, now,
+		models.SyncSessionStatusCommitted, models.SyncSessionStatusAborted,
+	); err != nil {
+		return fmt.Errorf("sync.markSessionExpired: update session: %w", err)
+	}
+	if _, err := tx.Exec(ctx,
+		`UPDATE sync_jobs
+		 SET status = $3,
+		     error = CASE WHEN error = '' THEN 'sync session expired' ELSE error END,
+		     updated_at = $4,
+		     completed_at = COALESCE(completed_at, $4)
+		 WHERE id = $1 AND user_id = $2
+		   AND status = $5`,
+		session.JobID, session.UserID, models.SyncJobStatusFailed, now, models.SyncJobStatusRunning,
+	); err != nil {
+		return fmt.Errorf("sync.markSessionExpired: update job: %w", err)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("sync.markSessionExpired: commit tx: %w", err)
+	}
+	session.Status = models.SyncSessionStatusExpired
+	session.UpdatedAt = now
 	return nil
 }
 

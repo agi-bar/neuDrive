@@ -39,3 +39,21 @@ vim ~/apps/agenthub/config/agenthub.env
 ~/apps/agenthub/bin/deploy-main
 ~/apps/agenthub/bin/status
 ```
+
+## Bundle Sync Prod-like 验收
+
+上线或大版本同步改动后，建议在这台 prod-like 机器上额外跑一次 Bundle Sync 验收。
+
+推荐顺序：
+
+1. 部署最新 `origin/main`
+2. 在管理后台生成一个 `both` Sync Token
+3. 用匿名 fixture 跑 `export -> preview -> push -> pull -> diff`
+4. 再用一套真实 `.ahubz` 跑同样流程
+5. 单独验证一次 archive `resume`
+6. 单独验证一次 `mirror` 删除边界
+
+完整 Runbook 见：
+
+- [`docs/sync-prodlike-acceptance.md`](../../docs/sync-prodlike-acceptance.md)
+- [`docs/sync.md`](../../docs/sync.md)

@@ -119,7 +119,7 @@ jobs:
           done
           cat /tmp/agenthub-server.log
           exit 1
-      - run: python -m unittest sdk/python/tests/test_sync_integration.py tools/test_ahub_sync_integration.py
+      - run: python -m unittest tools/test_ahub_sync_diff.py sdk/python/tests/test_sync_integration.py tools/test_ahub_sync_integration.py
         env:
           AGENTHUB_TEST_URL: http://localhost:8080
       - run: npm test --prefix sdk/javascript

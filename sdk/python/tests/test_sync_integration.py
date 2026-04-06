@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import importlib.util
 import json
 import os
@@ -44,12 +45,16 @@ def _register_user() -> tuple[str, str]:
 
 
 def _create_sync_scoped_token(jwt_token: str) -> str:
+    return _create_scoped_token(jwt_token, ["read:bundle", "write:bundle"])
+
+
+def _create_scoped_token(jwt_token: str, scopes: list[str]) -> str:
     response = httpx.post(
         f"{BASE_URL}/api/tokens",
         headers={"Authorization": f"Bearer {jwt_token}"},
         json={
             "name": "python-sync-test",
-            "scopes": ["read:bundle", "write:bundle"],
+            "scopes": scopes,
             "max_trust_level": 3,
             "expires_in_days": 1,
         },
@@ -63,6 +68,7 @@ def _create_sync_scoped_token(jwt_token: str) -> str:
 class TestPythonSyncIntegration(unittest.TestCase):
     def setUp(self) -> None:
         jwt_token, _ = _register_user()
+        self.jwt_token = jwt_token
         self.token = _create_sync_scoped_token(jwt_token)
         self.tool = _load_tool_module()
 
@@ -105,6 +111,19 @@ class TestPythonSyncIntegration(unittest.TestCase):
             state = hub.upload_part(session.session_id, 0, archive[:first_end])
             self.assertIn(state.status, {"uploading", "ready"})
 
+            bad_first = bytearray(archive[:first_end])
+            bad_first[0] ^= 0xFF
+            conflict = httpx.put(
+                f"{BASE_URL}/agent/import/session/{session.session_id}/parts/0",
+                content=bytes(bad_first),
+                headers={
+                    "Authorization": f"Bearer {self.token}",
+                    "Content-Type": "application/octet-stream",
+                },
+                timeout=30.0,
+            )
+            self.assertEqual(conflict.status_code, 409)
+
             resumed = hub.resume_session(session.session_id, archive)
             self.assertIn(resumed.status, {"ready", "uploading"})
 
@@ -114,6 +133,52 @@ class TestPythonSyncIntegration(unittest.TestCase):
 
             job = hub.get_sync_job(session.job_id)
             self.assertEqual(job.status, "succeeded")
+
+    def test_preview_does_not_write_history_and_scopes_are_enforced(self) -> None:
+        source_dir = materialize_source(multiplier=1)
+        bundle = self.tool.build_bundle(source_dir, "merge")
+
+        with AgentHub(BASE_URL, self.token) as hub:
+            preview = hub.preview_bundle(bundle=bundle)
+            self.assertTrue(preview.get("fingerprint"))
+            jobs = hub.list_sync_jobs()
+            self.assertEqual(jobs, [])
+
+        read_token = _create_scoped_token(self.jwt_token, ["read:bundle"])
+        write_token = _create_scoped_token(self.jwt_token, ["write:bundle"])
+
+        with AgentHub(BASE_URL, read_token) as hub:
+            exported = hub.export_bundle("json")
+            self.assertIn("skills", exported)
+            self.assertEqual(hub.list_sync_jobs(), [])
+            with self.assertRaises(Exception):
+                hub.import_bundle(bundle)
+
+        with AgentHub(BASE_URL, write_token) as hub:
+            preview = hub.preview_bundle(bundle=bundle)
+            self.assertTrue(preview.get("fingerprint"))
+            with self.assertRaises(Exception):
+                hub.export_bundle("json")
+            with self.assertRaises(Exception):
+                hub.list_sync_jobs()
+
+    def test_sync_token_endpoint_clamps_ttl(self) -> None:
+        response = httpx.post(
+            f"{BASE_URL}/api/tokens/sync",
+            headers={"Authorization": f"Bearer {self.jwt_token}"},
+            json={"access": "both", "ttl_minutes": 999},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        body = response.json()["data"]
+        self.assertEqual(body["scopes"], ["read:bundle", "write:bundle"])
+        expires_at = body["expires_at"]
+        remaining = (
+            datetime.datetime.fromisoformat(expires_at.replace("Z", "+00:00"))
+            - datetime.datetime.now(datetime.timezone.utc)
+        ).total_seconds() / 60.0
+        self.assertLessEqual(remaining, 121)
+        self.assertGreater(remaining, 110)
 
 
 if __name__ == "__main__":

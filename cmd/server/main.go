@@ -177,7 +177,7 @@ func main() {
 	// ---------------------------------------------------------------
 	// Background Jobs
 	// ---------------------------------------------------------------
-	scheduler := jobs.NewScheduler(memorySvc, tokenSvc, inboxSvc, slog.Default())
+	scheduler := jobs.NewScheduler(memorySvc, tokenSvc, inboxSvc, syncSvc, slog.Default())
 	scheduler.Start(context.Background())
 
 	// ---------------------------------------------------------------

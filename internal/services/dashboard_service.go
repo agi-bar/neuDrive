@@ -6,6 +6,7 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/systemskills"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -21,6 +22,10 @@ func NewDashboardService(db *pgxpool.Pool) *DashboardService {
 // GetStats aggregates dashboard statistics for a user.
 func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*models.DashboardStats, error) {
 	stats := &models.DashboardStats{}
+	skillStoragePat := hubpath.NormalizeStorage("/skills/") + "%"
+	skillAltPat := hubpath.AlternateSkillsPath(hubpath.NormalizeStorage("/skills/")) + "%"
+	memoryPat := hubpath.NormalizeStorage("/memory/") + "%"
+	profilePat := hubpath.NormalizeStorage("/memory/profile/") + "%"
 
 	// Count connected entries across manual API-key connections and OAuth/MCP grants.
 	err := s.db.QueryRow(ctx,
@@ -33,17 +38,47 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 		return nil, fmt.Errorf("dashboard.GetStats: connections count: %w", err)
 	}
 
-	// Count skills (non-directory file_tree entries under skills paths).
-	storagePat := hubpath.NormalizeStorage("/skills/") + "%"
-	altPat := hubpath.AlternateSkillsPath(hubpath.NormalizeStorage("/skills/")) + "%"
+	// Count all visible files across the Hub tree.
+	err = s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND deleted_at IS NULL`,
+		userID).
+		Scan(&stats.TotalFiles)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard.GetStats: files count: %w", err)
+	}
+
+	// Count memory files outside the structured profile section.
 	err = s.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND deleted_at IS NULL
-		   AND (path LIKE $2 OR path LIKE $3)`,
-		userID, storagePat, altPat).
+		   AND path LIKE $2
+		   AND path NOT LIKE $3`,
+		userID, memoryPat, profilePat).
+		Scan(&stats.TotalMemory)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard.GetStats: memory count: %w", err)
+	}
+
+	// Count profile entries.
+	err = s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND deleted_at IS NULL
+		   AND path LIKE $2`,
+		userID, profilePat).
+		Scan(&stats.TotalProfile)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard.GetStats: profile count: %w", err)
+	}
+
+	// Count skills by SKILL.md documents, plus bundled system skills.
+	err = s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND deleted_at IS NULL
+		   AND (path LIKE $2 OR path LIKE $3)
+		   AND path LIKE '%/SKILL.md'`,
+		userID, skillStoragePat, skillAltPat).
 		Scan(&stats.TotalSkills)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: skills count: %w", err)
 	}
+	stats.TotalSkills += len(systemskills.SkillSummaries())
 
 	// Count devices.
 	err = s.db.QueryRow(ctx,
@@ -53,12 +88,20 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 		return nil, fmt.Errorf("dashboard.GetStats: devices count: %w", err)
 	}
 
-	// Count active projects.
+	// Count projects.
 	err = s.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM projects WHERE user_id = $1 AND status = 'active'`, userID).
+		`SELECT COUNT(*) FROM projects WHERE user_id = $1`, userID).
 		Scan(&stats.TotalProjects)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: projects count: %w", err)
+	}
+
+	// Count inbox messages.
+	err = s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM inbox_messages WHERE user_id = $1`, userID).
+		Scan(&stats.TotalInbox)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard.GetStats: inbox count: %w", err)
 	}
 
 	// Weekly activity: count activity logs per day for the last 7 days.

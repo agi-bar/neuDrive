@@ -172,7 +172,7 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %v", status, body)
 		}
 		// Should have numeric keys
-		for _, key := range []string{"connections", "skills", "devices", "projects"} {
+		for _, key := range []string{"connections", "files", "memory", "profile", "skills", "devices", "projects", "inbox"} {
 			if _, ok := body[key]; !ok {
 				t.Errorf("missing key %q", key)
 			}

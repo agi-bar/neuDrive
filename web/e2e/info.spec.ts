@@ -4,7 +4,7 @@ import { setupUser } from './helpers'
 test.describe('Info Page — Profile Persistence', () => {
   test('save preferences and verify after reload', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/info')
+    await page.goto('/data/profile')
     await page.waitForLoadState('networkidle')
 
     await page.locator('textarea').nth(0).fill('偏好简洁代码，Go 优先')
@@ -18,7 +18,7 @@ test.describe('Info Page — Profile Persistence', () => {
 
   test('save relationships and verify after reload', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/info')
+    await page.goto('/data/profile')
     await page.waitForLoadState('networkidle')
 
     await page.locator('textarea').nth(1).fill('Alice 是产品经理')
@@ -32,7 +32,7 @@ test.describe('Info Page — Profile Persistence', () => {
 
   test('save principles and verify after reload', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/info')
+    await page.goto('/data/profile')
     await page.waitForLoadState('networkidle')
 
     await page.locator('textarea').nth(2).fill('先做再说，最小可行')
@@ -46,7 +46,7 @@ test.describe('Info Page — Profile Persistence', () => {
 
   test('save all three with single button', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/info')
+    await page.goto('/data/profile')
     await page.waitForLoadState('networkidle')
 
     await page.locator('textarea').nth(0).fill('偏好 TypeScript')
@@ -67,7 +67,7 @@ test.describe('Info Page — Profile Persistence', () => {
 
   test('vault section exists in page', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/info')
+    await page.goto('/data/profile')
     await page.waitForLoadState('networkidle')
 
     // Scroll vault section into view

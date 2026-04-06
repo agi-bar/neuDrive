@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { Routes, Route, NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { api } from './api'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
@@ -16,12 +16,21 @@ import SetupAdvancedPage from './pages/setup/SetupAdvancedPage'
 import SetupAdaptersPage from './pages/setup/SetupAdaptersPage'
 import SetupGptActionsPage from './pages/setup/SetupGptActionsPage'
 import SetupTokensPage from './pages/setup/SetupTokensPage'
+import DataFilesPage from './pages/data/DataFilesPage'
+import DataSkillsPage from './pages/data/DataSkillsPage'
+import DataMemoryPage from './pages/data/DataMemoryPage'
+import DataDevicesPage from './pages/data/DataDevicesPage'
+import DataRolesPage from './pages/data/DataRolesPage'
+import DataInboxPage from './pages/data/DataInboxPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const location = useLocation()
+  const [isSetupNavOpen, setIsSetupNavOpen] = useState(false)
+  const [isConnectionsNavOpen, setIsConnectionsNavOpen] = useState(false)
+  const [isDataNavOpen, setIsDataNavOpen] = useState(false)
 
   const checkAuth = useCallback(async () => {
     // Check for GitHub OAuth redirect tokens in URL
@@ -77,7 +86,11 @@ function App() {
     navigate('/login')
   }
 
-  const isSetupRoute = location.pathname.startsWith('/setup')
+  const isTokenManagementRoute = location.pathname === '/setup/tokens'
+  const isSetupRoute = location.pathname.startsWith('/setup') && !isTokenManagementRoute
+  const isConnectionsRoute = location.pathname.startsWith('/connections') || isTokenManagementRoute
+  const isProfileRoute = location.pathname === '/data/profile'
+  const isDataRoute = location.pathname.startsWith('/data') && !isProfileRoute
 
   if (loading) {
     return (
@@ -116,46 +129,123 @@ function App() {
             <span>概览</span>
           </NavLink>
           <div className="nav-group">
-            <NavLink to="/setup/web-apps" className={isSetupRoute ? 'nav-item nav-item-parent active' : 'nav-item nav-item-parent'}>
+            <button
+              type="button"
+              className={isSetupRoute ? 'nav-item nav-item-parent nav-item-button active' : 'nav-item nav-item-parent nav-item-button'}
+              aria-expanded={isSetupNavOpen}
+              aria-controls="setup-nav-submenu"
+              onClick={() => setIsSetupNavOpen((current) => !current)}
+            >
               <span className="nav-icon">&#9889;</span>
               <span>连接设置</span>
-            </NavLink>
-            <div className="nav-submenu" aria-label="连接设置子菜单">
-              <NavLink to="/setup/web-apps" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                Web / Desktop Apps
-              </NavLink>
-              <NavLink to="/setup/cloud" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                CLI Apps
-              </NavLink>
-              <NavLink to="/setup/adapters" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                Adapters
-              </NavLink>
-              <NavLink to="/setup/local" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                本地模式
-              </NavLink>
-              <NavLink to="/setup/advanced" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                高级模式
-              </NavLink>
-              <NavLink to="/setup/gpt-actions" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                ChatGPT Actions
-              </NavLink>
-              <NavLink to="/setup/tokens" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                Token 管理
-              </NavLink>
-            </div>
+              <span className={`nav-group-caret ${isSetupNavOpen ? 'nav-group-caret-open' : ''}`} aria-hidden="true">
+                &#9654;
+              </span>
+            </button>
+            {isSetupNavOpen && (
+              <div
+                id="setup-nav-submenu"
+                className="nav-submenu"
+                aria-label="连接设置子菜单"
+              >
+                <NavLink to="/setup/web-apps" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  网页应用
+                </NavLink>
+                <NavLink to="/setup/cloud" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  云端模式
+                </NavLink>
+                <NavLink to="/setup/adapters" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  Adapters
+                </NavLink>
+                <NavLink to="/setup/local" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  本地模式
+                </NavLink>
+                <NavLink to="/setup/advanced" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  高级模式
+                </NavLink>
+                <NavLink to="/setup/gpt-actions" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  ChatGPT Actions
+                </NavLink>
+              </div>
+            )}
           </div>
-          <NavLink to="/connections" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <span className="nav-icon">&#9670;</span>
-            <span>连接管理</span>
+          <div className="nav-group">
+            <button
+              type="button"
+              className={isConnectionsRoute ? 'nav-item nav-item-parent nav-item-button active' : 'nav-item nav-item-parent nav-item-button'}
+              aria-expanded={isConnectionsNavOpen}
+              aria-controls="connections-nav-submenu"
+              onClick={() => setIsConnectionsNavOpen((current) => !current)}
+            >
+              <span className="nav-icon">&#9670;</span>
+              <span>连接管理</span>
+              <span className={`nav-group-caret ${isConnectionsNavOpen ? 'nav-group-caret-open' : ''}`} aria-hidden="true">
+                &#9654;
+              </span>
+            </button>
+            {isConnectionsNavOpen && (
+              <div
+                id="connections-nav-submenu"
+                className="nav-submenu"
+                aria-label="连接管理子菜单"
+              >
+                <NavLink to="/connections" end className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  平台连接
+                </NavLink>
+                <NavLink to="/setup/tokens" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  Token 管理
+                </NavLink>
+              </div>
+            )}
+          </div>
+          <NavLink to="/data/profile" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <span className="nav-icon">&#9786;</span>
+            <span>我的资料</span>
           </NavLink>
-          <NavLink to="/info" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <span className="nav-icon">&#9733;</span>
-            <span>信息配置</span>
-          </NavLink>
-          <NavLink to="/projects" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <span className="nav-icon">&#9654;</span>
-            <span>项目</span>
-          </NavLink>
+          <div className="nav-group">
+            <button
+              type="button"
+              className={isDataRoute ? 'nav-item nav-item-parent nav-item-button active' : 'nav-item nav-item-parent nav-item-button'}
+              aria-expanded={isDataNavOpen}
+              aria-controls="data-nav-submenu"
+              onClick={() => setIsDataNavOpen((current) => !current)}
+            >
+              <span className="nav-icon">&#9776;</span>
+              <span>数据文件</span>
+              <span className={`nav-group-caret ${isDataNavOpen ? 'nav-group-caret-open' : ''}`} aria-hidden="true">
+                &#9654;
+              </span>
+            </button>
+            {isDataNavOpen && (
+              <div
+                id="data-nav-submenu"
+                className="nav-submenu"
+                aria-label="数据文件子菜单"
+              >
+                <NavLink to="/data/files" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  所有文件
+                </NavLink>
+                <NavLink to="/data/projects" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  项目
+                </NavLink>
+                <NavLink to="/data/skills" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  技能
+                </NavLink>
+                <NavLink to="/data/memory" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  Memory
+                </NavLink>
+                <NavLink to="/data/devices" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  设备
+                </NavLink>
+                <NavLink to="/data/roles" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  Roles
+                </NavLink>
+                <NavLink to="/data/inbox" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  Inbox
+                </NavLink>
+              </div>
+            )}
+          </div>
           <NavLink to="/collaborations" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9830;</span>
             <span>协作</span>
@@ -183,9 +273,20 @@ function App() {
             <Route path="gpt-actions" element={<SetupGptActionsPage />} />
             <Route path="tokens" element={<SetupTokensPage />} />
           </Route>
+          <Route path="/data" element={<Outlet />}>
+            <Route index element={<Navigate to="files" replace />} />
+            <Route path="files" element={<DataFilesPage />} />
+            <Route path="projects" element={<ProjectsPage />} />
+            <Route path="skills" element={<DataSkillsPage />} />
+            <Route path="memory" element={<DataMemoryPage />} />
+            <Route path="profile" element={<InfoPage title="我的资料" />} />
+            <Route path="devices" element={<DataDevicesPage />} />
+            <Route path="roles" element={<DataRolesPage />} />
+            <Route path="inbox" element={<DataInboxPage />} />
+          </Route>
           <Route path="/connections" element={<ConnectionsPage />} />
-          <Route path="/info" element={<InfoPage />} />
-          <Route path="/projects" element={<ProjectsPage />} />
+          <Route path="/info" element={<Navigate to="/data/profile" replace />} />
+          <Route path="/projects" element={<Navigate to="/data/projects" replace />} />
           <Route path="/collaborations" element={<CollaborationsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

@@ -4,7 +4,7 @@ import { setupUser } from './helpers'
 test.describe('Projects Page', () => {
   test('create project', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/projects')
+    await page.goto('/data/projects')
 
     await page.getByRole('button', { name: '新建项目' }).click()
     await page.getByPlaceholder('例如：blog-redesign').fill('test-project')
@@ -17,7 +17,7 @@ test.describe('Projects Page', () => {
 
   test('project detail shows empty state', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/projects')
+    await page.goto('/data/projects')
 
     // Create
     await page.getByRole('button', { name: '新建项目' }).click()
@@ -34,7 +34,7 @@ test.describe('Projects Page', () => {
 
   test('project with logs shows detail', async ({ page, request }) => {
     const user = await setupUser(page, request)
-    await page.goto('/projects')
+    await page.goto('/data/projects')
 
     // Create project
     await page.getByRole('button', { name: '新建项目' }).click()
@@ -62,7 +62,7 @@ test.describe('Projects Page', () => {
 
   test('summarize project shows context', async ({ page, request }) => {
     const user = await setupUser(page, request)
-    await page.goto('/projects')
+    await page.goto('/data/projects')
 
     // Create + add logs
     await page.getByRole('button', { name: '新建项目' }).click()
@@ -94,7 +94,7 @@ test.describe('Projects Page', () => {
 
   test('archive project', async ({ page, request }) => {
     await setupUser(page, request)
-    await page.goto('/projects')
+    await page.goto('/data/projects')
 
     await page.getByRole('button', { name: '新建项目' }).click()
     await page.getByPlaceholder('例如：blog-redesign').fill('archive-test')

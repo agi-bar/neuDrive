@@ -5,7 +5,7 @@ import {
   type Dispatch,
   type SetStateAction,
 } from 'react'
-import { Outlet, useOutletContext } from 'react-router-dom'
+import { Outlet, useLocation, useOutletContext } from 'react-router-dom'
 import { api, CreateTokenRequest, ScopedTokenResponse } from '../api'
 
 export const TRUST_LEVELS = [
@@ -129,6 +129,7 @@ export function useSetup() {
 }
 
 export default function SetupPage() {
+  const location = useLocation()
   const [tokens, setTokens] = useState<ScopedTokenResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -412,13 +413,18 @@ export default function SetupPage() {
   }
 
   const activeTokens = tokens.filter((token) => !token.is_revoked && !token.is_expired)
+  const isTokenManagementRoute = location.pathname === '/setup/tokens'
+  const pageTitle = isTokenManagementRoute ? 'Token 管理' : '连接设置'
+  const pageSubtitle = isTokenManagementRoute
+    ? '创建、改名、吊销和查看用于 API、脚本与高级 MCP 客户端的 Bearer Token。'
+    : '把 Agent Hub 配置到网页应用、CLI 和其他 MCP 客户端。'
 
   return (
     <div className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h2>连接设置</h2>
-          <p className="page-subtitle">把 Agent Hub 配置到网页应用、CLI 和其他 MCP 客户端。</p>
+          <h2>{pageTitle}</h2>
+          <p className="page-subtitle">{pageSubtitle}</p>
         </div>
       </div>
 

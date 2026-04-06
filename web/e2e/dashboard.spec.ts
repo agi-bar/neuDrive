@@ -18,41 +18,48 @@ test.describe('Login Page', () => {
 })
 
 test.describe('Dashboard Page', () => {
-  test('shows stats and quick links', async ({ page, request }) => {
+  test('shows stats cards, preview cards, and data management', async ({ page, request }) => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
+    const setupDrawerButton = page.getByRole('button', { name: '连接设置' })
+    const dataDrawerButton = page.getByRole('button', { name: '数据文件' })
 
     // Stats cards visible
     await expect(page.getByText('已连接平台')).toBeVisible()
-    await expect(page.getByText('可用技能')).toBeVisible()
-    await expect(page.getByText('设备', { exact: true })).toBeVisible()
-    await expect(page.getByText('活跃项目')).toBeVisible()
+    await expect(page.locator('.stat-card').filter({ hasText: '所有文件' })).toHaveCount(1)
+    await expect(page.locator('.stat-card').filter({ hasText: '项目' })).toHaveCount(1)
+    await expect(page.locator('.stat-card').filter({ hasText: '技能' })).toHaveCount(1)
+    await expect(page.locator('.stat-card').filter({ hasText: 'Memory' })).toHaveCount(1)
+    await expect(page.locator('.stat-card').filter({ hasText: '我的资料' })).toHaveCount(1)
+    await expect(page.locator('.stat-card').filter({ hasText: '设备' })).toHaveCount(1)
+    await expect(page.locator('.stat-card').filter({ hasText: 'Inbox' })).toHaveCount(1)
 
-    // User content panels visible
-    await expect(page.getByText('我的资料')).toBeVisible()
-    await expect(page.getByText('Hub 文件')).toBeVisible()
+    // Preview cards visible
+    await expect(page.getByRole('heading', { name: '我的资料' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Hub 文件' })).toBeVisible()
 
     // Status banner
     await expect(page.getByText('一切正常')).toBeVisible()
 
-    // Quick links
-    const quickLinks = page.locator('.quick-links')
-    await expect(quickLinks.getByRole('link', { name: /管理连接/ })).toBeVisible()
-    await expect(quickLinks.getByRole('link', { name: /个人偏好/ })).toBeVisible()
-    await expect(quickLinks.getByRole('link', { name: /查看项目/ })).toBeVisible()
-    await expect(quickLinks.getByRole('link', { name: /连接设置/ })).toBeVisible()
+    // Data management visible, quick links removed
+    await expect(page.getByText('数据管理')).toBeVisible()
+    await expect(page.locator('.quick-links')).toHaveCount(0)
+    await expect(setupDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(dataDrawerButton).toHaveAttribute('aria-expanded', 'false')
   })
 
-  test('quick links navigate correctly', async ({ page, request }) => {
+  test('preview links navigate correctly', async ({ page, request }) => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
-    await page.getByText('管理连接').click()
-    await expect(page).toHaveURL(/\/connections/)
+    const profileCard = page.locator('.dashboard-card').filter({ has: page.getByRole('heading', { name: '我的资料' }) })
+    await profileCard.getByRole('link', { name: '更多' }).click()
+    await expect(page).toHaveURL(/\/data\/profile/)
 
     await page.goto('/')
-    await page.getByText('查看项目').click()
-    await expect(page).toHaveURL(/\/projects/)
+    const filesCard = page.locator('.dashboard-card').filter({ has: page.getByRole('heading', { name: 'Hub 文件' }) })
+    await filesCard.getByRole('link', { name: '更多' }).click()
+    await expect(page).toHaveURL(/\/data\/files/)
   })
 })
 
@@ -100,7 +107,7 @@ test.describe('Projects Page', () => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
-    await page.goto('/projects')
+    await page.goto('/data/projects')
 
     // Create
     await page.getByRole('button', { name: '新建项目' }).click()
@@ -127,7 +134,7 @@ test.describe('Info Page', () => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
-    await page.goto('/info')
+    await page.goto('/data/profile')
     await page.waitForLoadState('networkidle')
 
     // Type in preferences textarea (first one = 个人偏好)
@@ -153,7 +160,7 @@ test.describe('Info Page', () => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
-    await page.goto('/info')
+    await page.goto('/data/profile')
     await page.waitForLoadState('networkidle')
 
     // Fill all three categories
@@ -183,14 +190,99 @@ test.describe('Setup Page', () => {
 
     await page.goto('/setup')
     await expect(page).toHaveURL(/\/setup\/web-apps/)
+    const setupDrawerButton = page.getByRole('button', { name: '连接设置' })
+    const connectionsDrawerButton = page.getByRole('button', { name: '连接管理' })
+    await expect(setupDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByRole('link', { name: '网页应用' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Web / Desktop Apps' })).toBeVisible()
 
+    await setupDrawerButton.click()
+    await expect(setupDrawerButton).toHaveAttribute('aria-expanded', 'true')
     await expect(page.getByRole('link', { name: '网页应用' })).toBeVisible()
     await expect(page.getByRole('link', { name: '云端模式' })).toBeVisible()
     await expect(page.getByRole('link', { name: '本地模式' })).toBeVisible()
     await expect(page.getByRole('link', { name: '高级模式' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'ChatGPT Actions' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Token 管理' })).toHaveCount(0)
+
+    await connectionsDrawerButton.click()
+    await expect(connectionsDrawerButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('link', { name: '平台连接' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Token 管理' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: '网页应用连接' })).toBeVisible()
+  })
+
+  test('setup drawer expands and collapses from the sidebar', async ({ page, request }) => {
+    const user = await registerAndLogin(request)
+    await loginViaUI(page, user.email, user.password)
+
+    const setupDrawerButton = page.getByRole('button', { name: '连接设置' })
+    await expect(setupDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByRole('link', { name: '网页应用' })).toHaveCount(0)
+
+    await setupDrawerButton.click()
+    await expect(setupDrawerButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('link', { name: '网页应用' })).toBeVisible()
+
+    await setupDrawerButton.click()
+    await expect(setupDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByRole('link', { name: '网页应用' })).toHaveCount(0)
+  })
+
+  test('connections drawer expands and collapses from the sidebar', async ({ page, request }) => {
+    const user = await registerAndLogin(request)
+    await loginViaUI(page, user.email, user.password)
+
+    const connectionsDrawerButton = page.getByRole('button', { name: '连接管理' })
+    await expect(connectionsDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByRole('link', { name: '平台连接' })).toHaveCount(0)
+
+    await connectionsDrawerButton.click()
+    await expect(connectionsDrawerButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByRole('link', { name: '平台连接' })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Token 管理' })).toBeVisible()
+
+    await connectionsDrawerButton.click()
+    await expect(connectionsDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(page.getByRole('link', { name: '平台连接' })).toHaveCount(0)
+  })
+})
+
+test.describe('Data Navigation', () => {
+  test('data drawer expands and collapses from the sidebar', async ({ page, request }) => {
+    const user = await registerAndLogin(request)
+    await loginViaUI(page, user.email, user.password)
+
+    const dataDrawerButton = page.getByRole('button', { name: '数据文件' })
+    const dataSubmenu = page.locator('#data-nav-submenu')
+    await expect(dataDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(dataSubmenu).toHaveCount(0)
+
+    await dataDrawerButton.click()
+    await expect(dataDrawerButton).toHaveAttribute('aria-expanded', 'true')
+    await expect(dataSubmenu).toBeVisible()
+    await expect(dataSubmenu.getByRole('link', { name: '所有文件' })).toBeVisible()
+    await expect(dataSubmenu.getByRole('link', { name: '项目' })).toBeVisible()
+    await expect(dataSubmenu.getByRole('link', { name: '技能' })).toBeVisible()
+    await expect(dataSubmenu.getByRole('link', { name: 'Memory' })).toBeVisible()
+    await expect(dataSubmenu.getByRole('link', { name: '设备' })).toBeVisible()
+    await expect(dataSubmenu.getByRole('link', { name: 'Roles' })).toBeVisible()
+    await expect(dataSubmenu.getByRole('link', { name: 'Inbox' })).toBeVisible()
+    await expect(page.locator('.sidebar-nav').getByRole('link', { name: '我的资料' })).toBeVisible()
+
+    await dataDrawerButton.click()
+    await expect(dataDrawerButton).toHaveAttribute('aria-expanded', 'false')
+    await expect(dataSubmenu).toHaveCount(0)
+  })
+
+  test('legacy info and projects routes redirect to data pages', async ({ page, request }) => {
+    const user = await registerAndLogin(request)
+    await loginViaUI(page, user.email, user.password)
+
+    await page.goto('/info')
+    await expect(page).toHaveURL(/\/data\/profile/)
+
+    await page.goto('/projects')
+    await expect(page).toHaveURL(/\/data\/projects/)
   })
 })
 
@@ -212,22 +304,75 @@ test.describe('Navigation', () => {
     const user = await registerAndLogin(request)
     await loginViaUI(page, user.email, user.password)
 
-    const links = [
+    const setupDrawerButton = page.getByRole('button', { name: '连接设置' })
+    const connectionsDrawerButton = page.getByRole('button', { name: '连接管理' })
+    const dataDrawerButton = page.getByRole('button', { name: '数据文件' })
+    const setupLinks = [
       { text: '概览', url: '/' },
-      { text: '连接设置', url: '/setup/web-apps' },
+      { text: '网页应用', url: '/setup/web-apps' },
       { text: '云端模式', url: '/setup/cloud' },
       { text: '本地模式', url: '/setup/local' },
       { text: '高级模式', url: '/setup/advanced' },
       { text: 'ChatGPT Actions', url: '/setup/gpt-actions' },
+    ]
+    const connectionLinks = [
+      { text: '平台连接', url: '/connections' },
       { text: 'Token 管理', url: '/setup/tokens' },
-      { text: '连接管理', url: '/connections' },
-      { text: '信息配置', url: '/info' },
-      { text: '项目', url: '/projects' },
+    ]
+    const dataLinks = [
+      { text: '所有文件', url: '/data/files' },
+      { text: '项目', url: '/data/projects' },
+      { text: '技能', url: '/data/skills' },
+      { text: 'Memory', url: '/data/memory' },
+      { text: '设备', url: '/data/devices' },
+      { text: 'Roles', url: '/data/roles' },
+      { text: 'Inbox', url: '/data/inbox' },
+    ]
+    const topLevelLinks = [
+      { text: '我的资料', url: '/data/profile' },
       { text: '协作', url: '/collaborations' },
     ]
 
-    for (const link of links) {
-      await page.getByRole('link', { name: link.text }).click()
+    await setupDrawerButton.click()
+    await expect(setupDrawerButton).toHaveAttribute('aria-expanded', 'true')
+
+    for (const link of setupLinks) {
+      const navLink = page.getByRole('link', { name: link.text })
+      await navLink.scrollIntoViewIfNeeded()
+      await navLink.click({ force: true })
+      await expect(page).toHaveURL(new RegExp(link.url))
+      const main = page.locator('.main-content')
+      await expect(main).not.toBeEmpty()
+    }
+
+    await connectionsDrawerButton.click()
+    await expect(connectionsDrawerButton).toHaveAttribute('aria-expanded', 'true')
+
+    for (const link of connectionLinks) {
+      const navLink = page.getByRole('link', { name: link.text })
+      await navLink.scrollIntoViewIfNeeded()
+      await navLink.click({ force: true })
+      await expect(page).toHaveURL(new RegExp(link.url))
+      const main = page.locator('.main-content')
+      await expect(main).not.toBeEmpty()
+    }
+
+    await dataDrawerButton.click()
+    await expect(dataDrawerButton).toHaveAttribute('aria-expanded', 'true')
+
+    for (const link of dataLinks) {
+      const navLink = page.getByRole('link', { name: link.text })
+      await navLink.scrollIntoViewIfNeeded()
+      await navLink.click({ force: true })
+      await expect(page).toHaveURL(new RegExp(link.url))
+      const main = page.locator('.main-content')
+      await expect(main).not.toBeEmpty()
+    }
+
+    for (const link of topLevelLinks) {
+      const navLink = page.getByRole('link', { name: link.text })
+      await navLink.scrollIntoViewIfNeeded()
+      await navLink.evaluate((el: HTMLElement) => el.click())
       await expect(page).toHaveURL(new RegExp(link.url))
       // Verify no blank page — main content area should have content
       const main = page.locator('.main-content')

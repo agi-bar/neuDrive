@@ -29,7 +29,11 @@ const TRUST_LABELS: Record<number, string> = {
   4: 'L4 完全信任',
 }
 
-export default function InfoPage() {
+interface InfoPageProps {
+  title?: string
+}
+
+export default function InfoPage({ title = '我的资料' }: InfoPageProps) {
   const [profiles, setProfiles] = useState<ProfileEntry[]>([])
   const [vaultScopes, setVaultScopes] = useState<VaultScope[]>([])
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
@@ -145,7 +149,7 @@ export default function InfoPage() {
   return (
     <div className="page">
       <div className="page-header">
-        <h2>信息配置</h2>
+        <h2>{title}</h2>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}

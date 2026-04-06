@@ -276,6 +276,25 @@ a:hover {
   margin-bottom: 0;
 }
 
+.nav-item-button {
+  width: 100%;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.nav-group-caret {
+  margin-left: auto;
+  font-size: 10px;
+  transition: transform 0.15s ease;
+}
+
+.nav-group-caret-open {
+  transform: rotate(90deg);
+}
+
 .nav-submenu {
   display: flex;
   flex-direction: column;
@@ -655,6 +674,16 @@ a:hover {
   line-height: 1.6;
 }
 
+.dashboard-profile-item-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.dashboard-preview-meta {
+  margin-bottom: 12px;
+}
+
 .dashboard-subtitle {
   font-size: 12px;
   font-weight: 600;
@@ -766,6 +795,62 @@ a:hover {
 .dashboard-empty-copy {
   font-size: 13px;
   color: var(--color-text-muted);
+}
+
+.data-record-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.data-record-item {
+  margin-bottom: 0;
+}
+
+.data-record-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.data-record-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.data-record-path {
+  font-size: 12px;
+  color: var(--color-primary);
+  margin-bottom: 8px;
+  word-break: break-all;
+}
+
+.data-record-preview {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text);
+}
+
+.data-record-secondary {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.data-record-meta {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.data-inline-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .stat-card {

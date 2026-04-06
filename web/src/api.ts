@@ -85,6 +85,69 @@ export interface TreeSnapshotResponse {
   entries: FileNode[]
 }
 
+export interface DashboardActivity {
+  platform: string
+  count: number
+}
+
+export interface DashboardPending {
+  type: string
+  count: number
+  message: string
+}
+
+export interface DashboardStats {
+  connections: number
+  files: number
+  memory: number
+  profile: number
+  skills: number
+  devices: number
+  projects: number
+  inbox: number
+  weekly_activity: DashboardActivity[]
+  pending: DashboardPending[]
+}
+
+export interface DeviceRecord {
+  id?: string
+  name: string
+  device_type: string
+  brand?: string
+  protocol?: string
+  endpoint?: string
+  skill_md?: string
+  config?: Record<string, any>
+  status?: string
+  created_at?: string
+  updated_at?: string
+}
+
+export interface RoleRecord {
+  id?: string
+  name: string
+  role_type?: string
+  allowed_paths?: string[]
+  allowed_vault_scopes?: string[]
+  lifecycle?: string
+  created_at?: string
+}
+
+export interface InboxMessageRecord {
+  id: string
+  from_address: string
+  to_address: string
+  subject: string
+  body: string
+  priority?: string
+  action_required?: boolean
+  status?: string
+  created_at?: string
+  archived_at?: string
+  tags?: string[]
+  domain?: string
+}
+
 // ---------------------------------------------------------------------------
 // Token refresh logic
 // ---------------------------------------------------------------------------
@@ -248,7 +311,7 @@ export const api = {
     }),
 
   // Dashboard
-  getStats: () => request<any>('/dashboard/stats'),
+  getStats: () => request<DashboardStats>('/dashboard/stats'),
 
   // Connections
   getConnections: () => request<{ connections: ConnectionResponse[] }>('/connections').then(r => r.connections || []),
@@ -323,13 +386,15 @@ export const api = {
   getVaultScopes: () => request<{ scopes: any[] }>('/vault/scopes').then(r => r.scopes || []),
 
   // Roles
-  getRoles: () => request<{ roles: any[] }>('/roles').then(r => r.roles || []),
+  getRoles: () => request<{ roles: RoleRecord[] }>('/roles').then(r => r.roles || []),
 
   // Devices
-  getDevices: () => request<{ devices: any[] }>('/devices').then(r => r.devices || []),
+  getDevices: () => request<{ devices: DeviceRecord[] }>('/devices').then(r => r.devices || []),
 
   // Inbox
-  getInbox: (role: string) => request<any[]>(`/inbox/${role}`),
+  getInbox: (role: string, status = 'incoming') =>
+    request<{ role: string; messages: InboxMessageRecord[] }>(`/inbox/${role}?status=${encodeURIComponent(status)}`)
+      .then(r => r.messages || []),
 
   // Import / Export
   importSkills: (skills: SkillFile[]) =>

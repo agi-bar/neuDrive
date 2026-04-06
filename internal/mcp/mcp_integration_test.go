@@ -74,6 +74,7 @@ func setupIntegrationMCP(t *testing.T) *MCPServer {
 	deviceSvc := services.NewDeviceService(pool, fileTreeSvc)
 	dashboardSvc := services.NewDashboardService(pool)
 	importSvc := services.NewImportService(pool, fileTreeSvc, memorySvc, vaultSvc)
+	tokenSvc := services.NewTokenService(pool)
 
 	return &MCPServer{
 		UserID:      userID,
@@ -88,6 +89,7 @@ func setupIntegrationMCP(t *testing.T) *MCPServer {
 		Device:      deviceSvc,
 		Dashboard:   dashboardSvc,
 		Import:      importSvc,
+		Token:       tokenSvc,
 	}
 }
 
@@ -392,6 +394,25 @@ func TestMCPInteg_ImportSkill(t *testing.T) {
 	text, isErr = mcpToolCall(t, s, "list_skills", map[string]interface{}{})
 	if isErr {
 		t.Fatalf("list_skills after import error: %s", text)
+	}
+}
+
+func TestMCPInteg_CreateSyncToken(t *testing.T) {
+	s := setupIntegrationMCP(t)
+
+	text, isErr := mcpToolCall(t, s, "create_sync_token", map[string]interface{}{
+		"purpose":     "integration-test",
+		"access":      "both",
+		"ttl_minutes": 30,
+	})
+	if isErr {
+		t.Fatalf("create_sync_token error: %s", text)
+	}
+	if !strings.Contains(text, "\"token\": \"aht_") {
+		t.Fatalf("expected scoped token output, got %s", text)
+	}
+	if !strings.Contains(text, models.ScopeWriteBundle) || !strings.Contains(text, models.ScopeReadBundle) {
+		t.Fatalf("expected bundle scopes in output, got %s", text)
 	}
 }
 

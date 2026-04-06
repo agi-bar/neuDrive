@@ -104,9 +104,10 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 	if days <= 0 {
 		days = 7
 	}
+	cutoff := time.Now().UTC().AddDate(0, 0, -days)
 
 	if s.fileTree != nil {
-		entries, err := s.loadScratchFromTree(ctx, userID, days)
+		entries, err := s.loadScratchFromTree(ctx, userID, &cutoff)
 		if err == nil && len(entries) > 0 {
 			return entries, nil
 		}
@@ -138,12 +139,62 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 	return entries, rows.Err()
 }
 
+func (s *MemoryService) GetScratchActive(ctx context.Context, userID uuid.UUID) ([]models.MemoryScratch, error) {
+	if s.fileTree != nil {
+		entries, err := s.loadScratchFromTree(ctx, userID, nil)
+		if err == nil && len(entries) > 0 {
+			return entries, nil
+		}
+		if err != nil && err != ErrEntryNotFound {
+			return nil, err
+		}
+	}
+
+	rows, err := s.db.Query(ctx,
+		`SELECT id, user_id, date, content, source, expires_at, created_at
+		 FROM memory_scratch
+		 WHERE user_id = $1
+		   AND (expires_at IS NULL OR expires_at > NOW())
+		 ORDER BY created_at DESC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("memory.GetScratchActive: %w", err)
+	}
+	defer rows.Close()
+
+	var entries []models.MemoryScratch
+	for rows.Next() {
+		var m models.MemoryScratch
+		if err := rows.Scan(&m.ID, &m.UserID, &m.Date, &m.Content, &m.Source, &m.ExpiresAt, &m.CreatedAt); err != nil {
+			return nil, fmt.Errorf("memory.GetScratchActive: scan: %w", err)
+		}
+		entries = append(entries, m)
+	}
+	return entries, rows.Err()
+}
+
 func (s *MemoryService) WriteScratch(ctx context.Context, userID uuid.UUID, content, source string) error {
 	_, err := s.WriteScratchWithTitle(ctx, userID, content, source, "")
 	return err
 }
 
 func (s *MemoryService) WriteScratchWithTitle(ctx context.Context, userID uuid.UUID, content, source, title string) (*models.FileTreeEntry, error) {
+	return s.writeScratchEntry(ctx, userID, content, source, title, time.Now().UTC(), nil, uuid.New(), false)
+}
+
+func (s *MemoryService) ImportScratch(ctx context.Context, userID uuid.UUID, content, source, title string, createdAt time.Time, expiresAt *time.Time) (*models.FileTreeEntry, error) {
+	if createdAt.IsZero() {
+		createdAt = time.Now().UTC()
+	}
+	now := createdAt.UTC()
+	return s.writeScratchEntry(ctx, userID, content, source, title, now, expiresAt, importedScratchLegacyID(source, title, now), true)
+}
+
+func importedScratchLegacyID(source, title string, createdAt time.Time) uuid.UUID {
+	key := fmt.Sprintf("agenthub/imported-scratch/%s/%s/%s", source, title, createdAt.UTC().Format(time.RFC3339Nano))
+	return uuid.NewSHA1(uuid.NameSpaceURL, []byte(key))
+}
+
+func (s *MemoryService) writeScratchEntry(ctx context.Context, userID uuid.UUID, content, source, title string, createdAt time.Time, expiresAt *time.Time, legacyID uuid.UUID, upsert bool) (*models.FileTreeEntry, error) {
 	if err := validateContentLength(content, maxContentBytes); err != nil {
 		return nil, fmt.Errorf("memory.WriteScratchWithTitle: %w", err)
 	}
@@ -151,9 +202,14 @@ func (s *MemoryService) WriteScratchWithTitle(ctx context.Context, userID uuid.U
 		source = "agenthub"
 	}
 
-	now := time.Now().UTC()
-	legacyID := uuid.New()
-	expiresAt := now.AddDate(0, 0, 7)
+	if legacyID == uuid.Nil {
+		legacyID = uuid.New()
+	}
+	now := createdAt.UTC()
+	if expiresAt == nil {
+		defaultExpiry := now.AddDate(0, 0, 7)
+		expiresAt = &defaultExpiry
+	}
 	slugBase := title
 	if strings.TrimSpace(slugBase) == "" {
 		slugBase = source
@@ -180,10 +236,19 @@ func (s *MemoryService) WriteScratchWithTitle(ctx context.Context, userID uuid.U
 		}
 	}
 
-	_, err = s.db.Exec(ctx,
-		`INSERT INTO memory_scratch (id, user_id, date, content, source, expires_at, created_at)
-		 VALUES ($1, $2, $3::DATE, $4, $5, $6, $7)`,
-		legacyID, userID, now.Format("2006-01-02"), content, source, expiresAt, now)
+	query := `INSERT INTO memory_scratch (id, user_id, date, content, source, expires_at, created_at)
+		 VALUES ($1, $2, $3::DATE, $4, $5, $6, $7)`
+	if upsert {
+		query += `
+		 ON CONFLICT (id) DO UPDATE SET
+		   date = EXCLUDED.date,
+		   content = EXCLUDED.content,
+		   source = EXCLUDED.source,
+		   expires_at = EXCLUDED.expires_at,
+		   created_at = EXCLUDED.created_at`
+	}
+
+	_, err = s.db.Exec(ctx, query, legacyID, userID, now.Format("2006-01-02"), content, source, expiresAt, now)
 	if err != nil {
 		return nil, fmt.Errorf("memory.WriteScratchWithTitle: %w", err)
 	}
@@ -417,13 +482,12 @@ func (s *MemoryService) loadProfilesFromTree(ctx context.Context, userID uuid.UU
 	return profiles, nil
 }
 
-func (s *MemoryService) loadScratchFromTree(ctx context.Context, userID uuid.UUID, days int) ([]models.MemoryScratch, error) {
+func (s *MemoryService) loadScratchFromTree(ctx context.Context, userID uuid.UUID, cutoff *time.Time) ([]models.MemoryScratch, error) {
 	snapshot, err := s.fileTree.Snapshot(ctx, userID, "/memory/scratch", models.TrustLevelFull)
 	if err != nil {
 		return nil, err
 	}
 
-	cutoff := time.Now().UTC().AddDate(0, 0, -days)
 	entries := make([]models.MemoryScratch, 0, len(snapshot.Entries))
 	for _, entry := range snapshot.Entries {
 		if entry.IsDirectory || !strings.HasSuffix(entry.Path, ".md") {
@@ -433,7 +497,7 @@ func (s *MemoryService) loadScratchFromTree(ctx context.Context, userID uuid.UUI
 		if expiresAt := metadataTime(entry.Metadata, "expires_at"); expiresAt != nil && !expiresAt.After(time.Now().UTC()) {
 			continue
 		}
-		if entry.CreatedAt.Before(cutoff) {
+		if cutoff != nil && entry.CreatedAt.Before(*cutoff) {
 			continue
 		}
 
@@ -442,12 +506,14 @@ func (s *MemoryService) loadScratchFromTree(ctx context.Context, userID uuid.UUI
 			date = inferScratchDate(entry.Path, entry.CreatedAt)
 		}
 		source, _ := entry.Metadata["source"].(string)
+		title, _ := entry.Metadata["title"].(string)
 
 		entries = append(entries, models.MemoryScratch{
 			ID:        entry.ID,
 			UserID:    entry.UserID,
 			Date:      date,
 			Content:   entry.Content,
+			Title:     title,
 			Source:    source,
 			ExpiresAt: metadataTime(entry.Metadata, "expires_at"),
 			CreatedAt: entry.CreatedAt,

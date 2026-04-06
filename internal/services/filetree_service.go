@@ -249,6 +249,9 @@ func (s *FileTreeService) WriteEntry(
 		if err != nil {
 			return nil, fmt.Errorf("filetree.WriteEntry: update: %w", err)
 		}
+		if err := s.deleteBlobTx(ctx, tx, updated.ID); err != nil {
+			return nil, err
+		}
 
 		if err := s.insertEntryVersion(ctx, tx, &updated, "update"); err != nil {
 			return nil, err
@@ -347,6 +350,9 @@ func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path str
 	)
 	if err != nil {
 		return fmt.Errorf("filetree.Delete: update: %w", err)
+	}
+	if err := s.deleteBlobTx(ctx, tx, deleted.ID); err != nil {
+		return err
 	}
 
 	if err := s.insertEntryVersion(ctx, tx, &deleted, "delete"); err != nil {
@@ -519,6 +525,9 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 		)
 		if err != nil {
 			return nil, fmt.Errorf("filetree.EnsureDirectory: update: %w", err)
+		}
+		if err := s.deleteBlobTx(ctx, tx, updated.ID); err != nil {
+			return nil, err
 		}
 
 		// Directory ensure is idempotent; only emit a version when reviving a tombstone.

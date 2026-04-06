@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
@@ -69,6 +70,7 @@ type MCPServer struct {
 	UserID     uuid.UUID
 	TrustLevel int
 	Scopes     []string
+	BaseURL    string
 
 	Connection  *services.ConnectionService
 	OAuth       *services.OAuthService
@@ -81,6 +83,7 @@ type MCPServer struct {
 	Device      *services.DeviceService
 	Dashboard   *services.DashboardService
 	Import      *services.ImportService
+	Token       *services.TokenService
 }
 
 func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
@@ -297,6 +300,15 @@ func (s *MCPServer) getTools() []MCPTool {
 				"files": propObject("文件内容 map: {路径: 内容}"),
 			}, "name", "files"),
 		},
+		{
+			Name:        "create_sync_token",
+			Description: "生成短命 scoped token，用于批量同步 bundle 到 /agent/import/bundle 或从 /agent/export/bundle 导出",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"purpose":     prop("string", "用途说明"),
+				"access":      prop("string", "权限: push, pull, both (默认 push)"),
+				"ttl_minutes": prop("integer", "有效期分钟数，范围 5-120，默认 30"),
+			}, "purpose"),
+		},
 		// import_claude_memory removed from MCP tools — available via admin HTTP API only
 	}
 
@@ -347,6 +359,10 @@ func (s *MCPServer) toolAllowed(name string) bool {
 func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 	ctx := context.Background()
 	args := params.Arguments
+
+	if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) && !s.toolAllowed(params.Name) {
+		return fmt.Sprintf("error: tool %q not allowed by current scopes", params.Name), true
+	}
 
 	switch params.Name {
 	case "read_profile":
@@ -654,6 +670,65 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		return fmt.Sprintf("imported %d files for skill %q", count, name), false
+
+	case "create_sync_token":
+		if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) {
+			return "error: create_sync_token requires admin scope", true
+		}
+		if s.Token == nil {
+			return "error: token service not configured", true
+		}
+
+		purpose, _ := args["purpose"].(string)
+		if strings.TrimSpace(purpose) == "" {
+			return "error: purpose is required", true
+		}
+
+		access, _ := args["access"].(string)
+		access = strings.TrimSpace(strings.ToLower(access))
+		if access == "" {
+			access = "push"
+		}
+
+		rawTTL, hasTTL := args["ttl_minutes"]
+		ttlMinutes := 30
+		if hasTTL {
+			switch typed := rawTTL.(type) {
+			case float64:
+				ttlMinutes = int(typed)
+			case int:
+				ttlMinutes = typed
+			}
+		}
+		if ttlMinutes < 5 || ttlMinutes > 120 {
+			return "error: ttl_minutes must be between 5 and 120", true
+		}
+
+		var scopes []string
+		switch access {
+		case "push":
+			scopes = []string{models.ScopeWriteBundle}
+		case "pull":
+			scopes = []string{models.ScopeReadBundle}
+		case "both":
+			scopes = []string{models.ScopeReadBundle, models.ScopeWriteBundle}
+		default:
+			return "error: access must be one of push, pull, both", true
+		}
+
+		tokenName := fmt.Sprintf("sync:%s", purpose)
+		resp, err := s.Token.CreateEphemeralToken(ctx, s.UserID, tokenName, scopes, models.TrustLevelWork, time.Duration(ttlMinutes)*time.Minute)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err), true
+		}
+		payload, _ := json.MarshalIndent(map[string]interface{}{
+			"token":      resp.Token,
+			"expires_at": resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
+			"api_base":   s.BaseURL,
+			"scopes":     resp.ScopedToken.Scopes,
+			"usage":      fmt.Sprintf("python3 tools/ahub-sync.py push --token %s --bundle backup.ahub", resp.Token),
+		}, "", "  ")
+		return string(payload), false
 
 	case "import_claude_memory":
 		memoriesRaw, _ := json.Marshal(args["memories"])

@@ -201,6 +201,17 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 	if e.DeletedAt != nil {
 		deletedAt = e.DeletedAt.Format("2006-01-02T15:04:05Z")
 	}
+	size := int64(len(e.Content))
+	if raw, ok := e.Metadata["size_bytes"]; ok {
+		switch typed := raw.(type) {
+		case int:
+			size = int64(typed)
+		case int64:
+			size = typed
+		case float64:
+			size = int64(typed)
+		}
+	}
 	return &FileNode{
 		Path:      publicPath,
 		Name:      hubpath.BaseName(publicPath),
@@ -208,7 +219,7 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 		Kind:      e.Kind,
 		Content:   e.Content,
 		MimeType:  e.ContentType,
-		Size:      int64(len(e.Content)),
+		Size:      size,
 		Version:   e.Version,
 		Checksum:  e.Checksum,
 		Metadata:  e.Metadata,

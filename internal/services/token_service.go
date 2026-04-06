@@ -84,6 +84,61 @@ func (s *TokenService) CreateToken(ctx context.Context, userID uuid.UUID, req mo
 	}, nil
 }
 
+// CreateEphemeralToken generates a short-lived scoped token with minute-level TTL.
+func (s *TokenService) CreateEphemeralToken(ctx context.Context, userID uuid.UUID, name string, scopes []string, maxTrustLevel int, ttl time.Duration) (*models.CreateTokenResponse, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, fmt.Errorf("token.CreateEphemeralToken: name is required")
+	}
+	if len(scopes) == 0 {
+		return nil, fmt.Errorf("token.CreateEphemeralToken: at least one scope is required")
+	}
+	if maxTrustLevel < 1 || maxTrustLevel > 4 {
+		return nil, fmt.Errorf("token.CreateEphemeralToken: max_trust_level must be between 1 and 4")
+	}
+	if ttl < time.Minute {
+		return nil, fmt.Errorf("token.CreateEphemeralToken: ttl must be at least 1 minute")
+	}
+
+	validScopes := make(map[string]bool, len(models.AllScopes))
+	for _, sc := range models.AllScopes {
+		validScopes[sc] = true
+	}
+	for _, sc := range scopes {
+		if !validScopes[sc] {
+			return nil, fmt.Errorf("token.CreateEphemeralToken: invalid scope %q", sc)
+		}
+	}
+
+	rawToken, tokenHash, tokenPrefix, err := generateToken()
+	if err != nil {
+		return nil, fmt.Errorf("token.CreateEphemeralToken: %w", err)
+	}
+
+	now := time.Now().UTC()
+	id := uuid.New()
+	expiresAt := now.Add(ttl)
+
+	_, err = s.db.Exec(ctx,
+		`INSERT INTO scoped_tokens (id, user_id, name, token_hash, token_prefix, scopes, max_trust_level, expires_at, rate_limit_reset_at, created_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+		id, userID, name, tokenHash, tokenPrefix, scopes, maxTrustLevel, expiresAt, now)
+	if err != nil {
+		return nil, fmt.Errorf("token.CreateEphemeralToken: %w", err)
+	}
+
+	token, err := s.getByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	return &models.CreateTokenResponse{
+		Token:       rawToken,
+		TokenPrefix: tokenPrefix,
+		ScopedToken: token.ToResponse(),
+	}, nil
+}
+
 // ValidateToken hashes the raw token, looks it up in DB (not revoked, not expired),
 // updates last_used_at, and returns the ScopedToken record.
 func (s *TokenService) ValidateToken(ctx context.Context, rawToken string) (*models.ScopedToken, error) {

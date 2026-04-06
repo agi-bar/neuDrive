@@ -21,6 +21,7 @@ type MemoryScratch struct {
 	UserID    uuid.UUID  `json:"user_id" db:"user_id"`
 	Date      string     `json:"date" db:"date"`
 	Content   string     `json:"content" db:"content"`
+	Title     string     `json:"title,omitempty"`
 	Source    string     `json:"source" db:"source"`
 	ExpiresAt *time.Time `json:"expires_at,omitempty" db:"expires_at"`
 	CreatedAt time.Time  `json:"created_at" db:"created_at"`

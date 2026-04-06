@@ -34,6 +34,9 @@ const (
 	ScopeReadTree  = "read:tree"
 	ScopeWriteTree = "write:tree"
 
+	ScopeReadBundle  = "read:bundle"
+	ScopeWriteBundle = "write:bundle"
+
 	ScopeSearch = "search"
 
 	ScopeAdmin = "admin" // full access
@@ -49,6 +52,7 @@ var AllScopes = []string{
 	ScopeReadInbox, ScopeWriteInbox,
 	ScopeReadProjects, ScopeWriteProjects,
 	ScopeReadTree, ScopeWriteTree,
+	ScopeReadBundle, ScopeWriteBundle,
 	ScopeSearch,
 	ScopeAdmin,
 }
@@ -82,6 +86,7 @@ func ScopeCategories() map[string][]string {
 		"Inbox":    {ScopeReadInbox, ScopeWriteInbox},
 		"Projects": {ScopeReadProjects, ScopeWriteProjects},
 		"Tree":     {ScopeReadTree, ScopeWriteTree},
+		"Bundle":   {ScopeReadBundle, ScopeWriteBundle},
 		"Search":   {ScopeSearch},
 		"Admin":    {ScopeAdmin},
 	}

@@ -79,6 +79,7 @@ func main() {
 		UserID:      scopedToken.UserID,
 		TrustLevel:  scopedToken.MaxTrustLevel,
 		Scopes:      scopedToken.Scopes,
+		BaseURL:     cfg.PublicBaseURL,
 		Connection:  connectionSvc,
 		OAuth:       oauthSvc,
 		FileTree:    fileTreeSvc,
@@ -90,6 +91,7 @@ func main() {
 		Device:      deviceSvc,
 		Dashboard:   dashboardSvc,
 		Import:      importSvc,
+		Token:       tokenSvc,
 	}
 
 	// Run stdio transport

@@ -122,6 +122,7 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		UserID:      userID,
 		TrustLevel:  trustLevel,
 		Scopes:      scopes,
+		BaseURL:     baseURL,
 		Connection:  s.ConnectionService,
 		OAuth:       s.OAuthService,
 		FileTree:    s.FileTreeService,
@@ -133,6 +134,7 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		Device:      s.DeviceService,
 		Dashboard:   s.DashboardService,
 		Import:      s.ImportService,
+		Token:       s.TokenService,
 	}
 
 	resp := mcpServer.HandleJSONRPC(req)

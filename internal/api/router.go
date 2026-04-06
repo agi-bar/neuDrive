@@ -330,7 +330,9 @@ func (s *Server) setupRoutes() {
 		r.Post("/agent/import/skill", s.handleAgentImportSkill)
 		r.Post("/agent/import/claude-memory", s.handleAgentImportClaudeMemory)
 		r.Post("/agent/import/bulk", s.handleAgentImportBulk)
+		r.With(MaxBodySizeMiddleware(50<<20)).Post("/agent/import/bundle", s.handleAgentImportBundle)
 		r.Get("/agent/export/all", s.handleAgentExportAll)
+		r.Get("/agent/export/bundle", s.handleAgentExportBundle)
 	})
 
 	// Embedded frontend (SPA) — catch-all for non-API routes.

@@ -1,10 +1,12 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"mime"
 	"path"
@@ -231,6 +233,150 @@ func (s *ImportService) ImportBundle(ctx context.Context, userID uuid.UUID, bund
 	return result, nil
 }
 
+func (s *ImportService) PreviewBundle(ctx context.Context, userID uuid.UUID, bundle models.Bundle) (*models.BundlePreviewResult, error) {
+	if s.fileTree == nil {
+		return nil, fmt.Errorf("import.PreviewBundle: file tree service not configured")
+	}
+	if s.memory == nil {
+		return nil, fmt.Errorf("import.PreviewBundle: memory service not configured")
+	}
+
+	mode, normalizedProfile, validatedMemory, validatedSkills, skillNames, err := prepareBundlePreview(bundle)
+	if err != nil {
+		return nil, err
+	}
+
+	preview := &models.BundlePreviewResult{
+		Version: bundle.Version,
+		Mode:    mode,
+		Skills:  make(map[string]models.BundleSkillPreview, len(validatedSkills)),
+	}
+
+	profileCategories := make([]string, 0, len(normalizedProfile))
+	for category := range normalizedProfile {
+		profileCategories = append(profileCategories, category)
+	}
+	sort.Strings(profileCategories)
+	for _, category := range profileCategories {
+		action, err := s.previewTextPath(ctx, userID, hubpath.ProfilePath(category), normalizedProfile[category], "text/markdown")
+		if err != nil {
+			return nil, err
+		}
+		entry := models.BundlePreviewEntry{
+			Path:   hubpath.ProfilePath(category),
+			Action: action,
+			Kind:   "profile",
+		}
+		preview.Profile = append(preview.Profile, entry)
+		applyBundlePreviewAction(&preview.Summary, action)
+	}
+
+	for _, item := range validatedMemory {
+		scratchPath := importedScratchPath(item)
+		existing, _, blobExists, err := s.loadPreviewEntry(ctx, userID, scratchPath)
+		if err != nil {
+			return nil, err
+		}
+		action := previewTextAction(existing, blobExists, item.content, "text/markdown")
+		entry := models.BundlePreviewEntry{
+			Path:   scratchPath,
+			Action: action,
+			Kind:   "memory",
+		}
+		preview.Memory = append(preview.Memory, entry)
+		applyBundlePreviewAction(&preview.Summary, action)
+	}
+
+	for _, skillName := range skillNames {
+		skill := validatedSkills[skillName]
+		skillRoot := path.Join("/skills", skillName)
+		snapshot, err := s.fileTree.Snapshot(ctx, userID, skillRoot, models.TrustLevelFull)
+		if err != nil {
+			return nil, err
+		}
+
+		existing := make(map[string]models.FileTreeEntry, len(snapshot.Entries))
+		for _, entry := range snapshot.Entries {
+			if entry.IsDirectory {
+				continue
+			}
+			publicPath := hubpath.NormalizePublic(entry.Path)
+			relPath := strings.TrimPrefix(publicPath, strings.TrimSuffix(skillRoot, "/")+"/")
+			existing[relPath] = entry
+		}
+
+		skillPreview := models.BundleSkillPreview{}
+		declared := make(map[string]struct{}, len(skill.textFiles)+len(skill.binaryFiles))
+
+		textPaths := sortedStringKeys(skill.textFiles)
+		for _, relPath := range textPaths {
+			declared[relPath] = struct{}{}
+			entry, hasEntry := existing[relPath]
+			var current *models.FileTreeEntry
+			var blobExists bool
+			if hasEntry {
+				current = &entry
+				_, blobExists, err = s.fileTree.ReadBlobByEntryID(ctx, entry.ID)
+				if err != nil {
+					return nil, err
+				}
+			}
+			action := previewTextAction(current, blobExists, skill.textFiles[relPath], contentTypeFromExt(relPath))
+			skillPreview.Files = append(skillPreview.Files, models.BundlePreviewEntry{
+				Path:   path.Join(skillRoot, relPath),
+				Action: action,
+				Kind:   "text",
+			})
+			applyBundlePreviewAction(&skillPreview.Summary, action)
+			applyBundlePreviewAction(&preview.Summary, action)
+		}
+
+		binaryPaths := sortedBlobKeys(skill.binaryFiles)
+		for _, relPath := range binaryPaths {
+			declared[relPath] = struct{}{}
+			entry, hasEntry := existing[relPath]
+			var current *models.FileTreeEntry
+			var currentBlob []byte
+			var blobExists bool
+			if hasEntry {
+				current = &entry
+				currentBlob, blobExists, err = s.fileTree.ReadBlobByEntryID(ctx, entry.ID)
+				if err != nil {
+					return nil, err
+				}
+			}
+			action := previewBinaryAction(current, currentBlob, blobExists, skill.binaryFiles[relPath])
+			skillPreview.Files = append(skillPreview.Files, models.BundlePreviewEntry{
+				Path:   path.Join(skillRoot, relPath),
+				Action: action,
+				Kind:   "binary",
+			})
+			applyBundlePreviewAction(&skillPreview.Summary, action)
+			applyBundlePreviewAction(&preview.Summary, action)
+		}
+
+		if mode == bundleModeMirror {
+			existingPaths := sortedEntryKeys(existing)
+			for _, relPath := range existingPaths {
+				if _, ok := declared[relPath]; ok {
+					continue
+				}
+				skillPreview.Files = append(skillPreview.Files, models.BundlePreviewEntry{
+					Path:   path.Join(skillRoot, relPath),
+					Action: "delete",
+					Kind:   "file",
+				})
+				applyBundlePreviewAction(&skillPreview.Summary, "delete")
+				applyBundlePreviewAction(&preview.Summary, "delete")
+			}
+		}
+
+		preview.Skills[skillName] = skillPreview
+	}
+
+	return preview, nil
+}
+
 func (s *ExportService) ExportBundle(ctx context.Context, userID uuid.UUID) (*models.Bundle, error) {
 	bundle := &models.Bundle{
 		Version:   models.BundleVersionV1,
@@ -322,6 +468,209 @@ func (s *ExportService) ExportBundle(ctx context.Context, userID uuid.UUID) (*mo
 
 	bundle.Stats.TotalSkills = len(bundle.Skills)
 	return bundle, nil
+}
+
+func prepareBundlePreview(bundle models.Bundle) (string, map[string]string, []validatedBundleMemoryItem, map[string]validatedBundleSkill, []string, error) {
+	if bundle.Version != models.BundleVersionV1 {
+		return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: unsupported bundle version %q", bundle.Version)
+	}
+
+	mode := normalizeBundleMode(bundle.Mode)
+	if mode == "" {
+		return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: invalid mode %q", bundle.Mode)
+	}
+
+	normalizedProfile := make(map[string]string, len(bundle.Profile))
+	for category, content := range bundle.Profile {
+		category = strings.TrimSpace(category)
+		if category == "" {
+			return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: profile category is required")
+		}
+		normalizedProfile[category] = content
+	}
+
+	validatedMemory := make([]validatedBundleMemoryItem, 0, len(bundle.Memory))
+	for idx, item := range bundle.Memory {
+		if strings.TrimSpace(item.Content) == "" {
+			return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: memory[%d] content is required", idx)
+		}
+		createdAt, expiresAt, err := parseBundleMemoryTimes(item)
+		if err != nil {
+			return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: memory[%d]: %w", idx, err)
+		}
+		validatedMemory = append(validatedMemory, validatedBundleMemoryItem{
+			content:   item.Content,
+			title:     item.Title,
+			source:    item.Source,
+			createdAt: createdAt,
+			expiresAt: expiresAt,
+		})
+	}
+
+	validatedSkills := make(map[string]validatedBundleSkill, len(bundle.Skills))
+	skillNames := make([]string, 0, len(bundle.Skills))
+	for skillName, skill := range bundle.Skills {
+		if err := validateSlug(skillName, 128); err != nil {
+			return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: invalid skill name %q: %w", skillName, err)
+		}
+
+		normalized := validatedBundleSkill{
+			textFiles:   make(map[string]string, len(skill.Files)),
+			binaryFiles: make(map[string]validatedBundleBlob, len(skill.BinaryFiles)),
+		}
+		hasSkillDoc := false
+
+		for relPath, content := range skill.Files {
+			cleanPath, err := cleanBundleRelativePath(relPath)
+			if err != nil {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: %w", skillName, err)
+			}
+			if _, exists := normalized.textFiles[cleanPath]; exists {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: duplicate file %q", skillName, cleanPath)
+			}
+			if _, exists := normalized.binaryFiles[cleanPath]; exists {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: file %q declared as both text and binary", skillName, cleanPath)
+			}
+			normalized.textFiles[cleanPath] = content
+			if cleanPath == "SKILL.md" {
+				hasSkillDoc = true
+			}
+		}
+
+		for relPath, blob := range skill.BinaryFiles {
+			cleanPath, err := cleanBundleRelativePath(relPath)
+			if err != nil {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: %w", skillName, err)
+			}
+			if cleanPath == "SKILL.md" {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: SKILL.md must be a text file", skillName)
+			}
+			if _, exists := normalized.textFiles[cleanPath]; exists {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: file %q declared as both text and binary", skillName, cleanPath)
+			}
+			if _, exists := normalized.binaryFiles[cleanPath]; exists {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: duplicate file %q", skillName, cleanPath)
+			}
+			data, contentType, err := decodeBundleBlob(cleanPath, blob)
+			if err != nil {
+				return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q: %w", skillName, err)
+			}
+			normalized.binaryFiles[cleanPath] = validatedBundleBlob{
+				data:        data,
+				contentType: contentType,
+			}
+		}
+
+		if !hasSkillDoc {
+			return "", nil, nil, nil, nil, fmt.Errorf("import.PreviewBundle: skill %q missing SKILL.md", skillName)
+		}
+
+		validatedSkills[skillName] = normalized
+		skillNames = append(skillNames, skillName)
+	}
+	sort.Strings(skillNames)
+	return mode, normalizedProfile, validatedMemory, validatedSkills, skillNames, nil
+}
+
+func (s *ImportService) loadPreviewEntry(ctx context.Context, userID uuid.UUID, fullPath string) (*models.FileTreeEntry, []byte, bool, error) {
+	entry, err := s.fileTree.Read(ctx, userID, fullPath, models.TrustLevelFull)
+	if err != nil {
+		if errors.Is(err, ErrEntryNotFound) {
+			return nil, nil, false, nil
+		}
+		return nil, nil, false, err
+	}
+	blob, ok, err := s.fileTree.ReadBlobByEntryID(ctx, entry.ID)
+	if err != nil {
+		return nil, nil, false, err
+	}
+	return entry, blob, ok, nil
+}
+
+func (s *ImportService) previewTextPath(ctx context.Context, userID uuid.UUID, fullPath, desiredContent, desiredContentType string) (string, error) {
+	entry, _, blobExists, err := s.loadPreviewEntry(ctx, userID, fullPath)
+	if err != nil {
+		return "", err
+	}
+	return previewTextAction(entry, blobExists, desiredContent, desiredContentType), nil
+}
+
+func previewTextAction(entry *models.FileTreeEntry, blobExists bool, desiredContent, desiredContentType string) string {
+	if entry == nil {
+		return "create"
+	}
+	if blobExists {
+		return "update"
+	}
+	if entry.Content == desiredContent && entry.ContentType == desiredContentType {
+		return "skip"
+	}
+	return "update"
+}
+
+func previewBinaryAction(entry *models.FileTreeEntry, blob []byte, blobExists bool, desired validatedBundleBlob) string {
+	if entry == nil {
+		return "create"
+	}
+	if !blobExists {
+		return "update"
+	}
+	if bytes.Equal(blob, desired.data) && entry.ContentType == desired.contentType {
+		return "skip"
+	}
+	return "update"
+}
+
+func importedScratchPath(item validatedBundleMemoryItem) string {
+	legacyID := importedScratchLegacyID(item.source, item.title, item.createdAt)
+	slugBase := item.title
+	if strings.TrimSpace(slugBase) == "" {
+		slugBase = item.source
+	}
+	slug := fmt.Sprintf("%s-%s", slugBase, legacyID.String()[:8])
+	return hubpath.ScratchPath(item.createdAt, slug)
+}
+
+func applyBundlePreviewAction(summary *models.BundlePreviewSummary, action string) {
+	switch action {
+	case "create":
+		summary.Create++
+	case "update":
+		summary.Update++
+	case "delete":
+		summary.Delete++
+	case "skip":
+		summary.Skip++
+	case "conflict":
+		summary.Conflict++
+	}
+}
+
+func sortedStringKeys(values map[string]string) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedBlobKeys(values map[string]validatedBundleBlob) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func sortedEntryKeys(values map[string]models.FileTreeEntry) []string {
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
 }
 
 func cleanBundleRelativePath(relPath string) (string, error) {

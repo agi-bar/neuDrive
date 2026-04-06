@@ -290,3 +290,82 @@ func TestBundleImportExport_RoundTripRealisticFixture(t *testing.T) {
 		t.Fatal("export unexpectedly included system skill")
 	}
 }
+
+func TestBundlePreview_RealisticFixture(t *testing.T) {
+	ctx, userID, fileTree, _, importSvc, _ := setupBundleIntegration(t)
+
+	files := loadRealisticSkillFixture(t)
+	binary := readRealisticBinaryFixture(t)
+	sum := sha256.Sum256(binary)
+
+	bundle := models.Bundle{
+		Version: models.BundleVersionV1,
+		Source:  "realistic-fixture",
+		Mode:    bundleModeMerge,
+		Skills: map[string]models.BundleSkill{
+			"ahub-sync": {
+				Files: files,
+				BinaryFiles: map[string]models.BundleBlobFile{
+					"assets/tiny.png": {
+						ContentBase64: base64.StdEncoding.EncodeToString(binary),
+						ContentType:   "image/png",
+						SizeBytes:     int64(len(binary)),
+						SHA256:        hex.EncodeToString(sum[:]),
+					},
+				},
+			},
+		},
+	}
+
+	if _, err := importSvc.ImportBundle(ctx, userID, bundle); err != nil {
+		t.Fatalf("seed import bundle: %v", err)
+	}
+	if _, err := fileTree.WriteEntry(ctx, userID, "/skills/ahub-sync/extra.md", "delete me", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("write extra file: %v", err)
+	}
+	if _, err := fileTree.WriteEntry(ctx, userID, "/skills/keep-me/SKILL.md", "# Keep Me\n", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("write untouched skill: %v", err)
+	}
+
+	previewBundle := bundle
+	previewBundle.Mode = bundleModeMirror
+	preview, err := importSvc.PreviewBundle(ctx, userID, previewBundle)
+	if err != nil {
+		t.Fatalf("preview bundle: %v", err)
+	}
+
+	if preview.Mode != bundleModeMirror {
+		t.Fatalf("preview mode = %q, want %q", preview.Mode, bundleModeMirror)
+	}
+	if preview.Summary.Delete != 1 {
+		t.Fatalf("preview delete count = %d, want 1", preview.Summary.Delete)
+	}
+	if preview.Summary.Create != 0 {
+		t.Fatalf("preview create count = %d, want 0", preview.Summary.Create)
+	}
+
+	skillPreview, ok := preview.Skills["ahub-sync"]
+	if !ok {
+		t.Fatal("preview missing ahub-sync skill")
+	}
+
+	foundDelete := false
+	for _, entry := range skillPreview.Files {
+		if strings.HasSuffix(entry.Path, "/extra.md") && entry.Action == "delete" {
+			foundDelete = true
+		}
+		if strings.Contains(entry.Path, "/keep-me/") {
+			t.Fatalf("preview should not include untouched skill path: %s", entry.Path)
+		}
+	}
+	if !foundDelete {
+		t.Fatal("preview missing delete entry for extra.md")
+	}
+	if _, ok := preview.Skills["keep-me"]; ok {
+		t.Fatal("preview should not include untouched keep-me skill")
+	}
+}

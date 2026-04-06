@@ -51,3 +51,31 @@ type BundleImportResult struct {
 	ProfileCategories int    `json:"profile_categories"`
 	MemoryImported    int    `json:"memory_imported"`
 }
+
+type BundlePreviewSummary struct {
+	Create   int `json:"create,omitempty"`
+	Update   int `json:"update,omitempty"`
+	Delete   int `json:"delete,omitempty"`
+	Skip     int `json:"skip,omitempty"`
+	Conflict int `json:"conflict,omitempty"`
+}
+
+type BundlePreviewEntry struct {
+	Path   string `json:"path"`
+	Action string `json:"action"`
+	Kind   string `json:"kind,omitempty"`
+}
+
+type BundleSkillPreview struct {
+	Summary BundlePreviewSummary `json:"summary"`
+	Files   []BundlePreviewEntry `json:"files,omitempty"`
+}
+
+type BundlePreviewResult struct {
+	Version string                        `json:"version"`
+	Mode    string                        `json:"mode"`
+	Summary BundlePreviewSummary          `json:"summary"`
+	Profile []BundlePreviewEntry          `json:"profile,omitempty"`
+	Memory  []BundlePreviewEntry          `json:"memory,omitempty"`
+	Skills  map[string]BundleSkillPreview `json:"skills,omitempty"`
+}

@@ -4,6 +4,7 @@ ahub-sync: export/push/pull Agent Hub bundles.
 
 Examples:
   python3 tools/ahub-sync.py export --source /path/to/skills -o backup.ahub
+  python3 tools/ahub-sync.py preview --token aht_xxx --bundle backup.ahub
   python3 tools/ahub-sync.py push --token aht_xxx --bundle backup.ahub --api-base https://hub.example.com
   python3 tools/ahub-sync.py push --token aht_xxx --source /path/to/skills --mode mirror
   python3 tools/ahub-sync.py pull --token aht_xxx -o backup.ahub
@@ -173,6 +174,28 @@ def cmd_push(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_preview(args: argparse.Namespace) -> int:
+    if args.bundle:
+        with open(args.bundle, "r", encoding="utf-8") as fh:
+            bundle = json.load(fh)
+    else:
+        bundle = build_bundle(args.source, args.mode)
+
+    if args.mode:
+        bundle["mode"] = args.mode
+
+    print_bundle_stats(bundle)
+    response = http_json(
+        "POST",
+        f"{args.api_base.rstrip('/')}/agent/import/preview",
+        token=args.token,
+        payload=bundle,
+    )
+    result = unwrap_response(response)
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_pull(args: argparse.Namespace) -> int:
     response = http_json(
         "GET",
@@ -206,6 +229,15 @@ def build_parser() -> argparse.ArgumentParser:
     push_group.add_argument("--bundle", help="existing .ahub bundle file")
     push_cmd.add_argument("--mode", default="merge", choices=("merge", "mirror"))
     push_cmd.set_defaults(func=cmd_push)
+
+    preview_cmd = sub.add_parser("preview", help="preview bundle changes before importing into Agent Hub")
+    preview_cmd.add_argument("--token", required=True)
+    preview_cmd.add_argument("--api-base", default=DEFAULT_API_BASE)
+    preview_group = preview_cmd.add_mutually_exclusive_group(required=True)
+    preview_group.add_argument("--source", help="directory containing skill subdirectories")
+    preview_group.add_argument("--bundle", help="existing .ahub bundle file")
+    preview_cmd.add_argument("--mode", default="merge", choices=("merge", "mirror"))
+    preview_cmd.set_defaults(func=cmd_preview)
 
     pull_cmd = sub.add_parser("pull", help="export a bundle from Agent Hub")
     pull_cmd.add_argument("--token", required=True)

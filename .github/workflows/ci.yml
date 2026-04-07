@@ -12,10 +12,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - run: go vet ./...
       - run: |
-          go install golang.org/x/tools/cmd/goimports@v0.31.0
+          go install golang.org/x/tools/cmd/goimports@v0.43.0
           goimports -l . | (! grep .)
 
   test:
@@ -38,8 +38,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
-      - run: go test ./... -v -race -coverprofile=coverage.out
+          go-version: '1.25'
+      - run: go test -p 1 ./... -v -race -coverprofile=coverage.out
         env:
           DATABASE_URL: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
           AGENTHUB_TEST_DB: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
@@ -57,7 +57,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - run: go build -o agenthub ./cmd/server/
       - run: go build -o agenthub-mcp ./cmd/mcp/
 
@@ -91,7 +91,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - uses: actions/setup-node@v4
         with:
           node-version: '20'

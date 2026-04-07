@@ -405,6 +405,38 @@ export const api = {
   getTreeSnapshot: (path = '/'): Promise<TreeSnapshotResponse> =>
     request<TreeSnapshotResponse>(`/tree/snapshot?path=${encodeURIComponent(path)}`),
 
+  writeTree: (
+    path: string,
+    params: {
+      content: string
+      mimeType?: string
+      isDir?: boolean
+      metadata?: Record<string, any>
+      expectedVersion?: number
+      expectedChecksum?: string
+      minTrustLevel?: number
+    },
+  ): Promise<FileNode> => {
+    const normalized = path.startsWith('/') ? path : `/${path}`
+    const body = {
+      content: params.content,
+      mime_type: params.mimeType || 'text/plain',
+      is_dir: params.isDir || false,
+      metadata: params.metadata,
+      expected_version: params.expectedVersion,
+      expected_checksum: params.expectedChecksum,
+      min_trust_level: params.minTrustLevel,
+    }
+    return request<FileNode>(`/tree${normalized}` as string, {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    })
+  },
+  deleteTree: (path: string): Promise<{ status: string; path: string }> => {
+    const normalized = path.startsWith('/') ? path : `/${path}`
+    return request<{ status: string; path: string }>(`/tree${normalized}`, { method: 'DELETE' })
+  },
+
   // Memory conflicts
   getConflicts: () => request<{ conflicts: MemoryConflict[] }>('/memory/conflicts').then(r => r.conflicts),
   resolveConflict: (id: string, resolution: string) =>

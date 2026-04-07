@@ -847,6 +847,26 @@ a:hover {
   white-space: nowrap;
 }
 
+/* === Files Browser (Dropbox-like) === */
+.breadcrumbs { font-size: 12px; color: var(--color-text-secondary); }
+.breadcrumbs-sep { margin: 0 6px; color: var(--color-text-muted); }
+
+.files-table { width: 100%; border: 1px solid var(--color-border); border-radius: var(--radius); overflow: hidden; }
+.files-thead { display: grid; grid-template-columns: 1fr 120px 140px 200px; background: #fafbfc; border-bottom: 1px solid var(--color-border); }
+.files-th { padding: 10px 12px; font-size: 12px; font-weight: 600; color: var(--color-text-secondary); cursor: pointer; }
+.files-tbody { display: block; }
+.files-tr { display: grid; grid-template-columns: 1fr 120px 140px 200px; align-items: center; padding: 8px 12px; border-top: 1px solid var(--color-border-light); cursor: default; }
+.files-tr:hover { background: var(--color-bg); }
+.files-tr.is-selected { background: var(--color-primary-light); }
+.files-td { font-size: 13px; color: var(--color-text); }
+.files-col-name { display: flex; align-items: center; gap: 8px; }
+.file-icon { width: 16px; height: 16px; display: inline-block; }
+.fi-folder::before { content: '\1F4C1'; }
+.fi-file::before { content: '\1F5CE'; }
+.fi-md::before { content: 'M'; display: inline-block; width: 16px; height: 16px; text-align: center; font-weight: 700; color: var(--color-primary); }
+.file-name { word-break: break-all; }
+.files-empty { padding: 24px; color: var(--color-text-secondary); text-align: center; }
+
 .data-inline-list {
   display: flex;
   flex-wrap: wrap;

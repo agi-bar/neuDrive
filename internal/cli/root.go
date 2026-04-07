@@ -105,14 +105,7 @@ func runServer(args []string) int {
 		}
 		return 2
 	}
-	selectedStorage := strings.TrimSpace(*storage)
-	if selectedStorage == "" {
-		if strings.TrimSpace(*databaseURL) != "" {
-			selectedStorage = "postgres"
-		} else {
-			selectedStorage = "sqlite"
-		}
-	}
+	selectedStorage := chooseStorageBackend(*storage, *databaseURL)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -156,14 +149,7 @@ func runMCP(args []string) int {
 		}
 		return 2
 	}
-	selectedStorage := strings.TrimSpace(*storage)
-	if selectedStorage == "" {
-		if strings.TrimSpace(*databaseURL) != "" {
-			selectedStorage = "postgres"
-		} else {
-			selectedStorage = "sqlite"
-		}
-	}
+	selectedStorage := chooseStorageBackend(*storage, *databaseURL)
 	if err := mcpapp.RunStdio(context.Background(), mcpapp.Options{
 		Storage:        selectedStorage,
 		SQLitePath:     *sqlitePath,
@@ -178,6 +164,20 @@ func runMCP(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func chooseStorageBackend(explicitStorage, explicitDatabaseURL string) string {
+	selectedStorage := strings.ToLower(strings.TrimSpace(explicitStorage))
+	if selectedStorage != "" {
+		return selectedStorage
+	}
+	if strings.TrimSpace(explicitDatabaseURL) != "" {
+		return "postgres"
+	}
+	if envDatabaseURL, ok := os.LookupEnv("DATABASE_URL"); ok && strings.TrimSpace(envDatabaseURL) != "" {
+		return "postgres"
+	}
+	return "sqlite"
 }
 
 func runStatus(args []string) int {

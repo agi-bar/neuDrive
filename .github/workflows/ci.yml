@@ -104,7 +104,7 @@ jobs:
       - run: npx playwright install --with-deps chromium
         working-directory: web
       - run: go build -o /tmp/agenthub ./cmd/agenthub
-      - run: /tmp/agenthub server --listen :8080 > /tmp/agenthub-server.log 2>&1 &
+      - run: /tmp/agenthub server --storage postgres --listen :8080 > /tmp/agenthub-server.log 2>&1 &
         env:
           DATABASE_URL: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
           JWT_SECRET: test-jwt-secret

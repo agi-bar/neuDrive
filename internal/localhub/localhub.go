@@ -3,18 +3,16 @@ package localhub
 import (
 	"context"
 	"fmt"
-	"mime"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/agi-bar/agenthub/internal/localruntime"
 	"github.com/agi-bar/agenthub/internal/localstore"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/skillsarchive"
 	"github.com/google/uuid"
 )
 
@@ -211,31 +209,11 @@ func (c *Client) writeLocalFile(ctx context.Context, hubPath, srcPath string, me
 }
 
 func detectContentType(path string, data []byte) string {
-	if ext := strings.TrimSpace(strings.ToLower(filepath.Ext(path))); ext != "" {
-		if byExt := mime.TypeByExtension(ext); byExt != "" {
-			return byExt
-		}
-	}
-	return http.DetectContentType(data)
+	return skillsarchive.DetectContentType(path, data)
 }
 
 func looksBinary(path string, data []byte) bool {
-	switch strings.ToLower(filepath.Ext(path)) {
-	case ".png", ".jpg", ".jpeg", ".gif", ".pdf", ".zip", ".skill", ".bin", ".ico", ".woff", ".woff2", ".ttf":
-		return true
-	}
-	if len(data) == 0 {
-		return false
-	}
-	if !utf8.Valid(data) {
-		return true
-	}
-	for _, b := range data {
-		if b == 0 {
-			return true
-		}
-	}
-	return false
+	return skillsarchive.LooksBinary(path, data)
 }
 
 func isBinaryMetadata(metadata map[string]interface{}) bool {

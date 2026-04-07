@@ -17,6 +17,7 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 	})
 
 	cases := [][]string{
+		{"browse", "--help"},
 		{"status", "--help"},
 		{"doctor", "--help"},
 		{"platform", "--help"},
@@ -27,6 +28,9 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		{"disconnect", "--help"},
 		{"import", "--help"},
 		{"export", "--help"},
+		{"files", "--help"},
+		{"files", "ls", "--help"},
+		{"files", "cat", "--help"},
 		{"daemon", "--help"},
 		{"server", "--help"},
 		{"mcp", "--help"},
@@ -78,8 +82,12 @@ func TestRootCommandsUsageAndExitCodes(t *testing.T) {
 		{name: "platform show missing", args: []string{"platform", "show"}, want: 2, substr: "usage: agenthub platform show <platform>", stream: "stderr"},
 		{name: "connect missing", args: []string{"connect"}, want: 2, substr: "usage: agenthub connect <platform>", stream: "stderr"},
 		{name: "disconnect missing", args: []string{"disconnect"}, want: 2, substr: "usage: agenthub disconnect <platform>", stream: "stderr"},
-		{name: "import missing", args: []string{"import"}, want: 0, substr: "usage: agenthub import <platform> [--mode agent|files|all]", stream: "stdout"},
+		{name: "import missing", args: []string{"import"}, want: 0, substr: "usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]", stream: "stdout"},
+		{name: "import zip invalid mode", args: []string{"import", "claude", "--zip", "skills.zip", "--mode", "agent"}, want: 2, substr: "--zip can only be combined with --mode files", stream: "stderr"},
 		{name: "export missing", args: []string{"export"}, want: 2, substr: "usage: agenthub export <platform> [--output DIR]", stream: "stderr"},
+		{name: "browse extra", args: []string{"browse", "/one", "/two"}, want: 2, substr: "usage: agenthub browse [--print-url] [/route]", stream: "stderr"},
+		{name: "files unknown", args: []string{"files", "wat"}, want: 2, substr: "unknown files subcommand", stream: "stderr"},
+		{name: "files cat missing", args: []string{"files", "cat"}, want: 2, substr: "usage: agenthub files cat <path>", stream: "stderr"},
 		{name: "daemon unknown", args: []string{"daemon", "wat"}, want: 2, substr: "unknown daemon subcommand", stream: "stderr"},
 		{name: "sync unknown", args: []string{"sync", "wat"}, want: 2, substr: "unknown sync subcommand", stream: "stderr"},
 		{name: "remote unknown", args: []string{"remote", "wat"}, want: 2, substr: "unknown remote subcommand", stream: "stderr"},

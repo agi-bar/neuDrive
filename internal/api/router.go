@@ -248,7 +248,7 @@ func (s *Server) setupRoutes() {
 		// Import / Export (legacy) — 50MB body limit for imports
 		r.Group(func(r chi.Router) {
 			r.Use(MaxBodySizeMiddleware(50 << 20))
-			r.Post("/api/import/skills", s.HandleImportSkills)
+			r.With(MaxBodySizeMiddleware(50<<20)).Post("/api/import/skills", s.HandleImportSkills)
 			r.Post("/api/import/vault", s.HandleImportVault)
 			r.Post("/api/import/devices", s.HandleImportDevices)
 			r.Post("/api/import/full", s.HandleImportFull)
@@ -332,6 +332,7 @@ func (s *Server) setupRoutes() {
 
 		// Agent Import (bulk API)
 		r.Post("/agent/import/profile", s.handleAgentImportProfile)
+		r.With(MaxBodySizeMiddleware(50<<20)).Post("/agent/import/skills", s.handleAgentImportSkills)
 		r.Post("/agent/import/skill", s.handleAgentImportSkill)
 		r.Post("/agent/import/claude-memory", s.handleAgentImportClaudeMemory)
 		r.Post("/agent/import/bulk", s.handleAgentImportBulk)

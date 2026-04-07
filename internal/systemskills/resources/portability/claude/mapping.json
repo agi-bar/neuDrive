@@ -33,6 +33,13 @@
       "restore_strategy": "manual_prompt"
     },
     {
+      "source_feature": "Claude Web skills zip",
+      "agenthub_target": [
+        "/skills/<name>/..."
+      ],
+      "restore_strategy": "zip_import_preferred"
+    },
+    {
       "source_feature": "Conversations",
       "agenthub_target": [
         "conversation_archive"

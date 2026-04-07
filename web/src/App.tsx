@@ -41,11 +41,17 @@ function App() {
     const params = new URLSearchParams(window.location.search)
     const ghToken = params.get('github_token')
     const ghRefresh = params.get('github_refresh')
+    const localToken = params.get('local_token')
     if (ghToken) {
       localStorage.setItem('token', ghToken)
       if (ghRefresh) localStorage.setItem('refresh_token', ghRefresh)
       // Clean URL
-      window.history.replaceState({}, '', '/')
+      window.history.replaceState({}, '', window.location.pathname)
+    }
+    if (localToken) {
+      localStorage.setItem('token', localToken)
+      localStorage.removeItem('refresh_token')
+      window.history.replaceState({}, '', window.location.pathname)
     }
 
     const token = localStorage.getItem('token')

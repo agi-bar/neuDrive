@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"archive/zip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -77,6 +78,21 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("unexpected import output: %s", stdout)
 	}
 
+	stdout, _ = mustRunAgenthub(t, binary, env, "browse", "--print-url", "/data/files")
+	if !strings.Contains(stdout, "/data/files?local_token=") {
+		t.Fatalf("unexpected browse URL output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "files", "ls", "/memory/profile")
+	if !strings.Contains(stdout, "/memory/profile/codex-agent.md") {
+		t.Fatalf("expected imported profile file in files ls: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "files", "cat", "/memory/profile/codex-agent.md")
+	if !strings.Contains(stdout, "Be concise and actionable.") {
+		t.Fatalf("unexpected files cat output: %s", stdout)
+	}
+
 	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex", "--mode", "files")
 	if !strings.Contains(stdout, "using mode=files") {
 		t.Fatalf("unexpected files import output: %s", stdout)
@@ -103,6 +119,24 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude")
 	if !strings.Contains(stdout, "Imported claude using mode=agent") {
 		t.Fatalf("unexpected claude import output: %s", stdout)
+	}
+	claudeSkillsZip := filepath.Join(workDir, "claude-web-skills.zip")
+	writeTestSkillZip(t, claudeSkillsZip, map[string][]byte{
+		"claude-web-skill/SKILL.md":        []byte("# Claude Web Skill\n\nImported from zip.\n"),
+		"claude-web-skill/helper.py":       []byte("print('hello from claude web zip')\n"),
+		"claude-web-skill/assets/logo.png": []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0x00},
+	})
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude", "--zip", claudeSkillsZip)
+	if !strings.Contains(stdout, "Imported 3 files") || !strings.Contains(stdout, "into /skills using claude") {
+		t.Fatalf("unexpected claude zip import output: %s", stdout)
+	}
+	stdout, _ = mustRunAgenthub(t, binary, env, "files", "ls", "/skills/claude-web-skill")
+	if !strings.Contains(stdout, "/skills/claude-web-skill/SKILL.md") || !strings.Contains(stdout, "/skills/claude-web-skill/helper.py") || !strings.Contains(stdout, "/skills/claude-web-skill/assets") {
+		t.Fatalf("expected imported claude web skill files: %s", stdout)
+	}
+	stdout, _ = mustRunAgenthub(t, binary, env, "files", "ls", "/skills/claude-web-skill/assets")
+	if !strings.Contains(stdout, "/skills/claude-web-skill/assets/logo.png") {
+		t.Fatalf("expected imported claude web binary asset: %s", stdout)
 	}
 	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude", "--mode", "all")
 	if !strings.Contains(stdout, "Imported claude using mode=all") {
@@ -152,4 +186,26 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	}
 
 	mustRunAgenthub(t, binary, env, "daemon", "stop")
+}
+
+func writeTestSkillZip(t *testing.T, target string, files map[string][]byte) {
+	t.Helper()
+	f, err := os.Create(target)
+	if err != nil {
+		t.Fatalf("create zip %s: %v", target, err)
+	}
+	defer f.Close()
+	zw := zip.NewWriter(f)
+	for name, content := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("create zip entry %s: %v", name, err)
+		}
+		if _, err := w.Write(content); err != nil {
+			t.Fatalf("write zip entry %s: %v", name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("close zip %s: %v", target, err)
+	}
 }

@@ -361,6 +361,23 @@ func (s *Server) handleAgentImportSkill(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+func (s *Server) handleAgentImportSkills(w http.ResponseWriter, r *http.Request) {
+	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeWriteSkills) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	if s.ImportService == nil || s.FileTreeService == nil {
+		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "import service not configured")
+		return
+	}
+	result, err := s.importSkillsForUser(r, userID)
+	if err != nil {
+		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
+		return
+	}
+	respondOK(w, result)
+}
+
 func (s *Server) handleAgentImportClaudeMemory(w http.ResponseWriter, r *http.Request) {
 	userID, trustLevel := agentAuth(r)
 	if userID == nil {

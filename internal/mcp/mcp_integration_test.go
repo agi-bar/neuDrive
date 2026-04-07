@@ -431,6 +431,28 @@ func TestMCPInteg_CreateSyncToken(t *testing.T) {
 	}
 }
 
+func TestMCPInteg_CreateSkillsImportToken(t *testing.T) {
+	s := setupIntegrationMCP(t)
+
+	text, isErr := mcpToolCall(t, s, "create_skills_import_token", map[string]interface{}{
+		"purpose":     "claude-web-skills",
+		"platform":    "claude-web",
+		"ttl_minutes": 30,
+	})
+	if isErr {
+		t.Fatalf("create_skills_import_token error: %s", text)
+	}
+	if !strings.Contains(text, "\"token\": \"aht_") {
+		t.Fatalf("expected scoped token output, got %s", text)
+	}
+	if !strings.Contains(text, models.ScopeWriteSkills) {
+		t.Fatalf("expected write:skills scope in output, got %s", text)
+	}
+	if !strings.Contains(text, "/agent/import/skills?platform=claude-web") {
+		t.Fatalf("expected upload_url in output, got %s", text)
+	}
+}
+
 func TestMCPInteg_ImportClaudeMemory(t *testing.T) {
 	s := setupIntegrationMCP(t)
 

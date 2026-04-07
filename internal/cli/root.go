@@ -2,12 +2,18 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
+	"io"
+	"net/http"
+	"net/url"
 	"os"
+	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"time"
@@ -16,6 +22,7 @@ import (
 	"github.com/agi-bar/agenthub/internal/app/serverapp"
 	"github.com/agi-bar/agenthub/internal/localhub"
 	"github.com/agi-bar/agenthub/internal/localruntime"
+	"github.com/agi-bar/agenthub/internal/localserver"
 	"github.com/agi-bar/agenthub/internal/platforms"
 	"github.com/agi-bar/agenthub/internal/synccli"
 )
@@ -38,6 +45,8 @@ func Run(args []string) int {
 		return runSync(args[1:])
 	case "remote":
 		return runRemote(args[1:])
+	case "browse":
+		return runBrowse(args[1:])
 	case "status":
 		return runStatus(args[1:])
 	case "doctor":
@@ -57,6 +66,8 @@ func Run(args []string) int {
 		return runImport(args[1:])
 	case "export":
 		return runExport(args[1:])
+	case "files":
+		return runFiles(args[1:])
 	case "daemon":
 		return runDaemon(args[1:])
 	default:
@@ -72,6 +83,7 @@ func printRootUsage() {
 Local-first AI hub and platform sync tool.
 
 Usage:
+  agenthub browse [/route]
   agenthub status
   agenthub doctor
   agenthub platform ls
@@ -79,8 +91,10 @@ Usage:
   agenthub ls [platform]
   agenthub connect <platform>
   agenthub disconnect <platform>
-  agenthub import <platform> [--mode agent|files|all]
+  agenthub import <platform> [--mode agent|files|all] [--zip FILE]
   agenthub export <platform> [--output DIR]
+  agenthub files ls [path]
+  agenthub files cat <path>
   agenthub sync <subcommand>
   agenthub remote <subcommand>
   agenthub daemon status|stop|logs
@@ -498,17 +512,18 @@ func runDisconnect(args []string) int {
 
 func runImport(args []string) int {
 	if isHelpArg(args) || len(args) == 0 {
-		fmt.Println("usage: agenthub import <platform> [--mode agent|files|all]")
+		fmt.Println("usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]")
 		return 0
 	}
 	platform := strings.TrimSpace(args[0])
 	if platform == "" || strings.HasPrefix(platform, "-") {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import <platform> [--mode agent|files|all]")
+		fmt.Fprintln(os.Stderr, "usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]")
 		return 2
 	}
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	mode := fs.String("mode", "", "import mode: agent, files, all")
+	zipPath := fs.String("zip", "", "Claude skills zip exported from the web app")
 	if err := fs.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -516,7 +531,11 @@ func runImport(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import <platform> [--mode agent|files|all]")
+		fmt.Fprintln(os.Stderr, "usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]")
+		return 2
+	}
+	if strings.TrimSpace(*zipPath) != "" && strings.TrimSpace(*mode) != "" && strings.TrimSpace(*mode) != string(platforms.ImportModeFiles) {
+		fmt.Fprintln(os.Stderr, "--zip can only be combined with --mode files")
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -544,10 +563,24 @@ func runImport(args []string) int {
 		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
 	}
-	result, err := platforms.Import(ctx, cfg, platform, *mode)
+	var result *platforms.ImportSummary
+	if strings.TrimSpace(*zipPath) != "" {
+		result, err = platforms.ImportSkillsZip(ctx, cfg, platform, *zipPath)
+	} else {
+		result, err = platforms.Import(ctx, cfg, platform, *mode)
+	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "import %s: %v\n", platform, err)
 		return 1
+	}
+	if strings.TrimSpace(*zipPath) != "" && result.Files != nil {
+		fmt.Printf("Imported %d files (%d bytes) from %s into /skills using %s.\n",
+			result.Files.Files,
+			result.Files.Bytes,
+			*zipPath,
+			platform,
+		)
+		return 0
 	}
 	switch {
 	case result.Agent != nil && result.Files != nil:
@@ -640,6 +673,151 @@ func runExport(args []string) int {
 	return 0
 }
 
+func runBrowse(args []string) int {
+	fs := flag.NewFlagSet("browse", flag.ContinueOnError)
+	fs.SetOutput(os.Stderr)
+	printURL := fs.Bool("print-url", false, "print the dashboard URL instead of opening a browser")
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		return 2
+	}
+	route := "/"
+	if fs.NArg() > 1 {
+		fmt.Fprintln(os.Stderr, "usage: agenthub browse [--print-url] [/route]")
+		return 2
+	}
+	if fs.NArg() == 1 {
+		route = fs.Arg(0)
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	cfg, state, err := ensureLocalOwnerAccess(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "prepare local dashboard: %v\n", err)
+		return 1
+	}
+	target, err := buildBrowseURL(state.APIBase, route, cfg.Local.OwnerToken)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "build dashboard URL: %v\n", err)
+		return 1
+	}
+	if *printURL {
+		fmt.Println(target)
+		return 0
+	}
+	fmt.Printf("Opening Agent Hub dashboard:\n%s\n", target)
+	if err := openBrowser(target); err != nil {
+		fmt.Fprintf(os.Stderr, "open browser: %v\n", err)
+		fmt.Println(target)
+		return 1
+	}
+	return 0
+}
+
+func runFiles(args []string) int {
+	if len(args) == 0 || isHelpArg(args) {
+		fmt.Println("Usage: agenthub files ls [path]\n       agenthub files cat <path>")
+		return 0
+	}
+	switch args[0] {
+	case "ls":
+		return runFilesLS(args[1:])
+	case "cat":
+		return runFilesCat(args[1:])
+	default:
+		fmt.Fprintf(os.Stderr, "unknown files subcommand %q\n", args[0])
+		return 2
+	}
+}
+
+func runFilesLS(args []string) int {
+	if isHelpArg(args) {
+		fmt.Println("usage: agenthub files ls [path]")
+		return 0
+	}
+	if len(args) > 1 {
+		fmt.Fprintln(os.Stderr, "usage: agenthub files ls [path]")
+		return 2
+	}
+	targetPath := "/"
+	if len(args) == 1 {
+		targetPath = normalizeHubPath(args[0])
+	}
+	if targetPath != "/" && !strings.HasSuffix(targetPath, "/") {
+		targetPath += "/"
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "prepare local files view: %v\n", err)
+		return 1
+	}
+	var node localserver.FileNode
+	if err := localAPIGet(ctx, state.APIBase, token, "/agent/tree"+targetPath, &node); err != nil {
+		fmt.Fprintf(os.Stderr, "files ls: %v\n", err)
+		return 1
+	}
+	entries := node.Children
+	if !node.IsDir {
+		entries = []*localserver.FileNode{&node}
+	}
+	for _, entry := range entries {
+		kind := "file"
+		if entry.IsDir {
+			kind = "dir"
+		}
+		fmt.Printf("%s\t%s\n", kind, entry.Path)
+	}
+	return 0
+}
+
+func runFilesCat(args []string) int {
+	if isHelpArg(args) {
+		fmt.Println("usage: agenthub files cat <path>")
+		return 0
+	}
+	if len(args) != 1 {
+		fmt.Fprintln(os.Stderr, "usage: agenthub files cat <path>")
+		return 2
+	}
+	targetPath := normalizeHubPath(args[0])
+	if targetPath == "/" || strings.HasSuffix(targetPath, "/") {
+		fmt.Fprintln(os.Stderr, "files cat expects a file path, not a directory")
+		return 2
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "prepare local files view: %v\n", err)
+		return 1
+	}
+	var node localserver.FileNode
+	if err := localAPIGet(ctx, state.APIBase, token, "/agent/tree"+targetPath, &node); err != nil {
+		fmt.Fprintf(os.Stderr, "files cat: %v\n", err)
+		return 1
+	}
+	if node.IsDir {
+		fmt.Fprintln(os.Stderr, "files cat expects a file path, not a directory")
+		return 2
+	}
+	if node.Content == "" && !isTextLikeContent(node.MimeType) {
+		fmt.Fprintf(os.Stderr, "files cat: %s is a binary file (%s); use agenthub browse or export instead\n", node.Path, node.MimeType)
+		return 1
+	}
+	fmt.Print(node.Content)
+	if node.Content != "" && !strings.HasSuffix(node.Content, "\n") {
+		fmt.Println()
+	}
+	return 0
+}
+
 func runDaemon(args []string) int {
 	if len(args) == 0 || isHelpArg(args) {
 		fmt.Println("Usage: agenthub daemon status|stop|logs")
@@ -725,14 +903,12 @@ func runSync(args []string) int {
 			if loadErr == nil {
 				if err := localruntime.EnsureLocalDefaults(cfg); err == nil {
 					_ = saveConfig(configPath, cfg)
-					cfg, state, ensureErr := localruntime.EnsureLocalDaemon(ctx, executable, nil)
+					cfg, state, ensureErr := ensureCurrentLocalDaemon(ctx, executable, configPath)
 					if ensureErr == nil {
-						if err := ensureOwnerToken(ctx, configPath, cfg); err == nil {
-							envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_API_BASE", state.APIBase))
-							envRestore = append(envRestore, setTempEnv("AGENTHUB_API_BASE", state.APIBase))
-							envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_TOKEN", cfg.Local.OwnerToken))
-							envRestore = append(envRestore, setTempEnv("AGENTHUB_TOKEN", cfg.Local.OwnerToken))
-						}
+						envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_API_BASE", state.APIBase))
+						envRestore = append(envRestore, setTempEnv("AGENTHUB_API_BASE", state.APIBase))
+						envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_TOKEN", cfg.Local.OwnerToken))
+						envRestore = append(envRestore, setTempEnv("AGENTHUB_TOKEN", cfg.Local.OwnerToken))
 					}
 				}
 			}
@@ -830,9 +1006,39 @@ func saveConfig(path string, cfg *localruntime.CLIConfig) error {
 	return localruntime.SaveConfig(path, cfg)
 }
 
+func ensureLocalOwnerAccess(ctx context.Context) (*localruntime.CLIConfig, *localruntime.RuntimeState, error) {
+	executable, err := os.Executable()
+	if err != nil {
+		return nil, nil, err
+	}
+	configPath, cfg, err := localruntime.LoadConfig("")
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+		return nil, nil, err
+	}
+	if err := saveConfig(configPath, cfg); err != nil {
+		return nil, nil, err
+	}
+	cfg, state, err := ensureCurrentLocalDaemon(ctx, executable, configPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	return cfg, state, nil
+}
+
+func ensureLocalOwnerAccessForAPI(ctx context.Context) (*localruntime.CLIConfig, *localruntime.RuntimeState, string, error) {
+	cfg, state, err := ensureLocalOwnerAccess(ctx)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return cfg, state, cfg.Local.OwnerToken, nil
+}
+
 func ensureOwnerToken(ctx context.Context, configPath string, cfg *localruntime.CLIConfig) error {
 	if strings.TrimSpace(cfg.Local.OwnerToken) != "" {
-		return saveConfig(configPath, cfg)
+		return nil
 	}
 	hub, err := localhub.Open(ctx, cfg)
 	if err != nil {
@@ -847,6 +1053,69 @@ func ensureOwnerToken(ctx context.Context, configPath string, cfg *localruntime.
 	cfg.Local.OwnerTokenID = tokenResp.ScopedToken.ID.String()
 	cfg.Local.OwnerExpiresAt = tokenResp.ScopedToken.ExpiresAt.Format(time.RFC3339)
 	return saveConfig(configPath, cfg)
+}
+
+func ensureUsableOwnerToken(ctx context.Context, configPath string, cfg *localruntime.CLIConfig, apiBase string) error {
+	const maxAttempts = 3
+	for attempt := 0; attempt < maxAttempts; attempt++ {
+		if err := ensureOwnerToken(ctx, configPath, cfg); err != nil {
+			return err
+		}
+		if err := validateOwnerToken(ctx, apiBase, cfg.Local.OwnerToken); err == nil {
+			return nil
+		}
+		cfg.Local.OwnerToken = ""
+		cfg.Local.OwnerTokenID = ""
+		cfg.Local.OwnerExpiresAt = ""
+		if err := saveConfig(configPath, cfg); err != nil {
+			return err
+		}
+	}
+	if err := ensureOwnerToken(ctx, configPath, cfg); err != nil {
+		return err
+	}
+	return validateOwnerToken(ctx, apiBase, cfg.Local.OwnerToken)
+}
+
+func validateOwnerToken(ctx context.Context, apiBase, token string) error {
+	if strings.TrimSpace(token) == "" {
+		return errors.New("missing local owner token")
+	}
+	return localAPIGet(ctx, apiBase, token, "/agent/auth/whoami", nil)
+}
+
+func ensureCurrentLocalDaemon(ctx context.Context, executable, configPath string) (*localruntime.CLIConfig, *localruntime.RuntimeState, error) {
+	cfg, state, err := localruntime.EnsureLocalDaemon(ctx, executable, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := ensureUsableOwnerToken(ctx, configPath, cfg, state.APIBase); err == nil {
+		return cfg, state, nil
+	} else if !isLocalDaemonCompatibilityError(err) {
+		return nil, nil, err
+	}
+	if err := localruntime.StopLocalDaemon(); err != nil {
+		return nil, nil, fmt.Errorf("restart outdated local daemon: %w", err)
+	}
+	cfg, state, err = localruntime.EnsureLocalDaemon(ctx, executable, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+	if err := ensureUsableOwnerToken(ctx, configPath, cfg, state.APIBase); err != nil {
+		return nil, nil, err
+	}
+	return cfg, state, nil
+}
+
+func isLocalDaemonCompatibilityError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "404") ||
+		strings.Contains(msg, "unexpected api response") ||
+		strings.Contains(msg, "cannot unmarshal") ||
+		strings.Contains(msg, "invalid character")
 }
 
 func shouldUseLocalSyncDefaults(args []string) bool {
@@ -890,6 +1159,118 @@ func normalizeRemoteArgs(args []string) []string {
 		out = append(out, args[i])
 	}
 	return out
+}
+
+type localAPIEnvelope struct {
+	OK    bool            `json:"ok"`
+	Data  json.RawMessage `json:"data"`
+	Error struct {
+		Message string `json:"message"`
+	} `json:"error"`
+}
+
+func localAPIGet(ctx context.Context, apiBase, token, apiPath string, out any) error {
+	fullURL, err := joinAPIURL(apiBase, apiPath)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	var envelope localAPIEnvelope
+	if err := json.Unmarshal(body, &envelope); err != nil {
+		snippet := strings.TrimSpace(string(body))
+		if len(snippet) > 200 {
+			snippet = snippet[:200] + "..."
+		}
+		if snippet == "" {
+			snippet = resp.Status
+		}
+		return fmt.Errorf("unexpected API response (%s): %s", resp.Status, snippet)
+	}
+	if !envelope.OK {
+		if envelope.Error.Message != "" {
+			return errors.New(envelope.Error.Message)
+		}
+		return fmt.Errorf("unexpected API error (%s)", resp.Status)
+	}
+	if out == nil {
+		return nil
+	}
+	return json.Unmarshal(envelope.Data, out)
+}
+
+func joinAPIURL(apiBase, apiPath string) (string, error) {
+	base, err := url.Parse(strings.TrimRight(apiBase, "/"))
+	if err != nil {
+		return "", err
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + apiPath
+	return base.String(), nil
+}
+
+func buildBrowseURL(apiBase, route, token string) (string, error) {
+	if strings.TrimSpace(route) == "" {
+		route = "/"
+	}
+	if !strings.HasPrefix(route, "/") {
+		route = "/" + route
+	}
+	target, err := url.Parse(strings.TrimRight(apiBase, "/") + route)
+	if err != nil {
+		return "", err
+	}
+	query := target.Query()
+	query.Set("local_token", token)
+	target.RawQuery = query.Encode()
+	return target.String(), nil
+}
+
+func openBrowser(target string) error {
+	if browser := strings.TrimSpace(os.Getenv("BROWSER")); browser != "" {
+		return exec.Command(browser, target).Start()
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", target)
+	case "windows":
+		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
+	default:
+		cmd = exec.Command("xdg-open", target)
+	}
+	return cmd.Start()
+}
+
+func normalizeHubPath(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "/"
+	}
+	if !strings.HasPrefix(value, "/") {
+		return "/" + value
+	}
+	return value
+}
+
+func isTextLikeContent(mimeType string) bool {
+	mimeType = strings.ToLower(strings.TrimSpace(mimeType))
+	return mimeType == "" ||
+		strings.HasPrefix(mimeType, "text/") ||
+		strings.Contains(mimeType, "json") ||
+		strings.Contains(mimeType, "xml") ||
+		strings.Contains(mimeType, "javascript")
 }
 
 func setTempEnv(key, value string) func() {

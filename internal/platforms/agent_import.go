@@ -87,6 +87,30 @@ func Import(ctx context.Context, cfg *localruntime.CLIConfig, platform, rawMode 
 	return summary, nil
 }
 
+func ImportSkillsZip(ctx context.Context, cfg *localruntime.CLIConfig, platform, archivePath string) (*ImportSummary, error) {
+	adapter, err := Resolve(platform)
+	if err != nil {
+		return nil, err
+	}
+	if adapter.ID() != "claude-code" {
+		return nil, fmt.Errorf("--zip is currently supported only for claude")
+	}
+	hub, err := localhub.Open(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	defer hub.Close()
+	result, err := hub.ImportSkillsArchive(ctx, "claude-web", archivePath)
+	if err != nil {
+		return nil, err
+	}
+	return &ImportSummary{
+		Platform: adapter.ID(),
+		Mode:     ImportModeFiles,
+		Files:    result,
+	}, nil
+}
+
 func importViaAgent(ctx context.Context, cfg *localruntime.CLIConfig, platform string) (*localhub.AgentImportResult, error) {
 	if !supportsAgentMediatedImport(platform) {
 		return nil, fmt.Errorf("agent-mediated import is currently supported only for codex and claude")
@@ -267,7 +291,8 @@ Capture exact assets when directly observable, and capture derived long-term rul
 
 func agentExportSchema() map[string]interface{} {
 	return map[string]interface{}{
-		"type": "object",
+		"type":                 "object",
+		"additionalProperties": false,
 		"properties": map[string]interface{}{
 			"platform":      map[string]interface{}{"type": "string"},
 			"command":       map[string]interface{}{"type": "string"},
@@ -284,7 +309,7 @@ func agentExportSchema() map[string]interface{} {
 				"items": map[string]interface{}{"type": "string"},
 			},
 		},
-		"required": []string{"platform", "profile_rules", "memory_items", "projects", "automations", "tools", "connections", "archives", "unsupported", "notes"},
+		"required": []string{"platform", "command", "profile_rules", "memory_items", "projects", "automations", "tools", "connections", "archives", "unsupported", "notes"},
 	}
 }
 
@@ -300,7 +325,11 @@ func exportArraySchema(fields []string) map[string]interface{} {
 		case "confidence":
 			properties[field] = map[string]interface{}{"type": "number"}
 		case "metadata":
-			properties[field] = map[string]interface{}{"type": "object"}
+			properties[field] = map[string]interface{}{
+				"type":                 "object",
+				"additionalProperties": false,
+				"properties":           map[string]interface{}{},
+			}
 		default:
 			properties[field] = map[string]interface{}{"type": "string"}
 		}
@@ -308,8 +337,10 @@ func exportArraySchema(fields []string) map[string]interface{} {
 	return map[string]interface{}{
 		"type": "array",
 		"items": map[string]interface{}{
-			"type":       "object",
-			"properties": properties,
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties":           properties,
+			"required":             fields,
 		},
 	}
 }

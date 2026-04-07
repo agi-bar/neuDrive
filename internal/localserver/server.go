@@ -10,14 +10,18 @@ import (
 	"net"
 	"net/http"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/localmcp"
 	"github.com/agi-bar/agenthub/internal/localstore"
 	"github.com/agi-bar/agenthub/internal/mcp"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/agenthub/internal/skillsarchive"
+	"github.com/agi-bar/agenthub/internal/web"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -129,6 +133,7 @@ func (s *Server) routes() {
 
 	r.Post("/api/auth/login", s.localOnlyDisabled)
 	r.Post("/api/auth/register", s.localOnlyDisabled)
+	r.Post("/api/auth/logout", s.handleLogoutNoop)
 	r.Get("/api/auth/github/callback", s.localOnlyDisabled)
 	r.Post("/api/auth/github/callback", s.localOnlyDisabled)
 	r.HandleFunc("/oauth/register", s.localOnlyDisabled)
@@ -144,6 +149,18 @@ func (s *Server) routes() {
 
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
+		r.Get("/api/auth/me", s.handleAuthMe)
+		r.Get("/api/dashboard/stats", s.handleDashboardStats)
+		r.Get("/api/tree/snapshot", s.handleTreeSnapshot)
+		r.Get("/api/tree/*", s.handleTreeRead)
+		r.Put("/api/tree/*", s.handleTreeWrite)
+		r.Delete("/api/tree/*", s.handleTreeDelete)
+		r.MethodFunc(http.MethodGet, "/api/search", s.handleSearch)
+		r.MethodFunc(http.MethodPost, "/api/search", s.handleSearch)
+		r.Get("/api/memory/profile", s.handleGetProfileView)
+		r.Put("/api/memory/profile", s.handleUpdateProfile)
+		r.Get("/api/memory/conflicts", s.handleListConflicts)
+		r.Get("/api/vault/scopes", s.handleListVaultScopes)
 		r.Post("/api/tokens/sync", s.handleCreateSyncToken)
 
 		r.Get("/agent/auth/info", s.handleWhoAmI)
@@ -159,6 +176,7 @@ func (s *Server) routes() {
 		r.Put("/agent/memory/profile", s.handleUpdateProfile)
 
 		r.Group(func(r chi.Router) {
+			r.Post("/agent/import/skills", s.handleImportSkills)
 			r.Post("/agent/import/preview", s.handlePreviewBundle)
 			r.Post("/agent/import/bundle", s.handleImportBundle)
 			r.Get("/agent/export/bundle", s.handleExportBundle)
@@ -171,6 +189,8 @@ func (s *Server) routes() {
 			r.Get("/agent/sync/jobs/{id}", s.handleGetJob)
 		})
 	})
+
+	r.NotFound(web.Handler().ServeHTTP)
 }
 
 func (s *Server) requirePermission(w http.ResponseWriter, r *http.Request, minTrustLevel int, requiredScopes ...string) bool {
@@ -318,6 +338,34 @@ func (s *Server) handleCreateSyncToken(w http.ResponseWriter, r *http.Request) {
 		APIBase:   s.baseURL,
 		Scopes:    scopes,
 		Usage:     "Use this token for local bundle sync endpoints.",
+	})
+}
+
+func (s *Server) handleLogoutNoop(w http.ResponseWriter, r *http.Request) {
+	s.respondOK(w, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		s.respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	user, err := s.store.UserByID(r.Context(), userID)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	s.respondOK(w, map[string]any{
+		"id":           user.ID,
+		"slug":         user.Slug,
+		"display_name": user.DisplayName,
+		"email":        "",
+		"avatar_url":   "",
+		"bio":          "",
+		"timezone":     user.Timezone,
+		"language":     user.Language,
+		"created_at":   user.CreatedAt,
 	})
 }
 
@@ -515,6 +563,57 @@ func (s *Server) handleGetProfiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.respondOK(w, map[string]any{"profiles": profiles})
+}
+
+func (s *Server) handleGetProfileView(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadProfile) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	user, _ := s.store.UserByID(r.Context(), userID)
+	profiles, err := s.store.GetProfiles(r.Context(), userID)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	preferences := make(map[string]string, len(profiles))
+	for _, profile := range profiles {
+		preferences[profile.Category] = profile.Content
+	}
+	displayName := ""
+	if user != nil {
+		displayName = user.DisplayName
+	}
+	if value := strings.TrimSpace(preferences["display_name"]); value != "" {
+		displayName = value
+	}
+	s.respondOK(w, map[string]any{
+		"user_id":      userID,
+		"display_name": displayName,
+		"preferences":  preferences,
+	})
+}
+
+func (s *Server) handleListConflicts(w http.ResponseWriter, r *http.Request) {
+	s.respondOK(w, map[string]any{"conflicts": []any{}})
+}
+
+func (s *Server) handleListVaultScopes(w http.ResponseWriter, r *http.Request) {
+	s.respondOK(w, map[string]any{"scopes": []any{}})
+}
+
+func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		s.respondError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+	stats, err := s.store.DashboardStats(r.Context(), userID)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	s.respondOK(w, stats)
 }
 
 func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
@@ -785,6 +884,86 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, job)
 }
 
+func (s *Server) handleImportSkills(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteSkills) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+
+	if err := r.ParseMultipartForm(50 << 20); err != nil {
+		s.respondError(w, http.StatusBadRequest, fmt.Sprintf("parse multipart: %v", err))
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		s.respondError(w, http.StatusBadRequest, fmt.Sprintf("read form file: %v", err))
+		return
+	}
+	defer file.Close()
+
+	buf, err := io.ReadAll(file)
+	if err != nil {
+		s.respondError(w, http.StatusBadRequest, fmt.Sprintf("read file data: %v", err))
+		return
+	}
+	entries, err := skillsarchive.ParseZipBytes(buf, header.Filename)
+	if err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	platform := strings.TrimSpace(r.FormValue("platform"))
+	if platform == "" {
+		platform = strings.TrimSpace(r.URL.Query().Get("platform"))
+	}
+	if platform == "" {
+		platform = "skills-archive"
+	}
+	archiveName := filepath.Base(strings.TrimSpace(header.Filename))
+	if archiveName == "" {
+		archiveName = "skills.zip"
+	}
+
+	result := map[string]any{
+		"imported": 0,
+		"skipped":  0,
+		"errors":   []string{},
+	}
+	errorsList := make([]string, 0)
+
+	for _, entry := range entries {
+		target := path.Join("/skills", entry.SkillName, entry.RelPath)
+		metadata := map[string]interface{}{
+			"source_platform": platform,
+			"source_archive":  archiveName,
+			"capture_mode":    "archive",
+		}
+		contentType := skillsarchive.DetectContentType(entry.RelPath, entry.Data)
+		if skillsarchive.LooksBinary(entry.RelPath, entry.Data) {
+			if _, err := s.store.WriteBinaryEntry(r.Context(), userID, target, entry.Data, contentType, models.FileTreeWriteOptions{
+				Kind:          "skill_asset",
+				Metadata:      metadata,
+				MinTrustLevel: models.TrustLevelGuest,
+			}); err != nil {
+				errorsList = append(errorsList, fmt.Sprintf("skill %s/%s: %v", entry.SkillName, entry.RelPath, err))
+				continue
+			}
+		} else {
+			if _, err := s.store.WriteEntry(r.Context(), userID, target, string(entry.Data), contentType, models.FileTreeWriteOptions{
+				Kind:          "skill_file",
+				Metadata:      metadata,
+				MinTrustLevel: models.TrustLevelGuest,
+			}); err != nil {
+				errorsList = append(errorsList, fmt.Sprintf("skill %s/%s: %v", entry.SkillName, entry.RelPath, err))
+				continue
+			}
+		}
+		result["imported"] = result["imported"].(int) + 1
+	}
+	result["errors"] = errorsList
+	s.respondOK(w, result)
+}
+
 func decodeAndPreviewBundle(ctx context.Context, store *localstore.Store, userID uuid.UUID, body []byte) (*models.BundlePreviewResult, error) {
 	if len(strings.TrimSpace(string(body))) == 0 {
 		return nil, fmt.Errorf("preview request body is required")
@@ -880,10 +1059,7 @@ func ensurePublic(pathValue string) string {
 	if pathValue == "" {
 		return "/"
 	}
-	if strings.HasPrefix(pathValue, "/") {
-		return pathValue
-	}
-	return "/" + pathValue
+	return hubpath.NormalizePublic(pathValue)
 }
 
 func (s *Server) localOnlyDisabled(w http.ResponseWriter, r *http.Request) {

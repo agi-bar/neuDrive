@@ -116,6 +116,7 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 		// Memory
 		r.Get("/api/memory/profile", s.handleMemoryProfileGet)
 		r.Put("/api/memory/profile", s.handleMemoryProfileUpdate)
+		r.Post("/api/import/skills", s.HandleImportSkills)
 
 		// Projects
 		r.Get("/api/projects", s.handleListProjects)

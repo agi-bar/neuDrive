@@ -1,12 +1,16 @@
 package localserver
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -96,6 +100,22 @@ func TestLocalServerHealthAndDisabledOAuth(t *testing.T) {
 	if disabled.OK || disabled.Error.Message == "" {
 		t.Fatalf("unexpected disabled payload: %+v", disabled)
 	}
+
+	rootResp, err := http.Get(ts.URL + "/")
+	if err != nil {
+		t.Fatalf("GET /: %v", err)
+	}
+	defer rootResp.Body.Close()
+	if rootResp.StatusCode != http.StatusOK {
+		t.Fatalf("root status = %d", rootResp.StatusCode)
+	}
+	var rootBody bytes.Buffer
+	if _, err := rootBody.ReadFrom(rootResp.Body); err != nil {
+		t.Fatalf("read root body: %v", err)
+	}
+	if !strings.Contains(rootBody.String(), "<!doctype html>") && !strings.Contains(strings.ToLower(rootBody.String()), "<html") {
+		t.Fatalf("expected embedded frontend HTML, got %q", rootBody.String())
+	}
 }
 
 func TestLocalServerScopeGatingAndSyncFlow(t *testing.T) {
@@ -158,6 +178,119 @@ func TestLocalServerScopeGatingAndSyncFlow(t *testing.T) {
 	}
 }
 
+func TestLocalServerWebDashboardEndpoints(t *testing.T) {
+	ts, store, adminToken, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	userID, err := store.FirstUserID(ctx)
+	if err != nil {
+		t.Fatalf("FirstUserID: %v", err)
+	}
+	if err := store.UpsertProfile(ctx, userID, "preferences", "Keep responses concise.", "test"); err != nil {
+		t.Fatalf("UpsertProfile: %v", err)
+	}
+	if _, err := store.WriteScratchWithTitle(ctx, userID, "Scratch memory", "test", "scratch"); err != nil {
+		t.Fatalf("WriteScratchWithTitle: %v", err)
+	}
+	if _, err := store.CreateProject(ctx, userID, "local-dashboard"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+
+	status, me := doJSON(t, http.MethodGet, ts.URL+"/api/auth/me", adminToken, nil)
+	if status != http.StatusOK || !me.OK {
+		t.Fatalf("GET /api/auth/me failed: status=%d body=%+v", status, me)
+	}
+	if !bytes.Contains(me.Data, []byte(`"display_name":"Local Owner"`)) {
+		t.Fatalf("unexpected auth me payload: %s", string(me.Data))
+	}
+
+	status, profile := doJSON(t, http.MethodGet, ts.URL+"/api/memory/profile", adminToken, nil)
+	if status != http.StatusOK || !profile.OK {
+		t.Fatalf("GET /api/memory/profile failed: status=%d body=%+v", status, profile)
+	}
+	if !bytes.Contains(profile.Data, []byte(`"preferences":{"preferences":"Keep responses concise."}`)) {
+		t.Fatalf("unexpected profile payload: %s", string(profile.Data))
+	}
+
+	status, stats := doJSON(t, http.MethodGet, ts.URL+"/api/dashboard/stats", adminToken, nil)
+	if status != http.StatusOK || !stats.OK {
+		t.Fatalf("GET /api/dashboard/stats failed: status=%d body=%+v", status, stats)
+	}
+	for _, expected := range []string{`"files":`, `"memory":1`, `"profile":1`, `"projects":1`, `"skills":`} {
+		if !bytes.Contains(stats.Data, []byte(expected)) {
+			t.Fatalf("expected %q in stats payload: %s", expected, string(stats.Data))
+		}
+	}
+
+	status, conflicts := doJSON(t, http.MethodGet, ts.URL+"/api/memory/conflicts", adminToken, nil)
+	if status != http.StatusOK || !conflicts.OK || !bytes.Contains(conflicts.Data, []byte(`"conflicts":[]`)) {
+		t.Fatalf("unexpected conflicts payload: status=%d body=%+v", status, conflicts)
+	}
+}
+
+func TestLocalServerImportSkillsZip(t *testing.T) {
+	ts, store, _, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	userID, err := store.FirstUserID(ctx)
+	if err != nil {
+		t.Fatalf("FirstUserID: %v", err)
+	}
+	skillsToken, err := store.CreateToken(ctx, userID, "skills", []string{models.ScopeWriteSkills}, models.TrustLevelWork, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateToken skills: %v", err)
+	}
+
+	var zipBuf bytes.Buffer
+	zw := zip.NewWriter(&zipBuf)
+	writeZipEntry := func(name string, data []byte) {
+		t.Helper()
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("Create zip entry %s: %v", name, err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatalf("Write zip entry %s: %v", name, err)
+		}
+	}
+	writeZipEntry("claude-web-skill/SKILL.md", []byte("# Claude Web Skill\n\nImported from Claude Web.\n"))
+	writeZipEntry("claude-web-skill/helper.py", []byte("print('hello from zip')\n"))
+	writeZipEntry("claude-web-skill/assets/logo.png", []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0x00})
+	if err := zw.Close(); err != nil {
+		t.Fatalf("Close zip writer: %v", err)
+	}
+
+	status, env := doMultipartForm(t, http.MethodPost, ts.URL+"/agent/import/skills", skillsToken.Token, "file", "agenthub-skills.zip", zipBuf.Bytes(), map[string]string{
+		"platform": "claude-web",
+	})
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("import skills zip failed: status=%d body=%+v", status, env)
+	}
+	if !bytes.Contains(env.Data, []byte(`"imported":3`)) {
+		t.Fatalf("unexpected import payload: %s", string(env.Data))
+	}
+
+	entry, err := store.Read(ctx, userID, "/skills/claude-web-skill/SKILL.md", models.TrustLevelWork)
+	if err != nil {
+		t.Fatalf("Read SKILL.md: %v", err)
+	}
+	if !strings.Contains(entry.Content, "Imported from Claude Web") {
+		t.Fatalf("unexpected SKILL.md content: %q", entry.Content)
+	}
+	binaryEntry, err := store.Read(ctx, userID, "/skills/claude-web-skill/assets/logo.png", models.TrustLevelWork)
+	if err != nil {
+		t.Fatalf("Read logo: %v", err)
+	}
+	blob, ok, err := store.ReadBlobByEntryID(ctx, binaryEntry.ID)
+	if err != nil {
+		t.Fatalf("ReadBlobByEntryID: %v", err)
+	}
+	if !ok || len(blob) == 0 {
+		t.Fatalf("expected blob content for logo, ok=%t len=%d", ok, len(blob))
+	}
+	if binaryEntry.Metadata["capture_mode"] != "archive" || binaryEntry.Metadata["source_platform"] != "claude-web" {
+		t.Fatalf("unexpected logo metadata: %+v", binaryEntry.Metadata)
+	}
+}
+
 func doJSON(t *testing.T, method, url, token string, body []byte) (int, testEnvelope) {
 	t.Helper()
 	var reader *bytes.Reader
@@ -184,6 +317,46 @@ func doJSON(t *testing.T, method, url, token string, body []byte) (int, testEnve
 	var env testEnvelope
 	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
 		t.Fatalf("decode response: %v", err)
+	}
+	return resp.StatusCode, env
+}
+
+func doMultipartForm(t *testing.T, method, url, token, fieldName, filename string, payload []byte, fields map[string]string) (int, testEnvelope) {
+	t.Helper()
+	var body bytes.Buffer
+	writer := multipart.NewWriter(&body)
+	for key, value := range fields {
+		if err := writer.WriteField(key, value); err != nil {
+			t.Fatalf("WriteField %s: %v", key, err)
+		}
+	}
+	part, err := writer.CreateFormFile(fieldName, filename)
+	if err != nil {
+		t.Fatalf("CreateFormFile: %v", err)
+	}
+	if _, err := io.Copy(part, bytes.NewReader(payload)); err != nil {
+		t.Fatalf("Write multipart payload: %v", err)
+	}
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close multipart writer: %v", err)
+	}
+
+	req, err := http.NewRequest(method, url, &body)
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Content-Type", writer.FormDataContentType())
+	if token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("%s %s: %v", method, url, err)
+	}
+	defer resp.Body.Close()
+	var env testEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&env); err != nil {
+		t.Fatalf("decode multipart response: %v", err)
 	}
 	return resp.StatusCode, env
 }

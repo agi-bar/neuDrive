@@ -90,7 +90,14 @@ agenthub ls codex
 # 4. 把该平台的数据导入到本地 Hub
 agenthub import codex
 
-# 5. 用统一 sync 命令做 bundle 迁移 / 备份 / 恢复
+# 5. 直接打开本地 dashboard 查看导入结果
+agenthub browse
+
+# 6. 或者用 CLI 查看 Hub 里的文件与内容
+agenthub files ls /memory/profile
+agenthub files cat /memory/profile/codex-agent.md
+
+# 7. 用统一 sync 命令做 bundle 迁移 / 备份 / 恢复
 agenthub sync preview --bundle backup.ahubz
 agenthub sync push --bundle backup.ahubz
 ```
@@ -103,6 +110,10 @@ agenthub sync push --bundle backup.ahubz
   第一次本地启动时会自动在本机创建本地数据库，不再要求预先准备 Postgres
 - `agenthub sync ...` 现在是原生 Go 子命令
   不再依赖单独的 Python 同步脚本
+- `agenthub browse` 会打开本地 dashboard，并自动附带本地 owner token
+  不需要额外登录
+- `agenthub files ls|cat` 提供一个轻量级的 CLI 文件浏览入口
+  适合快速检查 profile / memory / project context 是否已经导入
 
 ### Docker 一键启动（自托管 / 官方服务模式）
 
@@ -176,7 +187,16 @@ agenthub import codex --mode all
 agenthub import claude --mode agent
 agenthub import claude --mode files
 agenthub import claude --mode all
+agenthub import claude --zip ./agenthub-skills.zip
 ```
+
+如果你是在 Claude 网页应用里导出 skills，优先做法是：
+
+1. 按 `portability/claude` 手册把 `/mnt/skills/user` 打成一个 zip
+2. 调用 Agent Hub MCP 工具 `create_skills_import_token`
+3. 用返回的 `upload_url` 把 zip 直接上传到 `/agent/import/skills`
+
+这样 Agent Hub 会在服务端自动解压，并把每个 skill 还原到 `/skills/<name>/...`。
 
 如果你是在远程 / 官方服务模式下使用，也仍然可以直接把各平台连到 `https://hub.example.com/mcp`。
 

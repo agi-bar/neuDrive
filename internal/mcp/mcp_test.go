@@ -247,7 +247,7 @@ func TestToolsList(t *testing.T) {
 		"send_message", "read_inbox",
 		"get_stats",
 		"import_skill", "save_memory", "create_project",
-		"create_sync_token",
+		"create_sync_token", "create_skills_import_token",
 	}
 
 	toolNames := make(map[string]bool)
@@ -314,6 +314,9 @@ func TestToolsListWithScopeFiltering(t *testing.T) {
 	}
 	if toolNames["create_sync_token"] {
 		t.Error("create_sync_token should not be available without admin scope")
+	}
+	if toolNames["create_skills_import_token"] {
+		t.Error("create_skills_import_token should not be available without admin scope")
 	}
 }
 

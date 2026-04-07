@@ -123,6 +123,7 @@ func (s *Server) tools() []mcp.MCPTool {
 		{Name: "save_memory", Description: "保存短期记忆", InputSchema: schema(map[string]interface{}{"memories": propArray("object", "记忆数组")}, "memories")},
 		{Name: "import_skill", Description: "导入 .skill 目录", InputSchema: schema(map[string]interface{}{"name": prop("string", "技能名"), "files": propObject("文件 map")}, "name", "files")},
 		{Name: "create_sync_token", Description: "生成短命 sync token", InputSchema: schema(map[string]interface{}{"purpose": prop("string", "用途说明"), "access": prop("string", "push/pull/both"), "ttl_minutes": prop("integer", "TTL 分钟")}, "purpose")},
+		{Name: "create_skills_import_token", Description: "生成短命 skills zip 上传 token", InputSchema: schema(map[string]interface{}{"purpose": prop("string", "用途说明"), "platform": prop("string", "来源平台"), "ttl_minutes": prop("integer", "TTL 分钟")}, "purpose")},
 	}
 	if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) {
 		filtered := make([]mcp.MCPTool, 0, len(tools))
@@ -364,6 +365,37 @@ func (s *Server) callTool(params mcp.ToolCallParams) (string, bool) {
 			"api_base":   s.BaseURL,
 			"scopes":     resp.ScopedToken.Scopes,
 			"usage":      fmt.Sprintf("agenthub sync push --bundle backup.ahubz --token %s --api-base %s", resp.Token, s.BaseURL),
+		}, "", "  ")
+		return string(payload), false
+	case "create_skills_import_token":
+		purpose, _ := params.Arguments["purpose"].(string)
+		if strings.TrimSpace(purpose) == "" {
+			return "error: purpose is required", true
+		}
+		platform, _ := params.Arguments["platform"].(string)
+		platform = strings.ToLower(strings.TrimSpace(platform))
+		if platform == "" {
+			platform = "claude-web"
+		}
+		ttlMinutes := 30
+		if raw, ok := params.Arguments["ttl_minutes"].(float64); ok {
+			ttlMinutes = int(raw)
+		}
+		if ttlMinutes < 5 || ttlMinutes > 120 {
+			return "error: ttl_minutes must be between 5 and 120", true
+		}
+		resp, err := s.Store.CreateToken(ctx, s.UserID, "skills-import:"+purpose, []string{models.ScopeWriteSkills}, models.TrustLevelWork, time.Duration(ttlMinutes)*time.Minute)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err), true
+		}
+		uploadURL := strings.TrimRight(s.BaseURL, "/") + "/agent/import/skills?platform=" + platform
+		payload, _ := json.MarshalIndent(map[string]interface{}{
+			"token":        resp.Token,
+			"expires_at":   resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
+			"api_base":     s.BaseURL,
+			"upload_url":   uploadURL,
+			"scopes":       resp.ScopedToken.Scopes,
+			"curl_example": fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/agenthub-skills.zip" "%s"`, resp.Token, platform, uploadURL),
 		}, "", "  ")
 		return string(payload), false
 	default:

@@ -30,7 +30,7 @@ Bundle Sync 支持两种文件格式：
 
 ## CLI 配置与登录
 
-`python3 tools/ahub-sync.py` 现在支持本地 profile 配置。登录一次后，后续 `preview / push / pull / resume / history / whoami` 默认都会读取当前 profile，不需要每次重复传 `--token` 和 `--api-base`。
+`agenthub sync` 现在支持本地 profile 配置。登录一次后，后续 `preview / push / pull / resume / history / whoami` 默认都会读取当前 profile，不需要每次重复传 `--token` 和 `--api-base`。
 
 默认配置文件位置：
 
@@ -63,15 +63,15 @@ Bundle Sync 支持两种文件格式：
 首次登录推荐直接走浏览器：
 
 ```bash
-python3 tools/ahub-sync.py login --api-base https://agenthub.agi.bar
-python3 tools/ahub-sync.py profiles
-python3 tools/ahub-sync.py whoami
+agenthub sync login --api-base https://agenthub.agi.bar
+agenthub sync profiles
+agenthub sync whoami
 ```
 
 也支持手工粘贴 token：
 
 ```bash
-python3 tools/ahub-sync.py login \
+agenthub sync login \
   --profile prod \
   --api-base https://agenthub.agi.bar \
   --token aht_xxx
@@ -80,8 +80,8 @@ python3 tools/ahub-sync.py login \
 多 profile 切换：
 
 ```bash
-python3 tools/ahub-sync.py use prod
-python3 tools/ahub-sync.py logout --profile staging
+agenthub sync use prod
+agenthub sync logout --profile staging
 ```
 
 ## `merge` 与 `mirror`
@@ -96,22 +96,22 @@ python3 tools/ahub-sync.py logout --profile staging
 ### 1. 本地导出
 
 ```bash
-python3 tools/ahub-sync.py export --source /path/to/skills -o backup.ahub
-python3 tools/ahub-sync.py export --source /path/to/skills --format archive -o backup.ahubz
+agenthub sync export --source /path/to/skills -o backup.ahub
+agenthub sync export --source /path/to/skills --format archive -o backup.ahubz
 ```
 
 ### 2. 预览
 
 ```bash
-python3 tools/ahub-sync.py preview --bundle backup.ahub
-python3 tools/ahub-sync.py preview --bundle backup.ahubz --mode mirror
+agenthub sync preview --bundle backup.ahub
+agenthub sync preview --bundle backup.ahubz --mode mirror
 ```
 
 ### 3. 导入
 
 ```bash
-python3 tools/ahub-sync.py push --bundle backup.ahub --transport json
-python3 tools/ahub-sync.py push --bundle backup.ahubz --transport auto
+agenthub sync push --bundle backup.ahub --transport json
+agenthub sync push --bundle backup.ahubz --transport auto
 ```
 
 `auto` 的规则：
@@ -122,8 +122,8 @@ python3 tools/ahub-sync.py push --bundle backup.ahubz --transport auto
 ### 4. 导出回本地
 
 ```bash
-python3 tools/ahub-sync.py pull -o pulled.ahub
-python3 tools/ahub-sync.py pull --format archive -o pulled.ahubz
+agenthub sync pull -o pulled.ahub
+agenthub sync pull --format archive -o pulled.ahubz
 ```
 
 ### 5. 继续未完成上传
@@ -135,7 +135,7 @@ python3 tools/ahub-sync.py pull --format archive -o pulled.ahubz
 继续时：
 
 ```bash
-python3 tools/ahub-sync.py resume --bundle backup.ahubz
+agenthub sync resume --bundle backup.ahubz
 ```
 
 前提是你重新选择原始 `.ahubz` 文件，而不是一个新的 archive。
@@ -143,14 +143,14 @@ python3 tools/ahub-sync.py resume --bundle backup.ahubz
 ### 6. 查看历史
 
 ```bash
-python3 tools/ahub-sync.py history
+agenthub sync history
 ```
 
 ### 7. 比对结果
 
 ```bash
-python3 tools/ahub-sync.py diff --left backup.ahubz --right pulled.ahubz
-python3 tools/ahub-sync.py diff --left backup.ahub --right pulled.ahubz --format json
+agenthub sync diff --left backup.ahubz --right pulled.ahubz
+agenthub sync diff --left backup.ahub --right pulled.ahubz --format json
 ```
 
 退出码：
@@ -164,7 +164,7 @@ python3 tools/ahub-sync.py diff --left backup.ahub --right pulled.ahubz --format
 可以按 domain 和 skill 过滤：
 
 ```bash
-python3 tools/ahub-sync.py export \
+agenthub sync export \
   --source /path/to/skills \
   --format archive \
   --include-domain skills \

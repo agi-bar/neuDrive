@@ -37,8 +37,8 @@
 
 ```bash
 curl -fsS "$BASE_URL/api/health"
-python3 tools/ahub-sync.py --help
-python3 tools/ahub-sync.py diff --help
+agenthub sync --help
+agenthub sync diff --help
 ```
 
 打开 Web 管理后台的数据同步页面，确认：
@@ -61,12 +61,12 @@ python3 tools/ahub-sync.py diff --help
 命令模板：
 
 ```bash
-python3 tools/ahub-sync.py login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
-python3 tools/ahub-sync.py export --source /path/to/fixture --format archive -o fixture.ahubz
-python3 tools/ahub-sync.py preview --bundle fixture.ahubz
-python3 tools/ahub-sync.py push --bundle fixture.ahubz --transport auto
-python3 tools/ahub-sync.py pull --format archive -o fixture-pulled.ahubz
-python3 tools/ahub-sync.py diff --left fixture.ahubz --right fixture-pulled.ahubz
+agenthub sync login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
+agenthub sync export --source /path/to/fixture --format archive -o fixture.ahubz
+agenthub sync preview --bundle fixture.ahubz
+agenthub sync push --bundle fixture.ahubz --transport auto
+agenthub sync pull --format archive -o fixture-pulled.ahubz
+agenthub sync diff --left fixture.ahubz --right fixture-pulled.ahubz
 ```
 
 通过标准：
@@ -102,7 +102,7 @@ python3 tools/ahub-sync.py diff --left fixture.ahubz --right fixture-pulled.ahub
 CLI 方式：
 
 ```bash
-python3 tools/ahub-sync.py resume --bundle real.ahubz
+agenthub sync resume --bundle real.ahubz
 ```
 
 通过标准：

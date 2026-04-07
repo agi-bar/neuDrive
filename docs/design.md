@@ -6,6 +6,83 @@
 
 ---
 
+## 当前产品面：本地优先 + 可选远端服务
+
+从产品表面上，Agent Hub 现在收口成两层：
+
+1. **`agenthub` 官方 CLI**
+   - 默认是本地优先工具
+   - 自动托管本地 Hub daemon
+   - 管理本地 agent 平台接入、bundle sync、daemon 状态和 remote profiles
+2. **Agent Hub Server**
+   - 可以是官方服务 `https://agenthub.agi.bar`
+   - 也可以是用户自己启动的 `agenthub server`
+
+当前推荐心智：
+
+- 日常用户先装 `agenthub`
+- `agenthub connect <platform>` 把本地 Claude/Codex/Gemini/Cursor 连到本地 Hub
+- `agenthub import <platform>` / `agenthub export <platform>` 处理平台数据，其中 Codex 默认优先走 agent-mediated 导入
+- `agenthub sync ...` 处理 bundle 迁移、备份、恢复
+- 只有在明确需要时，才去 `agenthub remote login official --url https://agenthub.agi.bar`
+
+### 平台接入的三层模型
+
+Agent Hub 平台接入现在固定分三层：
+
+1. **MCP 层**
+   - 提供 Agent Hub 的全量能力面
+   - 包括 tree/files、skills、profile/memory、projects、sync token 等现有工具
+2. **入口层**
+   - 平台原生入口统一命名为 `agenthub`
+   - Claude Code：`/agenthub <subcommand>`
+   - Codex：`$agenthub <subcommand>` 或 `/skills` 选择 `agenthub`
+3. **技能层**
+   - 系统级 umbrella skill：`/skills/agenthub/SKILL.md`
+   - 平台本地安装物只是入口和步骤说明，不复制 MCP 功能
+
+这意味着：**MCP 是完整能力面，`agenthub` skill / command 是平台内入口面。**
+
+### 运行时模型
+
+```mermaid
+flowchart LR
+    CLI["agenthub CLI"] --> Ensure["ensure local daemon"]
+    Ensure --> Local["local Agent Hub daemon"]
+    CLI --> Platforms["Claude / Codex / Gemini / Cursor adapters"]
+    CLI --> Sync["bundle sync"]
+    Sync --> Local
+    CLI --> Remote["optional remote profiles"]
+    Remote --> Hosted["agenthub.agi.bar or self-hosted server"]
+    Platforms --> Local
+```
+
+### 当前实现状态
+
+- `agenthub server`
+  作为统一服务端入口，取代官方文档里的 `cmd/server` 直接用法
+- `agenthub mcp stdio`
+  作为高级兼容模式保留，不再是主路径
+- `agenthub sync ...`
+  已并入统一 CLI 表面
+- `agenthub platform ls/show/connect/disconnect/import/export`
+  已提供首批本地 CLI 平台适配器：`claude-code`、`codex`、`gemini-cli`、`cursor-agent`
+- `agenthub remote ...`
+  用于显式登录和切换远端 Hub profile
+- 本地 daemon 默认使用 SQLite
+  本地首次启动会自动 bootstrap local owner 和本地数据库路径
+- 远端 / 官方服务模式继续以 Postgres 为主
+
+### 当前限制
+
+SQLite 本地优先主链路已经接进来了，但仍有两个明确边界：
+
+- GitHub OAuth / 对外 OAuth provider / 依赖公网回调的链路，在本地 SQLite 模式下显式禁用并提示切换到远端/公网服务模式
+
+这意味着：本地日常使用、平台接入、bundle sync、本地 daemon 自动托管已经可用；而公网 OAuth 型能力仍然属于远端/官方服务模式。
+
+---
+
 ## 零、战略定位：这件事在历史坐标里的位置
 
 ### 0.1 每一次计算范式转移，都会产生一个信任层

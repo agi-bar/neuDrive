@@ -104,14 +104,15 @@ jobs:
       - run: python -m pip install 'httpx>=0.25.0'
       - run: npx playwright install --with-deps chromium
         working-directory: web
-      - run: go run ./cmd/server > /tmp/agenthub-server.log 2>&1 &
+      - run: go build -o /tmp/agenthub-server ./cmd/server
+      - run: /tmp/agenthub-server > /tmp/agenthub-server.log 2>&1 &
         env:
           DATABASE_URL: postgres://agenthub:test@localhost:5432/agenthub_test?sslmode=disable
           JWT_SECRET: test-jwt-secret
           VAULT_MASTER_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
           PORT: '8080'
       - run: |
-          for i in $(seq 1 30); do
+          for i in $(seq 1 60); do
             if curl -fsS http://localhost:8080/api/health >/dev/null; then
               exit 0
             fi

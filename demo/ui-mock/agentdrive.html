@@ -1,0 +1,421 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AgentDrive · 文件（OneDrive风格原型）</title>
+  <style>
+    :root{
+      --bg:#f8f9fa;--surface:#fff;--border:#e2e6ea;--border-light:#f0f1f3;
+      --text:#1a1a1a;--muted:#6b7280;--primary:#2563eb;--primary-hover:#1d4ed8;
+      --danger:#dc2626;--success:#16a34a
+    }
+    *{box-sizing:border-box} html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif}
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border);padding:16px;position:sticky;top:0;height:100vh}
+    .brand{font-weight:600}
+    .nav-title{margin-top:12px;color:var(--muted)}
+    .main{flex:1;min-width:0}
+    .container{max-width:1200px;margin:0 auto;padding:16px 24px}
+
+    .toolbar{display:flex;align-items:center;gap:8px;margin-bottom:10px}
+    .crumbs{font-size:12px;color:var(--muted)}
+    .crumbs button{border:none;background:none;color:var(--primary);cursor:pointer}
+    .spacer{flex:1}
+    .search input{padding:6px 10px;border:1px solid var(--border);border-radius:6px;width:320px}
+    .btn{padding:7px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface);cursor:pointer}
+    .btn:hover{background:#f6f7f9}
+    .btn-primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .btn-primary:hover{background:var(--primary-hover)}
+    .btn-danger{color:var(--danger);border-color:var(--danger);background:transparent}
+    .btn-danger:hover{background:#fef2f2}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+
+    .ns-chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+    .chip{border:1px solid var(--border);background:#fafbfc;color:#475569;border-radius:999px;padding:4px 10px;font-size:12px;cursor:pointer}
+    .chip.active{background:#eef4ff;color:var(--primary);border-color:#dbe7ff}
+
+    .layout{display:grid;grid-template-columns: 1fr 340px;gap:12px;align-items:start}
+    .table{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden}
+    .thead,.trow{display:grid;grid-template-columns: 36px 1fr 120px 150px 160px;align-items:center}
+    .thead{background:#fafbfc;border-bottom:1px solid var(--border);font-size:12px;font-weight:600;color:var(--muted)}
+    .tcell{padding:10px 12px}
+    .trow{border-top:1px solid var(--border-light)}
+    .trow:hover{background:#f6f8ff}
+    .trow.selected{background:#eef4ff}
+    .name{display:flex;align-items:center;gap:8px;min-width:0}
+    .name .label{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .ns-badge{display:inline-block;border:1px solid #eef0f2;background:#f9fafb;color:#475569;border-radius:999px;padding:2px 8px;font-size:12px}
+    .lock{margin-left:6px;color:#9ca3af}
+    .actions{visibility:hidden;margin-left:8px;display:inline-flex;gap:6px}
+    .trow:hover .actions{visibility:visible}
+    .empty{padding:24px;color:var(--muted);text-align:center}
+
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:8px}
+    .card .card-header{display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-bottom:1px solid var(--border-light)}
+    .card .card-body{padding:12px}
+    .meta{color:var(--muted);font-size:12px}
+    pre{white-space:pre-wrap;word-break:break-word}
+
+    .banner{padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:8px;margin:10px 0;color:#92400e}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">AgentDrive</div>
+      <div class="nav-title">文件（统一入口）</div>
+      <div style="margin-top:12px;color:var(--muted);font-size:12px">方向：OneDrive/Dropbox 基本范式</div>
+    </aside>
+    <main class="main">
+      <div class="container">
+        <div class="toolbar">
+          <div class="crumbs" id="crumbs"></div>
+          <div class="spacer"></div>
+          <div class="search"><input id="searchBox" placeholder="搜索（支持命名空间/扩展名关键字）" /></div>
+          <button class="btn" id="newDirBtn">新建文件夹</button>
+          <button class="btn" id="newFileBtn">新建文件</button>
+          <input id="uploadInput" type="file" accept=".md,.txt" style="display:none" />
+          <button class="btn" id="uploadBtn">上传文本</button>
+          <button class="btn btn-danger" id="deleteBtn" disabled>删除</button>
+        </div>
+
+        <div class="ns-chips" id="nsChips"></div>
+
+        <div class="banner">部分系统路径为只读（🔒）。遇到写入失败时，建议另存到 <code>/notes</code>、<code>/projects/&lt;name&gt;</code> 或你的私有 <code>/skills/&lt;bundle&gt;</code>。</div>
+
+        <div class="layout">
+          <div class="table" id="table"></div>
+          <div class="card" id="previewPanel" style="display:none">
+            <div class="card-header">
+              <div id="previewTitle" style="font-weight:600">预览</div>
+              <div>
+                <button class="btn" id="openEditorBtn">在编辑器打开</button>
+                <button class="btn" id="closePreviewBtn">关闭</button>
+              </div>
+            </div>
+            <div class="card-body">
+              <div class="meta" id="previewMeta"></div>
+              <div id="previewContent" style="margin-top:8px"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+  // --- 假数据：Agent 概念 → 文件树映射 ---
+  const NOW = new Date()
+  function daysAgo(n){ const d=new Date(NOW); d.setDate(d.getDate()-n); return d.toISOString() }
+  /** 文件节点模型（精简）：
+   * { path, name, is_dir, namespace, kind, size, updated_at, readOnly, content }
+   */
+  const DATA = []
+  // 生成 Projects（3 个项目，每个含 context.md / log.jsonl / notes.md / assets/ 文件）
+  ;(['alpha','bravo','charlie']).forEach((p,idx)=>{
+    DATA.push({ path:`/projects/${p}`, name:p, is_dir:true, namespace:'projects', updated_at:daysAgo(idx) })
+    DATA.push({ path:`/projects/${p}/context.md`, name:'context.md', is_dir:false, namespace:'projects', kind:'project_context', size:2200+idx*30, updated_at:daysAgo(idx), content:`# ${p.toUpperCase()} 项目\n- 目标：对齐 OneDrive 范式\n- 范围：文件浏览/搜索/预览` })
+    DATA.push({ path:`/projects/${p}/log.jsonl`, name:'log.jsonl', is_dir:false, namespace:'projects', kind:'project_log', size:5200+idx*100, updated_at:daysAgo(idx+1), content:`{"ts":"${daysAgo(idx)}","msg":"init"}\n` })
+    DATA.push({ path:`/projects/${p}/notes.md`, name:'notes.md', is_dir:false, namespace:'projects', size:900+idx*50, updated_at:daysAgo(idx+2), content:`- [ ] ${p} TODO A\n- [ ] ${p} TODO B` })
+    DATA.push({ path:`/projects/${p}/assets`, name:'assets', is_dir:true, namespace:'projects', updated_at:daysAgo(idx+2) })
+    DATA.push({ path:`/projects/${p}/assets/spec.txt`, name:'spec.txt', is_dir:false, namespace:'projects', size:600, updated_at:daysAgo(idx+3), content:`Spec of ${p}` })
+  })
+
+  // 生成 Skills Bundles（4 个 bundle，含 SKILL.md + prompt.md），其中 1 个只读
+  ;([
+    {bundle:'qa-bot', name:'QA Bot', ro:false},
+    {bundle:'translator', name:'Translator', ro:true},
+    {bundle:'planner', name:'Task Planner', ro:false},
+    {bundle:'summarizer', name:'Summarizer', ro:false},
+  ]).forEach((s,idx)=>{
+    const base=`/skills/${s.bundle}`
+    DATA.push({ path:base, name:s.bundle, is_dir:true, namespace:'skills', updated_at:daysAgo(1+idx), readOnly:!!s.ro })
+    DATA.push({ path:`${base}/SKILL.md`, name:'SKILL.md', is_dir:false, namespace:'skills', kind:'skill', size:3200+idx*120, updated_at:daysAgo(1+idx), readOnly:!!s.ro, content:`---\nname: ${s.name}\n---\n# ${s.name}\n说明与使用…` })
+    DATA.push({ path:`${base}/assets`, name:'assets', is_dir:true, namespace:'skills', updated_at:daysAgo(2+idx), readOnly:!!s.ro })
+    DATA.push({ path:`${base}/assets/prompt.md`, name:'prompt.md', is_dir:false, namespace:'skills', size:1200+idx*40, updated_at:daysAgo(2+idx), readOnly:!!s.ro, content:'You are a helpful assistant…' })
+  })
+
+  // Memory（profile + 10 条 scratch 笔记）
+  DATA.push({ path:'/memory/profile', name:'profile', is_dir:true, namespace:'memory', updated_at:daysAgo(2) })
+  DATA.push({ path:'/memory/profile/display_name.md', name:'display_name.md', is_dir:false, namespace:'memory', kind:'memory_profile', size:40, updated_at:daysAgo(2), content:'AgentDrive User' })
+  DATA.push({ path:'/memory/scratch', name:'scratch', is_dir:true, namespace:'memory', updated_at:daysAgo(3) })
+  for(let i=1;i<=10;i++){
+    DATA.push({ path:`/memory/scratch/note-${i}.md`, name:`note-${i}.md`, is_dir:false, namespace:'memory', kind:'memory_scratch', size:150+i*5, updated_at:daysAgo(3+Math.floor(i/3)), content:`快速笔记 ${i}\n- 事项 A\n- 事项 B` })
+  }
+
+  // Devices（2 台设备）
+  ;(['printer','camera']).forEach((d,idx)=>{
+    DATA.push({ path:`/devices/${d}`, name:d, is_dir:true, namespace:'devices', updated_at:daysAgo(4+idx) })
+    DATA.push({ path:`/devices/${d}/SKILL.md`, name:'SKILL.md', is_dir:false, namespace:'devices', kind:'device_skill', size:900, updated_at:daysAgo(4+idx), content:`# ${d} Skill` })
+    DATA.push({ path:`/devices/${d}/config.json`, name:'config.json', is_dir:false, namespace:'devices', size:400, updated_at:daysAgo(4+idx), content:`{"device":"${d}","host":"10.0.0.${20+idx}"}` })
+  })
+
+  // Roles（2 个角色）
+  ;(['admin','editor']).forEach((r,idx)=>{
+    DATA.push({ path:`/roles/${r}`, name:r, is_dir:true, namespace:'roles', updated_at:daysAgo(5+idx) })
+    DATA.push({ path:`/roles/${r}/SKILL.md`, name:'SKILL.md', is_dir:false, namespace:'roles', kind:'role_skill', size:1200, updated_at:daysAgo(5+idx), content:`# ${r} Role` })
+  })
+
+  // Inbox（8 条）
+  DATA.push({ path:'/inbox', name:'inbox', is_dir:true, namespace:'inbox', updated_at:daysAgo(1) })
+  for(let i=1;i<=8;i++){
+    DATA.push({ path:`/inbox/2026-04-0${(i%9)+1}-msg-${i}.json`, name:`2026-04-0${(i%9)+1}-msg-${i}.json`, is_dir:false, namespace:'inbox', size:500+i*10, updated_at:daysAgo(1+Math.floor(i/2)), content:`{"from":"system","id":${i}}` })
+  }
+
+  // Notes（12 条）与 Root 散文件（3 条）
+  DATA.push({ path:'/notes', name:'notes', is_dir:true, namespace:'notes', updated_at:daysAgo(0) })
+  for(let i=1;i<=12;i++){
+    DATA.push({ path:`/notes/todo-${i}.md`, name:`todo-${i}.md`, is_dir:false, namespace:'notes', size:280+i*10, updated_at:daysAgo(Math.floor(i/2)), content:`- [ ] 任务 ${i}\n- [ ] 另一条` })
+  }
+  ;(['readme.md','changelog.md','roadmap.md']).forEach((f,idx)=>{
+    DATA.push({ path:`/${f}`, name:f, is_dir:false, namespace:'root', size:800+idx*200, updated_at:daysAgo(7+idx), content:`# ${f}` })
+  })
+
+  // 确保顶层命名空间目录可见（根目录不再空）
+  ;(['projects','skills','memory','devices','roles']).forEach((seg,i)=>{
+    if(!DATA.find(n=>n.path===`/${seg}`)){
+      DATA.push({ path:`/${seg}`, name:seg, is_dir:true, namespace:seg, updated_at:daysAgo(1+i) })
+    }
+  })
+
+  // --- 内存文件系统 ---
+  const byPath = new Map(DATA.map(n=>[n.path,{...n}]))
+  function listChildren(dir){
+    const norm = dir.endsWith('/')?dir.slice(0,-1):dir
+    const out=[]
+    for(const n of byPath.values()){
+      const parent = n.path.slice(0, n.path.lastIndexOf('/')) || '/'
+      if(parent===norm) out.push(n)
+    }
+    out.sort((a,b)=> a.is_dir===b.is_dir ? a.name.localeCompare(b.name) : (a.is_dir? -1:1))
+    return out
+  }
+  function ensureDir(p){ if(!byPath.has(p)) byPath.set(p,{ path:p, name:p.split('/').pop()||'/', is_dir:true, namespace:nsOf(p), updated_at:new Date().toISOString() }) }
+  function nsOf(p){
+    const seg = p.replace(/^\/+/, '').split('/')[0] || ''
+    return ['projects','skills','memory','devices','roles','inbox','notes'].includes(seg) ? seg : (seg? 'root':'root')
+  }
+
+  // --- 状态 ---
+  let currentPath = '/'
+  let filterNS = 'all'
+  let searchQuery = ''
+  let sortKey = 'updated_at' // name|updated_at|size
+  let sortDir = 'desc'
+  let selected = new Set()
+  let previewPath = ''
+  let renamingPath = ''
+
+  // --- 工具 ---
+  function fmtTime(v){ try{ return new Date(v).toLocaleString('zh-CN') }catch{ return v||'-' } }
+  function fmtSize(n){ if(!n||n<=0) return '-'; const u=['B','KB','MB','GB']; let i=0,v=n; while(v>=1024 && i<u.length-1){v/=1024;i++} return v.toFixed(1)+' '+u[i] }
+  function basename(p){ const s=p.split('/'); return s[s.length-1]||'/' }
+  function parentOf(p){ if(p==='/' ) return '/'; const i=p.lastIndexOf('/'); return i<=0? '/': p.slice(0,i) }
+  function isMd(n){ return /\.md$/i.test(n.name) }
+
+  // --- 渲染 ---
+  function renderCrumbs(){
+    const el = document.getElementById('crumbs'); el.innerHTML=''
+    const parts = currentPath.replace(/^\/+/, '').split('/').filter(Boolean)
+    const segs = ['/', ...parts.map((_,i)=> '/'+parts.slice(0,i+1).join('/'))]
+    const labels = ['根目录', ...parts]
+    segs.forEach((seg,i)=>{
+      if(i>0) el.appendChild(document.createTextNode(' / '))
+      const b = document.createElement('button'); b.textContent = labels[i]; b.onclick=()=>navigateTo(seg)
+      el.appendChild(b)
+    })
+  }
+
+  function renderChips(){
+    const wrap = document.getElementById('nsChips'); wrap.innerHTML=''
+    const items = [
+      ['all','全部'], ['projects','Projects'], ['skills','Skills'], ['memory','Memory'], ['devices','Devices'], ['roles','Roles'], ['inbox','Inbox'], ['notes','Notes'], ['root','Root']
+    ]
+    items.forEach(([key,label])=>{
+      const c = document.createElement('div'); c.className='chip'+(filterNS===key?' active':''); c.textContent=label
+      c.onclick=()=>{ filterNS=key; refresh() }
+      wrap.appendChild(c)
+    })
+  }
+
+  function visibleRows(){
+    // 搜索模式：全局过滤；否则列出当前目录 children
+    let rows=[]
+    if(searchQuery.trim()){
+      const q = searchQuery.trim().toLowerCase()
+      for(const n of byPath.values()){
+        if(n.is_dir) continue
+        if(filterNS!=='all' && n.namespace!==filterNS) continue
+        const hay = (n.name+' '+n.path+' '+(n.kind||'')).toLowerCase()
+        if(hay.includes(q)) rows.push(n)
+      }
+    }else{
+      const kids = listChildren(currentPath)
+      rows = kids.filter(n=> filterNS==='all' || n.namespace===filterNS)
+    }
+    const mul = (sortDir==='asc'?1:-1)
+    rows.sort((a,b)=>{
+      if(a.is_dir!==b.is_dir) return a.is_dir? -1:1
+      if(sortKey==='name') return a.name.localeCompare(b.name)*mul
+      if(sortKey==='size') return ((a.size||0)-(b.size||0))*mul
+      const ta=new Date(a.updated_at||0).getTime(), tb=new Date(b.updated_at||0).getTime();
+      return (ta-tb)*mul
+    })
+    return rows
+  }
+
+  function renderTable(){
+    const host = document.getElementById('table'); host.innerHTML=''
+    const thead = document.createElement('div'); thead.className='thead'
+    const heads = ['','名称','大小','命名空间','最近修改']
+    heads.forEach((h,i)=>{
+      const c=document.createElement('div'); c.className='tcell'; c.textContent=h
+      if(i>0){ c.style.cursor='pointer'; c.onclick=()=>toggleSort(['name','size','namespace','updated_at'][i-1]||'name') }
+      thead.appendChild(c)
+    })
+    host.appendChild(thead)
+
+    const rows = visibleRows()
+    if(rows.length===0){ const e=document.createElement('div'); e.className='empty'; e.textContent= searchQuery? '无搜索结果' : '该目录暂无内容'; host.appendChild(e); return }
+
+    rows.forEach(n=>{
+      const row = document.createElement('div'); row.className='trow'+(selected.has(n.path)?' selected':'')
+      row.ondblclick=()=>{ if(n.is_dir) navigateTo(n.path); else openPreview(n.path) }
+
+      const c0=document.createElement('div'); c0.className='tcell'
+      const cb=document.createElement('input'); cb.type='checkbox'; cb.checked=selected.has(n.path)
+      cb.onchange=(e)=>{ if(e.target.checked) selected.add(n.path); else selected.delete(n.path); updateToolbar(); renderTable() }
+      c0.appendChild(cb)
+
+      const c1=document.createElement('div'); c1.className='tcell name'
+      const icon=document.createElement('span'); icon.textContent=n.is_dir? '📁' : (isMd(n)? '📝':'📄')
+      const label=document.createElement('span'); label.className='label'; label.textContent=n.name
+      c1.appendChild(icon); c1.appendChild(label)
+      if(n.readOnly){ const lock=document.createElement('span'); lock.className='lock'; lock.textContent='🔒'; c1.appendChild(lock) }
+      const act=document.createElement('span'); act.className='actions'
+      if(!n.is_dir){ const aOpen=document.createElement('button'); aOpen.className='btn'; aOpen.textContent='预览'; aOpen.onclick=(e)=>{e.stopPropagation(); openPreview(n.path)}; act.appendChild(aOpen) }
+      const aRen=document.createElement('button'); aRen.className='btn'; aRen.textContent='重命名'; aRen.onclick=(e)=>{e.stopPropagation(); beginRename(n.path)}; act.appendChild(aRen)
+      const aDel=document.createElement('button'); aDel.className='btn'; aDel.textContent='删除'; aDel.onclick=(e)=>{e.stopPropagation(); doDelete([n.path])}; act.appendChild(aDel)
+      c1.appendChild(act)
+
+      const c2=document.createElement('div'); c2.className='tcell'; c2.textContent= n.is_dir? '-' : fmtSize(n.size)
+      const c3=document.createElement('div'); c3.className='tcell'; const b=document.createElement('span'); b.className='ns-badge'; b.textContent=n.namespace; c3.appendChild(b)
+      const c4=document.createElement('div'); c4.className='tcell'; c4.textContent=fmtTime(n.updated_at)
+
+      row.onclick=(e)=>{ // 选中/多选
+        const multi = e.metaKey||e.ctrlKey
+        if(!multi) selected.clear()
+        if(selected.has(n.path)) selected.delete(n.path); else selected.add(n.path)
+        updateToolbar(); renderTable()
+      }
+
+      row.appendChild(c0); row.appendChild(c1); row.appendChild(c2); row.appendChild(c3); row.appendChild(c4)
+      host.appendChild(row)
+    })
+  }
+
+  function renderPreview(){
+    const panel=document.getElementById('previewPanel')
+    if(!previewPath){ panel.style.display='none'; return }
+    const n = byPath.get(previewPath); if(!n || n.is_dir){ panel.style.display='none'; return }
+    panel.style.display='block'
+    document.getElementById('previewTitle').textContent = '预览：'+n.name
+    document.getElementById('previewMeta').textContent = `${n.path} · ${fmtSize(n.size)} · ${fmtTime(n.updated_at)} · ${n.kind||'file'}`
+    const cont = document.getElementById('previewContent'); cont.innerHTML=''
+    if(isMd(n)){
+      // 极简“Markdown”渲染：只处理#标题与换行
+      const html = (n.content||'').replace(/^# (.*)$/gm,'<h3>$1</h3>').replace(/\n/g,'<br/>')
+      const div=document.createElement('div'); div.innerHTML=html; cont.appendChild(div)
+    } else if((n.content||'').length){
+      const pre=document.createElement('pre'); pre.textContent=n.content; cont.appendChild(pre)
+    } else {
+      const p=document.createElement('div'); p.className='meta'; p.textContent='该文件暂无可预览内容'; cont.appendChild(p)
+    }
+  }
+
+  function updateToolbar(){
+    document.getElementById('deleteBtn').disabled = selected.size===0
+  }
+
+  // --- 操作 ---
+  function navigateTo(p){ currentPath=p; previewPath=''; selected.clear(); renderCrumbs(); renderTable(); renderPreview(); updateToolbar() }
+  function toggleSort(key){ if(sortKey===key) sortDir = (sortDir==='asc'?'desc':'asc'); else {sortKey=key; sortDir='asc'}; renderTable() }
+  function openPreview(p){ previewPath=p; renderPreview() }
+
+  function beginRename(p){
+    if(!byPath.has(p)) return
+    const orig = byPath.get(p)
+    const name = prompt('重命名为（含扩展名）：', orig.name)
+    if(!name || name===orig.name) return
+    const parent = parentOf(p)
+    const np = (parent.endsWith('/')?parent:parent+'/') + name
+    if(byPath.has(np)) return alert('目标已存在：'+np)
+    if(orig.readOnly) return alert('只读路径，无法重命名')
+    byPath.delete(p); byPath.set(np,{...orig, path:np, name, updated_at:new Date().toISOString()})
+    // 同步其孩子（若目录）
+    if(orig.is_dir){ for(const n of [...byPath.values()]) if(n.path.startsWith(p+'/')){ const np2=np+n.path.slice(p.length); byPath.delete(n.path); byPath.set(np2,{...n, path:np2}) } }
+    if(previewPath===p) previewPath=np
+    selected.delete(p); selected.add(np)
+    navigateTo(parent)
+  }
+
+  function doDelete(paths){
+    if(paths.length===0) return
+    if(!confirm('确定删除以下 '+paths.length+' 个条目？\n'+paths.join('\n'))) return
+    for(const p of paths){ const n=byPath.get(p); if(!n) continue; if(n.readOnly){ alert('只读路径禁止删除：'+p); continue } byPath.delete(p); if(n.is_dir){ for(const q of [...byPath.keys()]) if(q.startsWith(p+'/')) byPath.delete(q) } }
+    selected.clear(); previewPath=''; renderTable(); renderPreview(); updateToolbar()
+  }
+
+  function newDir(){
+    const name = prompt('新建文件夹名称：','新建文件夹'); if(!name) return
+    const p = (currentPath.endsWith('/')?currentPath:currentPath+'/') + name
+    if(byPath.has(p)) return alert('已存在：'+p)
+    ensureDir(currentPath); byPath.set(p,{ path:p, name, is_dir:true, namespace:nsOf(p), updated_at:new Date().toISOString() })
+    navigateTo(currentPath)
+  }
+  function newFile(){
+    const name = prompt('新建文件名称：','新建文档.md'); if(!name) return
+    const p = (currentPath.endsWith('/')?currentPath:currentPath+'/') + name
+    if(byPath.has(p)) return alert('已存在：'+p)
+    byPath.set(p,{ path:p, name, is_dir:false, namespace:nsOf(p), size:0, updated_at:new Date().toISOString(), content: (name.endsWith('.md')?'# 新文档\n':'') })
+    navigateTo(currentPath); openPreview(p)
+  }
+  function uploadText(file){
+    if(!file) return; if(!/\.(md|txt)$/i.test(file.name)) return alert('仅支持 .md/.txt')
+    const reader=new FileReader(); reader.onload=()=>{
+      const text=String(reader.result||''); const p=(currentPath.endsWith('/')?currentPath:currentPath+'/')+file.name
+      byPath.set(p,{ path:p, name:file.name, is_dir:false, namespace:nsOf(p), size:text.length, updated_at:new Date().toISOString(), content:text })
+      navigateTo(currentPath); openPreview(p)
+    }; reader.readAsText(file)
+  }
+
+  // --- 事件绑定 ---
+  document.getElementById('newDirBtn').onclick=newDir
+  document.getElementById('newFileBtn').onclick=newFile
+  document.getElementById('uploadBtn').onclick=()=>document.getElementById('uploadInput').click()
+  document.getElementById('uploadInput').onchange=(e)=>{ const f=e.target.files&&e.target.files[0]; if(f) uploadText(f); e.target.value='' }
+  document.getElementById('deleteBtn').onclick=()=>doDelete([...selected])
+  document.getElementById('closePreviewBtn').onclick=()=>{ previewPath=''; renderPreview() }
+  document.getElementById('openEditorBtn').onclick=()=> alert('演示模式：此处将跳转到编辑器路由 /data/files/edit/<path>')
+  document.getElementById('searchBox').onkeydown=(e)=>{
+    if(e.key==='Enter'){ searchQuery=e.target.value; renderTable() }
+    if(e.key==='Escape'){ e.target.value=''; searchQuery=''; renderTable() }
+  }
+
+  // 键盘快捷键
+  window.addEventListener('keydown', (e)=>{
+    if(e.key==='Escape'){ selected.clear(); updateToolbar(); renderTable() }
+    if(e.key==='Delete' && selected.size>0){ e.preventDefault(); doDelete([...selected]) }
+    if(e.key==='F2' && selected.size===1){ e.preventDefault(); beginRename([...selected][0]) }
+    if(e.key==='Enter' && selected.size===1){ const p=[...selected][0]; const n=byPath.get(p); if(!n) return; (n.is_dir? navigateTo(p) : openPreview(p)) }
+    if((e.ctrlKey||e.metaKey) && e.key.toLowerCase()==='a'){ e.preventDefault(); selected.clear(); const rows=visibleRows(); rows.forEach(n=>selected.add(n.path)); updateToolbar(); renderTable() }
+  })
+
+  // 初始渲染
+  function refresh(){ renderCrumbs(); renderChips(); renderTable(); renderPreview(); updateToolbar() }
+  refresh()
+  </script>
+  </body>
+  </html>

@@ -17,6 +17,7 @@ import SetupAdaptersPage from './pages/setup/SetupAdaptersPage'
 import SetupGptActionsPage from './pages/setup/SetupGptActionsPage'
 import SetupTokensPage from './pages/setup/SetupTokensPage'
 import DataFilesPage from './pages/data/DataFilesPage'
+import FilesBetaPage from './pages/data/FilesBetaPage'
 import FilesBrowserPage from './pages/data/FilesBrowserPage'
 import DataFileEditorPage from './pages/data/DataFileEditorPage'
 import DataSkillsPage from './pages/data/DataSkillsPage'
@@ -234,6 +235,9 @@ function App() {
                 <NavLink to="/data/files" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   最近更新
                 </NavLink>
+                <NavLink to="/data/files-beta" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  文件（Beta）
+                </NavLink>
                 <NavLink to="/data/projects" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   项目
                 </NavLink>
@@ -290,6 +294,7 @@ function App() {
             <Route path="files/edit/*" element={<DataFileEditorPage />} />
             <Route path="files/browse/*" element={<FilesBrowserPage />} />
             <Route path="files" element={<DataFilesPage />} />
+            <Route path="files-beta" element={<FilesBetaPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="skills" element={<DataSkillsPage />} />
             <Route path="memory" element={<DataMemoryPage />} />

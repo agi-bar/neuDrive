@@ -51,19 +51,21 @@ python3 tools/ahub-sync.py diff --help
 ### A. 匿名样本 round-trip
 
 1. 生成 `both` Sync Token
-2. 从仓库 fixture 或本地样本导出 archive
-3. 运行 preview
-4. 运行 push
-5. 运行 pull
-6. 运行 diff
+2. 登录 CLI profile
+3. 从仓库 fixture 或本地样本导出 archive
+4. 运行 preview
+5. 运行 push
+6. 运行 pull
+7. 运行 diff
 
 命令模板：
 
 ```bash
+python3 tools/ahub-sync.py login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
 python3 tools/ahub-sync.py export --source /path/to/fixture --format archive -o fixture.ahubz
-python3 tools/ahub-sync.py preview --token "$SYNC_TOKEN" --api-base "$BASE_URL" --bundle fixture.ahubz
-python3 tools/ahub-sync.py push --token "$SYNC_TOKEN" --api-base "$BASE_URL" --bundle fixture.ahubz --transport auto
-python3 tools/ahub-sync.py pull --token "$SYNC_TOKEN" --api-base "$BASE_URL" --format archive -o fixture-pulled.ahubz
+python3 tools/ahub-sync.py preview --bundle fixture.ahubz
+python3 tools/ahub-sync.py push --bundle fixture.ahubz --transport auto
+python3 tools/ahub-sync.py pull --format archive -o fixture-pulled.ahubz
 python3 tools/ahub-sync.py diff --left fixture.ahubz --right fixture-pulled.ahubz
 ```
 
@@ -100,7 +102,7 @@ python3 tools/ahub-sync.py diff --left fixture.ahubz --right fixture-pulled.ahub
 CLI 方式：
 
 ```bash
-python3 tools/ahub-sync.py resume --token "$SYNC_TOKEN" --api-base "$BASE_URL" --bundle real.ahubz
+python3 tools/ahub-sync.py resume --bundle real.ahubz
 ```
 
 通过标准：

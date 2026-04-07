@@ -191,6 +191,16 @@ export interface BundleFilters {
   exclude_skills?: string[]
 }
 
+export interface AgentAuthInfo {
+  user_id: string
+  user_slug?: string
+  auth_mode: string
+  trust_level: number
+  scopes?: string[]
+  expires_at?: string
+  api_base: string
+}
+
 export interface BundlePreviewResult {
   version: string
   mode: string

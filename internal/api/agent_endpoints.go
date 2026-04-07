@@ -11,6 +11,33 @@ import (
 	"github.com/google/uuid"
 )
 
+func (s *Server) handleAgentAuthWhoAmI(w http.ResponseWriter, r *http.Request) {
+	if !s.agentCheckAuth(w, r, models.TrustLevelGuest, "") {
+		return
+	}
+
+	userID, _ := userIDFromCtx(r.Context())
+	resp := models.AgentAuthInfo{
+		UserID:     userID,
+		AuthMode:   "connection",
+		TrustLevel: trustLevelFromCtx(r.Context()),
+		APIBase:    requestBaseURL(r),
+	}
+
+	if token := scopedTokenFromCtx(r.Context()); token != nil {
+		resp.AuthMode = "scoped_token"
+		resp.Scopes = append([]string{}, token.Scopes...)
+		resp.ExpiresAt = &token.ExpiresAt
+	}
+	if s.UserService != nil {
+		if user, err := s.UserService.GetByID(r.Context(), userID); err == nil && user != nil {
+			resp.UserSlug = user.Slug
+		}
+	}
+
+	respondOK(w, resp)
+}
+
 func (s *Server) handleAgentVaultListScopes(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeReadVault) {
 		return

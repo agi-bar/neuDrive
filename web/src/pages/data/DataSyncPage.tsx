@@ -9,6 +9,16 @@ import {
 } from '../../api'
 import { formatDateTime, summarizeText } from './DataShared'
 
+type CLIAccess = 'push' | 'pull' | 'both'
+
+interface CLILoginRequest {
+  callback: string
+  state: string
+  profile: string
+  access: CLIAccess
+  ttlMinutes: number
+}
+
 function parseCommaList(value: string) {
   return value
     .split(',')
@@ -108,6 +118,7 @@ export default function DataSyncPage() {
   const [ttlMinutes, setTTLMinutes] = useState(30)
   const [tokenBusy, setTokenBusy] = useState(false)
   const [tokenError, setTokenError] = useState('')
+  const [tokenMessage, setTokenMessage] = useState('')
 
   const [importFile, setImportFile] = useState<File | null>(null)
   const [importMode, setImportMode] = useState<'merge' | 'mirror'>('merge')
@@ -129,6 +140,31 @@ export default function DataSyncPage() {
   const [jobs, setJobs] = useState<SyncJob[]>([])
   const [jobsBusy, setJobsBusy] = useState(false)
   const [jobsError, setJobsError] = useState('')
+
+  const cliLogin = useMemo<CLILoginRequest | null>(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('cli_login') !== '1') return null
+    const callback = params.get('cli_callback') || ''
+    const state = params.get('cli_state') || ''
+    const profile = params.get('cli_profile') || 'default'
+    const access = (params.get('cli_access') || 'both') as CLIAccess
+    const ttl = Number(params.get('cli_ttl_minutes') || ttlMinutes || 30)
+    if (!callback || !state) return null
+    if (!['push', 'pull', 'both'].includes(access)) return null
+    return {
+      callback,
+      state,
+      profile,
+      access,
+      ttlMinutes: Number.isFinite(ttl) && ttl > 0 ? Math.max(5, Math.min(120, ttl)) : 30,
+    }
+  }, [ttlMinutes])
+
+  useEffect(() => {
+    if (cliLogin?.ttlMinutes) {
+      setTTLMinutes(cliLogin.ttlMinutes)
+    }
+  }, [cliLogin?.ttlMinutes])
 
   const exportFilters = useMemo<BundleFilters>(() => ({
     include_domains: [
@@ -162,10 +198,31 @@ export default function DataSyncPage() {
   const handleCreateSyncToken = async () => {
     setTokenBusy(true)
     setTokenError('')
+    setTokenMessage('')
     try {
-      const created = await api.createSyncToken({ access: 'both', ttl_minutes: ttlMinutes })
+      const created = await api.createSyncToken({ access: cliLogin?.access || 'both', ttl_minutes: cliLogin?.ttlMinutes || ttlMinutes })
       setSyncToken(created)
-      setImportMessage('已生成临时同步 token，可用于当前页面的导入、导出和历史查询。')
+      if (cliLogin) {
+        const callbackRes = await fetch(cliLogin.callback, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            state: cliLogin.state,
+            profile: cliLogin.profile,
+            token: created.token,
+            expires_at: created.expires_at,
+            api_base: created.api_base,
+            scopes: created.scopes,
+            usage: created.usage,
+          }),
+        })
+        if (!callbackRes.ok) {
+          throw new Error('Sync token 已生成，但发送到本地 CLI 失败。请检查终端仍在等待登录，或改用手工 `login --token ...`。')
+        }
+        setTokenMessage(`已把 Sync Token 发送到本地 CLI profile：${cliLogin.profile}。可以返回终端继续。`)
+      } else {
+        setTokenMessage('已生成临时同步 token，可用于当前页面的导入、导出和历史查询，也可复制到本地 CLI 登录。')
+      }
     } catch (err: any) {
       setTokenError(err.message || '生成同步 token 失败')
     } finally {
@@ -280,6 +337,21 @@ export default function DataSyncPage() {
           <h3 className="card-title">临时同步 Token</h3>
         </div>
         <p className="data-record-secondary">生成一个 30 分钟到 2 小时内有效的短命 token，供本页面或本地 CLI 调用 `/agent/*` 同步接口。</p>
+        {cliLogin ? (
+          <div className="alert alert-warn" style={{ marginTop: 12 }}>
+            当前页面由 CLI 打开。点击“生成 Sync Token”后，会把 token 直接回填到本地 profile <code>{cliLogin.profile}</code>，之后 CLI 命令无需再手工传 <code>--token</code> 或 <code>--api-base</code>。
+          </div>
+        ) : (
+          <div className="data-sync-cli-box">
+            <div className="data-record-title">推荐 CLI 流程</div>
+            <p className="data-record-secondary">先登录一次保存默认 profile，后续 `push/pull/resume/history` 直接读取本地配置。</p>
+            <div className="data-sync-cli-steps">
+              <code>python3 tools/ahub-sync.py login --api-base {window.location.origin}</code>
+              <code>python3 tools/ahub-sync.py push --bundle backup.ahubz</code>
+            </div>
+            <div className="data-record-secondary">如果你已经生成了当前 token，也可以手工执行：<code>python3 tools/ahub-sync.py login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code></div>
+          </div>
+        )}
         <div className="data-sync-row">
           <select aria-label="Sync token TTL" value={ttlMinutes} onChange={(e) => setTTLMinutes(Number(e.target.value))}>
             <option value={30}>30 分钟</option>
@@ -298,6 +370,7 @@ export default function DataSyncPage() {
             <div className="data-record-secondary">{syncToken.usage}</div>
           </div>
         )}
+        {tokenMessage && <div className="alert alert-success" style={{ marginTop: 12 }}>{tokenMessage}</div>}
         {tokenError && <div className="alert alert-error">{tokenError}</div>}
       </div>
 

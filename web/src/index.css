@@ -892,6 +892,30 @@ a:hover {
   background: var(--color-surface-subtle);
 }
 
+.data-sync-cli-box {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px dashed var(--color-border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, rgba(15, 118, 110, 0.05), rgba(255, 255, 255, 0));
+}
+
+.data-sync-cli-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+.data-sync-cli-steps code {
+  display: block;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border-light);
+  word-break: break-all;
+}
+
 .data-sync-token {
   display: block;
   margin-top: 8px;

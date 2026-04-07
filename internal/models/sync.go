@@ -171,6 +171,16 @@ type SyncTokenResponse struct {
 	Usage     string    `json:"usage"`
 }
 
+type AgentAuthInfo struct {
+	UserID     uuid.UUID  `json:"user_id"`
+	UserSlug   string     `json:"user_slug,omitempty"`
+	AuthMode   string     `json:"auth_mode"`
+	TrustLevel int        `json:"trust_level"`
+	Scopes     []string   `json:"scopes,omitempty"`
+	ExpiresAt  *time.Time `json:"expires_at,omitempty"`
+	APIBase    string     `json:"api_base"`
+}
+
 func (s SyncSession) ManifestJSON() ([]byte, error) {
 	return json.Marshal(s.Manifest)
 }

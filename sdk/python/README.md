@@ -138,6 +138,9 @@ data = hub.export_all()
 from agenthub import AgentHub
 
 with AgentHub("https://hub.example.com", token="aht_xxx") as hub:
+    auth = hub.get_auth_info()
+    print(auth["user_slug"], auth["scopes"])
+
     preview = hub.preview_bundle(bundle={"version": "ahub.bundle/v1", "created_at": "...", "mode": "merge", "skills": {}, "profile": {}, "memory": []})
     print(preview["fingerprint"])
 
@@ -157,7 +160,7 @@ with AgentHub("https://hub.example.com", token="aht_xxx") as hub:
     print(jobs[0].status)
 ```
 
-For CLI workflows and acceptance steps, see [`docs/sync.md`](../../docs/sync.md).
+For CLI login/profile workflows and acceptance steps, see [`docs/sync.md`](../../docs/sync.md).
 
 ### Dashboard
 

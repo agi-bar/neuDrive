@@ -13,6 +13,7 @@ import type {
   BundleFilters,
   BundlePreviewResult,
   DashboardStats,
+  AgentAuthInfo,
   SyncJob,
   SyncSessionStatus,
   TreeSnapshot,
@@ -439,6 +440,10 @@ export class AgentHub {
   // -------------------------------------------------------------------------
   // Bundle Sync
   // -------------------------------------------------------------------------
+
+  async getAuthInfo(): Promise<AgentAuthInfo> {
+    return this.get<AgentAuthInfo>('/agent/auth/whoami')
+  }
 
   async previewBundle(payload: Record<string, unknown>): Promise<BundlePreviewResult> {
     return this.post<BundlePreviewResult>('/agent/import/preview', payload)

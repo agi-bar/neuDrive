@@ -172,17 +172,18 @@ codex mcp add agenthub --url https://hub.example.com/mcp --bearer-token-env-var 
 最短链路：
 
 ```bash
-# 1. 在 Web UI 生成一个 30 分钟到 2 小时有效的 Sync Token
+# 1. 登录一次，保存默认 profile（浏览器会打开到 /data/sync）
+python3 tools/ahub-sync.py login --api-base https://agenthub.agi.bar
 
 # 2. 本地导出 bundle
 python3 tools/ahub-sync.py export --source /path/to/skills --format archive -o backup.ahubz
 
 # 3. 预览并导入
-python3 tools/ahub-sync.py preview --token aht_xxx --bundle backup.ahubz
-python3 tools/ahub-sync.py push --token aht_xxx --bundle backup.ahubz --transport auto
+python3 tools/ahub-sync.py preview --bundle backup.ahubz
+python3 tools/ahub-sync.py push --bundle backup.ahubz --transport auto
 
 # 4. 从 Hub 拉回并比对
-python3 tools/ahub-sync.py pull --token aht_xxx --format archive -o pulled.ahubz
+python3 tools/ahub-sync.py pull --format archive -o pulled.ahubz
 python3 tools/ahub-sync.py diff --left backup.ahubz --right pulled.ahubz
 ```
 

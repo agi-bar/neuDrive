@@ -28,6 +28,62 @@ Bundle Sync 支持两种文件格式：
 - 只做导入时用 `push`
 - 做 round-trip 验收时用 `both`
 
+## CLI 配置与登录
+
+`python3 tools/ahub-sync.py` 现在支持本地 profile 配置。登录一次后，后续 `preview / push / pull / resume / history / whoami` 默认都会读取当前 profile，不需要每次重复传 `--token` 和 `--api-base`。
+
+默认配置文件位置：
+
+- macOS：`~/Library/Application Support/AgentHub/config.json`
+- Linux：`$XDG_CONFIG_HOME/agenthub/config.json`
+- Linux（无 XDG 时）：`~/.config/agenthub/config.json`
+
+配置里会保存：
+
+- `current_profile`
+- `profiles.<name>.api_base`
+- `profiles.<name>.token`
+- `profiles.<name>.expires_at`
+- `profiles.<name>.scopes`
+
+参数优先级：
+
+1. CLI 显式参数
+2. 环境变量
+3. 当前 profile 配置
+4. 内建默认值
+
+相关环境变量：
+
+- `AGENTHUB_SYNC_CONFIG`
+- `AGENTHUB_SYNC_PROFILE`
+- `AGENTHUB_SYNC_API_BASE` 或 `AGENTHUB_API_BASE`
+- `AGENTHUB_SYNC_TOKEN` 或 `AGENTHUB_TOKEN`
+
+首次登录推荐直接走浏览器：
+
+```bash
+python3 tools/ahub-sync.py login --api-base https://agenthub.agi.bar
+python3 tools/ahub-sync.py profiles
+python3 tools/ahub-sync.py whoami
+```
+
+也支持手工粘贴 token：
+
+```bash
+python3 tools/ahub-sync.py login \
+  --profile prod \
+  --api-base https://agenthub.agi.bar \
+  --token aht_xxx
+```
+
+多 profile 切换：
+
+```bash
+python3 tools/ahub-sync.py use prod
+python3 tools/ahub-sync.py logout --profile staging
+```
+
 ## `merge` 与 `mirror`
 
 - `merge`：只 upsert bundle 里出现的数据，不删除现有额外文件
@@ -47,15 +103,15 @@ python3 tools/ahub-sync.py export --source /path/to/skills --format archive -o b
 ### 2. 预览
 
 ```bash
-python3 tools/ahub-sync.py preview --token aht_xxx --bundle backup.ahub
-python3 tools/ahub-sync.py preview --token aht_xxx --bundle backup.ahubz --mode mirror
+python3 tools/ahub-sync.py preview --bundle backup.ahub
+python3 tools/ahub-sync.py preview --bundle backup.ahubz --mode mirror
 ```
 
 ### 3. 导入
 
 ```bash
-python3 tools/ahub-sync.py push --token aht_xxx --bundle backup.ahub --transport json
-python3 tools/ahub-sync.py push --token aht_xxx --bundle backup.ahubz --transport auto
+python3 tools/ahub-sync.py push --bundle backup.ahub --transport json
+python3 tools/ahub-sync.py push --bundle backup.ahubz --transport auto
 ```
 
 `auto` 的规则：
@@ -66,8 +122,8 @@ python3 tools/ahub-sync.py push --token aht_xxx --bundle backup.ahubz --transpor
 ### 4. 导出回本地
 
 ```bash
-python3 tools/ahub-sync.py pull --token aht_xxx -o pulled.ahub
-python3 tools/ahub-sync.py pull --token aht_xxx --format archive -o pulled.ahubz
+python3 tools/ahub-sync.py pull -o pulled.ahub
+python3 tools/ahub-sync.py pull --format archive -o pulled.ahubz
 ```
 
 ### 5. 继续未完成上传
@@ -79,7 +135,7 @@ python3 tools/ahub-sync.py pull --token aht_xxx --format archive -o pulled.ahubz
 继续时：
 
 ```bash
-python3 tools/ahub-sync.py resume --token aht_xxx --bundle backup.ahubz
+python3 tools/ahub-sync.py resume --bundle backup.ahubz
 ```
 
 前提是你重新选择原始 `.ahubz` 文件，而不是一个新的 archive。
@@ -87,7 +143,7 @@ python3 tools/ahub-sync.py resume --token aht_xxx --bundle backup.ahubz
 ### 6. 查看历史
 
 ```bash
-python3 tools/ahub-sync.py history --token aht_xxx
+python3 tools/ahub-sync.py history
 ```
 
 ### 7. 比对结果
@@ -131,6 +187,8 @@ python3 tools/ahub-sync.py export \
 - 导入上传
 - 导出下载
 - 最近同步历史
+
+如果页面是由 CLI 打开的，还会直接把生成的 token 回填到本地 profile。
 
 archive 导入时，页面会自动：
 

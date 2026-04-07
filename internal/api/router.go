@@ -302,6 +302,7 @@ func (s *Server) setupRoutes() {
 	r.Group(func(r chi.Router) {
 		r.Use(s.apiKeyMiddleware)
 
+		r.Get("/agent/auth/whoami", s.handleAgentAuthWhoAmI)
 		r.Get("/agent/tree/snapshot", s.handleAgentTreeSnapshot)
 		r.Get("/agent/tree/changes", s.handleAgentTreeChanges)
 		r.Get("/agent/tree/*", s.handleAgentTreeList)

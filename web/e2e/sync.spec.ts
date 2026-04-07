@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
 import fs from 'node:fs'
+import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -22,6 +23,71 @@ function writeSkillSourceDir(skillName: string) {
 }
 
 test.describe('Bundle Sync', () => {
+  test('cli login flow can send token back to localhost callback', async ({ page, request }) => {
+    await setupUser(page, request)
+
+    const callback = await new Promise<{ url: string; received: Promise<any>; close: () => Promise<void> }>((resolve) => {
+      let resolver = (_payload: any) => {}
+      const received = new Promise<any>((innerResolve) => {
+        resolver = innerResolve
+      })
+      const server = http.createServer((req, res) => {
+        res.setHeader('Access-Control-Allow-Origin', '*')
+        res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+        if (req.method === 'OPTIONS') {
+          res.statusCode = 204
+          res.end()
+          return
+        }
+        if (req.method !== 'POST' || req.url !== '/callback') {
+          res.statusCode = 404
+          res.end()
+          return
+        }
+        const chunks: Buffer[] = []
+        req.on('data', (chunk) => chunks.push(Buffer.from(chunk)))
+        req.on('end', () => {
+          res.setHeader('Content-Type', 'application/json')
+          res.end(JSON.stringify({ ok: true }))
+          resolver(JSON.parse(Buffer.concat(chunks).toString('utf8')))
+        })
+      })
+      server.listen(0, '127.0.0.1', () => {
+        const address = server.address()
+        if (!address || typeof address === 'string') {
+          throw new Error('failed to start callback server')
+        }
+        resolve({
+          url: `http://127.0.0.1:${address.port}/callback`,
+          received,
+          close: () => new Promise<void>((innerResolve, innerReject) => server.close((err) => err ? innerReject(err) : innerResolve())),
+        })
+      })
+    })
+
+    try {
+      const params = new URLSearchParams({
+        cli_login: '1',
+        cli_profile: 'prod',
+        cli_access: 'both',
+        cli_ttl_minutes: '30',
+        cli_callback: callback.url,
+        cli_state: 'pw-sync-state',
+      })
+      await page.goto(`/data/sync?${params.toString()}`)
+      await expect(page.getByText(/当前页面由 CLI 打开/)).toBeVisible()
+      await page.getByRole('button', { name: '生成 Sync Token' }).click()
+      await expect(page.getByText(/已把 Sync Token 发送到本地 CLI profile：prod/)).toBeVisible({ timeout: 15000 })
+      const payload = await callback.received
+      expect(payload.state).toBe('pw-sync-state')
+      expect(payload.profile).toBe('prod')
+      expect(payload.token.startsWith('aht_')).toBeTruthy()
+      expect(payload.api_base).toMatch(/^http/)
+    } finally {
+      await callback.close()
+    }
+  })
+
   test('preview mirror deletes with expanded detail list', async ({ page, request }) => {
     await setupUser(page, request)
 

@@ -183,6 +183,25 @@ class TestPythonSyncIntegration(unittest.TestCase):
         self.assertLessEqual(remaining, 121)
         self.assertGreater(remaining, 110)
 
+    def test_sync_token_can_introspect_agent_auth_info(self) -> None:
+        response = httpx.post(
+            f"{BASE_URL}/api/tokens/sync",
+            headers={"Authorization": f"Bearer {self.jwt_token}"},
+            json={"access": "both", "ttl_minutes": 30},
+            timeout=30.0,
+        )
+        response.raise_for_status()
+        body = response.json()["data"]
+
+        with AgentHub(BASE_URL, body["token"]) as hub:
+            info = hub.get_auth_info()
+
+        self.assertEqual(info["api_base"], BASE_URL)
+        self.assertEqual(info["auth_mode"], "scoped_token")
+        self.assertEqual(info["scopes"], ["read:bundle", "write:bundle"])
+        self.assertTrue(info.get("expires_at"))
+        self.assertTrue(info.get("user_slug"))
+
 
 if __name__ == "__main__":
     unittest.main()

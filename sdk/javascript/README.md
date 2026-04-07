@@ -100,6 +100,9 @@ const hub = new AgentHub({
   token: 'aht_xxxxx',
 })
 
+const auth = await hub.getAuthInfo()
+console.log(auth.user_slug, auth.scopes)
+
 const preview = await hub.previewBundle({
   version: 'ahub.bundle/v1',
   created_at: new Date().toISOString(),
@@ -122,7 +125,7 @@ await hub.resumeSession(session.session_id, archive)
 await hub.commitSession(session.session_id, preview.fingerprint)
 ```
 
-For CLI and operational guidance, see [`docs/sync.md`](../../docs/sync.md).
+For CLI login/profile setup and operational guidance, see [`docs/sync.md`](../../docs/sync.md).
 
 ### `AgentHubAuth` (OAuth helper)
 

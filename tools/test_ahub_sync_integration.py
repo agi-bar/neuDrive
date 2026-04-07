@@ -5,6 +5,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -61,6 +62,144 @@ def register_user() -> str:
 
 @unittest.skipIf(not BASE_URL, "AGENTHUB_TEST_URL not set")
 class TestAhubSyncCLI(unittest.TestCase):
+    def test_login_profiles_whoami_and_config_precedence(self) -> None:
+        token = register_user()
+        with tempfile.TemporaryDirectory(prefix="agenthub-sync-config-") as tmpdir:
+            config_path = Path(tmpdir) / "config.json"
+            env = os.environ.copy()
+            env["AGENTHUB_SYNC_CONFIG"] = str(config_path)
+
+            login = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "login",
+                    "--token",
+                    token,
+                    "--api-base",
+                    BASE_URL,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn("Logged in to", login.stdout)
+            saved = json.loads(config_path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["current_profile"], "default")
+            self.assertEqual(saved["profiles"]["default"]["api_base"], BASE_URL)
+            self.assertEqual(saved["profiles"]["default"]["scopes"], ["read:bundle", "write:bundle"])
+
+            history = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "history",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(json.loads(history.stdout), [])
+
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "login",
+                    "--profile",
+                    "staging",
+                    "--token",
+                    token,
+                    "--api-base",
+                    BASE_URL,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "use",
+                    "staging",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            profiles = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "profiles",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn("* staging", profiles.stdout)
+
+            whoami = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "whoami",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertIn("Current profile: staging", whoami.stdout)
+            self.assertIn("Scopes: read:bundle, write:bundle", whoami.stdout)
+
+            saved = json.loads(config_path.read_text(encoding="utf-8"))
+            saved["profiles"]["staging"]["api_base"] = "https://invalid.example.test"
+            saved["profiles"]["staging"]["token"] = "aht_invalid"
+            config_path.write_text(json.dumps(saved, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            overridden = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "history",
+                    "--token",
+                    token,
+                    "--api-base",
+                    BASE_URL,
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertEqual(json.loads(overridden.stdout), [])
+
+            saved = json.loads(config_path.read_text(encoding="utf-8"))
+            saved["current_profile"] = "default"
+            saved["profiles"]["default"]["expires_at"] = "2000-01-01T00:00:00Z"
+            config_path.write_text(json.dumps(saved, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+            expired = subprocess.run(
+                [
+                    "python3",
+                    str(ROOT / "tools" / "ahub-sync.py"),
+                    "history",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                env=env,
+            )
+            self.assertNotEqual(expired.returncode, 0)
+            self.assertIn("expired", expired.stderr)
+
     def test_export_preview_push_pull_history(self) -> None:
         token = register_user()
         tool = load_tool_module()

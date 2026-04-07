@@ -125,6 +125,10 @@ test('AgentHub JS SDK handles json bundle and archive sessions', { skip: skipIfN
   const archiveBytes = new Uint8Array(fs.readFileSync(archivePath))
   const hub = new AgentHub({ baseURL: BASE_URL, token })
 
+  const authInfo = await hub.getAuthInfo()
+  assert.equal(authInfo.api_base, BASE_URL)
+  assert.deepEqual(authInfo.scopes, ['read:bundle', 'write:bundle'])
+
   const preview = await hub.previewBundle(bundle)
   assert.ok(preview.fingerprint)
 

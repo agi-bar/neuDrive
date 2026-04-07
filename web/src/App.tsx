@@ -108,6 +108,9 @@ function App() {
   }
 
   if (!user) {
+    if (location.pathname !== '/login') {
+      return <Navigate to={`/login?redirect=${encodeURIComponent(window.location.href)}`} replace />
+    }
     return (
       <Routes>
         <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />

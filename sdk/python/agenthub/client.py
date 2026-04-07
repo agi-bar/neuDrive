@@ -316,6 +316,10 @@ class AgentHub:
         """Export all Hub data as a JSON dict."""
         return self._request("GET", "/agent/export/all")
 
+    def get_auth_info(self) -> dict[str, Any]:
+        """Return the currently authenticated scoped-token/session metadata."""
+        return self._request("GET", "/agent/auth/whoami")
+
     def preview_bundle(
         self,
         bundle: Optional[dict[str, Any]] = None,
@@ -723,6 +727,10 @@ class AsyncAgentHub:
 
     async def export_all(self) -> dict:
         return await self._request("GET", "/agent/export/all")
+
+    async def get_auth_info(self) -> dict[str, Any]:
+        """Return the currently authenticated scoped-token/session metadata."""
+        return await self._request("GET", "/agent/auth/whoami")
 
     async def preview_bundle(
         self,

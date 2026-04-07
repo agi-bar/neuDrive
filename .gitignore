@@ -1,11 +1,15 @@
 server
 bin/
 *.exe
+__pycache__/
+*.py[cod]
 node_modules/
 web/dist/
 .env
 agenthub.env
 .local/
+.claude/
+.gemini/
 deploy/k8s/*-secret.yaml
 docker-compose.override.yml
 

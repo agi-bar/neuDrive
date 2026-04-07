@@ -14,7 +14,7 @@ RUN go mod download
 COPY . .
 # Copy the built frontend into the embed directory
 COPY --from=frontend /app/web/dist/ ./internal/web/dist/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /agenthub ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -o /agenthub ./cmd/agenthub
 
 # ---- Final image: just the binary + migrations ----
 FROM alpine:3.19
@@ -23,4 +23,4 @@ WORKDIR /app
 COPY --from=builder /agenthub .
 COPY migrations/ ./migrations/
 EXPOSE 8080
-CMD ["./agenthub"]
+CMD ["./agenthub", "server", "--listen", ":8080"]

@@ -40,9 +40,10 @@ func TestFileTreeServiceListSkillSummariesIncludesSystemSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSkillSummaries() error = %v", err)
 	}
-	if len(summaries) != 3 {
-		t.Fatalf("expected 3 system skills, got %d", len(summaries))
+	if len(summaries) != 4 {
+		t.Fatalf("expected 4 system skills, got %d", len(summaries))
 	}
+	foundAgentHub := false
 	for _, summary := range summaries {
 		if summary.Source != "system" {
 			t.Fatalf("expected source=system, got %q", summary.Source)
@@ -50,6 +51,12 @@ func TestFileTreeServiceListSkillSummariesIncludesSystemSkills(t *testing.T) {
 		if !summary.ReadOnly {
 			t.Fatalf("expected read_only summary for %q", summary.Name)
 		}
+		if summary.Name == "agenthub" {
+			foundAgentHub = true
+		}
+	}
+	if !foundAgentHub {
+		t.Fatal("expected agenthub system skill summary")
 	}
 }
 

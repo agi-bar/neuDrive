@@ -11,13 +11,12 @@ jobs:
         goos: [linux, darwin, windows]
         goarch: [amd64, arm64]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
         with:
-          go-version: '1.22'
+          go-version: '1.25'
       - run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o agenthub-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/server/
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o agenthub-mcp-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/mcp/
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o agenthub-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/agenthub/
       - uses: actions/upload-artifact@v4
         with:
           name: agenthub-${{ matrix.goos }}-${{ matrix.goarch }}

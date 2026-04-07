@@ -29,25 +29,38 @@ type Config struct {
 }
 
 func Load() (*Config, error) {
+	return LoadWithOverrides(nil)
+}
+
+func LoadWithOverrides(overrides map[string]string) (*Config, error) {
+	envOrOverride := func(key, fallback string) string {
+		if overrides != nil {
+			if value, ok := overrides[key]; ok {
+				return value
+			}
+		}
+		return getEnv(key, fallback)
+	}
+
 	cfg := &Config{
-		DatabaseURL:             getEnv("DATABASE_URL", "postgres://localhost:5432/agenthub?sslmode=disable"),
-		Port:                    getEnv("PORT", "8080"),
-		JWTSecret:               getEnv("JWT_SECRET", ""),
-		GithubClientID:          getEnv("GITHUB_CLIENT_ID", ""),
-		GithubClientSecret:      getEnv("GITHUB_CLIENT_SECRET", ""),
-		FeishuAppID:             getEnv("FEISHU_APP_ID", ""),
-		FeishuAppSecret:         getEnv("FEISHU_APP_SECRET", ""),
-		FeishuVerificationToken: getEnv("FEISHU_VERIFICATION_TOKEN", ""),
-		FeishuEncryptKey:        getEnv("FEISHU_ENCRYPT_KEY", ""),
-		VaultMasterKey:          getEnv("VAULT_MASTER_KEY", ""),
-		PublicBaseURL:           strings.TrimRight(getEnv("PUBLIC_BASE_URL", ""), "/"),
-		CORSOrigins:             strings.Split(getEnv("CORS_ORIGINS", "http://localhost:3000"), ","),
+		DatabaseURL:             envOrOverride("DATABASE_URL", "postgres://localhost:5432/agenthub?sslmode=disable"),
+		Port:                    envOrOverride("PORT", "8080"),
+		JWTSecret:               envOrOverride("JWT_SECRET", ""),
+		GithubClientID:          envOrOverride("GITHUB_CLIENT_ID", ""),
+		GithubClientSecret:      envOrOverride("GITHUB_CLIENT_SECRET", ""),
+		FeishuAppID:             envOrOverride("FEISHU_APP_ID", ""),
+		FeishuAppSecret:         envOrOverride("FEISHU_APP_SECRET", ""),
+		FeishuVerificationToken: envOrOverride("FEISHU_VERIFICATION_TOKEN", ""),
+		FeishuEncryptKey:        envOrOverride("FEISHU_ENCRYPT_KEY", ""),
+		VaultMasterKey:          envOrOverride("VAULT_MASTER_KEY", ""),
+		PublicBaseURL:           strings.TrimRight(envOrOverride("PUBLIC_BASE_URL", ""), "/"),
+		CORSOrigins:             strings.Split(envOrOverride("CORS_ORIGINS", "http://localhost:3000"), ","),
 		RateLimit:               getEnvInt("RATE_LIMIT", 100),
 		MaxBodySize:             int64(getEnvInt("MAX_BODY_SIZE", 10*1024*1024)),
-		LogLevel:                getEnv("LOG_LEVEL", "info"),
-		LogFormat:               getEnv("LOG_FORMAT", "text"),
+		LogLevel:                envOrOverride("LOG_LEVEL", "info"),
+		LogFormat:               envOrOverride("LOG_FORMAT", "text"),
 		CaptureOAuth:            getEnvBool("AGENTHUB_CAPTURE_OAUTH", false),
-		CaptureDir:              getEnv("AGENTHUB_CAPTURE_DIR", "tmp/oauth-captures"),
+		CaptureDir:              envOrOverride("AGENTHUB_CAPTURE_DIR", "tmp/oauth-captures"),
 	}
 
 	if cfg.JWTSecret == "" {

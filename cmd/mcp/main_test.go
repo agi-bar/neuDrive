@@ -1,11 +1,15 @@
 package main
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/agi-bar/agenthub/internal/app/mcpapp"
+)
 
 func TestResolveTokenPrefersExplicitValue(t *testing.T) {
-	t.Setenv(defaultTokenEnvVar, "aht_from_env")
+	t.Setenv(mcpapp.DefaultTokenEnvVar, "aht_from_env")
 
-	token, err := resolveToken("aht_explicit", defaultTokenEnvVar)
+	token, err := mcpapp.ResolveToken("aht_explicit", mcpapp.DefaultTokenEnvVar)
 	if err != nil {
 		t.Fatalf("resolveToken returned error: %v", err)
 	}
@@ -15,9 +19,9 @@ func TestResolveTokenPrefersExplicitValue(t *testing.T) {
 }
 
 func TestResolveTokenFallsBackToEnvironment(t *testing.T) {
-	t.Setenv(defaultTokenEnvVar, "aht_from_env")
+	t.Setenv(mcpapp.DefaultTokenEnvVar, "aht_from_env")
 
-	token, err := resolveToken("", defaultTokenEnvVar)
+	token, err := mcpapp.ResolveToken("", mcpapp.DefaultTokenEnvVar)
 	if err != nil {
 		t.Fatalf("resolveToken returned error: %v", err)
 	}
@@ -29,7 +33,7 @@ func TestResolveTokenFallsBackToEnvironment(t *testing.T) {
 func TestResolveTokenSupportsCustomEnvironmentVariable(t *testing.T) {
 	t.Setenv("CUSTOM_AGENTHUB_TOKEN", "aht_custom")
 
-	token, err := resolveToken("", "CUSTOM_AGENTHUB_TOKEN")
+	token, err := mcpapp.ResolveToken("", "CUSTOM_AGENTHUB_TOKEN")
 	if err != nil {
 		t.Fatalf("resolveToken returned error: %v", err)
 	}
@@ -39,7 +43,7 @@ func TestResolveTokenSupportsCustomEnvironmentVariable(t *testing.T) {
 }
 
 func TestResolveTokenErrorsWhenMissing(t *testing.T) {
-	_, err := resolveToken("", "MISSING_TOKEN")
+	_, err := mcpapp.ResolveToken("", "MISSING_TOKEN")
 	if err == nil {
 		t.Fatal("expected error for missing token")
 	}

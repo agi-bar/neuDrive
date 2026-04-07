@@ -346,10 +346,10 @@ export default function DataSyncPage() {
             <div className="data-record-title">推荐 CLI 流程</div>
             <p className="data-record-secondary">先登录一次保存默认 profile，后续 `push/pull/resume/history` 直接读取本地配置。</p>
             <div className="data-sync-cli-steps">
-              <code>python3 tools/ahub-sync.py login --api-base {window.location.origin}</code>
-              <code>python3 tools/ahub-sync.py push --bundle backup.ahubz</code>
+              <code>agenthub sync login --api-base {window.location.origin}</code>
+              <code>agenthub sync push --bundle backup.ahubz</code>
             </div>
-            <div className="data-record-secondary">如果你已经生成了当前 token，也可以手工执行：<code>python3 tools/ahub-sync.py login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code></div>
+            <div className="data-record-secondary">如果你已经生成了当前 token，也可以手工执行：<code>agenthub sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code></div>
           </div>
         )}
         <div className="data-sync-row">

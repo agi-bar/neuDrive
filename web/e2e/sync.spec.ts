@@ -5,9 +5,23 @@ import http from 'node:http'
 import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { unzipSync, strFromU8 } from 'fflate'
 import { setupUser } from './helpers'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
+
+function runAgentHub(args: string[]) {
+  const configured = process.env.AGENTHUB_CLI
+  if (configured) {
+    execFileSync(configured, args, { stdio: 'inherit' })
+    return
+  }
+  if (fs.existsSync('/tmp/agenthub')) {
+    execFileSync('/tmp/agenthub', args, { stdio: 'inherit' })
+    return
+  }
+  execFileSync('go', ['run', './cmd/agenthub', ...args], { cwd: ROOT, stdio: 'inherit' })
+}
 
 function writeJSONBundle(filePath: string, bundle: Record<string, unknown>) {
   fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2))
@@ -170,27 +184,11 @@ test.describe('Bundle Sync', () => {
     const sourceDir = writeSkillSourceDir('pw-archive-skill')
     const archivePath = path.join(os.tmpdir(), `pw-sync-${Date.now()}.ahubz`)
 
-    execFileSync('python3', [
-      path.join(ROOT, 'tools', 'ahub-sync.py'),
-      'export',
-      '--source',
-      sourceDir,
-      '--format',
-      'archive',
-      '-o',
-      archivePath,
-    ], { stdio: 'inherit' })
+    runAgentHub(['sync', 'export', '--source', sourceDir, '--format', 'archive', '-o', archivePath])
 
     const archiveBytes = fs.readFileSync(archivePath)
-    const manifest = JSON.parse(execFileSync('python3', [
-      '-c',
-      [
-        'import json, sys, zipfile',
-        'with zipfile.ZipFile(sys.argv[1], "r") as zf:',
-        '    print(zf.read("manifest.json").decode("utf-8"))',
-      ].join('\n'),
-      archivePath,
-    ], { encoding: 'utf8' }))
+    const manifestFiles = unzipSync(new Uint8Array(archiveBytes))
+    const manifest = JSON.parse(strFromU8(manifestFiles['manifest.json']))
 
     const syncTokenRes = await request.post('/api/tokens/sync', {
       headers: { Authorization: `Bearer ${user.token}` },

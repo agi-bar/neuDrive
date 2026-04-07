@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import datetime
-import importlib.util
 import json
 import os
 import sys
@@ -16,19 +15,9 @@ sys.path.insert(0, str(ROOT / "sdk" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from agenthub import AgentHub  # noqa: E402
-from sync_fixture import materialize_source  # noqa: E402
+from sync_fixture import export_bundle_with_cli, materialize_source  # noqa: E402
 
 BASE_URL = os.environ.get("AGENTHUB_TEST_URL", "").rstrip("/")
-
-
-def _load_tool_module():
-    spec = importlib.util.spec_from_file_location("ahub_sync_tool", ROOT / "tools" / "ahub-sync.py")
-    if spec is None or spec.loader is None:
-        raise RuntimeError("failed to load ahub-sync tool module")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
 
 def _register_user() -> tuple[str, str]:
     slug = f"py-sync-{int(time.time() * 1000)}"
@@ -73,11 +62,12 @@ class TestPythonSyncIntegration(unittest.TestCase):
         jwt_token, _ = _register_user()
         self.jwt_token = jwt_token
         self.token = _create_sync_scoped_token(jwt_token)
-        self.tool = _load_tool_module()
 
     def test_json_bundle_preview_import_export_and_history(self) -> None:
         source_dir = materialize_source(multiplier=1)
-        bundle = self.tool.build_bundle(source_dir, "merge")
+        _, bundle = export_bundle_with_cli(source_dir, "json")
+        self.assertIsNotNone(bundle)
+        bundle = bundle or {}
 
         with AgentHub(BASE_URL, self.token) as hub:
             preview = hub.preview_bundle(bundle=bundle)
@@ -94,12 +84,10 @@ class TestPythonSyncIntegration(unittest.TestCase):
 
     def test_archive_session_resume_commit(self) -> None:
         source_dir = materialize_source(multiplier=3)
-        bundle = self.tool.build_bundle(source_dir, "merge")
-        archive, manifest = self.tool.build_archive(bundle, {
-            "include_domains": [],
-            "include_skills": [],
-            "exclude_skills": [],
-        })
+        archive_path, manifest = export_bundle_with_cli(source_dir, "archive")
+        archive = archive_path.read_bytes()
+        self.assertIsNotNone(manifest)
+        manifest = manifest or {}
 
         with AgentHub(BASE_URL, self.token) as hub:
             session = hub.start_sync_session({
@@ -139,7 +127,9 @@ class TestPythonSyncIntegration(unittest.TestCase):
 
     def test_preview_does_not_write_history_and_scopes_are_enforced(self) -> None:
         source_dir = materialize_source(multiplier=1)
-        bundle = self.tool.build_bundle(source_dir, "merge")
+        _, bundle = export_bundle_with_cli(source_dir, "json")
+        self.assertIsNotNone(bundle)
+        bundle = bundle or {}
 
         with AgentHub(BASE_URL, self.token) as hub:
             preview = hub.preview_bundle(bundle=bundle)

@@ -100,7 +100,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": "Platform portability manuals live under /skills/portability/<platform>/SKILL.md. Read them first when the user asks about import, export, migration, backup, or restore.",
+				"instructions": "Use /skills/agenthub/SKILL.md as the umbrella entrypoint for Agent Hub platform workflows. Platform portability manuals remain available under /skills/portability/<platform>/SKILL.md for migration-specific details.",
 			},
 		}
 	case "notifications/initialized":
@@ -726,7 +726,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			"expires_at": resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
 			"api_base":   s.BaseURL,
 			"scopes":     resp.ScopedToken.Scopes,
-			"usage":      fmt.Sprintf("python3 tools/ahub-sync.py push --token %s --bundle backup.ahub", resp.Token),
+			"usage":      fmt.Sprintf("agenthub sync login --api-base %s --token %s && agenthub sync push --bundle backup.ahub", s.BaseURL, resp.Token),
 		}, "", "  ")
 		return string(payload), false
 

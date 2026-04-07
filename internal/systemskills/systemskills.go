@@ -26,39 +26,63 @@ const currentUserSnapshotPlaceholder = "{{CURRENT_USER_SNAPSHOT}}"
 
 var (
 	systemSkillTimestamp = time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)
+	skillsRoot           = "/skills"
+	agentHubRoot         = "/skills/agenthub"
 	portabilityRoot      = "/skills/portability"
 	portabilityPlatforms = []string{"claude", "chatgpt", "codex"}
-	platformManifests    = map[string]platformManifest{
+	systemSkillOrder     = []string{"agenthub", "portability/claude", "portability/chatgpt", "portability/codex"}
+	agenthubManifest     = skillManifest{
+		DisplayName: "Agent Hub",
+		SkillName:   "agenthub",
+		Path:        agentHubRoot,
+		ResourceDir: "resources/agenthub",
+		Description: "Umbrella skill for using the full Agent Hub MCP surface from inside supported agent platforms.",
+		WhenToUse:   "Use when the user wants to export into Agent Hub, import Agent Hub data back into a platform, list syncable data, or check Agent Hub platform connectivity.",
+		Tags:        []string{"agenthub", "mcp", "platforms", "sync", "portability"},
+	}
+	platformManifests = map[string]skillManifest{
 		"claude": {
 			DisplayName: "Claude",
 			SkillName:   "portability/claude",
+			Path:        portabilityRoot + "/claude",
+			ResourceDir: "resources/portability/claude",
 			Description: "Guide for importing Claude data into AgentHub or restoring AgentHub data into Claude-compatible structures.",
 			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export Claude data and skills.",
 			Tags:        []string{"portability", "migration", "backup", "claude", "agenthub"},
+			Platform:    "claude",
 		},
 		"chatgpt": {
 			DisplayName: "ChatGPT",
 			SkillName:   "portability/chatgpt",
+			Path:        portabilityRoot + "/chatgpt",
+			ResourceDir: "resources/portability/chatgpt",
 			Description: "Guide for importing ChatGPT data into AgentHub or restoring AgentHub data into ChatGPT-compatible structures.",
 			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export ChatGPT data and platform features.",
 			Tags:        []string{"portability", "migration", "backup", "chatgpt", "agenthub"},
+			Platform:    "chatgpt",
 		},
 		"codex": {
 			DisplayName: "Codex",
 			SkillName:   "portability/codex",
+			Path:        portabilityRoot + "/codex",
+			ResourceDir: "resources/portability/codex",
 			Description: "Guide for importing Codex workspace conventions into AgentHub or exporting AgentHub context back into Codex workflows.",
 			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export Codex projects, prompts, tools, or automations.",
 			Tags:        []string{"portability", "migration", "backup", "codex", "agenthub"},
+			Platform:    "codex",
 		},
 	}
 )
 
-type platformManifest struct {
+type skillManifest struct {
 	DisplayName string
 	SkillName   string
+	Path        string
+	ResourceDir string
 	Description string
 	WhenToUse   string
 	Tags        []string
+	Platform    string
 }
 
 type Snapshot struct {
@@ -99,12 +123,15 @@ type SnapshotDeps struct {
 
 func IsProtectedPath(rawPath string) bool {
 	publicPath := strings.TrimSuffix(hubpath.NormalizePublic(rawPath), "/")
-	return publicPath == portabilityRoot || strings.HasPrefix(publicPath, portabilityRoot+"/")
+	return publicPath == agentHubRoot ||
+		strings.HasPrefix(publicPath, agentHubRoot+"/") ||
+		publicPath == portabilityRoot ||
+		strings.HasPrefix(publicPath, portabilityRoot+"/")
 }
 
 func IsSkillDocumentPath(rawPath string) bool {
 	publicPath := hubpath.NormalizePublic(rawPath)
-	return strings.HasSuffix(publicPath, "/SKILL.md") && strings.HasPrefix(publicPath, portabilityRoot+"/")
+	return strings.HasSuffix(publicPath, "/SKILL.md") && strings.HasPrefix(publicPath, skillsRoot+"/")
 }
 
 func PlatformFromPath(rawPath string) (string, bool) {
@@ -119,12 +146,15 @@ func PlatformFromPath(rawPath string) (string, bool) {
 }
 
 func SkillSummaries() []models.SkillSummary {
-	summaries := make([]models.SkillSummary, 0, len(portabilityPlatforms))
-	for _, platform := range portabilityPlatforms {
-		manifest := platformManifests[platform]
+	summaries := make([]models.SkillSummary, 0, len(systemSkillOrder))
+	for _, key := range systemSkillOrder {
+		manifest, ok := systemManifestByKey(key)
+		if !ok {
+			continue
+		}
 		summaries = append(summaries, models.SkillSummary{
 			Name:          manifest.SkillName,
-			Path:          portabilityRoot + "/" + platform + "/SKILL.md",
+			Path:          manifest.Path + "/SKILL.md",
 			Source:        "system",
 			ReadOnly:      true,
 			Description:   manifest.Description,
@@ -146,9 +176,12 @@ func ListEntries(rawPath string) ([]models.FileTreeEntry, bool) {
 	case "":
 		return nil, false
 	case "/":
-		return []models.FileTreeEntry{directoryEntry("/skills/")}, true
-	case "/skills":
-		return []models.FileTreeEntry{directoryEntry(portabilityRoot + "/")}, true
+		return []models.FileTreeEntry{directoryEntry(skillsRoot + "/")}, true
+	case skillsRoot:
+		return []models.FileTreeEntry{
+			directoryEntry(agentHubRoot + "/"),
+			directoryEntry(portabilityRoot + "/"),
+		}, true
 	case portabilityRoot:
 		entries := make([]models.FileTreeEntry, 0, len(portabilityPlatforms))
 		for _, platform := range portabilityPlatforms {
@@ -157,26 +190,37 @@ func ListEntries(rawPath string) ([]models.FileTreeEntry, bool) {
 		return entries, true
 	}
 
-	for _, platform := range portabilityPlatforms {
-		if strings.TrimSuffix(publicPath, "/") == portabilityRoot+"/"+platform {
-			entries := make([]models.FileTreeEntry, 0, 3)
-			for _, name := range []string{"SKILL.md", "mapping.json", "examples.md"} {
-				entry, ok, err := ReadEntry(path.Join(portabilityRoot, platform, name))
-				if err != nil || !ok {
-					continue
-				}
-				entries = append(entries, *entry)
-			}
-			return entries, true
-		}
+	resourceRoot, publicRoot, ok := resourceRootForPath(publicPath)
+	if !ok {
+		return nil, false
 	}
-
-	return nil, false
+	resourcePath := resourceRoot
+	if rel := strings.Trim(strings.TrimPrefix(publicPath, publicRoot), "/"); rel != "" {
+		resourcePath = path.Join(resourceRoot, rel)
+	}
+	items, err := fs.ReadDir(resourcesFS, resourcePath)
+	if err != nil {
+		return nil, false
+	}
+	entries := make([]models.FileTreeEntry, 0, len(items))
+	for _, item := range items {
+		childPath := path.Join(publicPath, item.Name())
+		if item.IsDir() {
+			entries = append(entries, directoryEntry(strings.TrimSuffix(childPath, "/")+"/"))
+			continue
+		}
+		entry, ok, err := ReadEntry(childPath)
+		if err != nil || !ok {
+			continue
+		}
+		entries = append(entries, *entry)
+	}
+	return entries, true
 }
 
 func ReadEntry(rawPath string) (*models.FileTreeEntry, bool, error) {
 	publicPath := hubpath.NormalizePublic(rawPath)
-	platform, ok := PlatformFromPath(publicPath)
+	manifest, resourcePathValue, ok := resourceForFile(publicPath)
 	if !ok {
 		return nil, false, nil
 	}
@@ -186,7 +230,7 @@ func ReadEntry(rawPath string) (*models.FileTreeEntry, bool, error) {
 		return nil, false, nil
 	}
 
-	content, err := fs.ReadFile(resourcesFS, resourcePath(platform, filename))
+	content, err := fs.ReadFile(resourcesFS, resourcePathValue)
 	if err != nil {
 		return nil, false, err
 	}
@@ -198,8 +242,7 @@ func ReadEntry(rawPath string) (*models.FileTreeEntry, bool, error) {
 
 	kind := "file"
 	mimeType := contentType(filename)
-	if filename == "SKILL.md" {
-		manifest := platformManifests[platform]
+	if filename == "SKILL.md" && strings.TrimSuffix(publicPath, "/") == manifest.Path+"/SKILL.md" {
 		kind = "skill"
 		metadata["name"] = manifest.SkillName
 		metadata["description"] = manifest.Description
@@ -350,10 +393,6 @@ func directoryEntry(publicPath string) models.FileTreeEntry {
 	}
 }
 
-func resourcePath(platform, filename string) string {
-	return path.Join("resources", "portability", platform, filename)
-}
-
 func contentType(filename string) string {
 	switch path.Ext(filename) {
 	case ".md":
@@ -499,4 +538,98 @@ func displayName(platform string) string {
 		return manifest.DisplayName
 	}
 	return strings.Title(platform)
+}
+
+func systemManifestByKey(key string) (skillManifest, bool) {
+	if key == "agenthub" {
+		return agenthubManifest, true
+	}
+	if strings.HasPrefix(key, "portability/") {
+		platform := strings.TrimPrefix(key, "portability/")
+		manifest, ok := platformManifests[platform]
+		return manifest, ok
+	}
+	return skillManifest{}, false
+}
+
+func resourceRootForPath(publicPath string) (string, string, bool) {
+	publicPath = strings.TrimSuffix(hubpath.NormalizePublic(publicPath), "/")
+	if publicPath == agentHubRoot || strings.HasPrefix(publicPath, agentHubRoot+"/") {
+		return agenthubManifest.ResourceDir, agenthubManifest.Path, true
+	}
+	for _, platform := range portabilityPlatforms {
+		manifest := platformManifests[platform]
+		if publicPath == manifest.Path || strings.HasPrefix(publicPath, manifest.Path+"/") {
+			return manifest.ResourceDir, manifest.Path, true
+		}
+	}
+	return "", "", false
+}
+
+func resourceForFile(publicPath string) (skillManifest, string, bool) {
+	resourceRoot, publicRoot, ok := resourceRootForPath(publicPath)
+	if !ok {
+		return skillManifest{}, "", false
+	}
+	manifest, ok := manifestForRoot(publicRoot)
+	if !ok {
+		return skillManifest{}, "", false
+	}
+	rel := strings.Trim(strings.TrimPrefix(hubpath.NormalizePublic(publicPath), publicRoot), "/")
+	if rel == "" {
+		return skillManifest{}, "", false
+	}
+	return manifest, path.Join(resourceRoot, rel), true
+}
+
+func manifestForRoot(publicRoot string) (skillManifest, bool) {
+	if publicRoot == agentHubRoot {
+		return agenthubManifest, true
+	}
+	for _, platform := range portabilityPlatforms {
+		manifest := platformManifests[platform]
+		if manifest.Path == publicRoot {
+			return manifest, true
+		}
+	}
+	return skillManifest{}, false
+}
+
+func ExportSkillFiles(skillName string) (map[string]string, error) {
+	var manifest skillManifest
+	switch strings.TrimSpace(skillName) {
+	case agenthubManifest.SkillName:
+		manifest = agenthubManifest
+	default:
+		platform, ok := strings.CutPrefix(strings.TrimSpace(skillName), "portability/")
+		if !ok {
+			return nil, fmt.Errorf("unknown system skill %q", skillName)
+		}
+		var exists bool
+		manifest, exists = platformManifests[platform]
+		if !exists {
+			return nil, fmt.Errorf("unknown system skill %q", skillName)
+		}
+	}
+
+	files := map[string]string{}
+	err := fs.WalkDir(resourcesFS, manifest.ResourceDir, func(resourcePath string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if d.IsDir() {
+			return nil
+		}
+		data, err := fs.ReadFile(resourcesFS, resourcePath)
+		if err != nil {
+			return err
+		}
+		rel := strings.TrimPrefix(resourcePath, manifest.ResourceDir+"/")
+		files[rel] = string(data)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
 }

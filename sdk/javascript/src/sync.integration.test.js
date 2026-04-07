@@ -11,6 +11,19 @@ const BASE_URL = (process.env.AGENTHUB_TEST_URL || '').replace(/\/+$/, '')
 const ROOT = path.resolve(__dirname, '../../..')
 const FIXTURE_DIR = path.join(ROOT, 'internal', 'services', 'testdata')
 
+function runAgentHub(args) {
+  const configured = process.env.AGENTHUB_CLI
+  if (configured) {
+    execFileSync(configured, args, { stdio: 'inherit' })
+    return
+  }
+  if (fs.existsSync('/tmp/agenthub')) {
+    execFileSync('/tmp/agenthub', args, { stdio: 'inherit' })
+    return
+  }
+  execFileSync('go', ['run', './cmd/agenthub', ...args], { cwd: ROOT, stdio: 'inherit' })
+}
+
 function skipIfNoServer() {
   if (!BASE_URL) {
     return true
@@ -117,8 +130,8 @@ test('AgentHub JS SDK handles json bundle and archive sessions', { skip: skipIfN
   const bundlePath = path.join(os.tmpdir(), `agenthub-js-${Date.now()}.ahub`)
   const archivePath = path.join(os.tmpdir(), `agenthub-js-${Date.now()}.ahubz`)
 
-  execFileSync('python3', [path.join(ROOT, 'tools', 'ahub-sync.py'), 'export', '--source', sourceDir, '-o', bundlePath], { stdio: 'inherit' })
-  execFileSync('python3', [path.join(ROOT, 'tools', 'ahub-sync.py'), 'export', '--source', sourceDir, '--format', 'archive', '-o', archivePath], { stdio: 'inherit' })
+  runAgentHub(['sync', 'export', '--source', sourceDir, '-o', bundlePath])
+  runAgentHub(['sync', 'export', '--source', sourceDir, '--format', 'archive', '-o', archivePath])
 
   const bundle = JSON.parse(fs.readFileSync(bundlePath, 'utf8'))
   const manifest = readManifestFromArchive(archivePath)

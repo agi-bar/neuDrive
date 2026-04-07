@@ -59,6 +59,39 @@ func TestListEntriesPortabilityRoot(t *testing.T) {
 	}
 }
 
+func TestListEntriesSkillsRootIncludesAgentHub(t *testing.T) {
+	entries, ok := ListEntries("/skills")
+	if !ok {
+		t.Fatal("expected /skills root to be handled")
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected agenthub + portability roots, got %d", len(entries))
+	}
+	paths := []string{entries[0].Path, entries[1].Path}
+	if !strings.Contains(strings.Join(paths, " "), "/skills/agenthub/") {
+		t.Fatalf("expected agenthub root in %v", paths)
+	}
+}
+
+func TestReadEntryAgentHubSkill(t *testing.T) {
+	entry, ok, err := ReadEntry("/skills/agenthub/SKILL.md")
+	if err != nil {
+		t.Fatalf("ReadEntry() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected agenthub system skill to be found")
+	}
+	if entry.Kind != "skill" {
+		t.Fatalf("expected kind=skill, got %q", entry.Kind)
+	}
+	if !strings.Contains(entry.Content, "Agent Hub") {
+		t.Fatalf("expected Agent Hub skill content")
+	}
+	if got, _ := entry.Metadata["name"].(string); got != "agenthub" {
+		t.Fatalf("expected skill name metadata, got %q", got)
+	}
+}
+
 func TestReadEntryChatGPTSkill(t *testing.T) {
 	entry, ok, err := ReadEntry("/skills/portability/chatgpt/SKILL.md")
 	if err != nil {
@@ -137,5 +170,26 @@ func TestRenderSkillDocumentIncludesSnapshot(t *testing.T) {
 	}
 	if !strings.Contains(rendered, "Connected to Codex: unknown") {
 		t.Fatalf("rendered content missing snapshot")
+	}
+}
+
+func TestExportSkillFilesAgentHub(t *testing.T) {
+	files, err := ExportSkillFiles("agenthub")
+	if err != nil {
+		t.Fatalf("ExportSkillFiles() error = %v", err)
+	}
+	for _, required := range []string{
+		"SKILL.md",
+		"commands/export.md",
+		"commands/import.md",
+		"commands/list.md",
+		"commands/status.md",
+		"commands/help.md",
+		"references/platforms/codex.md",
+		"references/platforms/claude.md",
+	} {
+		if _, ok := files[required]; !ok {
+			t.Fatalf("expected %s in exported skill files", required)
+		}
 	}
 }

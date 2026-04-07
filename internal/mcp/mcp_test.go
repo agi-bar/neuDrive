@@ -171,6 +171,9 @@ func TestListSkillsIncludesSystemPortabilityManuals(t *testing.T) {
 	if !strings.Contains(text, "portability/chatgpt") {
 		t.Fatalf("expected portability/chatgpt in list_skills output, got %s", text)
 	}
+	if !strings.Contains(text, "\"name\": \"agenthub\"") {
+		t.Fatalf("expected agenthub system skill in list_skills output, got %s", text)
+	}
 	if !strings.Contains(text, "\"read_only\": true") {
 		t.Fatalf("expected read_only flag in list_skills output, got %s", text)
 	}

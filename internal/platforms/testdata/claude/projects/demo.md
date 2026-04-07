@@ -1,0 +1,2 @@
+claude project fixture
+

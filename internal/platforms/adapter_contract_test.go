@@ -228,7 +228,6 @@ func TestAdapterContracts(t *testing.T) {
 			if tc.id == "claude-code" && (!status.EntrypointInstalled || status.EntrypointType != "command") {
 				t.Fatalf("expected claude command entrypoint installed: %+v", status)
 			}
-
 			importResult, err := ImportIntoLocalHub(ctx, cfg, tc.id)
 			if err != nil {
 				t.Fatalf("ImportIntoLocalHub(%s): %v", tc.id, err)
@@ -248,6 +247,24 @@ func TestAdapterContracts(t *testing.T) {
 			for _, rel := range tc.expectedExports {
 				if _, err := os.Stat(filepath.Join(exportRoot, filepath.FromSlash(rel))); err != nil {
 					t.Fatalf("expected exported path for %s: %s (%v)", tc.id, rel, err)
+				}
+			}
+
+			if tc.id == "claude-code" || tc.id == "codex" {
+				agentResult, err := Import(ctx, cfg, tc.id, "agent")
+				if err != nil {
+					t.Fatalf("Import(%s, agent): %v", tc.id, err)
+				}
+				if agentResult.Agent == nil || agentResult.Agent.ProfileCategories == 0 || agentResult.Agent.MemoryItems == 0 {
+					t.Fatalf("expected non-empty agent import result for %s: %+v", tc.id, agentResult)
+				}
+
+				allResult, err := Import(ctx, cfg, tc.id, "all")
+				if err != nil {
+					t.Fatalf("Import(%s, all): %v", tc.id, err)
+				}
+				if allResult.Agent == nil || allResult.Files == nil {
+					t.Fatalf("expected combined import result for %s: %+v", tc.id, allResult)
 				}
 			}
 

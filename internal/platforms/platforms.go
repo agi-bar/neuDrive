@@ -287,7 +287,7 @@ func (a *claudeAdapter) init() *claudeAdapter {
 				{Domain: "prompts", Label: "plans", Path: expandUser("~/.claude/plans"), IsDir: true},
 				{Domain: "tools", Label: "plugins", Path: expandUser("~/.claude/plugins"), IsDir: true},
 			},
-			"planned",
+			"supported",
 		)}
 	}
 	return a

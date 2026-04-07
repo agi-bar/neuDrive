@@ -166,12 +166,16 @@ agenthub platform show codex
   - 同时安装 `~/.claude/skills/agenthub` 和 `/agenthub <subcommand>` 命令入口
   - 在 Claude 中使用 `/agenthub export`、`/agenthub import`、`/agenthub list`、`/agenthub status`
 
-对 Codex 而言，`agenthub import codex` 默认走 agent-mediated 导入，也就是 `agenthub` 主动调用 `codex exec` 执行同一套导出逻辑。保守模式仍可用：
+对 Codex 和 Claude 而言，`agenthub import <platform>` 默认都走 agent-mediated 导入，也就是 `agenthub` 主动调用平台的非交互入口执行同一套导出逻辑。保守模式仍可用：
 
 ```bash
 agenthub import codex --mode agent
 agenthub import codex --mode files
 agenthub import codex --mode all
+
+agenthub import claude --mode agent
+agenthub import claude --mode files
+agenthub import claude --mode all
 ```
 
 如果你是在远程 / 官方服务模式下使用，也仍然可以直接把各平台连到 `https://hub.example.com/mcp`。

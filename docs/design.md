@@ -22,7 +22,7 @@
 
 - 日常用户先装 `agenthub`
 - `agenthub connect <platform>` 把本地 Claude/Codex/Gemini/Cursor 连到本地 Hub
-- `agenthub import <platform>` / `agenthub export <platform>` 处理平台数据，其中 Codex 默认优先走 agent-mediated 导入
+- `agenthub import <platform>` / `agenthub export <platform>` 处理平台数据，其中 Codex 和 Claude 默认优先走 agent-mediated 导入
 - `agenthub sync ...` 处理 bundle 迁移、备份、恢复
 - 只有在明确需要时，才去 `agenthub remote login official --url https://agenthub.agi.bar`
 

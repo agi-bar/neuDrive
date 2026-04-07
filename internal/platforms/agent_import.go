@@ -1,6 +1,7 @@
 package platforms
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -32,15 +33,15 @@ type ImportSummary struct {
 func ParseImportMode(platform, raw string) (ImportMode, error) {
 	mode := strings.ToLower(strings.TrimSpace(raw))
 	if mode == "" {
-		if strings.EqualFold(platform, "codex") {
+		if supportsAgentMediatedImport(platform) {
 			return ImportModeAgent, nil
 		}
 		return ImportModeFiles, nil
 	}
 	switch ImportMode(mode) {
 	case ImportModeAgent, ImportModeFiles, ImportModeAll:
-		if platform != "codex" && ImportMode(mode) != ImportModeFiles {
-			return "", fmt.Errorf("agent-mediated import is currently supported only for codex; use --mode files for %s", platform)
+		if !supportsAgentMediatedImport(platform) && ImportMode(mode) != ImportModeFiles {
+			return "", fmt.Errorf("agent-mediated import is currently supported only for codex and claude; use --mode files for %s", platform)
 		}
 		return ImportMode(mode), nil
 	default:
@@ -87,14 +88,14 @@ func Import(ctx context.Context, cfg *localruntime.CLIConfig, platform, rawMode 
 }
 
 func importViaAgent(ctx context.Context, cfg *localruntime.CLIConfig, platform string) (*localhub.AgentImportResult, error) {
-	if platform != "codex" {
-		return nil, fmt.Errorf("agent-mediated import is currently supported only for codex")
+	if !supportsAgentMediatedImport(platform) {
+		return nil, fmt.Errorf("agent-mediated import is currently supported only for codex and claude")
 	}
 	connection, ok := cfg.Local.Connections[platform]
 	if !ok || strings.TrimSpace(connection.Token) == "" {
-		return nil, fmt.Errorf("codex is not connected; run `agenthub connect codex` first")
+		return nil, fmt.Errorf("%s is not connected; run `agenthub connect %s` first", platformDisplayName(platform), preferredConnectName(platform))
 	}
-	payload, err := runCodexAgentExport(ctx)
+	payload, err := runAgentExport(ctx, platform)
 	if err != nil {
 		return nil, err
 	}
@@ -104,6 +105,17 @@ func importViaAgent(ctx context.Context, cfg *localruntime.CLIConfig, platform s
 	}
 	defer hub.Close()
 	return hub.ImportAgentExport(ctx, platform, payload)
+}
+
+func runAgentExport(ctx context.Context, platform string) (localhub.AgentExportPayload, error) {
+	switch platform {
+	case "codex":
+		return runCodexAgentExport(ctx)
+	case "claude-code":
+		return runClaudeAgentExport(ctx)
+	default:
+		return localhub.AgentExportPayload{}, fmt.Errorf("agent-mediated import is not supported for %s", platform)
+	}
 }
 
 func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, error) {
@@ -132,7 +144,7 @@ func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, erro
 
 	schemaPath := filepath.Join(tempDir, "schema.json")
 	outputPath := filepath.Join(tempDir, "agenthub-export.json")
-	schema, err := json.MarshalIndent(codexExportSchema(), "", "  ")
+	schema, err := json.MarshalIndent(agentExportSchema(), "", "  ")
 	if err != nil {
 		return localhub.AgentExportPayload{}, err
 	}
@@ -140,12 +152,12 @@ func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, erro
 		return localhub.AgentExportPayload{}, err
 	}
 
-	prompt := buildCodexExportPrompt(skillDoc, commandDoc, platformDoc, portabilityDoc)
+	prompt := buildAgentExportPrompt("Codex", "codex-entry-reference", "codex-portability-reference", skillDoc, commandDoc, platformDoc, portabilityDoc)
 	cmd := exec.CommandContext(ctx, "codex", "exec", "--skip-git-repo-check", "--output-schema", schemaPath, "--output-last-message", outputPath, prompt)
 	cmd.Dir = tempDir
-	output, err := cmd.CombinedOutput()
+	output, stderr, err := runCommandJSON(cmd)
 	if err != nil {
-		trimmed := strings.TrimSpace(string(output))
+		trimmed := strings.TrimSpace(stderr)
 		if trimmed != "" {
 			return localhub.AgentExportPayload{}, fmt.Errorf("codex exec failed: %w: %s", err, trimmed)
 		}
@@ -156,12 +168,61 @@ func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, erro
 	if err != nil || len(strings.TrimSpace(string(payloadBytes))) == 0 {
 		payloadBytes = output
 	}
-	var payload localhub.AgentExportPayload
-	if err := json.Unmarshal(payloadBytes, &payload); err != nil {
+	payload, err := decodeAgentExportPayload(payloadBytes)
+	if err != nil {
 		return localhub.AgentExportPayload{}, fmt.Errorf("decode codex export payload: %w", err)
 	}
 	if strings.TrimSpace(payload.Platform) == "" {
 		payload.Platform = "codex"
+	}
+	if strings.TrimSpace(payload.Command) == "" {
+		payload.Command = "export"
+	}
+	return payload, nil
+}
+
+func runClaudeAgentExport(ctx context.Context) (localhub.AgentExportPayload, error) {
+	skillDoc, err := readSystemDoc("/skills/agenthub/SKILL.md")
+	if err != nil {
+		return localhub.AgentExportPayload{}, err
+	}
+	commandDoc, err := readSystemDoc("/skills/agenthub/commands/export.md")
+	if err != nil {
+		return localhub.AgentExportPayload{}, err
+	}
+	platformDoc, err := readSystemDoc("/skills/agenthub/references/platforms/claude.md")
+	if err != nil {
+		return localhub.AgentExportPayload{}, err
+	}
+	portabilityDoc, err := readSystemDoc("/skills/portability/claude/SKILL.md")
+	if err != nil {
+		return localhub.AgentExportPayload{}, err
+	}
+
+	tempDir, err := os.MkdirTemp("", "agenthub-claude-export-*")
+	if err != nil {
+		return localhub.AgentExportPayload{}, err
+	}
+	defer os.RemoveAll(tempDir)
+
+	prompt := buildAgentExportPrompt("Claude Code", "claude-entry-reference", "claude-portability-reference", skillDoc, commandDoc, platformDoc, portabilityDoc)
+	cmd := exec.CommandContext(ctx, "claude", "-p", prompt)
+	cmd.Dir = tempDir
+	output, stderr, err := runCommandJSON(cmd)
+	if err != nil {
+		trimmed := strings.TrimSpace(stderr)
+		if trimmed != "" {
+			return localhub.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w: %s", err, trimmed)
+		}
+		return localhub.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w", err)
+	}
+
+	payload, err := decodeAgentExportPayload(output)
+	if err != nil {
+		return localhub.AgentExportPayload{}, fmt.Errorf("decode claude export payload: %w", err)
+	}
+	if strings.TrimSpace(payload.Platform) == "" {
+		payload.Platform = "claude-code"
 	}
 	if strings.TrimSpace(payload.Command) == "" {
 		payload.Command = "export"
@@ -180,8 +241,8 @@ func readSystemDoc(publicPath string) (string, error) {
 	return entry.Content, nil
 }
 
-func buildCodexExportPrompt(skillDoc, commandDoc, platformDoc, portabilityDoc string) string {
-	return strings.TrimSpace(fmt.Sprintf(`You are executing the installed Agent Hub Codex entrypoint.
+func buildAgentExportPrompt(platformDisplayName, referenceTag, portabilityTag, skillDoc, commandDoc, platformDoc, portabilityDoc string) string {
+	return strings.TrimSpace(fmt.Sprintf(`You are executing the installed Agent Hub %s entrypoint.
 
 Follow the umbrella skill and platform portability instructions below. Return only JSON matching the provided schema. Do not wrap the JSON in markdown fences.
 
@@ -193,18 +254,18 @@ Follow the umbrella skill and platform portability instructions below. Return on
 %s
 </agenthub-export-command>
 
-<codex-entry-reference>
+<%s>
 %s
-</codex-entry-reference>
+</%s>
 
-<codex-portability-reference>
+<%s>
 %s
-</codex-portability-reference>
+</%s>
 
-Capture exact assets when directly observable, and capture derived long-term rules, memory, and project context when you can infer them. Preserve unsupported or partial data under the unsupported/notes fields instead of dropping it.`, skillDoc, commandDoc, platformDoc, portabilityDoc))
+Capture exact assets when directly observable, and capture derived long-term rules, memory, and project context when you can infer them. Preserve unsupported or partial data under the unsupported/notes fields instead of dropping it.`, platformDisplayName, skillDoc, commandDoc, referenceTag, platformDoc, referenceTag, portabilityTag, portabilityDoc, portabilityTag))
 }
 
-func codexExportSchema() map[string]interface{} {
+func agentExportSchema() map[string]interface{} {
 	return map[string]interface{}{
 		"type": "object",
 		"properties": map[string]interface{}{
@@ -250,5 +311,64 @@ func exportArraySchema(fields []string) map[string]interface{} {
 			"type":       "object",
 			"properties": properties,
 		},
+	}
+}
+
+func runCommandJSON(cmd *exec.Cmd) ([]byte, string, error) {
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	output, err := cmd.Output()
+	return output, stderr.String(), err
+}
+
+func decodeAgentExportPayload(payloadBytes []byte) (localhub.AgentExportPayload, error) {
+	raw := strings.TrimSpace(string(payloadBytes))
+	var payload localhub.AgentExportPayload
+	if err := json.Unmarshal([]byte(raw), &payload); err == nil {
+		return payload, nil
+	}
+	if strings.HasPrefix(raw, "```") {
+		raw = strings.TrimPrefix(raw, "```json")
+		raw = strings.TrimPrefix(raw, "```")
+		raw = strings.TrimSuffix(raw, "```")
+		raw = strings.TrimSpace(raw)
+		if err := json.Unmarshal([]byte(raw), &payload); err == nil {
+			return payload, nil
+		}
+	}
+	start := strings.Index(raw, "{")
+	end := strings.LastIndex(raw, "}")
+	if start >= 0 && end > start {
+		if err := json.Unmarshal([]byte(raw[start:end+1]), &payload); err == nil {
+			return payload, nil
+		}
+	}
+	return payload, fmt.Errorf("invalid json payload")
+}
+
+func supportsAgentMediatedImport(platform string) bool {
+	switch platform {
+	case "codex", "claude-code":
+		return true
+	default:
+		return false
+	}
+}
+
+func preferredConnectName(platform string) string {
+	switch platform {
+	case "claude-code":
+		return "claude"
+	default:
+		return platform
+	}
+}
+
+func platformDisplayName(platform string) string {
+	switch platform {
+	case "claude-code":
+		return "claude"
+	default:
+		return platform
 	}
 }

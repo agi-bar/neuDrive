@@ -42,6 +42,11 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("ls codex alias mismatch: %s", stdout)
 	}
 
+	stdout, _ = mustRunAgenthub(t, binary, env, "platform", "show", "claude")
+	if !strings.Contains(stdout, "Platform: Claude Code") || !strings.Contains(stdout, "Agent-mediated export: supported") {
+		t.Fatalf("unexpected claude platform show output: %s", stdout)
+	}
+
 	mustRunAgenthub(t, binary, env, "connect", "codex")
 	cfg := loadCLIConfigForTest(t, configPath)
 	if strings.TrimSpace(cfg.Local.Connections["codex"].Token) == "" {
@@ -82,6 +87,28 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("unexpected all import output: %s", stdout)
 	}
 
+	mustRunAgenthub(t, binary, env, "connect", "claude")
+	cfg = loadCLIConfigForTest(t, configPath)
+	if strings.TrimSpace(cfg.Local.Connections["claude-code"].Token) == "" {
+		t.Fatal("expected saved claude connection token after connect")
+	}
+	stdout, _ = mustRunAgenthub(t, binary, env, "platform", "show", "claude")
+	if !strings.Contains(stdout, "Connected: true") || !strings.Contains(stdout, "Entrypoint type: command") {
+		t.Fatalf("expected connected claude status: %s", stdout)
+	}
+	if !strings.Contains(stdout, filepath.Join(home, ".claude", "commands", "agenthub.md")) {
+		t.Fatalf("expected claude command path in output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude")
+	if !strings.Contains(stdout, "Imported claude using mode=agent") {
+		t.Fatalf("unexpected claude import output: %s", stdout)
+	}
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude", "--mode", "all")
+	if !strings.Contains(stdout, "Imported claude using mode=all") {
+		t.Fatalf("unexpected claude all import output: %s", stdout)
+	}
+
 	exportDir := filepath.Join(workDir, "codex-export")
 	stdout, _ = mustRunAgenthub(t, binary, env, "export", "codex", "--output", exportDir)
 	if !strings.Contains(stdout, "Exported ") {
@@ -110,6 +137,18 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	}
 	if !strings.Contains(string(logData), "ARG=remove") {
 		t.Fatalf("expected remove invocation in shim log: %s", string(logData))
+	}
+
+	mustRunAgenthub(t, binary, env, "disconnect", "claude")
+	cfg = loadCLIConfigForTest(t, configPath)
+	if _, ok := cfg.Local.Connections["claude-code"]; ok {
+		t.Fatal("expected claude connection removed after disconnect")
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "agenthub")); !os.IsNotExist(err) {
+		t.Fatal("expected claude managed skill removed after disconnect")
+	}
+	if _, err := os.Stat(filepath.Join(home, ".claude", "commands", "agenthub.md")); !os.IsNotExist(err) {
+		t.Fatal("expected claude managed command removed after disconnect")
 	}
 
 	mustRunAgenthub(t, binary, env, "daemon", "stop")

@@ -4,15 +4,23 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/database"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/agi-bar/agenthub/internal/vault"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
+)
+
+var (
+	mcpTestMigrationsOnce sync.Once
+	mcpTestMigrationsErr  error
 )
 
 // ---------------------------------------------------------------------------
@@ -42,6 +50,13 @@ func setupIntegrationMCP(t *testing.T) *MCPServer {
 		t.Fatalf("connect to DB: %v", err)
 	}
 	t.Cleanup(func() { pool.Close() })
+
+	mcpTestMigrationsOnce.Do(func() {
+		mcpTestMigrationsErr = database.RunMigrations(pool, filepath.Join("..", "..", "migrations"))
+	})
+	if mcpTestMigrationsErr != nil {
+		t.Fatalf("run migrations: %v", mcpTestMigrationsErr)
+	}
 
 	// Create a unique test user directly in DB
 	userID := uuid.New()

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/localruntime"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
 )
 
 func configureIsolatedCLIEnv(t *testing.T) string {
@@ -38,7 +38,7 @@ func configureIsolatedCLIEnv(t *testing.T) string {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 	t.Setenv("GOCACHE", goCache)
-	t.Setenv(localruntime.ConfigEnv, filepath.Join(configHome, "agenthub", "config.json"))
+	t.Setenv(runtimecfg.ConfigEnv, filepath.Join(configHome, "agenthub", "config.json"))
 	for _, key := range []string{
 		"AGENTHUB_TOKEN",
 		"AGENTHUB_SYNC_TOKEN",

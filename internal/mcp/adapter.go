@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -321,17 +320,58 @@ func (s *MCPServer) getTools() []MCPTool {
 		// import_claude_memory removed from MCP tools — available via admin HTTP API only
 	}
 
+	filteredByCapability := make([]MCPTool, 0, len(tools))
+	for _, t := range tools {
+		if s.supportsTool(t.Name) {
+			filteredByCapability = append(filteredByCapability, t)
+		}
+	}
+
 	// Filter by scopes if token has limited scopes
 	if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) {
 		var filtered []MCPTool
-		for _, t := range tools {
+		for _, t := range filteredByCapability {
 			if s.toolAllowed(t.Name) {
 				filtered = append(filtered, t)
 			}
 		}
 		return filtered
 	}
-	return tools
+	return filteredByCapability
+}
+
+func (s *MCPServer) supportsTool(name string) bool {
+	switch name {
+	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
+		"get_project", "log_action", "list_directory", "read_file", "write_file",
+		"list_secrets", "read_secret", "list_skills", "read_skill", "list_devices",
+		"call_device", "send_message", "read_inbox", "get_stats", "save_memory",
+		"import_skill", "create_sync_token", "create_skills_import_token", "import_claude_memory":
+	default:
+		return false
+	}
+	switch name {
+	case "read_profile", "update_profile", "save_memory":
+		return s.Memory != nil
+	case "search_memory", "list_directory", "read_file", "write_file", "list_skills", "read_skill":
+		return s.FileTree != nil
+	case "list_projects", "create_project", "get_project", "log_action":
+		return s.Project != nil
+	case "list_secrets", "read_secret":
+		return s.Vault != nil
+	case "list_devices", "call_device":
+		return s.Device != nil
+	case "send_message", "read_inbox":
+		return s.Inbox != nil
+	case "get_stats":
+		return s.Dashboard != nil
+	case "import_skill", "import_claude_memory":
+		return s.Import != nil
+	case "create_sync_token", "create_skills_import_token":
+		return s.Token != nil
+	default:
+		return false
+	}
 }
 
 func (s *MCPServer) toolAllowed(name string) bool {
@@ -371,6 +411,12 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 
 	if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) && !s.toolAllowed(params.Name) {
 		return fmt.Sprintf("error: tool %q not allowed by current scopes", params.Name), true
+	}
+	if !s.isKnownTool(params.Name) {
+		return fmt.Sprintf("unknown tool: %s", params.Name), true
+	}
+	if !s.supportsTool(params.Name) {
+		return fmt.Sprintf("error: tool %q not configured", params.Name), true
 	}
 
 	switch params.Name {
@@ -800,7 +846,23 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 	}
 }
 
+func (s *MCPServer) isKnownTool(name string) bool {
+	switch name {
+	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
+		"get_project", "log_action", "list_directory", "read_file", "write_file",
+		"list_secrets", "read_secret", "list_skills", "read_skill", "list_devices",
+		"call_device", "send_message", "read_inbox", "get_stats", "save_memory",
+		"import_skill", "create_sync_token", "create_skills_import_token", "import_claude_memory":
+		return true
+	default:
+		return false
+	}
+}
+
 func (s *MCPServer) getResources() []MCPResource {
+	if s.FileTree == nil {
+		return nil
+	}
 	ctx := context.Background()
 	entries, err := s.FileTree.List(ctx, s.UserID, "/", s.TrustLevel)
 	if err != nil {
@@ -829,6 +891,9 @@ func (s *MCPServer) getResources() []MCPResource {
 }
 
 func (s *MCPServer) readResource(uri string) (string, error) {
+	if s.FileTree == nil {
+		return "", fmt.Errorf("file tree service not configured")
+	}
 	path := strings.TrimPrefix(uri, "agenthub://")
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
@@ -853,64 +918,12 @@ func mcpSnippetText(raw string) string {
 
 // RunStdio runs the MCP server on stdin/stdout (for Claude Code stdio transport)
 func (s *MCPServer) RunStdio(stdin io.Reader, stdout io.Writer) error {
-	scanner := bufio.NewScanner(stdin)
-	scanner.Buffer(make([]byte, 1024*1024), 1024*1024) // 1MB buffer
-
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-
-		var req JSONRPCRequest
-		if err := json.Unmarshal([]byte(line), &req); err != nil {
-			errResp := JSONRPCResponse{
-				JSONRPC: "2.0",
-				ID:      nil,
-				Error:   &RPCError{Code: -32700, Message: "parse error"},
-			}
-			writeJSONLine(stdout, errResp)
-			continue
-		}
-
-		resp := s.HandleJSONRPC(req)
-
-		// Notifications (no ID) don't get responses
-		if req.ID == nil && (strings.HasPrefix(req.Method, "notifications/")) {
-			continue
-		}
-
-		writeJSONLine(stdout, resp)
-	}
-	return scanner.Err()
+	return RunStdioHandler(s, stdin, stdout)
 }
 
 // ServeHTTP handles MCP over HTTP (for http transport)
 func (s *MCPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req JSONRPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(JSONRPCResponse{
-			JSONRPC: "2.0", Error: &RPCError{Code: -32700, Message: "parse error"},
-		})
-		return
-	}
-
-	resp := s.HandleJSONRPC(req)
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(resp)
-}
-
-// Helper: write JSON line to writer
-func writeJSONLine(w io.Writer, v interface{}) {
-	data, _ := json.Marshal(v)
-	fmt.Fprintf(w, "%s\n", data)
+	ServeHTTPHandler(s, w, r)
 }
 
 // Helper: JSON Schema builder

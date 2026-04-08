@@ -16,6 +16,7 @@ import (
 
 type ProjectService struct {
 	db       *pgxpool.Pool
+	repo     ProjectRepo
 	role     *RoleService
 	fileTree *FileTreeService
 }
@@ -24,7 +25,14 @@ func NewProjectService(db *pgxpool.Pool, role *RoleService, fileTree *FileTreeSe
 	return &ProjectService{db: db, role: role, fileTree: fileTree}
 }
 
+func NewProjectServiceWithRepo(repo ProjectRepo, role *RoleService, fileTree *FileTreeService) *ProjectService {
+	return &ProjectService{repo: repo, role: role, fileTree: fileTree}
+}
+
 func (s *ProjectService) List(ctx context.Context, userID uuid.UUID) ([]models.Project, error) {
+	if s.repo != nil {
+		return s.repo.ListProjects(ctx, userID)
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, name, status, context_md, metadata, created_at, updated_at
 		 FROM projects WHERE user_id = $1 AND status = 'active'
@@ -52,6 +60,9 @@ func (s *ProjectService) List(ctx context.Context, userID uuid.UUID) ([]models.P
 }
 
 func (s *ProjectService) Get(ctx context.Context, userID uuid.UUID, name string) (*models.Project, error) {
+	if s.repo != nil {
+		return s.repo.GetProject(ctx, userID, name)
+	}
 	var p models.Project
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, name, status, context_md, metadata, created_at, updated_at
@@ -73,6 +84,9 @@ func (s *ProjectService) Get(ctx context.Context, userID uuid.UUID, name string)
 func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name string) (*models.Project, error) {
 	if err := validateSlug(name, 128); err != nil {
 		return nil, fmt.Errorf("project.Create: invalid name: %w", err)
+	}
+	if s.repo != nil {
+		return s.repo.CreateProject(ctx, userID, name)
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -145,6 +159,9 @@ func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name stri
 }
 
 func (s *ProjectService) Archive(ctx context.Context, userID uuid.UUID, name string) error {
+	if s.repo != nil {
+		return s.repo.ArchiveProject(ctx, userID, name)
+	}
 	_, err := s.db.Exec(ctx,
 		`UPDATE projects SET status = 'archived', updated_at = $1 WHERE user_id = $2 AND name = $3`,
 		time.Now().UTC(), userID, name)
@@ -161,6 +178,9 @@ func (s *ProjectService) Archive(ctx context.Context, userID uuid.UUID, name str
 }
 
 func (s *ProjectService) UpdateContext(ctx context.Context, userID uuid.UUID, name, contextMD string) error {
+	if s.repo != nil {
+		return s.repo.UpdateProjectContext(ctx, userID, name, contextMD)
+	}
 	if s.fileTree != nil {
 		if _, err := s.fileTree.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), contextMD, "text/markdown", models.FileTreeWriteOptions{
 			Kind:          "project_context",
@@ -185,6 +205,9 @@ func (s *ProjectService) AppendLog(ctx context.Context, projectID uuid.UUID, log
 	projectName, userID, err := s.projectIdentity(ctx, projectID)
 	if err != nil {
 		return err
+	}
+	if s.repo != nil {
+		return s.repo.AppendProjectLog(ctx, userID, projectName, log)
 	}
 
 	now := time.Now().UTC()
@@ -240,6 +263,13 @@ func (s *ProjectService) GetLogs(ctx context.Context, projectID uuid.UUID, limit
 	if limit <= 0 {
 		limit = 50
 	}
+	if s.repo != nil {
+		projectName, userID, err := s.projectIdentity(ctx, projectID)
+		if err != nil {
+			return nil, err
+		}
+		return s.repo.GetProjectLogs(ctx, userID, projectName, limit)
+	}
 
 	if s.fileTree != nil {
 		projectName, userID, err := s.projectIdentity(ctx, projectID)
@@ -276,6 +306,9 @@ func (s *ProjectService) GetLogs(ctx context.Context, projectID uuid.UUID, limit
 }
 
 func (s *ProjectService) projectIdentity(ctx context.Context, projectID uuid.UUID) (string, uuid.UUID, error) {
+	if s.repo != nil {
+		return s.repo.GetProjectIdentity(ctx, projectID)
+	}
 	var name string
 	var userID uuid.UUID
 	err := s.db.QueryRow(ctx,

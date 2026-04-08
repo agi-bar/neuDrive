@@ -1,4 +1,4 @@
-package localhub
+package sqlite
 
 import (
 	"context"
@@ -9,8 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/localruntime"
-	"github.com/agi-bar/agenthub/internal/localstore"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/skillsarchive"
 	"github.com/google/uuid"
@@ -39,12 +38,12 @@ type ExportResult struct {
 }
 
 type Client struct {
-	store  *localstore.Store
+	store  *Store
 	userID uuid.UUID
 }
 
-func Open(ctx context.Context, cfg *localruntime.CLIConfig) (*Client, error) {
-	store, err := localstore.Open(cfg.Local.SQLitePath)
+func OpenClient(ctx context.Context, cfg *runtimecfg.CLIConfig) (*Client, error) {
+	store, err := Open(cfg.Local.SQLitePath)
 	if err != nil {
 		return nil, err
 	}
@@ -216,24 +215,6 @@ func looksBinary(path string, data []byte) bool {
 	return skillsarchive.LooksBinary(path, data)
 }
 
-func isBinaryMetadata(metadata map[string]interface{}) bool {
-	if metadata == nil {
-		return false
-	}
-	value, ok := metadata["binary"]
-	if !ok {
-		return false
-	}
-	switch typed := value.(type) {
-	case bool:
-		return typed
-	case string:
-		return typed == "true"
-	default:
-		return false
-	}
-}
-
 func isManagedAgentHubDir(pathValue string) bool {
 	_, err := os.Stat(filepath.Join(pathValue, ".agenthub-managed.json"))
 	return err == nil
@@ -243,7 +224,7 @@ func (c *Client) ValidateToken(ctx context.Context, token string) (*models.Scope
 	return c.store.ValidateToken(ctx, token)
 }
 
-func (c *Client) Store() *localstore.Store {
+func (c *Client) Store() *Store {
 	return c.store
 }
 

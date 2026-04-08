@@ -87,12 +87,22 @@ func (m *mockFileTreeService) Search(_ context.Context, _ uuid.UUID, query strin
 // and use the stdio transport for the read_profile tool (which needs Memory).
 
 // newTestMCPServer creates an MCPServer with no backing services (nil).
-// This is sufficient for protocol-level tests (initialize, tools/list, etc.)
+// For capability-aware tool listing we install zero-value services for the
+// capabilities we expect to be advertised.
 func newTestMCPServer() *MCPServer {
 	return &MCPServer{
 		UserID:     testUserID,
 		TrustLevel: models.TrustLevelFull,
 		Scopes:     []string{}, // empty = no scope filtering (full access)
+		FileTree:   &services.FileTreeService{},
+		Memory:     &services.MemoryService{},
+		Project:    &services.ProjectService{},
+		Vault:      &services.VaultService{},
+		Inbox:      &services.InboxService{},
+		Device:     &services.DeviceService{},
+		Dashboard:  &services.DashboardService{},
+		Import:     &services.ImportService{},
+		Token:      &services.TokenService{},
 	}
 }
 
@@ -280,6 +290,8 @@ func TestToolsListWithScopeFiltering(t *testing.T) {
 		UserID:     testUserID,
 		TrustLevel: models.TrustLevelFull,
 		Scopes:     []string{models.ScopeReadProfile}, // only profile scope
+		Memory:     &services.MemoryService{},
+		Dashboard:  &services.DashboardService{},
 	}
 
 	req := JSONRPCRequest{
@@ -325,10 +337,9 @@ func TestToolsListWithScopeFiltering(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestToolsCallReadProfileNilService(t *testing.T) {
-	// With nil Memory service, calling read_profile panics (nil pointer).
-	// This test verifies the panic occurs (the service is not nil-safe).
-	// In production a recover middleware would catch this.
+	// With nil Memory service, calling read_profile should return a configured error.
 	s := newTestMCPServer()
+	s.Memory = nil
 
 	params, _ := json.Marshal(ToolCallParams{
 		Name:      "read_profile",
@@ -342,18 +353,18 @@ func TestToolsCallReadProfileNilService(t *testing.T) {
 		Params:  params,
 	}
 
-	panicked := false
-	func() {
-		defer func() {
-			if r := recover(); r != nil {
-				panicked = true
-			}
-		}()
-		s.HandleJSONRPC(req)
-	}()
-
-	if !panicked {
-		t.Error("expected panic when calling read_profile with nil Memory service")
+	resp := s.HandleJSONRPC(req)
+	result, ok := resp.Result.(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected result map, got %#v", resp.Result)
+	}
+	isErr, _ := result["isError"].(bool)
+	if !isErr {
+		t.Fatal("expected isError=true for nil Memory service")
+	}
+	content, ok := result["content"].([]ContentBlock)
+	if ok && len(content) > 0 && !strings.Contains(content[0].Text, "not configured") {
+		t.Fatalf("expected not configured error, got %q", content[0].Text)
 	}
 }
 

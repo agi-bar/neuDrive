@@ -1,4 +1,4 @@
-package localstore
+package sqlite
 
 import (
 	"context"
@@ -26,7 +26,7 @@ const sqliteDriverName = "sqlite"
 func Open(path string) (*Store, error) {
 	path = strings.TrimSpace(path)
 	if path == "" {
-		return nil, fmt.Errorf("localstore.Open: sqlite path is required")
+		return nil, fmt.Errorf("sqlite.Open: sqlite path is required")
 	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return nil, err
@@ -59,9 +59,16 @@ func (s *Store) Path() string {
 	return s.path
 }
 
+func (s *Store) DB() *sql.DB {
+	if s == nil {
+		return nil
+	}
+	return s.db
+}
+
 func (s *Store) init(ctx context.Context) error {
 	if s == nil || s.db == nil {
-		return fmt.Errorf("localstore.init: database not configured")
+		return fmt.Errorf("sqlite.init: database not configured")
 	}
 	stmts := []string{
 		`CREATE TABLE IF NOT EXISTS users (
@@ -171,7 +178,7 @@ func (s *Store) init(ctx context.Context) error {
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			return fmt.Errorf("localstore.init: %w", err)
+			return fmt.Errorf("sqlite.init: %w", err)
 		}
 	}
 	return nil
@@ -203,7 +210,7 @@ func (s *Store) EnsureOwner(ctx context.Context) (*models.User, error) {
 		timeText(user.UpdatedAt),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("localstore.EnsureOwner: %w", err)
+		return nil, fmt.Errorf("sqlite.EnsureOwner: %w", err)
 	}
 	return user, nil
 }

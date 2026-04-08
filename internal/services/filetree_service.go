@@ -35,15 +35,23 @@ const fileTreeSelectColumns = `
 `
 
 type FileTreeService struct {
-	db *pgxpool.Pool
+	db   *pgxpool.Pool
+	repo FileTreeRepo
 }
 
 func NewFileTreeService(db *pgxpool.Pool) *FileTreeService {
 	return &FileTreeService{db: db}
 }
 
+func NewFileTreeServiceWithRepo(repo FileTreeRepo) *FileTreeService {
+	return &FileTreeService{repo: repo}
+}
+
 // List returns immediate children under the requested directory path.
 func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
+	if s.repo != nil {
+		return s.repo.List(ctx, userID, path, trustLevel)
+	}
 	path = hubpath.NormalizeStorage(path)
 	if !strings.HasSuffix(path, "/") {
 		path += "/"
@@ -96,6 +104,9 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 
 // Read returns a single live entry, respecting trust level.
 func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
+	if s.repo != nil {
+		return s.repo.Read(ctx, userID, path, trustLevel)
+	}
 	path = hubpath.NormalizeStorage(path)
 	if entry, ok, err := systemskills.ReadEntry(path); err != nil {
 		return nil, fmt.Errorf("filetree.Read: %w", err)
@@ -161,6 +172,9 @@ func (s *FileTreeService) WriteEntry(
 	contentType string,
 	opts models.FileTreeWriteOptions,
 ) (*models.FileTreeEntry, error) {
+	if s.repo != nil {
+		return s.repo.WriteEntry(ctx, userID, path, content, contentType, opts)
+	}
 	storagePath := hubpath.NormalizeStorage(path)
 	if systemskills.IsProtectedPath(storagePath) {
 		return nil, ErrReadOnlyPath
@@ -301,6 +315,9 @@ func (s *FileTreeService) WriteEntry(
 
 // Delete tombstones an entry instead of hard deleting it.
 func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path string) error {
+	if s.repo != nil {
+		return s.repo.Delete(ctx, userID, path)
+	}
 	storagePath := hubpath.NormalizeStorage(path)
 	if systemskills.IsProtectedPath(storagePath) {
 		return ErrReadOnlyPath
@@ -367,6 +384,9 @@ func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path str
 
 // Search performs full-text search across live entries and indexed metadata.
 func (s *FileTreeService) Search(ctx context.Context, userID uuid.UUID, query string, trustLevel int, pathPrefix string) ([]models.FileTreeEntry, error) {
+	if s.repo != nil {
+		return s.repo.Search(ctx, userID, query, trustLevel, pathPrefix)
+	}
 	args := []interface{}{userID, trustLevel}
 	argIdx := 3
 
@@ -419,6 +439,9 @@ func (s *FileTreeService) Search(ctx context.Context, userID uuid.UUID, query st
 }
 
 func (s *FileTreeService) EnsureDirectory(ctx context.Context, userID uuid.UUID, path string) error {
+	if s.repo != nil {
+		return s.repo.EnsureDirectory(ctx, userID, path)
+	}
 	_, err := s.EnsureDirectoryWithMetadata(ctx, userID, path, nil, models.TrustLevelGuest)
 	return err
 }
@@ -430,6 +453,15 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 	metadata map[string]interface{},
 	minTrustLevel int,
 ) (*models.FileTreeEntry, error) {
+	if s.repo != nil {
+		if len(metadata) == 0 {
+			if err := s.repo.EnsureDirectory(ctx, userID, path); err != nil {
+				return nil, err
+			}
+			return s.repo.Read(ctx, userID, path, models.TrustLevelFull)
+		}
+		return nil, fmt.Errorf("filetree.EnsureDirectory: metadata-backed repo ensure not implemented")
+	}
 	storagePath := hubpath.NormalizeStorage(path)
 	if !strings.HasSuffix(storagePath, "/") {
 		storagePath += "/"
@@ -579,6 +611,9 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 }
 
 func (s *FileTreeService) Snapshot(ctx context.Context, userID uuid.UUID, pathPrefix string, trustLevel int) (*models.EntrySnapshot, error) {
+	if s.repo != nil {
+		return s.repo.Snapshot(ctx, userID, pathPrefix, trustLevel)
+	}
 	pathPrefix = hubpath.NormalizeStorage(pathPrefix)
 	rows, err := s.db.Query(ctx,
 		fmt.Sprintf(`SELECT %s
@@ -702,6 +737,9 @@ func (s *FileTreeService) Changes(ctx context.Context, userID uuid.UUID, cursor 
 }
 
 func (s *FileTreeService) ListSkillSummaries(ctx context.Context, userID uuid.UUID, trustLevel int) ([]models.SkillSummary, error) {
+	if s.repo != nil {
+		return s.repo.ListSkillSummaries(ctx, userID, trustLevel)
+	}
 	summaries := append([]models.SkillSummary{}, systemskills.SkillSummaries()...)
 	if s.db == nil {
 		sort.Slice(summaries, func(i, j int) bool {

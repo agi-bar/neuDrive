@@ -17,6 +17,7 @@ import (
 
 type MemoryService struct {
 	db       *pgxpool.Pool
+	repo     MemoryRepo
 	fileTree *FileTreeService
 	Webhook  *WebhookService
 }
@@ -25,7 +26,14 @@ func NewMemoryService(db *pgxpool.Pool, fileTree *FileTreeService) *MemoryServic
 	return &MemoryService{db: db, fileTree: fileTree}
 }
 
+func NewMemoryServiceWithRepo(repo MemoryRepo, fileTree *FileTreeService) *MemoryService {
+	return &MemoryService{repo: repo, fileTree: fileTree}
+}
+
 func (s *MemoryService) GetProfile(ctx context.Context, userID uuid.UUID) ([]models.MemoryProfile, error) {
+	if s.repo != nil {
+		return s.repo.GetProfiles(ctx, userID)
+	}
 	if s.fileTree != nil {
 		profiles, err := s.loadProfilesFromTree(ctx, userID)
 		if err == nil && len(profiles) > 0 {
@@ -67,9 +75,11 @@ func (s *MemoryService) UpsertProfile(ctx context.Context, userID uuid.UUID, cat
 		source = "agenthub"
 	}
 
-	if conflict, _ := s.DetectConflict(ctx, userID, category, content, source); conflict != nil {
-		slog.Info("memory conflict detected",
-			"category", category, "sourceA", conflict.SourceA, "sourceB", conflict.SourceB)
+	if s.db != nil {
+		if conflict, _ := s.DetectConflict(ctx, userID, category, content, source); conflict != nil {
+			slog.Info("memory conflict detected",
+				"category", category, "sourceA", conflict.SourceA, "sourceB", conflict.SourceB)
+		}
 	}
 
 	if s.fileTree != nil {
@@ -83,6 +93,10 @@ func (s *MemoryService) UpsertProfile(ctx context.Context, userID uuid.UUID, cat
 		}); err != nil {
 			return fmt.Errorf("memory.UpsertProfile: write canonical entry: %w", err)
 		}
+	}
+
+	if s.repo != nil {
+		return s.repo.UpsertProfile(ctx, userID, category, content, source)
 	}
 
 	now := time.Now().UTC()
@@ -105,6 +119,10 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 		days = 7
 	}
 	cutoff := time.Now().UTC().AddDate(0, 0, -days)
+
+	if s.repo != nil {
+		return s.repo.GetScratch(ctx, userID, days)
+	}
 
 	if s.fileTree != nil {
 		entries, err := s.loadScratchFromTree(ctx, userID, &cutoff)
@@ -140,6 +158,9 @@ func (s *MemoryService) GetScratch(ctx context.Context, userID uuid.UUID, days i
 }
 
 func (s *MemoryService) GetScratchActive(ctx context.Context, userID uuid.UUID) ([]models.MemoryScratch, error) {
+	if s.repo != nil {
+		return s.repo.GetScratchActive(ctx, userID)
+	}
 	if s.fileTree != nil {
 		entries, err := s.loadScratchFromTree(ctx, userID, nil)
 		if err == nil && len(entries) > 0 {
@@ -233,6 +254,20 @@ func (s *MemoryService) writeScratchEntry(ctx context.Context, userID uuid.UUID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("memory.WriteScratchWithTitle: write canonical entry: %w", err)
+		}
+	}
+
+	if s.repo != nil {
+		if upsert {
+			_, err = s.repo.ImportScratch(ctx, userID, content, source, title, now, expiresAt)
+		} else {
+			entry, err = s.repo.WriteScratchWithTitle(ctx, userID, content, source, title)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("memory.WriteScratchWithTitle: %w", err)
+		}
+		if upsert || entry != nil {
+			return entry, nil
 		}
 	}
 

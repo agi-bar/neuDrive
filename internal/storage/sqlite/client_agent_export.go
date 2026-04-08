@@ -1,4 +1,4 @@
-package localhub
+package sqlite
 
 import (
 	"context"

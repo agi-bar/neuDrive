@@ -1,4 +1,4 @@
-package localstore
+package sqlite
 
 import (
 	"context"

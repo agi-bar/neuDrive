@@ -1,4 +1,4 @@
-package localstore
+package sqlite_test
 
 import (
 	"context"
@@ -13,13 +13,20 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/google/uuid"
 )
 
-func openTestStore(t *testing.T) (context.Context, *Store, uuid.UUID) {
+type testServiceFixture struct {
+	importSvc *services.ImportService
+	exportSvc *services.ExportService
+	syncSvc   *services.SyncService
+}
+
+func openTestStore(t *testing.T) (context.Context, *sqlite.Store, uuid.UUID) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := Open(filepath.Join(t.TempDir(), "local.db"))
+	store, err := sqlite.Open(filepath.Join(t.TempDir(), "local.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -29,6 +36,20 @@ func openTestStore(t *testing.T) (context.Context, *Store, uuid.UUID) {
 		t.Fatalf("EnsureOwner: %v", err)
 	}
 	return ctx, store, user.ID
+}
+
+func newTestServiceFixture(store *sqlite.Store) *testServiceFixture {
+	fileTree := services.NewFileTreeServiceWithRepo(sqlite.NewFileTreeRepo(store))
+	memory := services.NewMemoryServiceWithRepo(sqlite.NewMemoryRepo(store), nil)
+	project := services.NewProjectServiceWithRepo(sqlite.NewProjectRepo(store), nil, nil)
+	importSvc := services.NewImportService(nil, fileTree, memory, nil)
+	exportSvc := services.NewExportService(fileTree, memory, project, nil, nil, nil, nil, nil)
+	syncSvc := services.NewSyncServiceWithRepo(sqlite.NewSyncRepo(store), importSvc, exportSvc, fileTree, memory)
+	return &testServiceFixture{
+		importSvc: importSvc,
+		exportSvc: exportSvc,
+		syncSvc:   syncSvc,
+	}
 }
 
 func TestTokenLifecycle(t *testing.T) {
@@ -130,6 +151,7 @@ func TestFileAndBlobRoundTrip(t *testing.T) {
 
 func TestBundleImportExportRoundTrip(t *testing.T) {
 	ctx, sourceStore, sourceUserID := openTestStore(t)
+	sourceServices := newTestServiceFixture(sourceStore)
 	if err := sourceStore.UpsertProfile(ctx, sourceUserID, "preferences", "prefers local-first", "test"); err != nil {
 		t.Fatalf("UpsertProfile: %v", err)
 	}
@@ -149,7 +171,7 @@ func TestBundleImportExportRoundTrip(t *testing.T) {
 		t.Fatalf("WriteBinaryEntry: %v", err)
 	}
 
-	exported, err := sourceStore.ExportBundle(ctx, sourceUserID, models.BundleFilters{})
+	exported, err := sourceServices.exportSvc.ExportBundle(ctx, sourceUserID)
 	if err != nil {
 		t.Fatalf("ExportBundle: %v", err)
 	}
@@ -158,14 +180,15 @@ func TestBundleImportExportRoundTrip(t *testing.T) {
 	}
 
 	_, targetStore, targetUserID := openTestStore(t)
-	preview, err := targetStore.PreviewBundle(ctx, targetUserID, *exported)
+	targetServices := newTestServiceFixture(targetStore)
+	preview, err := targetServices.syncSvc.PreviewBundle(ctx, targetUserID, *exported)
 	if err != nil {
 		t.Fatalf("PreviewBundle: %v", err)
 	}
 	if preview.Summary.Create == 0 {
 		t.Fatalf("expected preview create actions, got %+v", preview.Summary)
 	}
-	result, err := targetStore.ImportBundle(ctx, targetUserID, *exported)
+	result, err := targetServices.importSvc.ImportBundle(ctx, targetUserID, *exported)
 	if err != nil {
 		t.Fatalf("ImportBundle: %v", err)
 	}
@@ -173,7 +196,7 @@ func TestBundleImportExportRoundTrip(t *testing.T) {
 		t.Fatalf("unexpected import result: %+v", result)
 	}
 
-	reExported, err := targetStore.ExportBundle(ctx, targetUserID, models.BundleFilters{})
+	reExported, err := targetServices.exportSvc.ExportBundle(ctx, targetUserID)
 	if err != nil {
 		t.Fatalf("ExportBundle reexport: %v", err)
 	}
@@ -186,6 +209,7 @@ func TestBundleImportExportRoundTrip(t *testing.T) {
 
 func TestArchiveSessionCommitAndCleanup(t *testing.T) {
 	ctx, sourceStore, sourceUserID := openTestStore(t)
+	sourceServices := newTestServiceFixture(sourceStore)
 	if _, err := sourceStore.WriteEntry(ctx, sourceUserID, "/skills/large/SKILL.md", "# Large\n", "text/markdown", models.FileTreeWriteOptions{MinTrustLevel: models.TrustLevelGuest}); err != nil {
 		t.Fatalf("WriteEntry SKILL: %v", err)
 	}
@@ -196,13 +220,14 @@ func TestArchiveSessionCommitAndCleanup(t *testing.T) {
 	if _, err := sourceStore.WriteBinaryEntry(ctx, sourceUserID, "/skills/large/assets/blob.bin", largeBinary, "application/octet-stream", models.FileTreeWriteOptions{MinTrustLevel: models.TrustLevelGuest}); err != nil {
 		t.Fatalf("WriteBinaryEntry: %v", err)
 	}
-	archive, manifest, err := sourceStore.ExportArchive(ctx, sourceUserID, models.BundleFilters{})
+	archive, manifest, err := sourceServices.syncSvc.ExportArchive(ctx, sourceUserID, models.BundleFilters{})
 	if err != nil {
 		t.Fatalf("ExportArchive: %v", err)
 	}
 
 	_, targetStore, targetUserID := openTestStore(t)
-	session, err := targetStore.StartSession(ctx, targetUserID, models.SyncStartSessionRequest{
+	targetServices := newTestServiceFixture(targetStore)
+	session, err := targetServices.syncSvc.StartSession(ctx, targetUserID, models.SyncStartSessionRequest{
 		TransportVersion: models.SyncTransportVersionV1,
 		Format:           models.BundleFormatArchive,
 		Mode:             manifest.Mode,
@@ -217,21 +242,21 @@ func TestArchiveSessionCommitAndCleanup(t *testing.T) {
 		t.Fatalf("expected multi-part archive, got %d parts for %d bytes", session.TotalParts, len(archive))
 	}
 	chunkSize := int(session.ChunkSizeBytes)
-	first, err := targetStore.UploadPart(ctx, targetUserID, session.SessionID, 0, archive[:chunkSize])
+	first, err := targetServices.syncSvc.UploadPart(ctx, targetUserID, session.SessionID, 0, archive[:chunkSize])
 	if err != nil {
 		t.Fatalf("UploadPart first: %v", err)
 	}
 	if first.Status != models.SyncSessionStatusUploading || len(first.MissingParts) == 0 {
 		t.Fatalf("unexpected first part state: %+v", first)
 	}
-	second, err := targetStore.UploadPart(ctx, targetUserID, session.SessionID, 1, archive[chunkSize:])
+	second, err := targetServices.syncSvc.UploadPart(ctx, targetUserID, session.SessionID, 1, archive[chunkSize:])
 	if err != nil {
 		t.Fatalf("UploadPart second: %v", err)
 	}
 	if second.Status != models.SyncSessionStatusReady {
 		t.Fatalf("expected ready session, got %+v", second)
 	}
-	importResult, err := targetStore.CommitSession(ctx, targetUserID, session.SessionID, models.SyncCommitRequest{})
+	importResult, err := targetServices.syncSvc.CommitSession(ctx, targetUserID, session.SessionID, models.SyncCommitRequest{})
 	if err != nil {
 		t.Fatalf("CommitSession: %v", err)
 	}
@@ -240,27 +265,27 @@ func TestArchiveSessionCommitAndCleanup(t *testing.T) {
 	}
 
 	var remainingParts int
-	if err := targetStore.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_session_parts WHERE session_id = ?`, session.SessionID.String()).Scan(&remainingParts); err != nil {
+	if err := targetStore.DB().QueryRowContext(ctx, `SELECT COUNT(*) FROM sync_session_parts WHERE session_id = ?`, session.SessionID.String()).Scan(&remainingParts); err != nil {
 		t.Fatalf("count remaining parts: %v", err)
 	}
 	if remainingParts != 0 {
 		t.Fatalf("expected session parts cleanup, got %d remaining", remainingParts)
 	}
-	job, err := targetStore.GetJob(ctx, targetUserID, session.JobID)
+	job, err := targetServices.syncSvc.GetJob(ctx, targetUserID, session.JobID)
 	if err != nil {
 		t.Fatalf("GetJob: %v", err)
 	}
 	if job.Status != models.SyncJobStatusSucceeded || job.Transport != models.SyncJobTransportArchive {
 		t.Fatalf("unexpected sync job after commit: %+v", job)
 	}
-	jobs, err := targetStore.ListJobs(ctx, targetUserID)
+	jobs, err := targetServices.syncSvc.ListJobs(ctx, targetUserID)
 	if err != nil {
 		t.Fatalf("ListJobs: %v", err)
 	}
 	if len(jobs) != 1 {
 		t.Fatalf("expected single archive job, got %d", len(jobs))
 	}
-	exported, err := targetStore.ExportBundle(ctx, targetUserID, models.BundleFilters{})
+	exported, err := targetServices.exportSvc.ExportBundle(ctx, targetUserID)
 	if err != nil {
 		t.Fatalf("ExportBundle after commit: %v", err)
 	}
@@ -271,6 +296,7 @@ func TestArchiveSessionCommitAndCleanup(t *testing.T) {
 
 func TestCleanExpiredSyncSessions(t *testing.T) {
 	ctx, store, userID := openTestStore(t)
+	svcs := newTestServiceFixture(store)
 	manifest := models.BundleArchiveManifest{
 		Version:       models.BundleVersionV2,
 		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
@@ -278,7 +304,7 @@ func TestCleanExpiredSyncSessions(t *testing.T) {
 		Mode:          "merge",
 		ArchiveSHA256: strings.Repeat("a", 64),
 	}
-	session, err := store.StartSession(ctx, userID, models.SyncStartSessionRequest{
+	session, err := svcs.syncSvc.StartSession(ctx, userID, models.SyncStartSessionRequest{
 		TransportVersion: models.SyncTransportVersionV1,
 		Format:           models.BundleFormatArchive,
 		Mode:             "merge",
@@ -289,24 +315,24 @@ func TestCleanExpiredSyncSessions(t *testing.T) {
 	if err != nil {
 		t.Fatalf("StartSession: %v", err)
 	}
-	if _, err := store.UploadPart(ctx, userID, session.SessionID, 0, []byte("partial")); err != nil {
+	if _, err := svcs.syncSvc.UploadPart(ctx, userID, session.SessionID, 0, []byte("partial")); err != nil {
 		t.Fatalf("UploadPart: %v", err)
 	}
 	past := time.Now().UTC().Add(-time.Hour)
-	if _, err := store.db.ExecContext(ctx, `UPDATE sync_sessions SET expires_at = ? WHERE id = ?`, timeText(past), session.SessionID.String()); err != nil {
+	if _, err := store.DB().ExecContext(ctx, `UPDATE sync_sessions SET expires_at = ? WHERE id = ?`, past.UTC().Format(time.RFC3339Nano), session.SessionID.String()); err != nil {
 		t.Fatalf("expire session: %v", err)
 	}
-	cleanup, err := store.CleanExpiredSyncSessions(ctx)
+	cleanup, err := svcs.syncSvc.CleanExpiredSessions(ctx)
 	if err != nil {
 		t.Fatalf("CleanExpiredSyncSessions: %v", err)
 	}
 	if cleanup.ExpiredSessions != 1 || cleanup.DeletedBytes == 0 {
 		t.Fatalf("unexpected cleanup result: %+v", cleanup)
 	}
-	if _, err := store.UploadPart(ctx, userID, session.SessionID, 0, []byte("retry")); err == nil || err != services.ErrSyncSessionExpired {
+	if _, err := svcs.syncSvc.UploadPart(ctx, userID, session.SessionID, 0, []byte("retry")); err == nil || err != services.ErrSyncSessionExpired {
 		t.Fatalf("expected expired session error, got %v", err)
 	}
-	job, err := store.GetJob(ctx, userID, session.JobID)
+	job, err := svcs.syncSvc.GetJob(ctx, userID, session.JobID)
 	if err != nil {
 		t.Fatalf("GetJob: %v", err)
 	}
@@ -323,11 +349,12 @@ func bundlesEquivalent(left, right models.Bundle) bool {
 
 func TestBundlePreviewIncludesBinarySHA(t *testing.T) {
 	ctx, store, userID := openTestStore(t)
+	svcs := newTestServiceFixture(store)
 	data := []byte("binary-data")
 	if _, err := store.WriteBinaryEntry(ctx, userID, "/skills/demo/assets/file.bin", data, "application/octet-stream", models.FileTreeWriteOptions{MinTrustLevel: models.TrustLevelGuest}); err != nil {
 		t.Fatalf("WriteBinaryEntry: %v", err)
 	}
-	exported, err := store.ExportBundle(ctx, userID, models.BundleFilters{})
+	exported, err := svcs.exportSvc.ExportBundle(ctx, userID)
 	if err != nil {
 		t.Fatalf("ExportBundle: %v", err)
 	}

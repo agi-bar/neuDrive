@@ -292,7 +292,11 @@ func (s *ImportService) PreviewBundle(ctx context.Context, userID uuid.UUID, bun
 		skillRoot := path.Join("/skills", skillName)
 		snapshot, err := s.fileTree.Snapshot(ctx, userID, skillRoot, models.TrustLevelFull)
 		if err != nil {
-			return nil, err
+			if errors.Is(err, ErrEntryNotFound) {
+				snapshot = &models.EntrySnapshot{Path: skillRoot}
+			} else {
+				return nil, err
+			}
 		}
 
 		existing := make(map[string]models.FileTreeEntry, len(snapshot.Entries))

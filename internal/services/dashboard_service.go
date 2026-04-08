@@ -12,15 +12,23 @@ import (
 )
 
 type DashboardService struct {
-	db *pgxpool.Pool
+	db   *pgxpool.Pool
+	repo DashboardRepo
 }
 
 func NewDashboardService(db *pgxpool.Pool) *DashboardService {
 	return &DashboardService{db: db}
 }
 
+func NewDashboardServiceWithRepo(repo DashboardRepo) *DashboardService {
+	return &DashboardService{repo: repo}
+}
+
 // GetStats aggregates dashboard statistics for a user.
 func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*models.DashboardStats, error) {
+	if s.repo != nil {
+		return s.repo.GetStats(ctx, userID)
+	}
 	stats := &models.DashboardStats{}
 	skillStoragePat := hubpath.NormalizeStorage("/skills/") + "%"
 	skillAltPat := hubpath.AlternateSkillsPath(hubpath.NormalizeStorage("/skills/")) + "%"

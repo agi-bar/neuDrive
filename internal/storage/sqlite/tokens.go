@@ -1,4 +1,4 @@
-package localstore
+package sqlite
 
 import (
 	"context"
@@ -16,20 +16,20 @@ import (
 func (s *Store) CreateToken(ctx context.Context, userID uuid.UUID, name string, scopes []string, maxTrustLevel int, ttl time.Duration) (*models.CreateTokenResponse, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
-		return nil, fmt.Errorf("localstore.CreateToken: name is required")
+		return nil, fmt.Errorf("sqlite.CreateToken: name is required")
 	}
 	if len(scopes) == 0 {
-		return nil, fmt.Errorf("localstore.CreateToken: at least one scope is required")
+		return nil, fmt.Errorf("sqlite.CreateToken: at least one scope is required")
 	}
 	if maxTrustLevel < models.TrustLevelGuest || maxTrustLevel > models.TrustLevelFull {
-		return nil, fmt.Errorf("localstore.CreateToken: invalid max trust level %d", maxTrustLevel)
+		return nil, fmt.Errorf("sqlite.CreateToken: invalid max trust level %d", maxTrustLevel)
 	}
 	if ttl < time.Minute {
-		return nil, fmt.Errorf("localstore.CreateToken: ttl must be at least 1 minute")
+		return nil, fmt.Errorf("sqlite.CreateToken: ttl must be at least 1 minute")
 	}
 	for _, scope := range scopes {
 		if !validScope(scope) {
-			return nil, fmt.Errorf("localstore.CreateToken: invalid scope %q", scope)
+			return nil, fmt.Errorf("sqlite.CreateToken: invalid scope %q", scope)
 		}
 	}
 	rawToken, tokenHash, tokenPrefix, err := generateToken()
@@ -57,7 +57,7 @@ func (s *Store) CreateToken(ctx context.Context, userID uuid.UUID, name string, 
 		timeText(now),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("localstore.CreateToken: %w", err)
+		return nil, fmt.Errorf("sqlite.CreateToken: %w", err)
 	}
 	token, err := s.tokenByID(ctx, id)
 	if err != nil {
@@ -81,14 +81,14 @@ func (s *Store) RevokeToken(ctx context.Context, userID, tokenID uuid.UUID) erro
 		userID.String(),
 	)
 	if err != nil {
-		return fmt.Errorf("localstore.RevokeToken: %w", err)
+		return fmt.Errorf("sqlite.RevokeToken: %w", err)
 	}
 	rows, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
 	if rows == 0 {
-		return fmt.Errorf("localstore.RevokeToken: token not found or already revoked")
+		return fmt.Errorf("sqlite.RevokeToken: token not found or already revoked")
 	}
 	return nil
 }
@@ -104,13 +104,13 @@ func (s *Store) ValidateToken(ctx context.Context, rawToken string) (*models.Sco
 	)
 	token, err := scanScopedToken(row)
 	if err != nil {
-		return nil, fmt.Errorf("localstore.ValidateToken: invalid or expired token")
+		return nil, fmt.Errorf("sqlite.ValidateToken: invalid or expired token")
 	}
 	if token.RevokedAt != nil {
-		return nil, fmt.Errorf("localstore.ValidateToken: token has been revoked")
+		return nil, fmt.Errorf("sqlite.ValidateToken: token has been revoked")
 	}
 	if token.IsExpired() {
-		return nil, fmt.Errorf("localstore.ValidateToken: token has expired")
+		return nil, fmt.Errorf("sqlite.ValidateToken: token has expired")
 	}
 	now := time.Now().UTC()
 	_, _ = s.db.ExecContext(ctx, `UPDATE scoped_tokens SET last_used_at = ? WHERE id = ?`, timeText(now), token.ID.String())
@@ -119,7 +119,7 @@ func (s *Store) ValidateToken(ctx context.Context, rawToken string) (*models.Sco
 
 func (s *Store) CheckRateLimit(ctx context.Context, token *models.ScopedToken) error {
 	if token == nil {
-		return fmt.Errorf("localstore.CheckRateLimit: token is required")
+		return fmt.Errorf("sqlite.CheckRateLimit: token is required")
 	}
 	now := time.Now().UTC()
 	if token.RateLimitResetAt.IsZero() || now.After(token.RateLimitResetAt.Add(time.Hour)) {
@@ -131,7 +131,7 @@ func (s *Store) CheckRateLimit(ctx context.Context, token *models.ScopedToken) e
 		return err
 	}
 	if token.RequestCount >= token.RateLimit {
-		return fmt.Errorf("localstore.CheckRateLimit: rate limit exceeded (%d/%d per hour)", token.RequestCount, token.RateLimit)
+		return fmt.Errorf("sqlite.CheckRateLimit: rate limit exceeded (%d/%d per hour)", token.RequestCount, token.RateLimit)
 	}
 	_, err := s.db.ExecContext(ctx, `UPDATE scoped_tokens SET request_count = request_count + 1 WHERE id = ?`, token.ID.String())
 	return err
@@ -236,7 +236,7 @@ func validScope(scope string) bool {
 func generateToken() (rawToken, tokenHash, tokenPrefix string, err error) {
 	buf := make([]byte, 20)
 	if _, err = rand.Read(buf); err != nil {
-		return "", "", "", fmt.Errorf("localstore.generateToken: %w", err)
+		return "", "", "", fmt.Errorf("sqlite.generateToken: %w", err)
 	}
 	tokenBody := hex.EncodeToString(buf)
 	rawToken = "aht_" + tokenBody

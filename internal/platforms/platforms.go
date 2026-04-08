@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/localhub"
-	"github.com/agi-bar/agenthub/internal/localruntime"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/systemskills"
 )
 
@@ -30,7 +30,7 @@ const (
 	claudeCommandEntrypoint = "~/.claude/commands/agenthub.md"
 )
 
-type Source = localhub.Source
+type Source = sqlite.Source
 
 type Status struct {
 	ID                  string
@@ -59,9 +59,9 @@ type Adapter interface {
 	EntrypointPath() string
 	ChatUsage() []string
 	AgentMediatedSupport() string
-	Detect(cfg *localruntime.CLIConfig, daemonURL string) Status
-	Connect(ctx context.Context, cfg *localruntime.CLIConfig, executable, daemonURL string, connection localruntime.LocalConnection) (localruntime.LocalConnection, error)
-	Disconnect(ctx context.Context, cfg *localruntime.CLIConfig) error
+	Detect(cfg *runtimecfg.CLIConfig, daemonURL string) Status
+	Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, executable, daemonURL string, connection runtimecfg.LocalConnection) (runtimecfg.LocalConnection, error)
+	Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error
 	DiscoverSources() []Source
 }
 
@@ -89,7 +89,7 @@ func Resolve(name string) (Adapter, error) {
 	return nil, fmt.Errorf("unknown platform %q", name)
 }
 
-func AllStatuses(cfg *localruntime.CLIConfig, daemonURL string) []Status {
+func AllStatuses(cfg *runtimecfg.CLIConfig, daemonURL string) []Status {
 	out := make([]Status, 0, len(Registry()))
 	for _, adapter := range Registry() {
 		out = append(out, adapter.Detect(cfg, daemonURL))
@@ -98,12 +98,12 @@ func AllStatuses(cfg *localruntime.CLIConfig, daemonURL string) []Status {
 	return out
 }
 
-func ImportIntoLocalHub(ctx context.Context, cfg *localruntime.CLIConfig, platform string) (*localhub.ImportResult, error) {
+func ImportIntoLocalHub(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string) (*sqlite.ImportResult, error) {
 	adapter, err := Resolve(platform)
 	if err != nil {
 		return nil, err
 	}
-	hub, err := localhub.Open(ctx, cfg)
+	hub, err := sqlite.OpenClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -111,12 +111,12 @@ func ImportIntoLocalHub(ctx context.Context, cfg *localruntime.CLIConfig, platfo
 	return hub.ImportPlatformSources(ctx, adapter.ID(), adapter.DiscoverSources())
 }
 
-func ExportFromLocalHub(ctx context.Context, cfg *localruntime.CLIConfig, platform, outputRoot string) (*localhub.ExportResult, error) {
+func ExportFromLocalHub(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, outputRoot string) (*sqlite.ExportResult, error) {
 	adapter, err := Resolve(platform)
 	if err != nil {
 		return nil, err
 	}
-	hub, err := localhub.Open(ctx, cfg)
+	hub, err := sqlite.OpenClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -124,25 +124,25 @@ func ExportFromLocalHub(ctx context.Context, cfg *localruntime.CLIConfig, platfo
 	return hub.ExportPlatformSnapshot(ctx, adapter.ID(), outputRoot)
 }
 
-func EnsureConnection(ctx context.Context, cfg *localruntime.CLIConfig, platform, executable, daemonURL string) (localruntime.LocalConnection, error) {
+func EnsureConnection(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, executable, daemonURL string) (runtimecfg.LocalConnection, error) {
 	adapter, err := Resolve(platform)
 	if err != nil {
-		return localruntime.LocalConnection{}, err
+		return runtimecfg.LocalConnection{}, err
 	}
 	if cfg.Local.Connections == nil {
-		cfg.Local.Connections = map[string]localruntime.LocalConnection{}
+		cfg.Local.Connections = map[string]runtimecfg.LocalConnection{}
 	}
 
 	connection := cfg.Local.Connections[adapter.ID()]
 	if strings.TrimSpace(connection.Token) == "" {
-		hub, err := localhub.Open(ctx, cfg)
+		hub, err := sqlite.OpenClient(ctx, cfg)
 		if err != nil {
-			return localruntime.LocalConnection{}, err
+			return runtimecfg.LocalConnection{}, err
 		}
 		defer hub.Close()
 		tokenResp, err := hub.CreatePlatformToken(ctx, adapter.ID(), models.TrustLevelWork)
 		if err != nil {
-			return localruntime.LocalConnection{}, err
+			return runtimecfg.LocalConnection{}, err
 		}
 		connection.Token = tokenResp.Token
 		connection.TokenID = tokenResp.ScopedToken.ID.String()
@@ -154,20 +154,20 @@ func EnsureConnection(ctx context.Context, cfg *localruntime.CLIConfig, platform
 	connection.LastPlatformURL = strings.TrimRight(daemonURL, "/") + "/mcp"
 	updated, err := adapter.Connect(ctx, cfg, executable, daemonURL, connection)
 	if err != nil {
-		return localruntime.LocalConnection{}, err
+		return runtimecfg.LocalConnection{}, err
 	}
 	cfg.Local.Connections[adapter.ID()] = updated
 	return updated, nil
 }
 
-func Disconnect(ctx context.Context, cfg *localruntime.CLIConfig, platform string) error {
+func Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string) error {
 	adapter, err := Resolve(platform)
 	if err != nil {
 		return err
 	}
 	connection, ok := cfg.Local.Connections[adapter.ID()]
 	if ok && strings.TrimSpace(connection.TokenID) != "" {
-		hub, err := localhub.Open(ctx, cfg)
+		hub, err := sqlite.OpenClient(ctx, cfg)
 		if err == nil {
 			_ = hub.RevokeToken(ctx, connection.TokenID)
 			hub.Close()
@@ -208,7 +208,7 @@ func (b *baseAdapter) AgentMediatedSupport() string {
 	return b.agentMediated
 }
 func (b *baseAdapter) DiscoverSources() []Source { return existingSources(b.sources) }
-func (b *baseAdapter) Detect(cfg *localruntime.CLIConfig, daemonURL string) Status {
+func (b *baseAdapter) Detect(cfg *runtimecfg.CLIConfig, daemonURL string) Status {
 	binPath, _ := lookPath(b.command)
 	connection, connected := cfg.Local.Connections[b.id]
 	entrypointType := b.entrypointType
@@ -298,10 +298,10 @@ func (a *claudeAdapter) DisplayName() string        { return a.init().baseAdapte
 func (a *claudeAdapter) Aliases() []string          { return a.init().baseAdapter.Aliases() }
 func (a *claudeAdapter) SupportedDomains() []string { return a.init().baseAdapter.SupportedDomains() }
 func (a *claudeAdapter) DiscoverSources() []Source  { return a.init().baseAdapter.DiscoverSources() }
-func (a *claudeAdapter) Detect(cfg *localruntime.CLIConfig, daemonURL string) Status {
+func (a *claudeAdapter) Detect(cfg *runtimecfg.CLIConfig, daemonURL string) Status {
 	return a.init().baseAdapter.Detect(cfg, daemonURL)
 }
-func (a *claudeAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig, executable, daemonURL string, connection localruntime.LocalConnection) (localruntime.LocalConnection, error) {
+func (a *claudeAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, executable, daemonURL string, connection runtimecfg.LocalConnection) (runtimecfg.LocalConnection, error) {
 	if _, err := lookPath("claude"); err != nil {
 		return connection, err
 	}
@@ -326,7 +326,7 @@ func (a *claudeAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig
 	_ = skillPath
 	return connection, nil
 }
-func (a *claudeAdapter) Disconnect(ctx context.Context, cfg *localruntime.CLIConfig) error {
+func (a *claudeAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
 	for _, target := range managedPathsForPlatform(cfg, a.ID(), expandUser(claudeEntrypointDir), expandUser(claudeCommandEntrypoint)) {
 		if err := removeManagedPath(target); err != nil {
 			return err
@@ -366,10 +366,10 @@ func (a *codexAdapter) DisplayName() string        { return a.init().baseAdapter
 func (a *codexAdapter) Aliases() []string          { return a.init().baseAdapter.Aliases() }
 func (a *codexAdapter) SupportedDomains() []string { return a.init().baseAdapter.SupportedDomains() }
 func (a *codexAdapter) DiscoverSources() []Source  { return a.init().baseAdapter.DiscoverSources() }
-func (a *codexAdapter) Detect(cfg *localruntime.CLIConfig, daemonURL string) Status {
+func (a *codexAdapter) Detect(cfg *runtimecfg.CLIConfig, daemonURL string) Status {
 	return a.init().baseAdapter.Detect(cfg, daemonURL)
 }
-func (a *codexAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig, executable, daemonURL string, connection localruntime.LocalConnection) (localruntime.LocalConnection, error) {
+func (a *codexAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, executable, daemonURL string, connection runtimecfg.LocalConnection) (runtimecfg.LocalConnection, error) {
 	if _, err := lookPath("codex"); err != nil {
 		return connection, err
 	}
@@ -400,7 +400,7 @@ func (a *codexAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig,
 	connection.ChatUsage = []string{"$agenthub export", "$agenthub import", "$agenthub list", "$agenthub status"}
 	return connection, nil
 }
-func (a *codexAdapter) Disconnect(ctx context.Context, cfg *localruntime.CLIConfig) error {
+func (a *codexAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
 	for _, target := range managedPathsForPlatform(cfg, a.ID(), expandUser(codexEntrypointDir)) {
 		if err := removeManagedPath(target); err != nil {
 			return err
@@ -439,10 +439,10 @@ func (a *geminiAdapter) DisplayName() string        { return a.init().baseAdapte
 func (a *geminiAdapter) Aliases() []string          { return a.init().baseAdapter.Aliases() }
 func (a *geminiAdapter) SupportedDomains() []string { return a.init().baseAdapter.SupportedDomains() }
 func (a *geminiAdapter) DiscoverSources() []Source  { return a.init().baseAdapter.DiscoverSources() }
-func (a *geminiAdapter) Detect(cfg *localruntime.CLIConfig, daemonURL string) Status {
+func (a *geminiAdapter) Detect(cfg *runtimecfg.CLIConfig, daemonURL string) Status {
 	return a.init().baseAdapter.Detect(cfg, daemonURL)
 }
-func (a *geminiAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig, executable, daemonURL string, connection localruntime.LocalConnection) (localruntime.LocalConnection, error) {
+func (a *geminiAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, executable, daemonURL string, connection runtimecfg.LocalConnection) (runtimecfg.LocalConnection, error) {
 	if _, err := lookPath("gemini"); err != nil {
 		return connection, err
 	}
@@ -454,7 +454,7 @@ func (a *geminiAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig
 	connection.ConfigPath = expandUser("~/.gemini/settings.json")
 	return connection, nil
 }
-func (a *geminiAdapter) Disconnect(ctx context.Context, cfg *localruntime.CLIConfig) error {
+func (a *geminiAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
 	return run(ctx, "gemini", "mcp", "remove", "--scope", "user", LocalServerName)
 }
 
@@ -488,10 +488,10 @@ func (a *cursorAdapter) DisplayName() string        { return a.init().baseAdapte
 func (a *cursorAdapter) Aliases() []string          { return a.init().baseAdapter.Aliases() }
 func (a *cursorAdapter) SupportedDomains() []string { return a.init().baseAdapter.SupportedDomains() }
 func (a *cursorAdapter) DiscoverSources() []Source  { return a.init().baseAdapter.DiscoverSources() }
-func (a *cursorAdapter) Detect(cfg *localruntime.CLIConfig, daemonURL string) Status {
+func (a *cursorAdapter) Detect(cfg *runtimecfg.CLIConfig, daemonURL string) Status {
 	return a.init().baseAdapter.Detect(cfg, daemonURL)
 }
-func (a *cursorAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig, executable, daemonURL string, connection localruntime.LocalConnection) (localruntime.LocalConnection, error) {
+func (a *cursorAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, executable, daemonURL string, connection runtimecfg.LocalConnection) (runtimecfg.LocalConnection, error) {
 	configPath := expandUser("~/.cursor/mcp.json")
 	current := map[string]any{"mcpServers": map[string]any{}}
 	if data, err := os.ReadFile(configPath); err == nil {
@@ -522,7 +522,7 @@ func (a *cursorAdapter) Connect(ctx context.Context, cfg *localruntime.CLIConfig
 	connection.ConfigPath = configPath
 	return connection, nil
 }
-func (a *cursorAdapter) Disconnect(ctx context.Context, cfg *localruntime.CLIConfig) error {
+func (a *cursorAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
 	configPath := expandUser("~/.cursor/mcp.json")
 	current := map[string]any{"mcpServers": map[string]any{}}
 	if data, err := os.ReadFile(configPath); err == nil {
@@ -587,7 +587,7 @@ type managedInstallMarker struct {
 	GeneratedAt string `json:"generated_at"`
 }
 
-func managedPathsForPlatform(cfg *localruntime.CLIConfig, platform string, defaults ...string) []string {
+func managedPathsForPlatform(cfg *runtimecfg.CLIConfig, platform string, defaults ...string) []string {
 	seen := map[string]struct{}{}
 	out := make([]string, 0, len(defaults))
 	if cfg != nil {

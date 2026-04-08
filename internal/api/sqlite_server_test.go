@@ -1,4 +1,4 @@
-package localserver
+package api
 
 import (
 	"archive/zip"
@@ -14,9 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/localstore"
 	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/go-chi/chi/v5"
+	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
 )
 
 type testEnvelope struct {
@@ -27,10 +26,10 @@ type testEnvelope struct {
 	} `json:"error"`
 }
 
-func newTestHTTPServer(t *testing.T) (*httptest.Server, *localstore.Store, string, string, string) {
+func newTestHTTPServer(t *testing.T) (*httptest.Server, *sqlitestorage.Store, string, string, string) {
 	t.Helper()
 	ctx := context.Background()
-	store, err := localstore.Open(filepath.Join(t.TempDir(), "local.db"))
+	store, err := sqlitestorage.Open(filepath.Join(t.TempDir(), "local.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
@@ -52,13 +51,8 @@ func newTestHTTPServer(t *testing.T) (*httptest.Server, *localstore.Store, strin
 		t.Fatalf("CreateToken write: %v", err)
 	}
 
-	s := &Server{
-		store:   store,
-		baseURL: "http://127.0.0.1:0",
-		router:  chi.NewRouter(),
-	}
-	s.routes()
-	ts := httptest.NewServer(s.router)
+	s := NewSQLiteServer(store, "http://127.0.0.1:0")
+	ts := httptest.NewServer(s.Handler())
 	s.baseURL = ts.URL
 	t.Cleanup(ts.Close)
 	return ts, store, admin.Token, readBundle.Token, writeBundle.Token

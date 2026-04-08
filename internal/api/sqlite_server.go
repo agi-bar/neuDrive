@@ -1,4 +1,4 @@
-package localserver
+package api
 
 import (
 	"context"
@@ -15,55 +15,86 @@ import (
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/localmcp"
-	"github.com/agi-bar/agenthub/internal/localstore"
 	"github.com/agi-bar/agenthub/internal/mcp"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/agi-bar/agenthub/internal/skillsarchive"
+	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/web"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
 
-type Options struct {
+type SQLiteOptions struct {
 	ListenAddr string
 	SQLitePath string
 	BaseURL    string
 }
 
-type Server struct {
-	store   *localstore.Store
-	baseURL string
-	router  *chi.Mux
+type SQLiteServer struct {
+	store     *sqlitestorage.Store
+	fileTree  *services.FileTreeService
+	memory    *services.MemoryService
+	project   *services.ProjectService
+	token     *services.TokenService
+	dashboard *services.DashboardService
+	importSvc *services.ImportService
+	exportSvc *services.ExportService
+	syncSvc   *services.SyncService
+	baseURL   string
+	router    *chi.Mux
 }
 
-type contextKey string
-
-const (
-	ctxKeyUserID     contextKey = "user_id"
-	ctxKeyTrustLevel contextKey = "trust_level"
-	ctxKeyToken      contextKey = "token"
-)
-
-type FileNode struct {
-	Path      string      `json:"path"`
-	Name      string      `json:"name"`
-	IsDir     bool        `json:"is_dir"`
-	Kind      string      `json:"kind,omitempty"`
-	Content   string      `json:"content,omitempty"`
-	MimeType  string      `json:"mime_type,omitempty"`
-	Size      int64       `json:"size,omitempty"`
-	Version   int64       `json:"version,omitempty"`
-	Checksum  string      `json:"checksum,omitempty"`
-	Metadata  interface{} `json:"metadata,omitempty"`
-	Children  []*FileNode `json:"children,omitempty"`
-	CreatedAt string      `json:"created_at,omitempty"`
-	UpdatedAt string      `json:"updated_at,omitempty"`
+func (s *SQLiteServer) ensureDeps() {
+	if s == nil || s.store == nil {
+		return
+	}
+	if s.fileTree == nil {
+		s.fileTree = services.NewFileTreeServiceWithRepo(sqlitestorage.NewFileTreeRepo(s.store))
+	}
+	if s.memory == nil {
+		s.memory = services.NewMemoryServiceWithRepo(sqlitestorage.NewMemoryRepo(s.store), nil)
+	}
+	if s.project == nil {
+		s.project = services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(s.store), nil, nil)
+	}
+	if s.token == nil {
+		s.token = services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(s.store))
+	}
+	if s.importSvc == nil {
+		s.importSvc = services.NewImportService(nil, s.fileTree, s.memory, nil)
+	}
+	if s.exportSvc == nil {
+		s.exportSvc = services.NewExportService(s.fileTree, s.memory, s.project, nil, nil, nil, nil, nil)
+	}
+	if s.dashboard == nil {
+		s.dashboard = services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(s.store))
+	}
+	if s.syncSvc == nil {
+		s.syncSvc = services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(s.store), s.importSvc, s.exportSvc, s.fileTree, s.memory)
+	}
 }
 
-func Run(ctx context.Context, opts Options) error {
-	store, err := localstore.Open(opts.SQLitePath)
+func NewSQLiteServer(store *sqlitestorage.Store, baseURL string) *SQLiteServer {
+	s := &SQLiteServer{
+		store:   store,
+		baseURL: strings.TrimRight(baseURL, "/"),
+		router:  chi.NewRouter(),
+	}
+	s.ensureDeps()
+	s.routes()
+	return s
+}
+
+func (s *SQLiteServer) Handler() http.Handler {
+	if s == nil {
+		return http.NotFoundHandler()
+	}
+	return s.router
+}
+
+func RunSQLite(ctx context.Context, opts SQLiteOptions) error {
+	store, err := sqlitestorage.Open(opts.SQLitePath)
 	if err != nil {
 		return err
 	}
@@ -71,12 +102,7 @@ func Run(ctx context.Context, opts Options) error {
 	if _, err := store.EnsureOwner(ctx); err != nil {
 		return err
 	}
-	s := &Server{
-		store:   store,
-		baseURL: strings.TrimRight(opts.BaseURL, "/"),
-		router:  chi.NewRouter(),
-	}
-	s.routes()
+	s := NewSQLiteServer(store, opts.BaseURL)
 	listener, err := net.Listen("tcp", opts.ListenAddr)
 	if err != nil {
 		return err
@@ -110,7 +136,8 @@ func Run(ctx context.Context, opts Options) error {
 	return httpServer.Shutdown(shutdownCtx)
 }
 
-func (s *Server) routes() {
+func (s *SQLiteServer) routes() {
+	s.ensureDeps()
 	r := s.router
 	r.Get("/api/health", func(w http.ResponseWriter, r *http.Request) {
 		s.respondOK(w, map[string]any{
@@ -193,7 +220,7 @@ func (s *Server) routes() {
 	r.NotFound(web.Handler().ServeHTTP)
 }
 
-func (s *Server) requirePermission(w http.ResponseWriter, r *http.Request, minTrustLevel int, requiredScopes ...string) bool {
+func (s *SQLiteServer) requirePermission(w http.ResponseWriter, r *http.Request, minTrustLevel int, requiredScopes ...string) bool {
 	token := scopedTokenFromCtx(r.Context())
 	if token == nil {
 		s.respondError(w, http.StatusUnauthorized, "missing bearer token")
@@ -215,7 +242,7 @@ func (s *Server) requirePermission(w http.ResponseWriter, r *http.Request, minTr
 	return false
 }
 
-func (s *Server) authMiddleware(next http.Handler) http.Handler {
+func (s *SQLiteServer) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		header := strings.TrimSpace(r.Header.Get("Authorization"))
 		rawToken := strings.TrimSpace(strings.TrimPrefix(header, "Bearer "))
@@ -226,23 +253,23 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			s.respondError(w, http.StatusUnauthorized, "missing bearer token")
 			return
 		}
-		token, err := s.store.ValidateToken(r.Context(), rawToken)
+		token, err := s.token.ValidateToken(r.Context(), rawToken)
 		if err != nil {
 			s.respondError(w, http.StatusUnauthorized, "invalid or expired token")
 			return
 		}
-		if err := s.store.CheckRateLimit(r.Context(), token); err != nil {
+		if err := s.token.CheckRateLimit(r.Context(), token); err != nil {
 			s.respondError(w, http.StatusTooManyRequests, err.Error())
 			return
 		}
 		ctx := context.WithValue(r.Context(), ctxKeyUserID, token.UserID)
 		ctx = context.WithValue(ctx, ctxKeyTrustLevel, token.MaxTrustLevel)
-		ctx = context.WithValue(ctx, ctxKeyToken, token)
+		ctx = context.WithValue(ctx, ctxKeyScopedToken, token)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleMCP(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -260,34 +287,31 @@ func (s *Server) handleMCP(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusUnauthorized, "authentication required")
 		return
 	}
-	token, err := s.store.ValidateToken(r.Context(), rawToken)
+	token, err := s.token.ValidateToken(r.Context(), rawToken)
 	if err != nil {
 		s.respondError(w, http.StatusUnauthorized, "invalid or expired token")
 		return
 	}
-	if err := s.store.CheckRateLimit(r.Context(), token); err != nil {
+	if err := s.token.CheckRateLimit(r.Context(), token); err != nil {
 		s.respondError(w, http.StatusTooManyRequests, err.Error())
 		return
 	}
-	var req mcp.JSONRPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(mcp.JSONRPCResponse{JSONRPC: "2.0", Error: &mcp.RPCError{Code: -32700, Message: "parse error"}})
-		return
-	}
-	server := &localmcp.Server{
-		Store:      s.store,
+	server := &mcp.MCPServer{
 		UserID:     token.UserID,
 		TrustLevel: token.MaxTrustLevel,
 		Scopes:     token.Scopes,
 		BaseURL:    s.baseURL,
+		FileTree:   s.fileTree,
+		Memory:     s.memory,
+		Project:    s.project,
+		Dashboard:  s.dashboard,
+		Import:     s.importSvc,
+		Token:      s.token,
 	}
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(server.HandleJSONRPC(req))
+	mcp.ServeHTTPHandler(server, w, r)
 }
 
-func (s *Server) handleCreateSyncToken(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleCreateSyncToken(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelFull, models.ScopeAdmin) {
 		return
 	}
@@ -327,7 +351,7 @@ func (s *Server) handleCreateSyncToken(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "access must be push, pull, or both")
 		return
 	}
-	created, err := s.store.CreateToken(r.Context(), userID, "sync-"+access, scopes, models.TrustLevelWork, time.Duration(ttlMinutes)*time.Minute)
+	created, err := s.token.CreateEphemeralToken(r.Context(), userID, "sync-"+access, scopes, models.TrustLevelWork, time.Duration(ttlMinutes)*time.Minute)
 	if err != nil {
 		s.respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -341,11 +365,11 @@ func (s *Server) handleCreateSyncToken(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleLogoutNoop(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleLogoutNoop(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]string{"status": "ok"})
 }
 
-func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		s.respondError(w, http.StatusUnauthorized, "unauthorized")
@@ -369,7 +393,7 @@ func (s *Server) handleAuthMe(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleWhoAmI(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleWhoAmI(w http.ResponseWriter, r *http.Request) {
 	userID, _ := userIDFromCtx(r.Context())
 	trust := trustLevelFromCtx(r.Context())
 	token := scopedTokenFromCtx(r.Context())
@@ -390,13 +414,13 @@ func (s *Server) handleWhoAmI(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, resp)
 }
 
-func (s *Server) handleListSkills(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleListSkills(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadSkills) {
 		return
 	}
 	userID, _ := userIDFromCtx(r.Context())
 	trust := trustLevelFromCtx(r.Context())
-	skills, err := s.store.ListSkillSummaries(r.Context(), userID, trust)
+	skills, err := s.fileTree.ListSkillSummaries(r.Context(), userID, trust)
 	if err != nil {
 		s.respondInternal(w, err)
 		return
@@ -404,7 +428,7 @@ func (s *Server) handleListSkills(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]any{"skills": skills})
 }
 
-func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadTree) {
 		return
 	}
@@ -414,14 +438,15 @@ func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
 	if pathValue == "" {
 		pathValue = "/"
 	}
-	snapshot, err := s.store.Snapshot(r.Context(), userID, pathValue, trust)
+	snapshot, err := s.fileTree.Snapshot(r.Context(), userID, pathValue, trust)
 	if err != nil {
 		s.respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 	nodes := make([]*FileNode, 0, len(snapshot.Entries))
 	for _, entry := range snapshot.Entries {
-		nodes = append(nodes, fileTreeEntryToNode(entry))
+		entryCopy := entry
+		nodes = append(nodes, fileTreeEntryToNode(&entryCopy))
 	}
 	s.respondOK(w, map[string]any{
 		"path":          snapshot.Path,
@@ -431,7 +456,7 @@ func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleTreeRead(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadTree) {
 		return
 	}
@@ -439,27 +464,28 @@ func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
 	trust := trustLevelFromCtx(r.Context())
 	pathValue := chi.URLParam(r, "*")
 	if strings.HasSuffix(pathValue, "/") || pathValue == "" {
-		entries, err := s.store.List(r.Context(), userID, pathValue, trust)
+		entries, err := s.fileTree.List(r.Context(), userID, pathValue, trust)
 		if err != nil {
 			s.respondError(w, http.StatusNotFound, err.Error())
 			return
 		}
 		children := make([]*FileNode, 0, len(entries))
 		for _, entry := range entries {
-			children = append(children, fileTreeEntryToNode(entry))
+			entryCopy := entry
+			children = append(children, fileTreeEntryToNode(&entryCopy))
 		}
 		s.respondOK(w, &FileNode{Path: ensurePublic(pathValue), Name: path.Base(strings.TrimSuffix(pathValue, "/")), IsDir: true, Kind: "directory", Children: children})
 		return
 	}
-	entry, err := s.store.Read(r.Context(), userID, pathValue, trust)
+	entry, err := s.fileTree.Read(r.Context(), userID, pathValue, trust)
 	if err != nil {
 		s.respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
-	s.respondOK(w, fileTreeEntryToNode(*entry))
+	s.respondOK(w, fileTreeEntryToNode(entry))
 }
 
-func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteTree) {
 		return
 	}
@@ -480,7 +506,7 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	}
 	pathValue := chi.URLParam(r, "*")
 	if req.IsDir {
-		if err := s.store.EnsureDirectory(r.Context(), userID, pathValue); err != nil {
+		if err := s.fileTree.EnsureDirectory(r.Context(), userID, pathValue); err != nil {
 			s.respondInternal(w, err)
 			return
 		}
@@ -491,7 +517,7 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	if mimeType == "" {
 		mimeType = req.MimeType
 	}
-	entry, err := s.store.WriteEntry(r.Context(), userID, pathValue, req.Content, mimeType, models.FileTreeWriteOptions{
+	entry, err := s.fileTree.WriteEntry(r.Context(), userID, pathValue, req.Content, mimeType, models.FileTreeWriteOptions{
 		Metadata:         req.Metadata,
 		MinTrustLevel:    req.MinTrustLevel,
 		ExpectedVersion:  req.ExpectedVersion,
@@ -505,22 +531,22 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 		s.respondInternal(w, err)
 		return
 	}
-	s.respondOK(w, fileTreeEntryToNode(*entry))
+	s.respondOK(w, fileTreeEntryToNode(entry))
 }
 
-func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteTree) {
 		return
 	}
 	userID, _ := userIDFromCtx(r.Context())
-	if err := s.store.Delete(r.Context(), userID, chi.URLParam(r, "*")); err != nil {
+	if err := s.fileTree.Delete(r.Context(), userID, chi.URLParam(r, "*")); err != nil {
 		s.respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 	s.respondOK(w, map[string]string{"status": "deleted"})
 }
 
-func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleSearch(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeSearch) {
 		return
 	}
@@ -536,7 +562,7 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 			query = body.Query
 		}
 	}
-	results, err := s.store.Search(r.Context(), userID, query, trust, "/")
+	results, err := s.fileTree.Search(r.Context(), userID, query, trust, "/")
 	if err != nil {
 		s.respondInternal(w, err)
 		return
@@ -552,12 +578,12 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]any{"query": query, "results": payload})
 }
 
-func (s *Server) handleGetProfiles(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleGetProfiles(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadProfile) {
 		return
 	}
 	userID, _ := userIDFromCtx(r.Context())
-	profiles, err := s.store.GetProfiles(r.Context(), userID)
+	profiles, err := s.memory.GetProfile(r.Context(), userID)
 	if err != nil {
 		s.respondInternal(w, err)
 		return
@@ -565,13 +591,13 @@ func (s *Server) handleGetProfiles(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]any{"profiles": profiles})
 }
 
-func (s *Server) handleGetProfileView(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleGetProfileView(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadProfile) {
 		return
 	}
 	userID, _ := userIDFromCtx(r.Context())
 	user, _ := s.store.UserByID(r.Context(), userID)
-	profiles, err := s.store.GetProfiles(r.Context(), userID)
+	profiles, err := s.memory.GetProfile(r.Context(), userID)
 	if err != nil {
 		s.respondInternal(w, err)
 		return
@@ -594,21 +620,21 @@ func (s *Server) handleGetProfileView(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleListConflicts(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleListConflicts(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]any{"conflicts": []any{}})
 }
 
-func (s *Server) handleListVaultScopes(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleListVaultScopes(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]any{"scopes": []any{}})
 }
 
-func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		s.respondError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
-	stats, err := s.store.DashboardStats(r.Context(), userID)
+	stats, err := s.dashboard.GetStats(r.Context(), userID)
 	if err != nil {
 		s.respondInternal(w, err)
 		return
@@ -616,7 +642,7 @@ func (s *Server) handleDashboardStats(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, stats)
 }
 
-func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteProfile) {
 		return
 	}
@@ -637,19 +663,19 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 		source = "agent"
 	}
 	if req.Category != "" {
-		if err := s.store.UpsertProfile(r.Context(), userID, req.Category, req.Content, source); err != nil {
+		if err := s.memory.UpsertProfile(r.Context(), userID, req.Category, req.Content, source); err != nil {
 			s.respondInternal(w, err)
 			return
 		}
 	}
 	for category, content := range req.Preferences {
-		if err := s.store.UpsertProfile(r.Context(), userID, category, content, source); err != nil {
+		if err := s.memory.UpsertProfile(r.Context(), userID, category, content, source); err != nil {
 			s.respondInternal(w, err)
 			return
 		}
 	}
 	if strings.TrimSpace(req.DisplayName) != "" {
-		if err := s.store.UpsertProfile(r.Context(), userID, "display_name", req.DisplayName, source); err != nil {
+		if err := s.memory.UpsertProfile(r.Context(), userID, "display_name", req.DisplayName, source); err != nil {
 			s.respondInternal(w, err)
 			return
 		}
@@ -657,7 +683,7 @@ func (s *Server) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {
 	s.handleGetProfiles(w, r)
 }
 
-func (s *Server) handlePreviewBundle(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handlePreviewBundle(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteBundle) {
 		return
 	}
@@ -667,7 +693,7 @@ func (s *Server) handlePreviewBundle(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	result, err := decodeAndPreviewBundle(r.Context(), s.store, userID, body)
+	result, err := s.decodeAndPreviewBundle(r.Context(), userID, body)
 	if err != nil {
 		s.respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -675,7 +701,7 @@ func (s *Server) handlePreviewBundle(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, result)
 }
 
-func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteBundle) {
 		return
 	}
@@ -685,7 +711,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	result, err := s.store.ImportBundle(r.Context(), userID, bundle)
+	result, err := s.importSvc.ImportBundle(r.Context(), userID, bundle)
 	if err != nil {
 		s.respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -693,7 +719,7 @@ func (s *Server) handleImportBundle(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, result)
 }
 
-func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeReadBundle) {
 		return
 	}
@@ -704,7 +730,7 @@ func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 		format = models.BundleFormatJSON
 	}
 	if format == models.BundleFormatArchive {
-		archive, _, err := s.store.ExportArchive(r.Context(), userID, filters)
+		archive, _, err := s.syncSvc.ExportArchive(r.Context(), userID, filters)
 		if err != nil {
 			s.respondInternal(w, err)
 			return
@@ -715,7 +741,7 @@ func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write(archive)
 		return
 	}
-	bundle, err := s.store.ExportBundle(r.Context(), userID, filters)
+	bundle, err := s.syncSvc.ExportBundleJSON(r.Context(), userID, filters)
 	if err != nil {
 		s.respondInternal(w, err)
 		return
@@ -723,7 +749,7 @@ func (s *Server) handleExportBundle(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, bundle)
 }
 
-func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleStartSession(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteBundle) {
 		return
 	}
@@ -733,7 +759,7 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	resp, err := s.store.StartSession(r.Context(), userID, req)
+	resp, err := s.syncSvc.StartSession(r.Context(), userID, req)
 	if err != nil {
 		s.respondError(w, http.StatusBadRequest, err.Error())
 		return
@@ -741,7 +767,7 @@ func (s *Server) handleStartSession(w http.ResponseWriter, r *http.Request) {
 	s.respondCreated(w, resp)
 }
 
-func (s *Server) handleUploadPart(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleUploadPart(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteBundle) {
 		return
 	}
@@ -761,7 +787,7 @@ func (s *Server) handleUploadPart(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	resp, err := s.store.UploadPart(r.Context(), userID, sessionID, index, data)
+	resp, err := s.syncSvc.UploadPart(r.Context(), userID, sessionID, index, data)
 	if err != nil {
 		status := http.StatusBadRequest
 		switch {
@@ -778,7 +804,7 @@ func (s *Server) handleUploadPart(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, resp)
 }
 
-func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteBundle) {
 		return
 	}
@@ -788,7 +814,7 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid session id")
 		return
 	}
-	resp, err := s.store.GetSession(r.Context(), userID, sessionID)
+	resp, err := s.syncSvc.GetSession(r.Context(), userID, sessionID)
 	if err != nil {
 		if errors.Is(err, services.ErrSyncSessionNotFound) {
 			s.respondError(w, http.StatusNotFound, "sync session not found")
@@ -800,7 +826,7 @@ func (s *Server) handleGetSession(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, resp)
 }
 
-func (s *Server) handleCommitSession(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleCommitSession(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteBundle) {
 		return
 	}
@@ -815,7 +841,7 @@ func (s *Server) handleCommitSession(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	result, err := s.store.CommitSession(r.Context(), userID, sessionID, req)
+	result, err := s.syncSvc.CommitSession(r.Context(), userID, sessionID, req)
 	if err != nil {
 		status := http.StatusBadRequest
 		switch {
@@ -832,7 +858,7 @@ func (s *Server) handleCommitSession(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, result)
 }
 
-func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteBundle) {
 		return
 	}
@@ -842,7 +868,7 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid session id")
 		return
 	}
-	if err := s.store.AbortSession(r.Context(), userID, sessionID); err != nil {
+	if err := s.syncSvc.AbortSession(r.Context(), userID, sessionID); err != nil {
 		if errors.Is(err, services.ErrSyncSessionNotFound) {
 			s.respondError(w, http.StatusNotFound, "sync session not found")
 			return
@@ -853,12 +879,12 @@ func (s *Server) handleDeleteSession(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]string{"status": "aborted"})
 }
 
-func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeReadBundle) {
 		return
 	}
 	userID, _ := userIDFromCtx(r.Context())
-	jobs, err := s.store.ListJobs(r.Context(), userID)
+	jobs, err := s.syncSvc.ListJobs(r.Context(), userID)
 	if err != nil {
 		s.respondInternal(w, err)
 		return
@@ -866,7 +892,7 @@ func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, map[string]any{"jobs": jobs})
 }
 
-func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeReadBundle) {
 		return
 	}
@@ -876,7 +902,7 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 		s.respondError(w, http.StatusBadRequest, "invalid job id")
 		return
 	}
-	job, err := s.store.GetJob(r.Context(), userID, jobID)
+	job, err := s.syncSvc.GetJob(r.Context(), userID, jobID)
 	if err != nil {
 		s.respondError(w, http.StatusNotFound, "sync job not found")
 		return
@@ -884,7 +910,7 @@ func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, job)
 }
 
-func (s *Server) handleImportSkills(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) handleImportSkills(w http.ResponseWriter, r *http.Request) {
 	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteSkills) {
 		return
 	}
@@ -940,7 +966,7 @@ func (s *Server) handleImportSkills(w http.ResponseWriter, r *http.Request) {
 		}
 		contentType := skillsarchive.DetectContentType(entry.RelPath, entry.Data)
 		if skillsarchive.LooksBinary(entry.RelPath, entry.Data) {
-			if _, err := s.store.WriteBinaryEntry(r.Context(), userID, target, entry.Data, contentType, models.FileTreeWriteOptions{
+			if _, err := s.fileTree.WriteBinaryEntry(r.Context(), userID, target, entry.Data, contentType, models.FileTreeWriteOptions{
 				Kind:          "skill_asset",
 				Metadata:      metadata,
 				MinTrustLevel: models.TrustLevelGuest,
@@ -949,7 +975,7 @@ func (s *Server) handleImportSkills(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 		} else {
-			if _, err := s.store.WriteEntry(r.Context(), userID, target, string(entry.Data), contentType, models.FileTreeWriteOptions{
+			if _, err := s.fileTree.WriteEntry(r.Context(), userID, target, string(entry.Data), contentType, models.FileTreeWriteOptions{
 				Kind:          "skill_file",
 				Metadata:      metadata,
 				MinTrustLevel: models.TrustLevelGuest,
@@ -964,95 +990,28 @@ func (s *Server) handleImportSkills(w http.ResponseWriter, r *http.Request) {
 	s.respondOK(w, result)
 }
 
-func decodeAndPreviewBundle(ctx context.Context, store *localstore.Store, userID uuid.UUID, body []byte) (*models.BundlePreviewResult, error) {
+func (s *SQLiteServer) decodeAndPreviewBundle(ctx context.Context, userID uuid.UUID, body []byte) (*models.BundlePreviewResult, error) {
 	if len(strings.TrimSpace(string(body))) == 0 {
 		return nil, fmt.Errorf("preview request body is required")
 	}
 	var bundle models.Bundle
 	if err := json.Unmarshal(body, &bundle); err == nil && bundle.Version == models.BundleVersionV1 {
-		return store.PreviewBundle(ctx, userID, bundle)
+		return s.importSvc.PreviewBundle(ctx, userID, bundle)
 	}
 	var request models.BundlePreviewRequest
 	if err := json.Unmarshal(body, &request); err == nil {
 		if request.Bundle != nil {
-			return store.PreviewBundle(ctx, userID, *request.Bundle)
+			return s.importSvc.PreviewBundle(ctx, userID, *request.Bundle)
 		}
 		if request.Manifest != nil {
-			return store.PreviewManifest(ctx, userID, *request.Manifest)
+			return s.syncSvc.PreviewManifest(ctx, userID, *request.Manifest)
 		}
 	}
 	var manifest models.BundleArchiveManifest
 	if err := json.Unmarshal(body, &manifest); err == nil && manifest.Version == models.BundleVersionV2 {
-		return store.PreviewManifest(ctx, userID, manifest)
+		return s.syncSvc.PreviewManifest(ctx, userID, manifest)
 	}
 	return nil, fmt.Errorf("unsupported preview payload")
-}
-
-func parseBundleFilters(r *http.Request) models.BundleFilters {
-	query := r.URL.Query()
-	return models.BundleFilters{
-		IncludeDomains: queryValues(query, "include_domain", "include_domains"),
-		IncludeSkills:  queryValues(query, "include_skill", "include_skills"),
-		ExcludeSkills:  queryValues(query, "exclude_skill", "exclude_skills"),
-	}
-}
-
-func queryValues(values map[string][]string, singular, plural string) []string {
-	var result []string
-	for _, key := range []string{singular, plural} {
-		for _, raw := range values[key] {
-			for _, part := range strings.Split(raw, ",") {
-				part = strings.TrimSpace(part)
-				if part != "" {
-					result = append(result, part)
-				}
-			}
-		}
-	}
-	return result
-}
-
-func userIDFromCtx(ctx context.Context) (uuid.UUID, bool) {
-	value, ok := ctx.Value(ctxKeyUserID).(uuid.UUID)
-	return value, ok
-}
-
-func trustLevelFromCtx(ctx context.Context) int {
-	value, _ := ctx.Value(ctxKeyTrustLevel).(int)
-	return value
-}
-
-func scopedTokenFromCtx(ctx context.Context) *models.ScopedToken {
-	value, _ := ctx.Value(ctxKeyToken).(*models.ScopedToken)
-	return value
-}
-
-func fileTreeEntryToNode(entry models.FileTreeEntry) *FileNode {
-	size := int64(len(entry.Content))
-	if raw, ok := entry.Metadata["size_bytes"]; ok {
-		switch typed := raw.(type) {
-		case float64:
-			size = int64(typed)
-		case int:
-			size = int64(typed)
-		case int64:
-			size = typed
-		}
-	}
-	return &FileNode{
-		Path:      ensurePublic(entry.Path),
-		Name:      path.Base(strings.TrimSuffix(ensurePublic(entry.Path), "/")),
-		IsDir:     entry.IsDirectory,
-		Kind:      entry.Kind,
-		Content:   entry.Content,
-		MimeType:  entry.ContentType,
-		Size:      size,
-		Version:   entry.Version,
-		Checksum:  entry.Checksum,
-		Metadata:  entry.Metadata,
-		CreatedAt: entry.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: entry.UpdatedAt.Format(time.RFC3339),
-	}
 }
 
 func ensurePublic(pathValue string) string {
@@ -1062,7 +1021,7 @@ func ensurePublic(pathValue string) string {
 	return hubpath.NormalizePublic(pathValue)
 }
 
-func (s *Server) localOnlyDisabled(w http.ResponseWriter, r *http.Request) {
+func (s *SQLiteServer) localOnlyDisabled(w http.ResponseWriter, r *http.Request) {
 	message := "This capability is only available in remote/public service mode. Switch to Postgres self-hosted or the official Agent Hub service."
 	if strings.Contains(r.Header.Get("Accept"), "text/html") {
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1073,24 +1032,24 @@ func (s *Server) localOnlyDisabled(w http.ResponseWriter, r *http.Request) {
 	s.respondError(w, http.StatusNotImplemented, message)
 }
 
-func (s *Server) respondOK(w http.ResponseWriter, data any) {
+func (s *SQLiteServer) respondOK(w http.ResponseWriter, data any) {
 	s.respondJSON(w, http.StatusOK, map[string]any{"ok": true, "data": data})
 }
 
-func (s *Server) respondCreated(w http.ResponseWriter, data any) {
+func (s *SQLiteServer) respondCreated(w http.ResponseWriter, data any) {
 	s.respondJSON(w, http.StatusCreated, map[string]any{"ok": true, "data": data})
 }
 
-func (s *Server) respondError(w http.ResponseWriter, status int, message string) {
+func (s *SQLiteServer) respondError(w http.ResponseWriter, status int, message string) {
 	s.respondJSON(w, status, map[string]any{"ok": false, "error": map[string]any{"message": message}})
 }
 
-func (s *Server) respondInternal(w http.ResponseWriter, err error) {
+func (s *SQLiteServer) respondInternal(w http.ResponseWriter, err error) {
 	slog.Error("local sqlite server error", "error", err)
 	s.respondError(w, http.StatusInternalServerError, err.Error())
 }
 
-func (s *Server) respondJSON(w http.ResponseWriter, status int, payload any) {
+func (s *SQLiteServer) respondJSON(w http.ResponseWriter, status int, payload any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(payload)

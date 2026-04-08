@@ -19,8 +19,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/localruntime"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
 	"github.com/agi-bar/agenthub/internal/services"
 )
 
@@ -325,26 +325,26 @@ func mustRunAgenthub(t *testing.T, binary string, env []string, args ...string) 
 	return stdout, stderr
 }
 
-func loadCLIConfigForTest(t *testing.T, path string) *localruntime.CLIConfig {
+func loadCLIConfigForTest(t *testing.T, path string) *runtimecfg.CLIConfig {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read config %s: %v", path, err)
 	}
-	var cfg localruntime.CLIConfig
+	var cfg runtimecfg.CLIConfig
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		t.Fatalf("decode config %s: %v", path, err)
 	}
 	return &cfg
 }
 
-func loadRuntimeStateForTest(t *testing.T, path string) *localruntime.RuntimeState {
+func loadRuntimeStateForTest(t *testing.T, path string) *runtimecfg.RuntimeState {
 	t.Helper()
 	data, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read runtime state %s: %v", path, err)
 	}
-	var state localruntime.RuntimeState
+	var state runtimecfg.RuntimeState
 	if err := json.Unmarshal(data, &state); err != nil {
 		t.Fatalf("decode runtime state %s: %v", path, err)
 	}

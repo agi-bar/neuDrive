@@ -19,8 +19,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/localruntime"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
 )
 
 const (
@@ -186,9 +186,9 @@ func runLogin(args []string) error {
 		info.Scopes = append([]string{}, callbackPayload.Scopes...)
 	}
 	if cfg.Profiles == nil {
-		cfg.Profiles = map[string]localruntime.SyncProfile{}
+		cfg.Profiles = map[string]runtimecfg.SyncProfile{}
 	}
-	profileEntry := localruntime.SyncProfile{
+	profileEntry := runtimecfg.SyncProfile{
 		APIBase:   strings.TrimRight(info.APIBase, "/"),
 		Token:     tokenValue,
 		Scopes:    append([]string{}, info.Scopes...),
@@ -200,7 +200,7 @@ func runLogin(args []string) error {
 	}
 	cfg.Profiles[profileName] = profileEntry
 	cfg.CurrentProfile = profileName
-	if err := localruntime.SaveConfig(configPathValue, cfg); err != nil {
+	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
 		return err
 	}
 	printLoginSummary(profileName, profileEntry.APIBase, info)
@@ -251,7 +251,7 @@ func runUse(args []string) error {
 		return fmt.Errorf("profile %s does not exist", profileName)
 	}
 	cfg.CurrentProfile = profileName
-	if err := localruntime.SaveConfig(configPathValue, cfg); err != nil {
+	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
 		return err
 	}
 	fmt.Printf("Current profile: %s\n", profileName)
@@ -328,7 +328,7 @@ func runLogout(args []string) error {
 	entry.Scopes = nil
 	entry.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	cfg.Profiles[profileName] = entry
-	if err := localruntime.SaveConfig(configPathValue, cfg); err != nil {
+	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
 		return err
 	}
 	fmt.Printf("Logged out profile %s\n", profileName)
@@ -859,17 +859,17 @@ func validMode(mode string) bool {
 	}
 }
 
-func loadCLIConfig(configOverride string) (string, *localruntime.CLIConfig, error) {
+func loadCLIConfig(configOverride string) (string, *runtimecfg.CLIConfig, error) {
 	if strings.TrimSpace(configOverride) != "" {
-		return localruntime.LoadConfig(configOverride)
+		return runtimecfg.LoadConfig(configOverride)
 	}
 	if envOverride := strings.TrimSpace(os.Getenv(syncConfigEnv)); envOverride != "" {
-		return localruntime.LoadConfig(envOverride)
+		return runtimecfg.LoadConfig(envOverride)
 	}
-	return localruntime.LoadConfig("")
+	return runtimecfg.LoadConfig("")
 }
 
-func resolveAPIBase(opts commonOptions, cfg *localruntime.CLIConfig, state *sessionState) string {
+func resolveAPIBase(opts commonOptions, cfg *runtimecfg.CLIConfig, state *sessionState) string {
 	if value := strings.TrimSpace(opts.APIBase); value != "" {
 		return strings.TrimRight(value, "/")
 	}
@@ -887,7 +887,7 @@ func resolveAPIBase(opts commonOptions, cfg *localruntime.CLIConfig, state *sess
 	return strings.TrimRight(fallbackAPIBase, "/")
 }
 
-func resolveRuntimeAuth(opts commonOptions, state *sessionState) (string, *localruntime.CLIConfig, string, string, string, string, error) {
+func resolveRuntimeAuth(opts commonOptions, state *sessionState) (string, *runtimecfg.CLIConfig, string, string, string, string, error) {
 	configPath, cfg, err := loadCLIConfig(opts.ConfigPath)
 	if err != nil {
 		return "", nil, "", "", "", "", err
@@ -914,7 +914,7 @@ func resolveRuntimeAuth(opts commonOptions, state *sessionState) (string, *local
 	return configPath, cfg, apiBaseValue, profile.Token, profileName, "profile:" + profileName, nil
 }
 
-func selectedProfileName(requested string, cfg *localruntime.CLIConfig) string {
+func selectedProfileName(requested string, cfg *runtimecfg.CLIConfig) string {
 	if value := strings.TrimSpace(requested); value != "" {
 		return value
 	}
@@ -932,16 +932,16 @@ func selectedProfileName(requested string, cfg *localruntime.CLIConfig) string {
 	return ""
 }
 
-func profileEntry(requested string, cfg *localruntime.CLIConfig) (string, localruntime.SyncProfile, bool) {
+func profileEntry(requested string, cfg *runtimecfg.CLIConfig) (string, runtimecfg.SyncProfile, bool) {
 	name := selectedProfileName(requested, cfg)
 	if name == "" {
-		return "", localruntime.SyncProfile{}, false
+		return "", runtimecfg.SyncProfile{}, false
 	}
 	profile, ok := cfg.Profiles[name]
 	return name, profile, ok
 }
 
-func profileExpired(profile localruntime.SyncProfile) bool {
+func profileExpired(profile runtimecfg.SyncProfile) bool {
 	if strings.TrimSpace(profile.ExpiresAt) == "" {
 		return false
 	}
@@ -952,7 +952,7 @@ func profileExpired(profile localruntime.SyncProfile) bool {
 	return !expiresAt.After(time.Now().UTC())
 }
 
-func pickProfileName(cfg *localruntime.CLIConfig, requested, apiBaseValue string) string {
+func pickProfileName(cfg *runtimecfg.CLIConfig, requested, apiBaseValue string) string {
 	if strings.TrimSpace(requested) != "" {
 		return strings.TrimSpace(requested)
 	}
@@ -988,7 +988,7 @@ func pickProfileName(cfg *localruntime.CLIConfig, requested, apiBaseValue string
 	}
 }
 
-func renderProfiles(cfg *localruntime.CLIConfig) string {
+func renderProfiles(cfg *runtimecfg.CLIConfig) string {
 	if len(cfg.Profiles) == 0 {
 		return "No saved profiles. Run `agenthub sync login`."
 	}

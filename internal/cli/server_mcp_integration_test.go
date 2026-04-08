@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/localhub"
-	"github.com/agi-bar/agenthub/internal/localruntime"
 	"github.com/agi-bar/agenthub/internal/mcp"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/agenthub/internal/storage/sqlite"
 )
 
 func TestAgenthubServerCommand_SQLite(t *testing.T) {
@@ -60,17 +60,17 @@ func TestAgenthubMCPStdio_SQLiteInitializeAndToolsList(t *testing.T) {
 	}
 	binary := buildAgenthubBinary(t)
 	sqlitePath := filepath.Join(t.TempDir(), "mcp.db")
-	cfg := &localruntime.CLIConfig{
+	cfg := &runtimecfg.CLIConfig{
 		Version: 2,
-		Local: localruntime.LocalConfig{
+		Local: runtimecfg.LocalConfig{
 			Storage:        "sqlite",
 			SQLitePath:     sqlitePath,
-			Connections:    map[string]localruntime.LocalConnection{},
+			Connections:    map[string]runtimecfg.LocalConnection{},
 			JWTSecret:      strings.Repeat("a", 64),
 			VaultMasterKey: strings.Repeat("b", 64),
 		},
 	}
-	hub, err := localhub.Open(context.Background(), cfg)
+	hub, err := sqlite.OpenClient(context.Background(), cfg)
 	if err != nil {
 		t.Fatalf("open local hub: %v", err)
 	}
@@ -159,7 +159,7 @@ func findFreeListenAddr(t *testing.T) string {
 func waitForTestHealth(ctx context.Context, apiBase string) error {
 	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
-		if err := localruntime.HealthCheck(ctx, apiBase); err == nil {
+		if err := runtimecfg.HealthCheck(ctx, apiBase); err == nil {
 			return nil
 		}
 		time.Sleep(200 * time.Millisecond)

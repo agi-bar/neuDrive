@@ -40,6 +40,7 @@ type SyncCleanupResult struct {
 
 type SyncService struct {
 	db            *pgxpool.Pool
+	repo          SyncRepo
 	importSvc     *ImportService
 	exportSvc     *ExportService
 	fileTree      *FileTreeService
@@ -57,6 +58,24 @@ func NewSyncService(
 ) *SyncService {
 	return &SyncService{
 		db:            db,
+		importSvc:     importSvc,
+		exportSvc:     exportSvc,
+		fileTree:      fileTree,
+		memory:        memory,
+		chunkSize:     models.DefaultSyncChunkSize,
+		autoThreshold: models.DefaultArchiveAutoThreshold,
+	}
+}
+
+func NewSyncServiceWithRepo(
+	repo SyncRepo,
+	importSvc *ImportService,
+	exportSvc *ExportService,
+	fileTree *FileTreeService,
+	memory *MemoryService,
+) *SyncService {
+	return &SyncService{
+		repo:          repo,
 		importSvc:     importSvc,
 		exportSvc:     exportSvc,
 		fileTree:      fileTree,
@@ -163,7 +182,11 @@ func (s *SyncService) PreviewManifest(ctx context.Context, userID uuid.UUID, man
 		skillRoot := path.Join("/skills", skillName)
 		snapshot, err := s.fileTree.Snapshot(ctx, userID, skillRoot, models.TrustLevelFull)
 		if err != nil {
-			return nil, err
+			if errors.Is(err, ErrEntryNotFound) {
+				snapshot = &models.EntrySnapshot{Path: skillRoot}
+			} else {
+				return nil, err
+			}
 		}
 
 		existing := make(map[string]models.FileTreeEntry, len(snapshot.Entries))
@@ -273,6 +296,9 @@ func (s *SyncService) ImportBundleJSON(ctx context.Context, userID uuid.UUID, bu
 }
 
 func (s *SyncService) ExportBundleJSON(ctx context.Context, userID uuid.UUID, filters models.BundleFilters) (*models.Bundle, error) {
+	if s.repo != nil {
+		return s.repo.ExportBundleJSON(ctx, userID, filters)
+	}
 	bundle, err := s.exportBundle(ctx, userID, filters)
 	if err != nil {
 		return nil, err
@@ -300,6 +326,9 @@ func (s *SyncService) ExportBundleJSON(ctx context.Context, userID uuid.UUID, fi
 }
 
 func (s *SyncService) ExportArchive(ctx context.Context, userID uuid.UUID, filters models.BundleFilters) ([]byte, *models.BundleArchiveManifest, error) {
+	if s.repo != nil {
+		return s.repo.ExportArchive(ctx, userID, filters)
+	}
 	bundle, err := s.exportBundle(ctx, userID, filters)
 	if err != nil {
 		return nil, nil, err
@@ -331,6 +360,9 @@ func (s *SyncService) ExportArchive(ctx context.Context, userID uuid.UUID, filte
 }
 
 func (s *SyncService) StartSession(ctx context.Context, userID uuid.UUID, req models.SyncStartSessionRequest) (*models.SyncSessionResponse, error) {
+	if s.repo != nil {
+		return s.repo.StartSession(ctx, userID, req)
+	}
 	if s.db == nil {
 		return nil, fmt.Errorf("sync.StartSession: database not configured")
 	}
@@ -439,6 +471,9 @@ func (s *SyncService) StartSession(ctx context.Context, userID uuid.UUID, req mo
 }
 
 func (s *SyncService) UploadPart(ctx context.Context, userID, sessionID uuid.UUID, index int, data []byte) (*models.SyncSessionResponse, error) {
+	if s.repo != nil {
+		return s.repo.UploadPart(ctx, userID, sessionID, index, data)
+	}
 	if s.db == nil {
 		return nil, fmt.Errorf("sync.UploadPart: database not configured")
 	}
@@ -523,6 +558,9 @@ func (s *SyncService) UploadPart(ctx context.Context, userID, sessionID uuid.UUI
 }
 
 func (s *SyncService) GetSession(ctx context.Context, userID, sessionID uuid.UUID) (*models.SyncSessionResponse, error) {
+	if s.repo != nil {
+		return s.repo.GetSession(ctx, userID, sessionID)
+	}
 	session, received, err := s.loadSessionState(ctx, userID, sessionID)
 	if err != nil {
 		return nil, err
@@ -536,6 +574,9 @@ func (s *SyncService) GetSession(ctx context.Context, userID, sessionID uuid.UUI
 }
 
 func (s *SyncService) AbortSession(ctx context.Context, userID, sessionID uuid.UUID) error {
+	if s.repo != nil {
+		return s.repo.AbortSession(ctx, userID, sessionID)
+	}
 	session, _, err := s.loadSessionState(ctx, userID, sessionID)
 	if err != nil {
 		return err
@@ -577,6 +618,9 @@ func (s *SyncService) AbortSession(ctx context.Context, userID, sessionID uuid.U
 }
 
 func (s *SyncService) CommitSession(ctx context.Context, userID, sessionID uuid.UUID, req models.SyncCommitRequest) (*models.BundleImportResult, error) {
+	if s.repo != nil {
+		return s.repo.CommitSession(ctx, userID, sessionID, req)
+	}
 	if s.db == nil {
 		return nil, fmt.Errorf("sync.CommitSession: database not configured")
 	}
@@ -671,6 +715,9 @@ func (s *SyncService) CommitSession(ctx context.Context, userID, sessionID uuid.
 }
 
 func (s *SyncService) ListJobs(ctx context.Context, userID uuid.UUID) ([]models.SyncJob, error) {
+	if s.repo != nil {
+		return s.repo.ListJobs(ctx, userID)
+	}
 	if s.db == nil {
 		return nil, fmt.Errorf("sync.ListJobs: database not configured")
 	}
@@ -702,6 +749,9 @@ func (s *SyncService) ListJobs(ctx context.Context, userID uuid.UUID) ([]models.
 }
 
 func (s *SyncService) GetJob(ctx context.Context, userID, jobID uuid.UUID) (*models.SyncJob, error) {
+	if s.repo != nil {
+		return s.repo.GetJob(ctx, userID, jobID)
+	}
 	if s.db == nil {
 		return nil, fmt.Errorf("sync.GetJob: database not configured")
 	}
@@ -727,6 +777,9 @@ func (s *SyncService) GetJob(ctx context.Context, userID, jobID uuid.UUID) (*mod
 }
 
 func (s *SyncService) CleanExpiredSessions(ctx context.Context) (*SyncCleanupResult, error) {
+	if s.repo != nil {
+		return s.repo.CleanExpiredSessions(ctx)
+	}
 	if s.db == nil {
 		return nil, fmt.Errorf("sync.CleanExpiredSessions: database not configured")
 	}

@@ -18,12 +18,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/api"
 	"github.com/agi-bar/agenthub/internal/app/mcpapp"
 	"github.com/agi-bar/agenthub/internal/app/serverapp"
-	"github.com/agi-bar/agenthub/internal/localhub"
-	"github.com/agi-bar/agenthub/internal/localruntime"
-	"github.com/agi-bar/agenthub/internal/localserver"
 	"github.com/agi-bar/agenthub/internal/platforms"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/synccli"
 )
 
@@ -203,16 +203,16 @@ func runStatus(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: agenthub status")
 		return 2
 	}
-	configPath, cfg, err := localruntime.LoadConfig("")
+	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
 	}
-	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "prepare local defaults: %v\n", err)
 		return 1
 	}
-	_, state, err := localruntime.LoadState("")
+	_, state, err := runtimecfg.LoadState("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load runtime state: %v\n", err)
 		return 1
@@ -223,7 +223,7 @@ func runStatus(args []string) int {
 		daemonURL = state.APIBase
 		status := "unhealthy"
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		if err := localruntime.HealthCheck(ctx, state.APIBase); err == nil {
+		if err := runtimecfg.HealthCheck(ctx, state.APIBase); err == nil {
 			status = "running"
 		}
 		cancel()
@@ -260,21 +260,21 @@ func runDoctor(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: agenthub doctor")
 		return 2
 	}
-	_, cfg, err := localruntime.LoadConfig("")
+	_, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
 	}
-	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "prepare local defaults: %v\n", err)
 		return 1
 	}
-	_, state, _ := localruntime.LoadState("")
+	_, state, _ := runtimecfg.LoadState("")
 	fmt.Println("Doctor:")
-	fmt.Printf("- config file: %s\n", localruntime.DefaultConfigPath())
+	fmt.Printf("- config file: %s\n", runtimecfg.DefaultConfigPath())
 	if state != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		err := localruntime.HealthCheck(ctx, state.APIBase)
+		err := runtimecfg.HealthCheck(ctx, state.APIBase)
 		cancel()
 		if err == nil {
 			fmt.Printf("- local daemon: healthy at %s\n", state.APIBase)
@@ -338,12 +338,12 @@ func runPlatformLS(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: agenthub platform ls")
 		return 2
 	}
-	_, cfg, err := localruntime.LoadConfig("")
+	_, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
 	}
-	_, state, _ := localruntime.LoadState("")
+	_, state, _ := runtimecfg.LoadState("")
 	daemonURL := ""
 	if state != nil {
 		daemonURL = state.APIBase
@@ -363,12 +363,12 @@ func runPlatformShow(args []string) int {
 		fmt.Fprintln(os.Stderr, "usage: agenthub platform show <platform>")
 		return 2
 	}
-	_, cfg, err := localruntime.LoadConfig("")
+	_, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
 	}
-	_, state, _ := localruntime.LoadState("")
+	_, state, _ := runtimecfg.LoadState("")
 	daemonURL := ""
 	if state != nil {
 		daemonURL = state.APIBase
@@ -439,12 +439,12 @@ func runConnect(args []string) int {
 		fmt.Fprintf(os.Stderr, "resolve executable: %v\n", err)
 		return 1
 	}
-	configPath, cfg, err := localruntime.LoadConfig("")
+	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
 	}
-	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "prepare local defaults: %v\n", err)
 		return 1
 	}
@@ -452,7 +452,7 @@ func runConnect(args []string) int {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		return 1
 	}
-	cfg, state, err := localruntime.EnsureLocalDaemon(ctx, executable, nil)
+	cfg, state, err := runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
@@ -493,7 +493,7 @@ func runDisconnect(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
-	configPath, cfg, err := localruntime.LoadConfig("")
+	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
@@ -545,12 +545,12 @@ func runImport(args []string) int {
 		fmt.Fprintf(os.Stderr, "resolve executable: %v\n", err)
 		return 1
 	}
-	configPath, cfg, err := localruntime.LoadConfig("")
+	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
 	}
-	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "prepare local defaults: %v\n", err)
 		return 1
 	}
@@ -558,7 +558,7 @@ func runImport(args []string) int {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		return 1
 	}
-	cfg, _, err = localruntime.EnsureLocalDaemon(ctx, executable, nil)
+	cfg, _, err = runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
@@ -646,12 +646,12 @@ func runExport(args []string) int {
 		fmt.Fprintf(os.Stderr, "resolve executable: %v\n", err)
 		return 1
 	}
-	configPath, cfg, err := localruntime.LoadConfig("")
+	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 		return 1
 	}
-	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "prepare local defaults: %v\n", err)
 		return 1
 	}
@@ -659,7 +659,7 @@ func runExport(args []string) int {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		return 1
 	}
-	cfg, _, err = localruntime.EnsureLocalDaemon(ctx, executable, nil)
+	cfg, _, err = runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
@@ -757,14 +757,14 @@ func runFilesLS(args []string) int {
 		fmt.Fprintf(os.Stderr, "prepare local files view: %v\n", err)
 		return 1
 	}
-	var node localserver.FileNode
+	var node api.FileNode
 	if err := localAPIGet(ctx, state.APIBase, token, "/agent/tree"+targetPath, &node); err != nil {
 		fmt.Fprintf(os.Stderr, "files ls: %v\n", err)
 		return 1
 	}
 	entries := node.Children
 	if !node.IsDir {
-		entries = []*localserver.FileNode{&node}
+		entries = []*api.FileNode{&node}
 	}
 	for _, entry := range entries {
 		kind := "file"
@@ -798,7 +798,7 @@ func runFilesCat(args []string) int {
 		fmt.Fprintf(os.Stderr, "prepare local files view: %v\n", err)
 		return 1
 	}
-	var node localserver.FileNode
+	var node api.FileNode
 	if err := localAPIGet(ctx, state.APIBase, token, "/agent/tree"+targetPath, &node); err != nil {
 		fmt.Fprintf(os.Stderr, "files cat: %v\n", err)
 		return 1
@@ -825,7 +825,7 @@ func runDaemon(args []string) int {
 	}
 	switch args[0] {
 	case "status":
-		_, state, err := localruntime.LoadState("")
+		_, state, err := runtimecfg.LoadState("")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "load runtime state: %v\n", err)
 			return 1
@@ -835,7 +835,7 @@ func runDaemon(args []string) int {
 			return 0
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		err = localruntime.HealthCheck(ctx, state.APIBase)
+		err = runtimecfg.HealthCheck(ctx, state.APIBase)
 		cancel()
 		status := "unhealthy"
 		if err == nil {
@@ -844,7 +844,7 @@ func runDaemon(args []string) int {
 		fmt.Printf("Local daemon %s at %s (pid %d)\n", status, state.APIBase, state.PID)
 		return 0
 	case "stop":
-		if err := localruntime.StopLocalDaemon(); err != nil {
+		if err := runtimecfg.StopLocalDaemon(); err != nil {
 			fmt.Fprintf(os.Stderr, "stop daemon: %v\n", err)
 			return 1
 		}
@@ -860,16 +860,16 @@ func runDaemon(args []string) int {
 			}
 			return 2
 		}
-		_, state, err := localruntime.LoadState("")
+		_, state, err := runtimecfg.LoadState("")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "load runtime state: %v\n", err)
 			return 1
 		}
-		logPath := localruntime.DefaultLogPath()
+		logPath := runtimecfg.DefaultLogPath()
 		if state != nil && state.LogPath != "" {
 			logPath = state.LogPath
 		}
-		content, err := localruntime.TailLog(logPath, *tail)
+		content, err := runtimecfg.TailLog(logPath, *tail)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "read logs: %v\n", err)
 			return 1
@@ -899,9 +899,9 @@ func runSync(args []string) int {
 		defer cancel()
 		executable, err := os.Executable()
 		if err == nil {
-			configPath, cfg, loadErr := localruntime.LoadConfig("")
+			configPath, cfg, loadErr := runtimecfg.LoadConfig("")
 			if loadErr == nil {
-				if err := localruntime.EnsureLocalDefaults(cfg); err == nil {
+				if err := runtimecfg.EnsureLocalDefaults(cfg); err == nil {
 					_ = saveConfig(configPath, cfg)
 					cfg, state, ensureErr := ensureCurrentLocalDaemon(ctx, executable, configPath)
 					if ensureErr == nil {
@@ -933,7 +933,7 @@ func runRemote(args []string) int {
 	}
 	switch args[0] {
 	case "ls":
-		_, cfg, err := localruntime.LoadConfig("")
+		_, cfg, err := runtimecfg.LoadConfig("")
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "load config: %v\n", err)
 			return 1
@@ -962,7 +962,7 @@ func runRemote(args []string) int {
 		profileName := args[1]
 		loginArgs := []string{"login", "--profile", profileName}
 		if !containsFlag(args[2:], "--api-base") && !containsFlag(args[2:], "--url") {
-			loginArgs = append(loginArgs, "--api-base", localruntime.DefaultRemoteOfficial)
+			loginArgs = append(loginArgs, "--api-base", runtimecfg.DefaultRemoteOfficial)
 		}
 		loginArgs = append(loginArgs, normalizeRemoteArgs(args[2:])...)
 		return runSync(loginArgs)
@@ -1002,20 +1002,20 @@ func runRemote(args []string) int {
 	}
 }
 
-func saveConfig(path string, cfg *localruntime.CLIConfig) error {
-	return localruntime.SaveConfig(path, cfg)
+func saveConfig(path string, cfg *runtimecfg.CLIConfig) error {
+	return runtimecfg.SaveConfig(path, cfg)
 }
 
-func ensureLocalOwnerAccess(ctx context.Context) (*localruntime.CLIConfig, *localruntime.RuntimeState, error) {
+func ensureLocalOwnerAccess(ctx context.Context) (*runtimecfg.CLIConfig, *runtimecfg.RuntimeState, error) {
 	executable, err := os.Executable()
 	if err != nil {
 		return nil, nil, err
 	}
-	configPath, cfg, err := localruntime.LoadConfig("")
+	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		return nil, nil, err
 	}
-	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		return nil, nil, err
 	}
 	if err := saveConfig(configPath, cfg); err != nil {
@@ -1028,7 +1028,7 @@ func ensureLocalOwnerAccess(ctx context.Context) (*localruntime.CLIConfig, *loca
 	return cfg, state, nil
 }
 
-func ensureLocalOwnerAccessForAPI(ctx context.Context) (*localruntime.CLIConfig, *localruntime.RuntimeState, string, error) {
+func ensureLocalOwnerAccessForAPI(ctx context.Context) (*runtimecfg.CLIConfig, *runtimecfg.RuntimeState, string, error) {
 	cfg, state, err := ensureLocalOwnerAccess(ctx)
 	if err != nil {
 		return nil, nil, "", err
@@ -1036,11 +1036,11 @@ func ensureLocalOwnerAccessForAPI(ctx context.Context) (*localruntime.CLIConfig,
 	return cfg, state, cfg.Local.OwnerToken, nil
 }
 
-func ensureOwnerToken(ctx context.Context, configPath string, cfg *localruntime.CLIConfig) error {
+func ensureOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CLIConfig) error {
 	if strings.TrimSpace(cfg.Local.OwnerToken) != "" {
 		return nil
 	}
-	hub, err := localhub.Open(ctx, cfg)
+	hub, err := sqlite.OpenClient(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -1055,7 +1055,7 @@ func ensureOwnerToken(ctx context.Context, configPath string, cfg *localruntime.
 	return saveConfig(configPath, cfg)
 }
 
-func ensureUsableOwnerToken(ctx context.Context, configPath string, cfg *localruntime.CLIConfig, apiBase string) error {
+func ensureUsableOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CLIConfig, apiBase string) error {
 	const maxAttempts = 3
 	for attempt := 0; attempt < maxAttempts; attempt++ {
 		if err := ensureOwnerToken(ctx, configPath, cfg); err != nil {
@@ -1084,8 +1084,8 @@ func validateOwnerToken(ctx context.Context, apiBase, token string) error {
 	return localAPIGet(ctx, apiBase, token, "/agent/auth/whoami", nil)
 }
 
-func ensureCurrentLocalDaemon(ctx context.Context, executable, configPath string) (*localruntime.CLIConfig, *localruntime.RuntimeState, error) {
-	cfg, state, err := localruntime.EnsureLocalDaemon(ctx, executable, nil)
+func ensureCurrentLocalDaemon(ctx context.Context, executable, configPath string) (*runtimecfg.CLIConfig, *runtimecfg.RuntimeState, error) {
+	cfg, state, err := runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -1094,10 +1094,10 @@ func ensureCurrentLocalDaemon(ctx context.Context, executable, configPath string
 	} else if !isLocalDaemonCompatibilityError(err) {
 		return nil, nil, err
 	}
-	if err := localruntime.StopLocalDaemon(); err != nil {
+	if err := runtimecfg.StopLocalDaemon(); err != nil {
 		return nil, nil, fmt.Errorf("restart outdated local daemon: %w", err)
 	}
-	cfg, state, err = localruntime.EnsureLocalDaemon(ctx, executable, nil)
+	cfg, state, err = runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
 	if err != nil {
 		return nil, nil, err
 	}

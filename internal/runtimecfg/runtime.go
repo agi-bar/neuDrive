@@ -1,4 +1,4 @@
-package localruntime
+package runtimecfg
 
 import (
 	"context"

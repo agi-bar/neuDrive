@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/localruntime"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
 )
 
-func configurePlatformTestEnv(t *testing.T) (string, *localruntime.CLIConfig, string, string) {
+func configurePlatformTestEnv(t *testing.T) (string, *runtimecfg.CLIConfig, string, string) {
 	t.Helper()
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
@@ -32,19 +32,19 @@ func configurePlatformTestEnv(t *testing.T) (string, *localruntime.CLIConfig, st
 	}
 	seedPlatformFixtures(t, home)
 	logPath := installPlatformShims(t, "claude", "codex", "gemini", "cursor-agent")
-	cfg := &localruntime.CLIConfig{
+	cfg := &runtimecfg.CLIConfig{
 		Version: 2,
-		Local: localruntime.LocalConfig{
+		Local: runtimecfg.LocalConfig{
 			Storage:        "sqlite",
 			SQLitePath:     filepath.Join(root, "local.db"),
 			JWTSecret:      strings.Repeat("a", 64),
 			VaultMasterKey: strings.Repeat("b", 64),
 			PublicBaseURL:  "http://127.0.0.1:42690",
-			Connections:    map[string]localruntime.LocalConnection{},
+			Connections:    map[string]runtimecfg.LocalConnection{},
 		},
-		Profiles: map[string]localruntime.SyncProfile{},
+		Profiles: map[string]runtimecfg.SyncProfile{},
 	}
-	if err := localruntime.EnsureLocalDefaults(cfg); err != nil {
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		t.Fatalf("EnsureLocalDefaults: %v", err)
 	}
 	return home, cfg, cfg.Local.PublicBaseURL, logPath

@@ -25,6 +25,9 @@ func (s *FileTreeService) WriteBinaryEntry(
 	contentType string,
 	opts models.FileTreeWriteOptions,
 ) (*models.FileTreeEntry, error) {
+	if s.repo != nil {
+		return s.repo.WriteBinaryEntry(ctx, userID, path, data, contentType, opts)
+	}
 	storagePath := hubpath.NormalizeStorage(path)
 	if systemskills.IsProtectedPath(storagePath) {
 		return nil, ErrReadOnlyPath
@@ -164,6 +167,9 @@ func (s *FileTreeService) WriteBinaryEntry(
 }
 
 func (s *FileTreeService) ReadBinary(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]byte, *models.FileTreeEntry, error) {
+	if s.repo != nil {
+		return s.repo.ReadBinary(ctx, userID, path, trustLevel)
+	}
 	entry, err := s.Read(ctx, userID, path, trustLevel)
 	if err != nil {
 		return nil, nil, err
@@ -179,6 +185,11 @@ func (s *FileTreeService) ReadBinary(ctx context.Context, userID uuid.UUID, path
 }
 
 func (s *FileTreeService) ReadBlobByEntryID(ctx context.Context, entryID uuid.UUID) ([]byte, bool, error) {
+	if reader, ok := s.repo.(interface {
+		ReadBlobByEntryID(context.Context, uuid.UUID) ([]byte, bool, error)
+	}); ok {
+		return reader.ReadBlobByEntryID(ctx, entryID)
+	}
 	if s.db == nil {
 		return nil, false, fmt.Errorf("filetree.ReadBlobByEntryID: database not configured")
 	}

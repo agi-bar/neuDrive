@@ -10,8 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agi-bar/agenthub/internal/localhub"
-	"github.com/agi-bar/agenthub/internal/localruntime"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/systemskills"
 )
 
@@ -24,10 +24,10 @@ const (
 )
 
 type ImportSummary struct {
-	Platform string                      `json:"platform"`
-	Mode     ImportMode                  `json:"mode"`
-	Files    *localhub.ImportResult      `json:"files,omitempty"`
-	Agent    *localhub.AgentImportResult `json:"agent,omitempty"`
+	Platform string                    `json:"platform"`
+	Mode     ImportMode                `json:"mode"`
+	Files    *sqlite.ImportResult      `json:"files,omitempty"`
+	Agent    *sqlite.AgentImportResult `json:"agent,omitempty"`
 }
 
 func ParseImportMode(platform, raw string) (ImportMode, error) {
@@ -49,7 +49,7 @@ func ParseImportMode(platform, raw string) (ImportMode, error) {
 	}
 }
 
-func Import(ctx context.Context, cfg *localruntime.CLIConfig, platform, rawMode string) (*ImportSummary, error) {
+func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode string) (*ImportSummary, error) {
 	adapter, err := Resolve(platform)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func Import(ctx context.Context, cfg *localruntime.CLIConfig, platform, rawMode 
 	return summary, nil
 }
 
-func ImportSkillsZip(ctx context.Context, cfg *localruntime.CLIConfig, platform, archivePath string) (*ImportSummary, error) {
+func ImportSkillsZip(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, archivePath string) (*ImportSummary, error) {
 	adapter, err := Resolve(platform)
 	if err != nil {
 		return nil, err
@@ -95,7 +95,7 @@ func ImportSkillsZip(ctx context.Context, cfg *localruntime.CLIConfig, platform,
 	if adapter.ID() != "claude-code" {
 		return nil, fmt.Errorf("--zip is currently supported only for claude")
 	}
-	hub, err := localhub.Open(ctx, cfg)
+	hub, err := sqlite.OpenClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -111,7 +111,7 @@ func ImportSkillsZip(ctx context.Context, cfg *localruntime.CLIConfig, platform,
 	}, nil
 }
 
-func importViaAgent(ctx context.Context, cfg *localruntime.CLIConfig, platform string) (*localhub.AgentImportResult, error) {
+func importViaAgent(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string) (*sqlite.AgentImportResult, error) {
 	if !supportsAgentMediatedImport(platform) {
 		return nil, fmt.Errorf("agent-mediated import is currently supported only for codex and claude")
 	}
@@ -123,7 +123,7 @@ func importViaAgent(ctx context.Context, cfg *localruntime.CLIConfig, platform s
 	if err != nil {
 		return nil, err
 	}
-	hub, err := localhub.Open(ctx, cfg)
+	hub, err := sqlite.OpenClient(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -131,38 +131,38 @@ func importViaAgent(ctx context.Context, cfg *localruntime.CLIConfig, platform s
 	return hub.ImportAgentExport(ctx, platform, payload)
 }
 
-func runAgentExport(ctx context.Context, platform string) (localhub.AgentExportPayload, error) {
+func runAgentExport(ctx context.Context, platform string) (sqlite.AgentExportPayload, error) {
 	switch platform {
 	case "codex":
 		return runCodexAgentExport(ctx)
 	case "claude-code":
 		return runClaudeAgentExport(ctx)
 	default:
-		return localhub.AgentExportPayload{}, fmt.Errorf("agent-mediated import is not supported for %s", platform)
+		return sqlite.AgentExportPayload{}, fmt.Errorf("agent-mediated import is not supported for %s", platform)
 	}
 }
 
-func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, error) {
+func runCodexAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error) {
 	skillDoc, err := readSystemDoc("/skills/agenthub/SKILL.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	commandDoc, err := readSystemDoc("/skills/agenthub/commands/export.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	platformDoc, err := readSystemDoc("/skills/agenthub/references/platforms/codex.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	portabilityDoc, err := readSystemDoc("/skills/portability/codex/SKILL.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 
 	tempDir, err := os.MkdirTemp("", "agenthub-codex-export-*")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -170,10 +170,10 @@ func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, erro
 	outputPath := filepath.Join(tempDir, "agenthub-export.json")
 	schema, err := json.MarshalIndent(agentExportSchema(), "", "  ")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	if err := os.WriteFile(schemaPath, append(schema, '\n'), 0o644); err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 
 	prompt := buildAgentExportPrompt("Codex", "codex-entry-reference", "codex-portability-reference", skillDoc, commandDoc, platformDoc, portabilityDoc)
@@ -183,9 +183,9 @@ func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, erro
 	if err != nil {
 		trimmed := strings.TrimSpace(stderr)
 		if trimmed != "" {
-			return localhub.AgentExportPayload{}, fmt.Errorf("codex exec failed: %w: %s", err, trimmed)
+			return sqlite.AgentExportPayload{}, fmt.Errorf("codex exec failed: %w: %s", err, trimmed)
 		}
-		return localhub.AgentExportPayload{}, fmt.Errorf("codex exec failed: %w", err)
+		return sqlite.AgentExportPayload{}, fmt.Errorf("codex exec failed: %w", err)
 	}
 
 	payloadBytes, err := os.ReadFile(outputPath)
@@ -194,7 +194,7 @@ func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, erro
 	}
 	payload, err := decodeAgentExportPayload(payloadBytes)
 	if err != nil {
-		return localhub.AgentExportPayload{}, fmt.Errorf("decode codex export payload: %w", err)
+		return sqlite.AgentExportPayload{}, fmt.Errorf("decode codex export payload: %w", err)
 	}
 	if strings.TrimSpace(payload.Platform) == "" {
 		payload.Platform = "codex"
@@ -205,27 +205,27 @@ func runCodexAgentExport(ctx context.Context) (localhub.AgentExportPayload, erro
 	return payload, nil
 }
 
-func runClaudeAgentExport(ctx context.Context) (localhub.AgentExportPayload, error) {
+func runClaudeAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error) {
 	skillDoc, err := readSystemDoc("/skills/agenthub/SKILL.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	commandDoc, err := readSystemDoc("/skills/agenthub/commands/export.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	platformDoc, err := readSystemDoc("/skills/agenthub/references/platforms/claude.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	portabilityDoc, err := readSystemDoc("/skills/portability/claude/SKILL.md")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 
 	tempDir, err := os.MkdirTemp("", "agenthub-claude-export-*")
 	if err != nil {
-		return localhub.AgentExportPayload{}, err
+		return sqlite.AgentExportPayload{}, err
 	}
 	defer os.RemoveAll(tempDir)
 
@@ -236,14 +236,14 @@ func runClaudeAgentExport(ctx context.Context) (localhub.AgentExportPayload, err
 	if err != nil {
 		trimmed := strings.TrimSpace(stderr)
 		if trimmed != "" {
-			return localhub.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w: %s", err, trimmed)
+			return sqlite.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w: %s", err, trimmed)
 		}
-		return localhub.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w", err)
+		return sqlite.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w", err)
 	}
 
 	payload, err := decodeAgentExportPayload(output)
 	if err != nil {
-		return localhub.AgentExportPayload{}, fmt.Errorf("decode claude export payload: %w", err)
+		return sqlite.AgentExportPayload{}, fmt.Errorf("decode claude export payload: %w", err)
 	}
 	if strings.TrimSpace(payload.Platform) == "" {
 		payload.Platform = "claude-code"
@@ -352,9 +352,9 @@ func runCommandJSON(cmd *exec.Cmd) ([]byte, string, error) {
 	return output, stderr.String(), err
 }
 
-func decodeAgentExportPayload(payloadBytes []byte) (localhub.AgentExportPayload, error) {
+func decodeAgentExportPayload(payloadBytes []byte) (sqlite.AgentExportPayload, error) {
 	raw := strings.TrimSpace(string(payloadBytes))
-	var payload localhub.AgentExportPayload
+	var payload sqlite.AgentExportPayload
 	if err := json.Unmarshal([]byte(raw), &payload); err == nil {
 		return payload, nil
 	}

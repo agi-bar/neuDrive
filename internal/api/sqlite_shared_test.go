@@ -338,6 +338,39 @@ func TestSQLiteSharedServerWebDashboardEndpoints(t *testing.T) {
 	}
 }
 
+func TestSQLiteSharedServerTreeDirectoryWithoutTrailingSlashListsChildren(t *testing.T) {
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	status, wrote := doJSON(t, http.MethodPut, ts.URL+"/api/tree/notes/test.md", adminToken, []byte(`{"content":"hello","mime_type":"text/markdown"}`))
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("write note failed: status=%d body=%+v", status, wrote)
+	}
+
+	status, listed := doJSON(t, http.MethodGet, ts.URL+"/api/tree/notes", adminToken, nil)
+	if status != http.StatusOK || !listed.OK {
+		t.Fatalf("list notes dir failed: status=%d body=%+v", status, listed)
+	}
+
+	var node struct {
+		Path     string `json:"path"`
+		Children []struct {
+			Path string `json:"path"`
+		} `json:"children"`
+	}
+	if err := json.Unmarshal(listed.Data, &node); err != nil {
+		t.Fatalf("unmarshal tree node: %v", err)
+	}
+	if node.Path != "/notes/" {
+		t.Fatalf("unexpected node path: %q", node.Path)
+	}
+	if len(node.Children) != 1 {
+		t.Fatalf("expected 1 child, got %d", len(node.Children))
+	}
+	if node.Children[0].Path != "/notes/test.md" {
+		t.Fatalf("unexpected child path: %q", node.Children[0].Path)
+	}
+}
+
 func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 	ts, store, adminToken, _, _ := newTestHTTPServer(t)
 	ctx := context.Background()
@@ -513,7 +546,7 @@ func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
 	if status != http.StatusOK || !dirNoSlash.OK {
 		t.Fatalf("browse dir without slash failed: status=%d body=%+v", status, dirNoSlash)
 	}
-	for _, expected := range []string{`"path":"/skills/demo"`, `"is_dir":true`, `"kind":"directory"`} {
+	for _, expected := range []string{`"path":"/skills/demo/"`, `"is_dir":true`, `"name":"SKILL.md"`} {
 		if !bytes.Contains(dirNoSlash.Data, []byte(expected)) {
 			t.Fatalf("expected %q in dir browse payload: %s", expected, string(dirNoSlash.Data))
 		}

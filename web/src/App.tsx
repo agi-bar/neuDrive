@@ -25,6 +25,7 @@ import DataDevicesPage from './pages/data/DataDevicesPage'
 import DataRolesPage from './pages/data/DataRolesPage'
 import DataInboxPage from './pages/data/DataInboxPage'
 import DataSyncPage from './pages/data/DataSyncPage'
+import SyncLoginPage from './pages/SyncLoginPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -100,6 +101,10 @@ function App() {
   const isConnectionsRoute = location.pathname.startsWith('/connections') || isTokenManagementRoute
   const isProfileRoute = location.pathname === '/data/profile'
   const isDataRoute = location.pathname.startsWith('/data') && !isProfileRoute
+  const isSyncLoginRoute = location.pathname === '/sync/login'
+  const isLegacySyncLoginRoute =
+    location.pathname === '/data/sync' &&
+    new URLSearchParams(location.search).get('cli_login') === '1'
 
   if (loading) {
     return (
@@ -125,6 +130,14 @@ function App() {
         <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     )
+  }
+
+  if (isLegacySyncLoginRoute) {
+    return <Navigate to={`/sync/login${location.search}`} replace />
+  }
+
+  if (isSyncLoginRoute) {
+    return <SyncLoginPage />
   }
 
   return (
@@ -292,7 +305,7 @@ function App() {
             <Route path="tokens" element={<SetupTokensPage />} />
           </Route>
           <Route path="/data" element={<Outlet />}>
-            <Route index element={<Navigate to="files" replace />} />
+            <Route index element={<Navigate to="files/browse" replace />} />
             <Route path="files/edit/*" element={<DataFileEditorPage />} />
             <Route path="files/browse/*" element={<FilesBrowserPage />} />
             <Route path="files/recent" element={<DataFilesPage />} />

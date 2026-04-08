@@ -32,6 +32,57 @@ type inMemoryTokenStore struct {
 	rawByID map[uuid.UUID]string
 }
 
+type stubFileTreeRepo struct {
+	listFn func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error)
+	readFn func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error)
+}
+
+func (s stubFileTreeRepo) List(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
+	if s.listFn != nil {
+		return s.listFn(ctx, userID, path, trustLevel)
+	}
+	return nil, services.ErrEntryNotFound
+}
+
+func (s stubFileTreeRepo) Read(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
+	if s.readFn != nil {
+		return s.readFn(ctx, userID, path, trustLevel)
+	}
+	return nil, services.ErrEntryNotFound
+}
+
+func (s stubFileTreeRepo) WriteEntry(context.Context, uuid.UUID, string, string, string, models.FileTreeWriteOptions) (*models.FileTreeEntry, error) {
+	return nil, services.ErrEntryNotFound
+}
+
+func (s stubFileTreeRepo) WriteBinaryEntry(context.Context, uuid.UUID, string, []byte, string, models.FileTreeWriteOptions) (*models.FileTreeEntry, error) {
+	return nil, services.ErrEntryNotFound
+}
+
+func (s stubFileTreeRepo) Delete(context.Context, uuid.UUID, string) error {
+	return services.ErrEntryNotFound
+}
+
+func (s stubFileTreeRepo) Search(context.Context, uuid.UUID, string, int, string) ([]models.FileTreeEntry, error) {
+	return nil, nil
+}
+
+func (s stubFileTreeRepo) EnsureDirectory(context.Context, uuid.UUID, string) error {
+	return nil
+}
+
+func (s stubFileTreeRepo) Snapshot(context.Context, uuid.UUID, string, int) (*models.EntrySnapshot, error) {
+	return nil, services.ErrEntryNotFound
+}
+
+func (s stubFileTreeRepo) ListSkillSummaries(context.Context, uuid.UUID, int) ([]models.SkillSummary, error) {
+	return nil, nil
+}
+
+func (s stubFileTreeRepo) ReadBinary(context.Context, uuid.UUID, string, int) ([]byte, *models.FileTreeEntry, error) {
+	return nil, nil, services.ErrEntryNotFound
+}
+
 func newInMemoryTokenStore() *inMemoryTokenStore {
 	return &inMemoryTokenStore{
 		tokens:  make(map[uuid.UUID]models.ScopedToken),

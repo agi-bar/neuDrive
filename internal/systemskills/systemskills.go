@@ -171,12 +171,13 @@ func ListEntries(rawPath string) ([]models.FileTreeEntry, bool) {
 	if publicPath == "" {
 		publicPath = "/"
 	}
+	if publicPath == "/" {
+		return []models.FileTreeEntry{directoryEntry(skillsRoot + "/")}, true
+	}
 
 	switch strings.TrimSuffix(publicPath, "/") {
 	case "":
 		return nil, false
-	case "/":
-		return []models.FileTreeEntry{directoryEntry(skillsRoot + "/")}, true
 	case skillsRoot:
 		return []models.FileTreeEntry{
 			directoryEntry(agentHubRoot + "/"),

@@ -1098,7 +1098,7 @@ func waitForBrowserLogin(apiBaseValue, profileName, access string, ttlMinutes in
 		}
 	}()
 	callbackURL := fmt.Sprintf("http://127.0.0.1:%d/callback", listener.Addr().(*net.TCPAddr).Port)
-	syncURL := fmt.Sprintf("%s/data/sync?%s", strings.TrimRight(apiBaseValue, "/"), url.Values{
+	syncURL := fmt.Sprintf("%s/sync/login?%s", strings.TrimRight(apiBaseValue, "/"), url.Values{
 		"cli_login":       []string{"1"},
 		"cli_profile":     []string{profileName},
 		"cli_access":      []string{access},

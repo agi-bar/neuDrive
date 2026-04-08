@@ -2,11 +2,15 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/google/uuid"
 )
 
 // ---------------------------------------------------------------------------
@@ -401,6 +405,66 @@ func TestFileTreeListSystemPortabilityDirectory(t *testing.T) {
 	}
 	if len(children) != 3 {
 		t.Fatalf("expected 3 platform directories, got %d", len(children))
+	}
+}
+
+func TestFileTreeListDirectoryWithoutTrailingSlash(t *testing.T) {
+	now := time.Date(2026, 4, 8, 0, 0, 0, 0, time.UTC)
+	ts, _ := newTestServerWithFileTree(services.NewFileTreeServiceWithRepo(stubFileTreeRepo{
+		readFn: func(_ context.Context, _ uuid.UUID, path string, _ int) (*models.FileTreeEntry, error) {
+			if path != "/projects/demo" {
+				return nil, services.ErrEntryNotFound
+			}
+			return &models.FileTreeEntry{
+				Path:        "/projects/demo",
+				Kind:        "directory",
+				IsDirectory: true,
+				ContentType: "directory",
+				Version:     1,
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			}, nil
+		},
+		listFn: func(_ context.Context, _ uuid.UUID, path string, _ int) ([]models.FileTreeEntry, error) {
+			if path != "/projects/demo" {
+				return nil, services.ErrEntryNotFound
+			}
+			return []models.FileTreeEntry{{
+				Path:          "/projects/demo/README.md",
+				Kind:          "file",
+				Content:       "# Demo\n",
+				ContentType:   "text/markdown",
+				Version:       1,
+				MinTrustLevel: models.TrustLevelGuest,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}}, nil
+		},
+	}))
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tree/projects/demo")
+	if err != nil {
+		t.Fatalf("GET /api/tree/projects/demo: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body := parseJSON(resp)
+	children, ok := body["children"].([]interface{})
+	if !ok {
+		t.Fatalf("expected children array, got %#v", body["children"])
+	}
+	if len(children) != 1 {
+		t.Fatalf("expected 1 child, got %d", len(children))
+	}
+	child, ok := children[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected child object, got %#v", children[0])
+	}
+	if child["path"] != "/projects/demo/README.md" {
+		t.Fatalf("unexpected child path: %#v", child["path"])
 	}
 }
 

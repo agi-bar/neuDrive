@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { api, type FileNode } from '../../api'
-import { fileNamespaceLabel, formatDateTime, isVisibleFileEntry, sortNodesByRecent, summarizeNodeContent } from './DataShared'
+import { fileNamespaceLabel, formatDateTime, isVisibleFileEntry, sortNodesByRecent } from './DataShared'
 import { useNavigate } from 'react-router-dom'
 
 export default function DataFilesPage() {
@@ -12,8 +12,6 @@ export default function DataFilesPage() {
   const [createPath, setCreatePath] = useState('/notes/new-note.md')
   const [createContent, setCreateContent] = useState('# 新文档\n\n')
   const [busyPath, setBusyPath] = useState<string | null>(null)
-  const [renameFor, setRenameFor] = useState<string | null>(null)
-  const [renameTo, setRenameTo] = useState('')
 
   useEffect(() => {
     const load = async () => {
@@ -85,45 +83,12 @@ export default function DataFilesPage() {
     }
   }
 
-  const handleBeginRename = (path: string) => {
-    setRenameFor(path)
-    setRenameTo(path)
-  }
-
-  const handleRename = async (fromPath: string) => {
-    if (!renameTo || renameTo === fromPath) {
-      setRenameFor(null)
-      return
-    }
-    try {
-      setBusyPath(fromPath)
-      const file = files.find(f => f.path === fromPath)
-      const content = file?.content || ''
-      await api.writeTree(renameTo, {
-        content,
-        mimeType: (file?.mime_type) || (renameTo.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain'),
-      })
-      await api.deleteTree(fromPath)
-      await refresh()
-      setRenameFor(null)
-    } catch (err: any) {
-      const msg = String(err.message || '')
-      if (msg.includes('read-only')) {
-        alert('重命名失败：目标或源路径为只读。')
-      } else {
-        alert(`重命名失败：${msg}`)
-      }
-    } finally {
-      setBusyPath(null)
-    }
-  }
-
   return (
     <div className="page">
       <div className="page-header page-header-stack">
         <div>
-          <h2>所有文件</h2>
-          <p className="page-subtitle">这里按最近更新时间汇总展示 Hub 中的全部文件内容，包含项目、技能、Memory、我的资料、设备、Roles、Inbox 和根文件空间。</p>
+          <h2>最近更新</h2>
+          <p className="page-subtitle">这里按更新时间列出最近改过的 Hub 文档。点击文件名会直接进入编辑器。</p>
         </div>
         <div className="page-actions">
           {!creating ? (
@@ -171,7 +136,13 @@ export default function DataFilesPage() {
           {files.map((file) => (
             <div key={file.path} className="card data-record-item">
               <div className="data-record-head">
-                <div className="data-record-title">{file.name}</div>
+                <button
+                  type="button"
+                  className="btn-text data-record-title-button"
+                  onClick={() => navigate(`/data/files/edit/${encodeURIComponent(file.path.replace(/^\/+/, ''))}`)}
+                >
+                  {file.name}
+                </button>
                 <div className="data-inline-list">
                   <span className="dashboard-inline-chip">{fileNamespaceLabel(file.path)}</span>
                   {file.kind && <span className="dashboard-inline-chip">{file.kind}</span>}
@@ -179,38 +150,11 @@ export default function DataFilesPage() {
                 </div>
               </div>
               <div className="data-record-path">{file.path}</div>
-              <div className="data-record-preview">{summarizeNodeContent(file, 220)}</div>
               <div className="form-actions" style={{ marginTop: 10 }}>
-                {!file.is_dir && (file.path.toLowerCase().endsWith('.md') || (file.mime_type || '').startsWith('text/')) && (
-                  <button
-                    className="btn btn-sm"
-                    onClick={() => navigate(`/data/files/edit/${encodeURIComponent(file.path.replace(/^\/+/, ''))}`)}
-                  >
-                    编辑
-                  </button>
-                )}
-                {!file.is_dir && (
-                  <button className="btn btn-sm" disabled={busyPath === file.path} onClick={() => handleBeginRename(file.path)}>重命名</button>
-                )}
                 {!file.is_dir && (
                   <button className="btn btn-sm btn-danger" disabled={busyPath === file.path} onClick={() => handleDelete(file.path)}>删除</button>
                 )}
               </div>
-              {renameFor === file.path && (
-                <div className="form-row" style={{ marginTop: 8 }}>
-                  <div className="form-group" style={{ gridColumn: '1 / span 2' }}>
-                    <label>新路径</label>
-                    <input value={renameTo} onChange={e => setRenameTo(e.target.value)} />
-                  </div>
-                  <div className="form-group">
-                    <label>&nbsp;</label>
-                    <div className="form-actions">
-                      <button className="btn btn-sm" disabled={busyPath === file.path} onClick={() => setRenameFor(null)}>取消</button>
-                      <button className="btn btn-sm btn-primary" disabled={busyPath === file.path} onClick={() => handleRename(file.path)}>保存重命名</button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           ))}
         </div>

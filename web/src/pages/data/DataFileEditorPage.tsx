@@ -21,6 +21,7 @@ export default function DataFileEditorPage() {
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
+  const [renamePath, setRenamePath] = useState(path)
 
   useEffect(() => {
     let mounted = true
@@ -33,6 +34,7 @@ export default function DataFileEditorPage() {
         if (!mounted) return
         setNode(data)
         setContent(data.content || '')
+        setRenamePath(data.path)
       } catch (err: any) {
         setError(err.message || '加载文件失败')
       } finally {
@@ -71,6 +73,38 @@ export default function DataFileEditorPage() {
       setSaving(false)
     }
   }, [node, path, content])
+
+  const handleRename = useCallback(async () => {
+    if (!node) return
+    const nextPath = renamePath.trim()
+    if (!nextPath || nextPath === path) {
+      setRenamePath(path)
+      return
+    }
+
+    setSaving(true)
+    setError('')
+    setSuccess('')
+    try {
+      await api.writeTree(nextPath, {
+        content,
+        mimeType: node.mime_type || (nextPath.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain'),
+        isDir: false,
+      })
+      await api.deleteTree(path)
+      navigate(`/data/files/edit/${encodeURIComponent(nextPath.replace(/^\/+/, ''))}`, { replace: true })
+      setSuccess('已重命名')
+    } catch (err: any) {
+      const msg = String(err.message || '')
+      if (msg.toLowerCase().includes('read-only')) {
+        setError('重命名失败：源路径或目标路径是只读目录。')
+      } else {
+        setError(err.message || '重命名失败')
+      }
+    } finally {
+      setSaving(false)
+    }
+  }, [content, navigate, node, path, renamePath])
 
   // 保存快捷键 Cmd/Ctrl+S
   useEffect(() => {
@@ -141,6 +175,24 @@ export default function DataFileEditorPage() {
 
       {error && <div className="alert alert-error" role="alert">{error}</div>}
       {success && <div className="alert alert-success" role="status">{success}</div>}
+
+      <div className="card" style={{ marginBottom: 12 }}>
+        <div className="form-row">
+          <div className="form-group" style={{ gridColumn: '1 / span 2' }}>
+            <label>文件路径</label>
+            <input value={renamePath} onChange={(e) => setRenamePath(e.target.value)} />
+          </div>
+          <div className="form-group">
+            <label>&nbsp;</label>
+            <div className="form-actions">
+              <button className="btn" disabled={saving || renamePath === path} onClick={() => setRenamePath(path)}>还原</button>
+              <button className="btn btn-primary" disabled={saving || !renamePath.trim() || renamePath === path} onClick={handleRename}>
+                {saving ? '处理中…' : '重命名'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
 
       <div className="card" data-color-mode="light">
         <MDEditor

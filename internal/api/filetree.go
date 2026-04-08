@@ -339,6 +339,9 @@ func (s *Server) readOrListTreePath(ctx context.Context, userID uuid.UUID, trust
 
 	entry, err := s.FileTreeService.Read(ctx, userID, storagePath, trustLevel)
 	if err == nil {
+		if entry.IsDirectory {
+			return s.listTreeNode(ctx, userID, trustLevel, storagePath)
+		}
 		return fileTreeEntryToNode(s.renderSystemSkillEntry(ctx, userID, trustLevel, entry)), nil
 	}
 

@@ -192,12 +192,12 @@ export default function DashboardPage() {
 
         <div className="card dashboard-card">
           <div className="card-header">
-            <h3 className="card-title">Hub 文件</h3>
-            <Link to="/data/files" className="dashboard-card-link">更多</Link>
+            <h3 className="card-title">最近更新</h3>
+            <Link to="/data/files/recent" className="dashboard-card-link">更多</Link>
           </div>
 
           <div className="dashboard-profile-meta dashboard-preview-meta">
-            首页只显示最近更新的 2 个 Hub 文件，完整列表请到“所有文件”页面查看。
+            首页只显示最近改过的 2 个文档，完整列表请到“最近更新”页面查看。
           </div>
 
           {recentFiles.length > 0 ? (
@@ -205,7 +205,6 @@ export default function DashboardPage() {
               {recentFiles.map((entry) => (
                 <div key={entry.path} className="dashboard-file-item">
                   <div className="dashboard-file-path">{entry.path}</div>
-                  <div className="dashboard-file-preview">{summarizeNodeContent(entry, 140)}</div>
                   <div className="dashboard-file-meta">{formatDateTime(entry.updated_at || entry.created_at)}</div>
                 </div>
               ))}

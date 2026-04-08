@@ -59,6 +59,19 @@ func TestListEntriesPortabilityRoot(t *testing.T) {
 	}
 }
 
+func TestListEntriesRootIncludesSkillsDirectory(t *testing.T) {
+	entries, ok := ListEntries("/")
+	if !ok {
+		t.Fatal("expected / root to be handled")
+	}
+	if len(entries) != 1 {
+		t.Fatalf("expected only skills root, got %d", len(entries))
+	}
+	if entries[0].Path != "/skills/" {
+		t.Fatalf("expected /skills/ entry, got %q", entries[0].Path)
+	}
+}
+
 func TestListEntriesSkillsRootIncludesAgentHub(t *testing.T) {
 	entries, ok := ListEntries("/skills")
 	if !ok {

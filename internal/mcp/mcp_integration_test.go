@@ -164,8 +164,43 @@ func TestMCPInteg_ToolsList(t *testing.T) {
 	}
 	result := resp.Result.(map[string]interface{})
 	tools := result["tools"].([]MCPTool)
-	if len(tools) < 20 {
-		t.Errorf("expected >= 20 tools, got %d", len(tools))
+	if len(tools) < 19 {
+		t.Errorf("expected >= 19 tools, got %d", len(tools))
+	}
+
+	toolNames := make(map[string]bool, len(tools))
+	for _, tool := range tools {
+		toolNames[tool.Name] = true
+	}
+	for _, expected := range []string{
+		"read_profile",
+		"update_profile",
+		"search_memory",
+		"list_projects",
+		"create_project",
+		"get_project",
+		"log_action",
+		"list_directory",
+		"read_file",
+		"write_file",
+		"list_secrets",
+		"read_secret",
+		"list_skills",
+		"read_skill",
+		"get_stats",
+		"save_memory",
+		"import_skill",
+		"create_sync_token",
+		"create_skills_import_token",
+	} {
+		if !toolNames[expected] {
+			t.Errorf("expected tool %q not found in tools/list", expected)
+		}
+	}
+	for _, hidden := range []string{"list_devices", "call_device", "send_message", "read_inbox"} {
+		if toolNames[hidden] {
+			t.Errorf("tool %q should not be exposed in tools/list", hidden)
+		}
 	}
 }
 
@@ -326,38 +361,47 @@ func TestMCPInteg_Vault_WriteReadDelete(t *testing.T) {
 	t.Logf("read_secret: text=%q isErr=%v", text, isErr)
 }
 
-func TestMCPInteg_Devices_ListAndCall(t *testing.T) {
+func TestMCPInteg_DevicesAreNotExposed(t *testing.T) {
 	s := setupIntegrationMCP(t)
 
-	// List (empty)
 	text, isErr := mcpToolCall(t, s, "list_devices", map[string]interface{}{})
-	if isErr {
-		t.Fatalf("list_devices error: %s", text)
+	if !isErr {
+		t.Fatalf("expected list_devices to be unavailable, got success: %s", text)
+	}
+	if !strings.Contains(text, "unknown tool: list_devices") {
+		t.Fatalf("expected list_devices to be hidden, got %q", text)
 	}
 
-	// Call non-existent device
 	text, isErr = mcpToolCall(t, s, "call_device", map[string]interface{}{
 		"device": "test-light", "action": "on",
 	})
-	// Should error (device not found)
-	t.Logf("call_device: text=%q isErr=%v", text, isErr)
+	if !isErr {
+		t.Fatalf("expected call_device to be unavailable, got success: %s", text)
+	}
+	if !strings.Contains(text, "unknown tool: call_device") {
+		t.Fatalf("expected call_device to be hidden, got %q", text)
+	}
 }
 
-func TestMCPInteg_Inbox_SendAndRead(t *testing.T) {
+func TestMCPInteg_InboxToolsAreNotExposed(t *testing.T) {
 	s := setupIntegrationMCP(t)
 
-	// Send
 	text, isErr := mcpToolCall(t, s, "send_message", map[string]interface{}{
 		"to": "assistant", "subject": "MCP Test", "body": "Hello from MCP test",
 	})
-	if isErr {
-		t.Fatalf("send_message error: %s", text)
+	if !isErr {
+		t.Fatalf("expected send_message to be unavailable, got success: %s", text)
+	}
+	if !strings.Contains(text, "unknown tool: send_message") {
+		t.Fatalf("expected send_message to be hidden, got %q", text)
 	}
 
-	// Read
 	text, isErr = mcpToolCall(t, s, "read_inbox", map[string]interface{}{})
-	if isErr {
-		t.Fatalf("read_inbox error: %s", text)
+	if !isErr {
+		t.Fatalf("expected read_inbox to be unavailable, got success: %s", text)
+	}
+	if !strings.Contains(text, "unknown tool: read_inbox") {
+		t.Fatalf("expected read_inbox to be hidden, got %q", text)
 	}
 }
 

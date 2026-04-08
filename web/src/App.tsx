@@ -17,7 +17,6 @@ import SetupAdaptersPage from './pages/setup/SetupAdaptersPage'
 import SetupGptActionsPage from './pages/setup/SetupGptActionsPage'
 import SetupTokensPage from './pages/setup/SetupTokensPage'
 import DataFilesPage from './pages/data/DataFilesPage'
-import FilesBetaPage from './pages/data/FilesBetaPage'
 import FilesBrowserPage from './pages/data/FilesBrowserPage'
 import DataFileEditorPage from './pages/data/DataFileEditorPage'
 import DataSkillsPage from './pages/data/DataSkillsPage'
@@ -235,14 +234,11 @@ function App() {
                 className="nav-submenu"
                 aria-label="数据文件子菜单"
               >
-                <NavLink to="/data/files/browse" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                <NavLink to="/data/files" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   文件管理器
                 </NavLink>
-                <NavLink to="/data/files" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                <NavLink to="/data/files/recent" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   最近更新
-                </NavLink>
-                <NavLink to="/data/files-beta" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                  文件（Beta）
                 </NavLink>
                 <NavLink to="/data/projects" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   项目
@@ -299,8 +295,8 @@ function App() {
             <Route index element={<Navigate to="files" replace />} />
             <Route path="files/edit/*" element={<DataFileEditorPage />} />
             <Route path="files/browse/*" element={<FilesBrowserPage />} />
-            <Route path="files" element={<DataFilesPage />} />
-            <Route path="files-beta" element={<FilesBetaPage />} />
+            <Route path="files/recent" element={<DataFilesPage />} />
+            <Route path="files/*" element={<FilesBrowserPage />} />
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="skills" element={<DataSkillsPage />} />
             <Route path="memory" element={<DataMemoryPage />} />

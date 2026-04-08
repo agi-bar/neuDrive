@@ -1,49 +1,16 @@
 import { useEffect, useState } from 'react'
-import { api, type FileNode } from '../../api'
-import { formatDateTime, isSkillDocument, sortNodesByRecent, summarizeNodeContent } from './DataShared'
-
-interface SkillItem {
-  id: string
-  name: string
-  path: string
-  description: string
-  source: string
-  whenToUse?: string
-  tags: string[]
-  updatedAt?: string
-}
-
-function formatSkillName(path: string) {
-  return path
-    .replace(/^\/skills\//, '')
-    .replace(/\/SKILL\.md$/i, '')
-    .split('/')
-    .join(' / ')
-}
-
-function buildSkills(entries: FileNode[]): SkillItem[] {
-  return sortNodesByRecent(entries.filter(isSkillDocument)).map((entry) => ({
-    id: entry.path,
-    name: String(entry.metadata?.name || formatSkillName(entry.path)),
-    path: entry.path,
-    description: String(entry.metadata?.description || summarizeNodeContent(entry, 180)),
-    source: String(entry.metadata?.source || 'user'),
-    whenToUse: entry.metadata?.when_to_use ? String(entry.metadata.when_to_use) : '',
-    tags: Array.isArray(entry.metadata?.tags) ? entry.metadata.tags.map((tag) => String(tag)) : [],
-    updatedAt: entry.updated_at || entry.created_at,
-  }))
-}
+import { api, type SkillSummary } from '../../api'
 
 export default function DataSkillsPage() {
-  const [skills, setSkills] = useState<SkillItem[]>([])
+  const [skills, setSkills] = useState<SkillSummary[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
   useEffect(() => {
     const load = async () => {
       try {
-        const snapshot = await api.getTreeSnapshot('/skills')
-        setSkills(buildSkills(snapshot.entries))
+        const data = await api.getSkills()
+        setSkills(data)
       } catch (err: any) {
         setError(err.message || '加载技能失败')
       } finally {
@@ -77,19 +44,19 @@ export default function DataSkillsPage() {
       ) : (
         <div className="data-record-list">
           {skills.map((skill) => (
-            <div key={skill.id} className="card data-record-item">
+            <div key={skill.path} className="card data-record-item">
               <div className="data-record-head">
                 <div className="data-record-title">{skill.name}</div>
-                <div className="data-record-meta">{formatDateTime(skill.updatedAt)}</div>
+                <div className="data-record-meta">{skill.read_only ? '只读' : skill.source}</div>
               </div>
               <div className="data-record-path">{skill.path}</div>
-              <div className="data-record-preview">{skill.description}</div>
-              {skill.whenToUse && (
-                <div className="data-record-secondary">{skill.whenToUse}</div>
+              <div className="data-record-preview">{skill.description || '暂无描述'}</div>
+              {skill.when_to_use && (
+                <div className="data-record-secondary">{skill.when_to_use}</div>
               )}
               <div className="data-inline-list">
                 <span className="dashboard-inline-chip">{skill.source}</span>
-                {skill.tags.slice(0, 4).map((tag) => (
+                {(skill.tags || []).slice(0, 4).map((tag) => (
                   <span key={tag} className="dashboard-inline-chip">{tag}</span>
                 ))}
               </div>

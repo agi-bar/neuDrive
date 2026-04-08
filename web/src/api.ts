@@ -109,6 +109,17 @@ export interface DashboardStats {
   pending: DashboardPending[]
 }
 
+export interface SkillSummary {
+  name: string
+  path: string
+  source: string
+  read_only?: boolean
+  description?: string
+  when_to_use?: string
+  tags?: string[]
+  min_trust_level?: number
+}
+
 export interface DeviceRecord {
   id?: string
   name: string
@@ -396,6 +407,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+
+  // Skills
+  getSkills: () => request<{ skills: SkillSummary[] }>('/skills').then(r => r.skills || []),
 
   // File tree
   getTree: (path = '/'): Promise<FileNode> => {

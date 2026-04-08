@@ -180,11 +180,12 @@ func (s *Store) ListProjects(ctx context.Context, userID uuid.UUID) ([]models.Pr
 			project.ID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-project:"+name))
 			project.UserID = userID
 			project.Name = name
-			project.Status = "active"
+			project.Status = projectStatus(entry.Metadata)
 			project.CreatedAt = entry.CreatedAt
 		}
 		project.ContextMD = entry.Content
 		project.UpdatedAt = entry.UpdatedAt
+		project.Metadata = cloneProjectMetadata(entry.Metadata)
 		projects[name] = project
 	}
 	names := make([]string, 0, len(projects))
@@ -208,6 +209,9 @@ func (s *Store) CreateProject(ctx context.Context, userID uuid.UUID, name string
 	entry, err := s.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), "", "text/markdown", models.FileTreeWriteOptions{
 		Kind:          "project_context",
 		MinTrustLevel: models.TrustLevelCollaborate,
+		Metadata: map[string]interface{}{
+			"status": "active",
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -225,6 +229,9 @@ func (s *Store) CreateProject(ctx context.Context, userID uuid.UUID, name string
 		Name:      name,
 		Status:    "active",
 		ContextMD: "",
+		Metadata: map[string]interface{}{
+			"status": "active",
+		},
 		CreatedAt: entry.CreatedAt,
 		UpdatedAt: now,
 	}, nil
@@ -239,11 +246,30 @@ func (s *Store) GetProject(ctx context.Context, userID uuid.UUID, name string) (
 		ID:        uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-project:"+name)),
 		UserID:    userID,
 		Name:      name,
-		Status:    "active",
+		Status:    projectStatus(entry.Metadata),
 		ContextMD: entry.Content,
+		Metadata:  cloneProjectMetadata(entry.Metadata),
 		CreatedAt: entry.CreatedAt,
 		UpdatedAt: entry.UpdatedAt,
 	}, nil
+}
+
+func (s *Store) ArchiveProject(ctx context.Context, userID uuid.UUID, name string) error {
+	project, err := s.GetProject(ctx, userID, name)
+	if err != nil {
+		return err
+	}
+	metadata := cloneProjectMetadata(project.Metadata)
+	if metadata == nil {
+		metadata = map[string]interface{}{}
+	}
+	metadata["status"] = "archived"
+	_, err = s.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), project.ContextMD, "text/markdown", models.FileTreeWriteOptions{
+		Kind:          "project_context",
+		MinTrustLevel: models.TrustLevelCollaborate,
+		Metadata:      metadata,
+	})
+	return err
 }
 
 func (s *Store) GetProjectLogs(ctx context.Context, userID uuid.UUID, name string, limit int) ([]models.ProjectLog, error) {
@@ -303,11 +329,45 @@ func (s *Store) AppendProjectLog(ctx context.Context, userID uuid.UUID, name str
 		content += "\n"
 	}
 	content += string(line) + "\n"
-	_, err = s.WriteEntry(ctx, userID, hubpath.ProjectLogPath(name), content, "application/x-ndjson", models.FileTreeWriteOptions{
+	if _, err = s.WriteEntry(ctx, userID, hubpath.ProjectLogPath(name), content, "application/x-ndjson", models.FileTreeWriteOptions{
 		Kind:          "project_log",
 		MinTrustLevel: models.TrustLevelCollaborate,
+	}); err != nil {
+		return err
+	}
+	project, err := s.GetProject(ctx, userID, name)
+	if err != nil {
+		return err
+	}
+	metadata := cloneProjectMetadata(project.Metadata)
+	if metadata == nil {
+		metadata = map[string]interface{}{}
+	}
+	metadata["last_activity"] = logEntry.CreatedAt.UTC().Format(time.RFC3339)
+	_, err = s.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), project.ContextMD, "text/markdown", models.FileTreeWriteOptions{
+		Kind:          "project_context",
+		MinTrustLevel: models.TrustLevelCollaborate,
+		Metadata:      metadata,
 	})
 	return err
+}
+
+func projectStatus(metadata map[string]interface{}) string {
+	if status, _ := metadata["status"].(string); strings.TrimSpace(status) != "" {
+		return status
+	}
+	return "active"
+}
+
+func cloneProjectMetadata(metadata map[string]interface{}) map[string]interface{} {
+	if len(metadata) == 0 {
+		return nil
+	}
+	cloned := make(map[string]interface{}, len(metadata))
+	for key, value := range metadata {
+		cloned[key] = value
+	}
+	return cloned
 }
 
 func metadataTime(metadata map[string]interface{}, key string) *time.Time {

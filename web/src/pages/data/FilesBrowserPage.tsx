@@ -1,10 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode } from '../../api'
-import MDEditor from '@uiw/react-markdown-preview'
+import { fileNamespaceLabel } from './DataShared'
 
 type SortKey = 'name' | 'updated_at' | 'size'
 type SortDir = 'asc' | 'desc'
+type NamespaceFilter = 'all' | 'projects' | 'skills' | 'memory' | 'devices' | 'roles' | 'inbox' | 'notes' | 'root'
+
+const NAMESPACE_CHIPS: Array<{ key: NamespaceFilter; label: string }> = [
+  { key: 'all', label: '全部' },
+  { key: 'projects', label: 'Projects' },
+  { key: 'skills', label: 'Skills' },
+  { key: 'memory', label: 'Memory' },
+  { key: 'devices', label: 'Devices' },
+  { key: 'roles', label: 'Roles' },
+  { key: 'inbox', label: 'Inbox' },
+  { key: 'notes', label: 'Notes' },
+  { key: 'root', label: 'Root' },
+]
 
 function useQuery() {
   const { search } = useLocation()
@@ -36,6 +49,14 @@ function formatBytes(n?: number) {
   return `${v.toFixed(1)} ${units[u]}`
 }
 
+function topNamespace(path: string): NamespaceFilter {
+  const seg = path.replace(/^\/+/, '').split('/')[0] || ''
+  if (seg === 'projects' || seg === 'skills' || seg === 'memory' || seg === 'devices' || seg === 'roles' || seg === 'inbox' || seg === 'notes') {
+    return seg
+  }
+  return 'root'
+}
+
 function sortNodes(nodes: FileNode[], key: SortKey, dir: SortDir) {
   const mul = dir === 'asc' ? 1 : -1
   return [...nodes].sort((a, b) => {
@@ -51,32 +72,32 @@ function sortNodes(nodes: FileNode[], key: SortKey, dir: SortDir) {
 export default function FilesBrowserPage() {
   const params = useParams()
   const navigate = useNavigate()
+  const location = useLocation()
   const query = useQuery()
   const wildcard = params['*'] || ''
   const currentPath = useMemo(() => (wildcard ? '/' + decodeURIComponent(wildcard) : '/'), [wildcard])
-  const [node, setNode] = useState<FileNode | null>(null)
   const [items, setItems] = useState<FileNode[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [preview, setPreview] = useState<FileNode | null>(null)
   const [creatingDir, setCreatingDir] = useState(false)
   const [newDirName, setNewDirName] = useState('新建文件夹')
   const [creatingFile, setCreatingFile] = useState(false)
   const [newFileName, setNewFileName] = useState('新建文档.md')
-  const [searching, setSearching] = useState('')
-  const [searchMode, setSearchMode] = useState(false)
+  const [searchInput, setSearchInput] = useState('')
+  const [appliedSearch, setAppliedSearch] = useState('')
+  const [namespaceFilter, setNamespaceFilter] = useState<NamespaceFilter>('all')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const sortKey = (query.get('sort') as SortKey) || 'updated_at'
   const sortDir = (query.get('dir') as SortDir) || 'desc'
+  const searchMode = Boolean(appliedSearch.trim())
 
   const refresh = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
-      if (searchMode && searching.trim()) {
-        const results = await api.search(searching.trim())
+      if (searchMode) {
+        const results = await api.search(appliedSearch.trim())
         const mapped: FileNode[] = results.map(r => ({
           path: r.path,
           name: r.name,
@@ -85,42 +106,19 @@ export default function FilesBrowserPage() {
           content: r.content,
           updated_at: r.updated_at,
         }))
-        setNode(null)
         setItems(sortNodes(mapped, sortKey, sortDir))
       } else {
         const root = await api.getTree(currentPath)
-        setNode(root)
         setItems(sortNodes(root.children || [], sortKey, sortDir))
       }
-      setSelected(new Set())
     } catch (err: any) {
       setError(err.message || '加载失败')
     } finally {
       setLoading(false)
     }
-  }, [currentPath, searchMode, searching, sortKey, sortDir])
+  }, [appliedSearch, currentPath, searchMode, sortKey, sortDir])
 
   useEffect(() => { refresh() }, [refresh])
-
-  // 键盘快捷键
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setSelected(new Set())
-      if (e.key === 'Delete' && selected.size > 0) {
-        e.preventDefault()
-        handleDelete(Array.from(selected))
-      }
-      if (e.key === 'Enter' && selected.size === 1) {
-        const p = Array.from(selected)[0]
-        const item = items.find(i => i.path === p)
-        if (!item) return
-        if (item.is_dir) navigate(`/data/files/browse/${encodeURIComponent(item.path.replace(/^\/+/, ''))}`)
-        else setPreview(item)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [selected, items, navigate])
 
   const toggleSort = (key: SortKey) => {
     const dir: SortDir = (sortKey === key ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc')
@@ -131,16 +129,25 @@ export default function FilesBrowserPage() {
   }
 
   const onNavigatePath = (p: string) => {
-    navigate(`/data/files/browse/${encodeURIComponent(p.replace(/^\/+/, ''))}`)
+    const normalized = p.replace(/^\/+/, '')
+    navigate(normalized ? `/data/files/${encodeURIComponent(normalized)}` : '/data/files')
   }
 
-  const handleSelect = (p: string, multi = false) => {
-    setSelected(prev => {
-      const next = new Set(prev)
-      if (!multi) { next.clear() }
-      if (next.has(p)) next.delete(p); else next.add(p)
-      return next
-    })
+  const handleOpen = (item: FileNode) => {
+    if (item.is_dir) {
+      onNavigatePath(item.path)
+      return
+    }
+    navigate(`/data/files/edit/${encodeURIComponent(item.path.replace(/^\/+/, ''))}`)
+  }
+
+  const runSearch = () => {
+    setAppliedSearch(searchInput.trim())
+  }
+
+  const clearSearch = () => {
+    setSearchInput('')
+    setAppliedSearch('')
   }
 
   const handleNewDir = async () => {
@@ -214,40 +221,63 @@ export default function FilesBrowserPage() {
     }
   }
 
-  const isSelected = (p: string) => selected.has(p)
-
-  if (loading) return <div className="page-loading">加载中...</div>
+  const filteredItems = useMemo(
+    () => items.filter((item) => namespaceFilter === 'all' || topNamespace(item.path) === namespaceFilter),
+    [items, namespaceFilter],
+  )
+  const listTitle = searchMode ? '搜索结果' : currentPath === '/' ? '根目录' : currentPath.split('/').pop() || currentPath
 
   return (
     <div className="page">
       <div className="page-header page-header-stack">
         <div>
           <h2>文件管理器</h2>
-          <Breadcrumbs path={currentPath} onNavigate={onNavigatePath} />
-        </div>
-        <div className="page-actions" style={{ gap: 6 }}>
-          <input
-            placeholder="搜索文件（回车执行）"
-            value={searching}
-            onChange={e => setSearching(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') { setSearchMode(Boolean(searching.trim())); refresh() }
-              if (e.key === 'Escape') { setSearchMode(false); setSearching(''); refresh() }
-            }}
-          />
-          <button className="btn" onClick={() => setCreatingDir(v => !v)}>新建文件夹</button>
-          <button className="btn" onClick={() => setCreatingFile(v => !v)}>新建文件</button>
-          <input ref={fileInputRef} type="file" accept=".md,.txt" style={{ display: 'none' }} onChange={(e) => {
-            const f = e.target.files?.[0]; if (f) handleUpload(f); e.currentTarget.value = ''
-          }} />
-          <button className="btn" onClick={() => fileInputRef.current?.click()}>上传文本</button>
-          <button className="btn btn-danger" disabled={selected.size === 0} onClick={() => handleDelete(Array.from(selected))}>删除</button>
+          <p className="page-subtitle">像 OneDrive 一样浏览、筛选、搜索和预览 Hub 文件。</p>
         </div>
       </div>
 
       {error && <div className="alert alert-warn">{error}</div>}
-      <div className="alert" style={{ background: '#fffbeb', border: '1px solid #fde68a', marginBottom: 12 }}>
+      <div className="alert files-browser-note" style={{ background: '#fffbeb', border: '1px solid #fde68a', marginBottom: 12 }}>
         部分系统路径为只读（例如内置技能/设备配置）。如遇“path is read-only”，请改在 <code>/notes/</code>、<code>/projects/</code> 或你的 <code>/skills/</code> 子目录。
+      </div>
+
+      <div className="files-browser-toolbar">
+        <Breadcrumbs path={currentPath} onNavigate={onNavigatePath} />
+        <div className="files-browser-spacer" />
+        <div className="files-browser-search">
+          <input
+            placeholder="搜索（关键词 / namespace / kind）"
+            value={searchInput}
+            onChange={e => setSearchInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') runSearch()
+              if (e.key === 'Escape') clearSearch()
+            }}
+          />
+        </div>
+        <button className="btn" onClick={runSearch}>搜索</button>
+        {searchMode && <button className="btn" onClick={clearSearch}>清除</button>}
+        <button className="btn" onClick={() => setCreatingDir(v => !v)}>新建文件夹</button>
+        <button className="btn" onClick={() => setCreatingFile(v => !v)}>新建文件</button>
+        <input ref={fileInputRef} type="file" accept=".md,.txt" style={{ display: 'none' }} onChange={(e) => {
+          const f = e.target.files?.[0]
+          if (f) handleUpload(f)
+          e.currentTarget.value = ''
+        }} />
+        <button className="btn" onClick={() => fileInputRef.current?.click()}>上传文本</button>
+      </div>
+
+      <div className="files-browser-chip-row" role="tablist" aria-label="命名空间筛选">
+        {NAMESPACE_CHIPS.map((chip) => (
+          <button
+            key={chip.key}
+            type="button"
+            className={`files-browser-chip${namespaceFilter === chip.key ? ' is-active' : ''}`}
+            onClick={() => setNamespaceFilter(chip.key)}
+          >
+            {chip.label}
+          </button>
+        ))}
       </div>
 
       {creatingDir && (
@@ -286,35 +316,58 @@ export default function FilesBrowserPage() {
         </div>
       )}
 
-      <div className="card">
-        <div className="files-table">
-          <div className="files-thead">
-            <div className="files-th files-col-name" onClick={() => toggleSort('name')}>名称</div>
-            <div className="files-th files-col-size" onClick={() => toggleSort('size')}>大小</div>
-            <div className="files-th files-col-kind">类型</div>
-            <div className="files-th files-col-time" onClick={() => toggleSort('updated_at')}>最近修改</div>
-          </div>
-          <div className="files-tbody">
-            {items.length === 0 ? (
-              <div className="files-empty">{searchMode ? '无搜索结果' : '该目录暂无内容'}</div>
-            ) : items.map((it) => (
-              <div key={it.path} className={"files-tr" + (isSelected(it.path) ? ' is-selected' : '')}
-                   onClick={(e) => handleSelect(it.path, e.metaKey || e.ctrlKey || e.shiftKey)}
-                   onDoubleClick={() => it.is_dir ? onNavigatePath(it.path) : setPreview(it)}
-              >
-                <div className="files-td files-col-name">
-                  <span className={"file-icon " + (it.is_dir ? 'fi-folder' : (/\.md$/i.test(it.name) ? 'fi-md' : 'fi-file'))} />
-                  <span className="file-name">{it.name}</span>
-                  {!it.is_dir && <button className="btn-text" style={{ marginLeft: 8 }} onClick={(e) => { e.stopPropagation(); beginRename(it.path) }}>重命名</button>}
-                  {!it.is_dir && <button className="btn-text" onClick={(e) => { e.stopPropagation(); navigate(`/data/files/edit/${encodeURIComponent(it.path.replace(/^\/+/, ''))}`) }}>在编辑器打开</button>}
-                </div>
-                <div className="files-td files-col-size">{it.is_dir ? '-' : formatBytes(it.size)}</div>
-                <div className="files-td files-col-kind">{it.kind || (it.is_dir ? 'directory' : 'file')}</div>
-                <div className="files-td files-col-time">{new Date(it.updated_at || it.created_at || 0).toLocaleString('zh-CN')}</div>
-              </div>
-            ))}
+      <div className="files-browser-panel">
+        <div className="files-browser-panel-head">
+          <div>
+            <strong>{listTitle}</strong>
+            <span className="files-browser-panel-path">{searchMode ? `关键词：${appliedSearch}` : currentPath}</span>
           </div>
         </div>
+        {loading ? (
+          <div className="page-loading">加载中...</div>
+        ) : (
+          <div className="files-table">
+            <div className="files-thead">
+              <div className="files-th files-col-name" onClick={() => toggleSort('name')}>名称</div>
+              <div className="files-th files-col-size" onClick={() => toggleSort('size')}>大小</div>
+              <div className="files-th files-col-kind">命名空间</div>
+              <div className="files-th files-col-time" onClick={() => toggleSort('updated_at')}>最近修改</div>
+            </div>
+            <div className="files-tbody">
+              {filteredItems.length === 0 ? (
+                <div className="files-empty">{searchMode ? '无搜索结果' : '该目录暂无内容'}</div>
+              ) : filteredItems.map((it) => (
+                <div
+                  key={it.path}
+                  className="files-tr"
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleOpen(it)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      handleOpen(it)
+                    }
+                  }}
+                >
+                  <div className="files-td files-col-name">
+                    <span className={"file-icon " + (it.is_dir ? 'fi-folder' : (/\.md$/i.test(it.name) ? 'fi-md' : 'fi-file'))} />
+                    <span className="file-name">{it.name}</span>
+                    <span className="files-browser-row-actions">
+                      <button className="btn-text" onClick={(e) => { e.stopPropagation(); beginRename(it.path) }}>重命名</button>
+                      <button className="btn-text" onClick={(e) => { e.stopPropagation(); handleDelete([it.path]) }}>删除</button>
+                    </span>
+                  </div>
+                  <div className="files-td files-col-size">{it.is_dir ? '-' : formatBytes(it.size)}</div>
+                  <div className="files-td files-col-kind">
+                    <span className="files-browser-badge">{fileNamespaceLabel(it.path)}</span>
+                  </div>
+                  <div className="files-td files-col-time">{new Date(it.updated_at || it.created_at || 0).toLocaleString('zh-CN')}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {renaming && (
@@ -334,28 +387,6 @@ export default function FilesBrowserPage() {
           </div>
         </div>
       )}
-
-      {preview && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <div className="card-header">
-            <div className="card-title">预览：{preview.name}</div>
-            <div className="page-actions">
-              <button className="btn" onClick={() => setPreview(null)}>关闭</button>
-              <button className="btn" onClick={() => navigate(`/data/files/edit/${encodeURIComponent(preview.path.replace(/^\/+/, ''))}`)}>在编辑器打开</button>
-            </div>
-          </div>
-          {/\.md$/i.test(preview.name) ? (
-            <div data-color-mode="light">
-              <MDEditor source={preview.content || ''} style={{ background: 'transparent' }} />
-            </div>
-          ) : ((preview.content && (preview.mime_type?.startsWith('text/') || true)) ? (
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{preview.content}</pre>
-          ) : (
-            <div className="data-record-secondary">该文件类型暂不支持预览</div>
-          ))}
-        </div>
-      )}
     </div>
   )
 }
-

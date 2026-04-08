@@ -145,7 +145,7 @@ export default function DataFileEditorPage() {
       <div className="card" data-color-mode="light">
         <MDEditor
           value={content}
-          onChange={(v) => setContent(v || '')}
+          onChange={(v?: string) => setContent(v || '')}
           preview="edit"
           height={520}
           visibleDragbar={false}

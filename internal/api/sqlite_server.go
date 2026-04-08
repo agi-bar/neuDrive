@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"path"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -178,6 +179,15 @@ func (s *SQLiteServer) routes() {
 		r.Use(s.authMiddleware)
 		r.Get("/api/auth/me", s.handleAuthMe)
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
+		r.Get("/api/projects", s.handleListProjects)
+		r.Post("/api/projects", s.handleCreateProject)
+		r.Get("/api/projects/{name}", s.handleGetProject)
+		r.Post("/api/projects/{name}/log", s.handleAppendProjectLog)
+		r.Put("/api/projects/{name}/archive", s.handleArchiveProject)
+		r.Get("/api/skills", s.handleListSkills)
+		r.Get("/api/devices", s.handleListDevices)
+		r.Get("/api/roles", s.handleListRoles)
+		r.Get("/api/inbox/{role}", s.handleInboxList)
 		r.Get("/api/tree/snapshot", s.handleTreeSnapshot)
 		r.Get("/api/tree/*", s.handleTreeRead)
 		r.Put("/api/tree/*", s.handleTreeWrite)
@@ -474,6 +484,9 @@ func (s *SQLiteServer) handleTreeRead(w http.ResponseWriter, r *http.Request) {
 			entryCopy := entry
 			children = append(children, fileTreeEntryToNode(&entryCopy))
 		}
+		if pathValue == "" || pathValue == "/" {
+			children = s.appendMissingRootNamespaces(r.Context(), userID, trust, children)
+		}
 		s.respondOK(w, &FileNode{Path: ensurePublic(pathValue), Name: path.Base(strings.TrimSuffix(pathValue, "/")), IsDir: true, Kind: "directory", Children: children})
 		return
 	}
@@ -640,6 +653,365 @@ func (s *SQLiteServer) handleDashboardStats(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	s.respondOK(w, stats)
+}
+
+func (s *SQLiteServer) handleListProjects(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadProjects) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	projects, err := s.store.ListProjects(r.Context(), userID)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	payload := make([]map[string]any, 0, len(projects))
+	for _, project := range projects {
+		payload = append(payload, projectPayload(project))
+	}
+	s.respondOK(w, map[string]any{"projects": payload})
+}
+
+func (s *SQLiteServer) handleCreateProject(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteProjects) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	var req struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	project, err := s.store.CreateProject(r.Context(), userID, req.Name)
+	if err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.respondCreated(w, projectPayload(*project))
+}
+
+func (s *SQLiteServer) handleGetProject(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadProjects) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	name := chi.URLParam(r, "name")
+	project, err := s.store.GetProject(r.Context(), userID, name)
+	if err != nil {
+		s.respondError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	logs, err := s.store.GetProjectLogs(r.Context(), userID, name, 50)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	logPayload := make([]map[string]any, 0, len(logs))
+	for _, logEntry := range logs {
+		logPayload = append(logPayload, projectLogPayload(logEntry))
+	}
+	s.respondOK(w, map[string]any{
+		"project": projectPayload(*project),
+		"logs":    logPayload,
+	})
+}
+
+func (s *SQLiteServer) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteProjects) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	name := chi.URLParam(r, "name")
+	var req struct {
+		Source  string   `json:"source"`
+		Action  string   `json:"action"`
+		Summary string   `json:"summary"`
+		Tags    []string `json:"tags"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		s.respondError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Summary) == "" {
+		s.respondError(w, http.StatusBadRequest, "summary is required")
+		return
+	}
+	if err := s.store.AppendProjectLog(r.Context(), userID, name, models.ProjectLog{
+		Source:    req.Source,
+		Action:    req.Action,
+		Summary:   req.Summary,
+		Tags:      req.Tags,
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		s.respondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	s.respondCreated(w, map[string]string{"status": "appended", "project": name})
+}
+
+func (s *SQLiteServer) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelWork, models.ScopeWriteProjects) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	name := chi.URLParam(r, "name")
+	if err := s.store.ArchiveProject(r.Context(), userID, name); err != nil {
+		s.respondError(w, http.StatusNotFound, "project not found")
+		return
+	}
+	s.respondOK(w, map[string]string{"status": "archived", "name": name})
+}
+
+func (s *SQLiteServer) handleListDevices(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadDevices) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	devices, err := s.listDevicesFromTree(r.Context(), userID)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	s.respondOK(w, map[string]any{"devices": devices})
+}
+
+func (s *SQLiteServer) handleListRoles(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadTree) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	roles, err := s.listRolesFromTree(r.Context(), userID)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	s.respondOK(w, map[string]any{"roles": roles})
+}
+
+func (s *SQLiteServer) handleInboxList(w http.ResponseWriter, r *http.Request) {
+	if !s.requirePermission(w, r, models.TrustLevelGuest, models.ScopeReadInbox) {
+		return
+	}
+	userID, _ := userIDFromCtx(r.Context())
+	role := chi.URLParam(r, "role")
+	status := strings.TrimSpace(r.URL.Query().Get("status"))
+	if status == "" {
+		status = "incoming"
+	}
+	messages, err := s.listInboxMessagesFromTree(r.Context(), userID, role, status)
+	if err != nil {
+		s.respondInternal(w, err)
+		return
+	}
+	s.respondOK(w, map[string]any{
+		"role":     role,
+		"messages": messages,
+	})
+}
+
+func (s *SQLiteServer) appendMissingRootNamespaces(ctx context.Context, userID uuid.UUID, trust int, children []*FileNode) []*FileNode {
+	seen := make(map[string]struct{}, len(children))
+	for _, child := range children {
+		seen[strings.TrimSuffix(ensurePublic(child.Path), "/")] = struct{}{}
+	}
+	for _, namespace := range []string{"/skills", "/devices", "/roles", "/inbox", "/notes"} {
+		if _, ok := seen[namespace]; ok {
+			continue
+		}
+		snapshot, err := s.store.Snapshot(ctx, userID, namespace, trust)
+		if err != nil || len(snapshot.Entries) == 0 {
+			continue
+		}
+		children = append(children, &FileNode{
+			Path:      namespace,
+			Name:      path.Base(namespace),
+			IsDir:     true,
+			Kind:      "directory",
+			MimeType:  "directory",
+			Metadata:  map[string]any{},
+			CreatedAt: snapshot.Entries[0].CreatedAt.Format(time.RFC3339),
+			UpdatedAt: snapshot.Entries[0].UpdatedAt.Format(time.RFC3339),
+		})
+	}
+	return children
+}
+
+func (s *SQLiteServer) listDevicesFromTree(ctx context.Context, userID uuid.UUID) ([]models.Device, error) {
+	snapshot, err := s.store.Snapshot(ctx, userID, "/devices", models.TrustLevelFull)
+	if err != nil {
+		if errors.Is(err, services.ErrEntryNotFound) {
+			return []models.Device{}, nil
+		}
+		return nil, err
+	}
+	devices := map[string]models.Device{}
+	for _, entry := range snapshot.Entries {
+		if entry.IsDirectory || !strings.HasSuffix(entry.Path, "/SKILL.md") {
+			continue
+		}
+		name := path.Base(path.Dir(ensurePublic(entry.Path)))
+		device := devices[name]
+		device.Name = name
+		device.UserID = userID
+		device.ID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-device:"+name))
+		device.SkillMD = entry.Content
+		device.CreatedAt = entry.CreatedAt
+		device.UpdatedAt = entry.UpdatedAt
+		if value, ok := entry.Metadata["device_type"].(string); ok {
+			device.DeviceType = value
+		}
+		if value, ok := entry.Metadata["brand"].(string); ok {
+			device.Brand = value
+		}
+		if value, ok := entry.Metadata["protocol"].(string); ok {
+			device.Protocol = value
+		}
+		if value, ok := entry.Metadata["endpoint"].(string); ok {
+			device.Endpoint = value
+		}
+		if value, ok := entry.Metadata["status"].(string); ok {
+			device.Status = value
+		}
+		devices[name] = device
+	}
+	names := make([]string, 0, len(devices))
+	for name := range devices {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]models.Device, 0, len(names))
+	for _, name := range names {
+		out = append(out, devices[name])
+	}
+	return out, nil
+}
+
+func (s *SQLiteServer) listRolesFromTree(ctx context.Context, userID uuid.UUID) ([]models.Role, error) {
+	snapshot, err := s.store.Snapshot(ctx, userID, "/roles", models.TrustLevelFull)
+	if err != nil {
+		if errors.Is(err, services.ErrEntryNotFound) {
+			return []models.Role{}, nil
+		}
+		return nil, err
+	}
+	roles := map[string]models.Role{}
+	for _, entry := range snapshot.Entries {
+		if entry.IsDirectory || !strings.HasSuffix(entry.Path, "/SKILL.md") {
+			continue
+		}
+		name := path.Base(path.Dir(ensurePublic(entry.Path)))
+		role := roles[name]
+		role.Name = name
+		role.UserID = userID
+		role.ID = uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-role:"+name))
+		role.CreatedAt = entry.CreatedAt
+		if value, ok := entry.Metadata["role_type"].(string); ok {
+			role.RoleType = value
+		}
+		if value, ok := entry.Metadata["lifecycle"].(string); ok {
+			role.Lifecycle = value
+		}
+		if value := stringSlice(entry.Metadata["allowed_paths"]); len(value) > 0 {
+			role.AllowedPaths = value
+		}
+		if value := stringSlice(entry.Metadata["allowed_vault_scopes"]); len(value) > 0 {
+			role.AllowedVaultScopes = value
+		}
+		roles[name] = role
+	}
+	names := make([]string, 0, len(roles))
+	for name := range roles {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	out := make([]models.Role, 0, len(names))
+	for _, name := range names {
+		out = append(out, roles[name])
+	}
+	return out, nil
+}
+
+func (s *SQLiteServer) listInboxMessagesFromTree(ctx context.Context, userID uuid.UUID, role, status string) ([]models.InboxMessage, error) {
+	snapshot, err := s.store.Snapshot(ctx, userID, "/inbox", models.TrustLevelFull)
+	if err != nil {
+		if errors.Is(err, services.ErrEntryNotFound) {
+			return []models.InboxMessage{}, nil
+		}
+		return nil, err
+	}
+	messages := make([]models.InboxMessage, 0)
+	for _, entry := range snapshot.Entries {
+		if entry.IsDirectory || !strings.HasSuffix(entry.Path, ".json") {
+			continue
+		}
+		var message models.InboxMessage
+		if err := json.Unmarshal([]byte(entry.Content), &message); err != nil {
+			continue
+		}
+		if role != "" && message.ToAddress != role {
+			continue
+		}
+		if status != "" && message.Status != status {
+			continue
+		}
+		messages = append(messages, message)
+	}
+	sort.Slice(messages, func(i, j int) bool {
+		return messages[i].CreatedAt.After(messages[j].CreatedAt)
+	})
+	return messages, nil
+}
+
+func stringSlice(raw any) []string {
+	switch typed := raw.(type) {
+	case []string:
+		return append([]string{}, typed...)
+	case []any:
+		values := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+				values = append(values, text)
+			}
+		}
+		return values
+	default:
+		return nil
+	}
+}
+
+func projectPayload(project models.Project) map[string]any {
+	payload := map[string]any{
+		"id":         project.ID,
+		"user_id":    project.UserID,
+		"name":       project.Name,
+		"status":     project.Status,
+		"context_md": project.ContextMD,
+		"created_at": project.CreatedAt,
+		"updated_at": project.UpdatedAt,
+	}
+	if lastActivity, _ := project.Metadata["last_activity"].(string); strings.TrimSpace(lastActivity) != "" {
+		payload["last_activity"] = lastActivity
+	}
+	if len(project.Metadata) > 0 {
+		payload["metadata"] = project.Metadata
+	}
+	return payload
+}
+
+func projectLogPayload(entry models.ProjectLog) map[string]any {
+	return map[string]any{
+		"id":         entry.ID,
+		"project_id": entry.ProjectID,
+		"source":     entry.Source,
+		"action":     entry.Action,
+		"summary":    entry.Summary,
+		"message":    entry.Summary,
+		"tags":       entry.Tags,
+		"created_at": entry.CreatedAt,
+		"timestamp":  entry.CreatedAt.Format(time.RFC3339),
+	}
 }
 
 func (s *SQLiteServer) handleUpdateProfile(w http.ResponseWriter, r *http.Request) {

@@ -16,6 +16,7 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/models"
 	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
+	"github.com/google/uuid"
 )
 
 type testEnvelope struct {
@@ -219,6 +220,138 @@ func TestLocalServerWebDashboardEndpoints(t *testing.T) {
 	if status != http.StatusOK || !conflicts.OK || !bytes.Contains(conflicts.Data, []byte(`"conflicts":[]`)) {
 		t.Fatalf("unexpected conflicts payload: status=%d body=%+v", status, conflicts)
 	}
+}
+
+func TestLocalServerProjectsAndSkillsEndpoints(t *testing.T) {
+	ts, store, adminToken, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	userID, err := store.FirstUserID(ctx)
+	if err != nil {
+		t.Fatalf("FirstUserID: %v", err)
+	}
+	if _, err := store.CreateProject(ctx, userID, "demo-project"); err != nil {
+		t.Fatalf("CreateProject: %v", err)
+	}
+	if err := store.AppendProjectLog(ctx, userID, "demo-project", models.ProjectLog{
+		Source:    "test",
+		Action:    "created",
+		Summary:   "hello project",
+		CreatedAt: time.Now().UTC(),
+	}); err != nil {
+		t.Fatalf("AppendProjectLog: %v", err)
+	}
+	if _, err := store.WriteEntry(ctx, userID, "/skills/demo/SKILL.md", "# Demo\n", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("WriteEntry skill: %v", err)
+	}
+	if _, err := store.WriteEntry(ctx, userID, "/devices/desk-light/SKILL.md", "# Desk Light\n", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+		Metadata: map[string]interface{}{
+			"device_type": "light",
+			"status":      "online",
+			"protocol":    "http",
+		},
+	}); err != nil {
+		t.Fatalf("WriteEntry device: %v", err)
+	}
+	if _, err := store.WriteEntry(ctx, userID, "/roles/researcher/SKILL.md", "# Researcher\n", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+		Metadata: map[string]interface{}{
+			"role_type":            "worker",
+			"lifecycle":            "project",
+			"allowed_paths":        []string{"/projects", "/skills"},
+			"allowed_vault_scopes": []string{"auth.github"},
+		},
+	}); err != nil {
+		t.Fatalf("WriteEntry role: %v", err)
+	}
+	inboxBody, err := json.Marshal(models.InboxMessage{
+		ID:          mustUUID(t, "11111111-1111-1111-1111-111111111111"),
+		FromAddress: "worker:policy@de.hub",
+		ToAddress:   "assistant",
+		Subject:     "Test message",
+		Body:        "hello inbox",
+		Status:      "incoming",
+		CreatedAt:   time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("Marshal inbox: %v", err)
+	}
+	if _, err := store.WriteEntry(ctx, userID, "/inbox/assistant/incoming/11111111-1111-1111-1111-111111111111.json", string(inboxBody), "application/json", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("WriteEntry inbox: %v", err)
+	}
+
+	status, projects := doJSON(t, http.MethodGet, ts.URL+"/api/projects", adminToken, nil)
+	if status != http.StatusOK || !projects.OK {
+		t.Fatalf("GET /api/projects failed: status=%d body=%+v", status, projects)
+	}
+	for _, expected := range []string{`"name":"demo-project"`, `"status":"active"`} {
+		if !bytes.Contains(projects.Data, []byte(expected)) {
+			t.Fatalf("expected %q in projects payload: %s", expected, string(projects.Data))
+		}
+	}
+
+	status, project := doJSON(t, http.MethodGet, ts.URL+"/api/projects/demo-project", adminToken, nil)
+	if status != http.StatusOK || !project.OK {
+		t.Fatalf("GET /api/projects/demo-project failed: status=%d body=%+v", status, project)
+	}
+	for _, expected := range []string{`"project"`, `"logs"`, `"timestamp"`, `"hello project"`} {
+		if !bytes.Contains(project.Data, []byte(expected)) {
+			t.Fatalf("expected %q in project payload: %s", expected, string(project.Data))
+		}
+	}
+
+	status, archived := doJSON(t, http.MethodPut, ts.URL+"/api/projects/demo-project/archive", adminToken, nil)
+	if status != http.StatusOK || !archived.OK || !bytes.Contains(archived.Data, []byte(`"status":"archived"`)) {
+		t.Fatalf("PUT /api/projects/demo-project/archive failed: status=%d body=%+v", status, archived)
+	}
+
+	status, skills := doJSON(t, http.MethodGet, ts.URL+"/api/skills", adminToken, nil)
+	if status != http.StatusOK || !skills.OK {
+		t.Fatalf("GET /api/skills failed: status=%d body=%+v", status, skills)
+	}
+	for _, expected := range []string{`"/skills/demo/SKILL.md"`, `"/skills/agenthub/SKILL.md"`} {
+		if !bytes.Contains(skills.Data, []byte(expected)) {
+			t.Fatalf("expected %q in skills payload: %s", expected, string(skills.Data))
+		}
+	}
+
+	status, devices := doJSON(t, http.MethodGet, ts.URL+"/api/devices", adminToken, nil)
+	if status != http.StatusOK || !devices.OK || !bytes.Contains(devices.Data, []byte(`"name":"desk-light"`)) {
+		t.Fatalf("GET /api/devices failed: status=%d body=%+v", status, devices)
+	}
+
+	status, roles := doJSON(t, http.MethodGet, ts.URL+"/api/roles", adminToken, nil)
+	if status != http.StatusOK || !roles.OK || !bytes.Contains(roles.Data, []byte(`"name":"researcher"`)) {
+		t.Fatalf("GET /api/roles failed: status=%d body=%+v", status, roles)
+	}
+
+	status, inbox := doJSON(t, http.MethodGet, ts.URL+"/api/inbox/assistant?status=incoming", adminToken, nil)
+	if status != http.StatusOK || !inbox.OK || !bytes.Contains(inbox.Data, []byte(`"subject":"Test message"`)) {
+		t.Fatalf("GET /api/inbox/assistant failed: status=%d body=%+v", status, inbox)
+	}
+
+	status, root := doJSON(t, http.MethodGet, ts.URL+"/api/tree/", adminToken, nil)
+	if status != http.StatusOK || !root.OK {
+		t.Fatalf("GET /api/tree/ failed: status=%d body=%+v", status, root)
+	}
+	for _, expected := range []string{`"/skills"`, `"/devices"`, `"/roles"`, `"/inbox"`} {
+		if !bytes.Contains(root.Data, []byte(expected)) {
+			t.Fatalf("expected %q in root tree payload: %s", expected, string(root.Data))
+		}
+	}
+}
+
+func mustUUID(t *testing.T, value string) uuid.UUID {
+	t.Helper()
+	parsed, err := uuid.Parse(value)
+	if err != nil {
+		t.Fatalf("uuid.Parse(%q): %v", value, err)
+	}
+	return parsed
 }
 
 func TestLocalServerImportSkillsZip(t *testing.T) {

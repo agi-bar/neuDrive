@@ -149,6 +149,47 @@ func TestFileAndBlobRoundTrip(t *testing.T) {
 	}
 }
 
+func TestSkillSummaryUsesFrontmatterDescription(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+
+	content := strings.TrimSpace(`---
+name: docx
+description: "Use this skill whenever the user wants to create or edit Word documents."
+when_to_use: "Use for .docx work."
+---
+
+# DOCX
+
+Word document workflows.
+`) + "\n"
+
+	if _, err := store.WriteEntry(ctx, userID, "/skills/docx/SKILL.md", content, "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+
+	summaries, err := store.ListSkillSummaries(ctx, userID, models.TrustLevelGuest)
+	if err != nil {
+		t.Fatalf("ListSkillSummaries: %v", err)
+	}
+
+	for _, summary := range summaries {
+		if summary.Path != "/skills/docx/SKILL.md" {
+			continue
+		}
+		if summary.Description != "Use this skill whenever the user wants to create or edit Word documents." {
+			t.Fatalf("Description = %q", summary.Description)
+		}
+		if summary.WhenToUse != "Use for .docx work." {
+			t.Fatalf("WhenToUse = %q", summary.WhenToUse)
+		}
+		return
+	}
+
+	t.Fatal("docx summary not found")
+}
+
 func TestBundleImportExportRoundTrip(t *testing.T) {
 	ctx, sourceStore, sourceUserID := openTestStore(t)
 	sourceServices := newTestServiceFixture(sourceStore)

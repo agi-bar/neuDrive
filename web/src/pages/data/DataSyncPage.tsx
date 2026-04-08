@@ -272,12 +272,16 @@ export default function DataSyncPage() {
   }
 
   return (
-    <div className="page">
-      <div className="page-header">
-        <h2>数据同步</h2>
-      </div>
+    <div className="page materials-page">
+      <section className="materials-hero">
+        <div className="materials-hero-copy">
+          <div className="materials-kicker">Agent Hub Data</div>
+          <h2 className="materials-title">Sync</h2>
+          <p className="materials-subtitle">把同步也收进同一套卡片语言里。这里集中处理 token、bundle 导入导出，以及最近的同步历史。</p>
+        </div>
+      </section>
 
-      <div className="card data-sync-card">
+      <div className="materials-panel data-sync-card">
         <div className="card-header">
           <h3 className="card-title">临时同步 Token</h3>
         </div>
@@ -313,7 +317,7 @@ export default function DataSyncPage() {
         {tokenError && <div className="alert alert-error">{tokenError}</div>}
       </div>
 
-      <div className="card data-sync-card">
+      <div className="materials-panel data-sync-card">
         <div className="card-header">
           <h3 className="card-title">导入上传</h3>
         </div>
@@ -415,7 +419,7 @@ export default function DataSyncPage() {
         {importError && <div className="alert alert-error">{importError}</div>}
       </div>
 
-      <div className="card data-sync-card">
+      <div className="materials-panel data-sync-card">
         <div className="card-header">
           <h3 className="card-title">导出下载</h3>
         </div>
@@ -457,7 +461,7 @@ export default function DataSyncPage() {
         {exportError && <div className="alert alert-error">{exportError}</div>}
       </div>
 
-      <div className="card data-sync-card">
+      <div className="materials-panel data-sync-card">
         <div className="card-header">
           <h3 className="card-title">最近同步历史</h3>
         </div>

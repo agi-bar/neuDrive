@@ -236,7 +236,7 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	current, _ := s.readCurrentEntry(ctx, userID, storagePath)
 	now := time.Now().UTC()
 	metadata := mergeMetadata(nil, opts.Metadata)
-	metadata = skillMetadataForPath(storagePath, content, metadata)
+	metadata = services.SkillMetadataForPath(storagePath, content, metadata)
 	kind := strings.TrimSpace(opts.Kind)
 	if kind == "" {
 		kind = classifyEntryKind(storagePath, false)
@@ -483,7 +483,7 @@ func (s *Store) ReadBlobByEntryID(ctx context.Context, entryID uuid.UUID) ([]byt
 
 func (s *Store) ListSkillSummaries(ctx context.Context, userID uuid.UUID, trustLevel int) ([]models.SkillSummary, error) {
 	summaries := append([]models.SkillSummary{}, systemskills.SkillSummaries()...)
-	for _, root := range []string{"/skills", "/devices", "/roles"} {
+	for _, root := range []string{"/skills"} {
 		snapshot, err := s.Snapshot(ctx, userID, root, trustLevel)
 		if err != nil {
 			if errors.Is(err, services.ErrEntryNotFound) {
@@ -495,9 +495,13 @@ func (s *Store) ListSkillSummaries(ctx context.Context, userID uuid.UUID, trustL
 			if entry.IsDirectory || !strings.HasSuffix(hubpath.NormalizePublic(entry.Path), "/SKILL.md") {
 				continue
 			}
+			resolved := services.SkillMetadataForPath(entry.Path, entry.Content, entry.Metadata)
 			name := path.Base(path.Dir(hubpath.NormalizePublic(entry.Path)))
-			description, _ := entry.Metadata["description"].(string)
-			whenToUse, _ := entry.Metadata["when_to_use"].(string)
+			if value, ok := resolved["name"].(string); ok && strings.TrimSpace(value) != "" {
+				name = value
+			}
+			description, _ := resolved["description"].(string)
+			whenToUse, _ := resolved["when_to_use"].(string)
 			summaries = append(summaries, models.SkillSummary{
 				Name:          name,
 				Path:          hubpath.NormalizePublic(entry.Path),
@@ -722,26 +726,6 @@ func classifyEntryKind(rawPath string, isDirectory bool) string {
 	default:
 		return "file"
 	}
-}
-
-func skillMetadataForPath(rawPath, content string, metadata map[string]interface{}) map[string]interface{} {
-	if !strings.HasSuffix(hubpath.NormalizePublic(rawPath), "/SKILL.md") {
-		return metadata
-	}
-	description := ""
-	for _, line := range strings.Split(content, "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		description = line
-		break
-	}
-	if description != "" {
-		metadata = mergeMetadata(metadata, map[string]interface{}{"description": description})
-	}
-	metadata["name"] = path.Base(path.Dir(hubpath.NormalizePublic(rawPath)))
-	return metadata
 }
 
 func binaryMetadata(data []byte) map[string]interface{} {

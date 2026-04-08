@@ -20,7 +20,7 @@ export default function SetupAdaptersPage() {
 
       <h4 className="setup-platform-title">Feishu Bot Adapter</h4>
       <p className="setup-note setup-note-first">
-        当前飞书先提供一版 Bot Webhook MVP：完成请求网址校验后，飞书发来的消息会进入 Agent Hub 的 Inbox。
+        当前飞书先提供一版 Bot Webhook MVP：完成请求网址校验后，飞书发来的事件会进入 Agent Hub 的结构化事件记录。
       </p>
 
       <SetupCodeBlock
@@ -55,7 +55,7 @@ export default function SetupAdaptersPage() {
       </ol>
 
       <p className="setup-note">
-        当前 MVP 会把飞书消息写入 Agent Hub 的 <code>assistant</code> Inbox，并在配置了 <code>FEISHU_APP_ID</code> / <code>FEISHU_APP_SECRET</code> 后自动回一条确认消息。文本消息会提取正文；非文本消息会以原始内容的形式保存在结构化 payload 中。更深的 Agent 对话桥接会在后续版本补上。
+        当前 MVP 会把飞书消息写入 Agent Hub 的事件记录，并在配置了 <code>FEISHU_APP_ID</code> / <code>FEISHU_APP_SECRET</code> 后自动回一条确认消息。文本消息会提取正文；非文本消息会以原始内容的形式保存在结构化 payload 中。更深的对话桥接会在后续版本补上。
       </p>
     </SetupSection>
   )

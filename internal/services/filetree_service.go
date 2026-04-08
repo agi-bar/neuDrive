@@ -756,8 +756,6 @@ func (s *FileTreeService) ListSkillSummaries(ctx context.Context, userID uuid.UU
 		source string
 	}{
 		{path: "/skills", source: "skills"},
-		{path: "/devices", source: "devices"},
-		{path: "/roles", source: "roles"},
 	}
 
 	for _, root := range roots {

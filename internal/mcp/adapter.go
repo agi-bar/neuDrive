@@ -64,6 +64,16 @@ type ContentBlock struct {
 	Text string `json:"text"`
 }
 
+func isHiddenMCPPath(rawPath string) bool {
+	publicPath := hubpath.NormalizePublic(rawPath)
+	for _, prefix := range []string{"/devices", "/roles", "/inbox"} {
+		if publicPath == prefix || strings.HasPrefix(publicPath, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 // MCPServer handles MCP protocol for Agent Hub
 type MCPServer struct {
 	UserID     uuid.UUID
@@ -99,7 +109,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": "Use /skills/agenthub/SKILL.md as the umbrella entrypoint for Agent Hub platform workflows. Platform portability manuals remain available under /skills/portability/<platform>/SKILL.md for migration-specific details.",
+				"instructions": "Use /skills/agenthub/SKILL.md as the umbrella entrypoint for Agent Hub platform workflows. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync. Platform portability manuals remain available under /skills/portability/<platform>/SKILL.md for migration-specific details.",
 			},
 		}
 	case "notifications/initialized":
@@ -163,10 +173,10 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "search_memory",
-			Description: "全文搜索记忆和邮件存档",
+			Description: "全文搜索记忆、项目和技能资料",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"query": prop("string", "搜索关键词"),
-				"scope": prop("string", "搜索范围: memory, inbox, all (默认 all)"),
+				"scope": prop("string", "搜索范围: memory, projects, skills, all (默认 all)"),
 			}, "query"),
 		},
 		{
@@ -246,40 +256,6 @@ func (s *MCPServer) getTools() []MCPTool {
 			}, "name"),
 		},
 		{
-			Name:        "list_devices",
-			Description: "列出注册的设备",
-			InputSchema: jsonSchema(map[string]interface{}{}),
-		},
-		{
-			Name:        "call_device",
-			Description: "调用设备动作",
-			InputSchema: jsonSchema(map[string]interface{}{
-				"device": prop("string", "设备名称"),
-				"action": prop("string", "动作"),
-				"params": propObject("动作参数"),
-			}, "device", "action"),
-		},
-		{
-			Name:        "send_message",
-			Description: "发送 Agent 间消息",
-			InputSchema: jsonSchema(map[string]interface{}{
-				"to":          prop("string", "收件地址 (如 worker:policy@de.hub)"),
-				"subject":     prop("string", "主题"),
-				"body":        prop("string", "正文（自包含，收件方无需前置信息）"),
-				"domain":      prop("string", "领域: governance, kb, collab, tools"),
-				"action_type": prop("string", "类型: task_request, info, result, alert, handoff, memory_sync"),
-				"tags":        propArray("string", "标签"),
-			}, "to", "subject", "body"),
-		},
-		{
-			Name:        "read_inbox",
-			Description: "读取收件箱消息",
-			InputSchema: jsonSchema(map[string]interface{}{
-				"role":   prop("string", "角色名称 (空=全部)"),
-				"status": prop("string", "状态: incoming, read, archived (空=incoming)"),
-			}),
-		},
-		{
 			Name:        "get_stats",
 			Description: "获取 Hub 统计概览",
 			InputSchema: jsonSchema(map[string]interface{}{}),
@@ -344,8 +320,7 @@ func (s *MCPServer) supportsTool(name string) bool {
 	switch name {
 	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
 		"get_project", "log_action", "list_directory", "read_file", "write_file",
-		"list_secrets", "read_secret", "list_skills", "read_skill", "list_devices",
-		"call_device", "send_message", "read_inbox", "get_stats", "save_memory",
+		"list_secrets", "read_secret", "list_skills", "read_skill", "get_stats", "save_memory",
 		"import_skill", "create_sync_token", "create_skills_import_token", "import_claude_memory":
 	default:
 		return false
@@ -359,10 +334,6 @@ func (s *MCPServer) supportsTool(name string) bool {
 		return s.Project != nil
 	case "list_secrets", "read_secret":
 		return s.Vault != nil
-	case "list_devices", "call_device":
-		return s.Device != nil
-	case "send_message", "read_inbox":
-		return s.Inbox != nil
 	case "get_stats":
 		return s.Dashboard != nil
 	case "import_skill", "import_claude_memory":
@@ -390,10 +361,6 @@ func (s *MCPServer) toolAllowed(name string) bool {
 		"read_secret":    models.ScopeReadVault,
 		"list_skills":    models.ScopeReadSkills,
 		"read_skill":     models.ScopeReadSkills,
-		"list_devices":   models.ScopeReadDevices,
-		"call_device":    models.ScopeCallDevices,
-		"send_message":   models.ScopeWriteInbox,
-		"read_inbox":     models.ScopeReadInbox,
 		"get_stats":      models.ScopeReadProfile,
 		"save_memory":    models.ScopeWriteMemory,
 		"import_skill":   models.ScopeWriteSkills,
@@ -462,12 +429,10 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			prefixes = []string{"/memory", "/identity"}
 		case "projects":
 			prefixes = []string{"/projects"}
-		case "inbox":
-			prefixes = []string{"/inbox"}
 		case "skills":
-			prefixes = []string{"/skills", "/devices", "/roles"}
+			prefixes = []string{"/skills"}
 		default:
-			prefixes = []string{"/memory", "/identity", "/projects", "/inbox", "/skills", "/devices", "/roles"}
+			prefixes = []string{"/memory", "/identity", "/projects", "/skills"}
 		}
 
 		seen := make(map[string]bool)
@@ -478,6 +443,9 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			}
 			for _, e := range entries {
 				publicPath := hubpath.StorageToPublic(e.Path)
+				if isHiddenMCPPath(publicPath) {
+					continue
+				}
 				if seen[publicPath] {
 					continue
 				}
@@ -555,21 +523,32 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 
 	case "list_directory":
 		path, _ := args["path"].(string)
+		if isHiddenMCPPath(path) {
+			return fmt.Sprintf("error: path %q is not available on the public MCP surface", path), true
+		}
 		entries, err := s.FileTree.List(ctx, s.UserID, path, s.TrustLevel)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		// Normalize storage paths to public paths (e.g. .skills/ → /skills/).
+		filtered := entries[:0]
 		for i := range entries {
 			rendered := s.renderSystemSkillEntry(ctx, &entries[i])
 			entries[i] = *rendered
 			entries[i].Path = hubpath.StorageToPublic(entries[i].Path)
+			if isHiddenMCPPath(entries[i].Path) {
+				continue
+			}
+			filtered = append(filtered, entries[i])
 		}
-		result, _ := json.MarshalIndent(entries, "", "  ")
+		result, _ := json.MarshalIndent(filtered, "", "  ")
 		return string(result), false
 
 	case "read_file":
 		path, _ := args["path"].(string)
+		if isHiddenMCPPath(path) {
+			return fmt.Sprintf("error: path %q is not available on the public MCP surface", path), true
+		}
 		entry, err := s.FileTree.Read(ctx, s.UserID, path, s.TrustLevel)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
@@ -579,6 +558,9 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 
 	case "write_file":
 		path, _ := args["path"].(string)
+		if isHiddenMCPPath(path) {
+			return fmt.Sprintf("error: path %q is not available on the public MCP surface", path), true
+		}
 		content, _ := args["content"].(string)
 		if _, err := s.FileTree.Write(ctx, s.UserID, path, content, "text/markdown", s.TrustLevel); err != nil {
 			return fmt.Sprintf("error: %v", err), true
@@ -618,61 +600,6 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		}
 		entry = s.renderSystemSkillEntry(ctx, entry)
 		return entry.Content, false
-
-	case "list_devices":
-		devices, err := s.Device.List(ctx, s.UserID)
-		if err != nil {
-			return fmt.Sprintf("error: %v", err), true
-		}
-		result, _ := json.MarshalIndent(devices, "", "  ")
-		return string(result), false
-
-	case "call_device":
-		device, _ := args["device"].(string)
-		action, _ := args["action"].(string)
-		callParams, _ := args["params"].(map[string]interface{})
-		resp, err := s.Device.Call(ctx, s.UserID, device, action, callParams)
-		if err != nil {
-			return fmt.Sprintf("error: %v", err), true
-		}
-		result, _ := json.MarshalIndent(resp, "", "  ")
-		return string(result), false
-
-	case "send_message":
-		to, _ := args["to"].(string)
-		subject, _ := args["subject"].(string)
-		body, _ := args["body"].(string)
-		domain, _ := args["domain"].(string)
-		actionType, _ := args["action_type"].(string)
-		tags := toStringSlice(args["tags"])
-		msg := models.InboxMessage{
-			FromAddress: "assistant@hub",
-			ToAddress:   to,
-			Subject:     subject,
-			Body:        body,
-			Domain:      domain,
-			ActionType:  actionType,
-			Tags:        tags,
-			Status:      "incoming",
-			Priority:    "normal",
-		}
-		if _, err := s.Inbox.Send(ctx, s.UserID, msg); err != nil {
-			return fmt.Sprintf("error: %v", err), true
-		}
-		return "message sent", false
-
-	case "read_inbox":
-		role, _ := args["role"].(string)
-		status, _ := args["status"].(string)
-		if status == "" {
-			status = "incoming"
-		}
-		msgs, err := s.Inbox.GetMessages(ctx, s.UserID, role, status)
-		if err != nil {
-			return fmt.Sprintf("error: %v", err), true
-		}
-		result, _ := json.MarshalIndent(msgs, "", "  ")
-		return string(result), false
 
 	case "get_stats":
 		stats, err := s.Dashboard.GetStats(ctx, s.UserID)
@@ -850,8 +777,7 @@ func (s *MCPServer) isKnownTool(name string) bool {
 	switch name {
 	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
 		"get_project", "log_action", "list_directory", "read_file", "write_file",
-		"list_secrets", "read_secret", "list_skills", "read_skill", "list_devices",
-		"call_device", "send_message", "read_inbox", "get_stats", "save_memory",
+		"list_secrets", "read_secret", "list_skills", "read_skill", "get_stats", "save_memory",
 		"import_skill", "create_sync_token", "create_skills_import_token", "import_claude_memory":
 		return true
 	default:

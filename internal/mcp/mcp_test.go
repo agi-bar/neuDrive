@@ -253,8 +253,6 @@ func TestToolsList(t *testing.T) {
 		"list_directory", "read_file", "write_file",
 		"list_secrets", "read_secret",
 		"list_skills", "read_skill",
-		"list_devices", "call_device",
-		"send_message", "read_inbox",
 		"get_stats",
 		"import_skill", "save_memory", "create_project",
 		"create_sync_token", "create_skills_import_token",
@@ -309,7 +307,7 @@ func TestToolsListWithScopeFiltering(t *testing.T) {
 	tools := result["tools"].([]MCPTool)
 
 	// With only read:profile, we should see read_profile and get_stats (both need read:profile)
-	// but NOT write_file, send_message, etc.
+	// but NOT write_file or other higher-privilege tools.
 	toolNames := make(map[string]bool)
 	for _, tool := range tools {
 		toolNames[tool.Name] = true
@@ -320,9 +318,6 @@ func TestToolsListWithScopeFiltering(t *testing.T) {
 	}
 	if toolNames["write_file"] {
 		t.Error("write_file should not be available with only read:profile scope")
-	}
-	if toolNames["send_message"] {
-		t.Error("send_message should not be available with only read:profile scope")
 	}
 	if toolNames["create_sync_token"] {
 		t.Error("create_sync_token should not be available without admin scope")

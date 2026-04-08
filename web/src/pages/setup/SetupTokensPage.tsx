@@ -92,7 +92,7 @@ export default function SetupTokensPage() {
                 <span className="preset-radio-dot" />
                 <div>
                   <strong>Agent 完整权限</strong>
-                  <span className="preset-radio-desc">读写 Memory、Skills、Inbox、Projects、Tree、Devices</span>
+                  <span className="preset-radio-desc">读写 Memory、Skills、Projects、Tree，并读取认证相关 Vault</span>
                 </div>
               </label>
               <label className={`preset-radio ${preset === 'readonly' ? 'preset-radio-active' : ''}`}>

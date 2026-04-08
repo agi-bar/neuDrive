@@ -102,9 +102,7 @@ export interface DashboardStats {
   memory: number
   profile: number
   skills: number
-  devices: number
   projects: number
-  inbox: number
   weekly_activity: DashboardActivity[]
   pending: DashboardPending[]
 }
@@ -118,45 +116,6 @@ export interface SkillSummary {
   when_to_use?: string
   tags?: string[]
   min_trust_level?: number
-}
-
-export interface DeviceRecord {
-  id?: string
-  name: string
-  device_type: string
-  brand?: string
-  protocol?: string
-  endpoint?: string
-  skill_md?: string
-  config?: Record<string, any>
-  status?: string
-  created_at?: string
-  updated_at?: string
-}
-
-export interface RoleRecord {
-  id?: string
-  name: string
-  role_type?: string
-  allowed_paths?: string[]
-  allowed_vault_scopes?: string[]
-  lifecycle?: string
-  created_at?: string
-}
-
-export interface InboxMessageRecord {
-  id: string
-  from_address: string
-  to_address: string
-  subject: string
-  body: string
-  priority?: string
-  action_required?: boolean
-  status?: string
-  created_at?: string
-  archived_at?: string
-  tags?: string[]
-  domain?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -469,29 +428,8 @@ export const api = {
       body: JSON.stringify({ resolution }),
     }),
 
-  // Collaborations
-  getCollaborations: () => request<{ owned: any[]; shared: any[] }>('/collaborations'),
-  createCollaboration: (data: any) =>
-    request<any>('/collaborations', {
-      method: 'POST',
-      body: JSON.stringify(data),
-    }),
-  revokeCollaboration: (id: string) =>
-    request<void>(`/collaborations/${id}`, { method: 'DELETE' }),
-
   // Vault
   getVaultScopes: () => request<{ scopes: any[] }>('/vault/scopes').then(r => r.scopes || []),
-
-  // Roles
-  getRoles: () => request<{ roles: RoleRecord[] }>('/roles').then(r => r.roles || []),
-
-  // Devices
-  getDevices: () => request<{ devices: DeviceRecord[] }>('/devices').then(r => r.devices || []),
-
-  // Inbox
-  getInbox: (role: string, status = 'incoming') =>
-    request<{ role: string; messages: InboxMessageRecord[] }>(`/inbox/${role}?status=${encodeURIComponent(status)}`)
-      .then(r => r.messages || []),
 
   // Import / Export
   importSkills: (skills: SkillFile[]) =>
@@ -513,11 +451,6 @@ export const api = {
     request<ImportResult>('/import/vault', {
       method: 'POST',
       body: JSON.stringify({ secrets }),
-    }),
-  importDevices: (devices: DeviceImport[]) =>
-    request<ImportResult>('/import/devices', {
-      method: 'POST',
-      body: JSON.stringify({ devices }),
     }),
   importFull: (data: FullHubExport) =>
     request<ImportResult>('/import/full', {
@@ -680,16 +613,6 @@ export interface VaultSecretImport {
   min_trust_level?: number
 }
 
-export interface DeviceImport {
-  name: string
-  device_type: string
-  brand?: string
-  protocol: string
-  endpoint: string
-  skill_md?: string
-  config?: Record<string, any>
-}
-
 export interface ProjectExport {
   name: string
   status: string
@@ -702,7 +625,6 @@ export interface FullHubExport {
   user: any
   profile: Record<string, string>
   skills: SkillFile[]
-  devices: DeviceImport[]
   projects: ProjectExport[]
   vault_scopes: string[]
 }

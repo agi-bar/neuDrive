@@ -14,9 +14,11 @@ Use this umbrella skill when the user wants to work with Agent Hub from inside a
 
 ## Core Model
 
-- Agent Hub MCP is the full capability surface.
+- Agent Hub MCP is the supported public capability surface for current product workflows.
 - This local `agenthub` skill is the entry layer that routes platform-native commands to the right MCP tools and local platform actions.
 - Treat Agent Hub as the canonical destination for imported data.
+- Current public surface focuses on profile, memory, projects, skills, tree, token, and sync workflows.
+- Devices, roles, inbox, and collaboration remain deferred product concepts. Do not treat them as currently supported public Agent Hub tools.
 
 ## Commands
 
@@ -37,4 +39,3 @@ Use this umbrella skill when the user wants to work with Agent Hub from inside a
 - Preserve exact assets separately from derived summaries.
 - When a platform-specific portability manual exists, read `/skills/portability/<platform>/SKILL.md` before migrating data.
 - Never silently drop unsupported or partially captured data; preserve it as notes or archive metadata.
-

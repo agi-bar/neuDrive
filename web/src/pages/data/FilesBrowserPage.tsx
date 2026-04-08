@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { api, type FileNode } from '../../api'
+import { api, type FileNode, type SkillSummary } from '../../api'
+import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
+import FileMaterialsTile from '../../components/FileMaterialsTile'
+import { buildFileTileModel, buildSkillBundleTileModel, buildSkillSummaryLookup, dataFileEditorRoute, skillSummaryForPath } from './DataShared'
 
 type SortKey = 'name' | 'updated_at'
 type SortDir = 'asc' | 'desc'
@@ -54,6 +57,7 @@ export default function FilesBrowserPage() {
   const [newFileName, setNewFileName] = useState('新建文档.md')
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
+  const [skillLookup, setSkillLookup] = useState<Record<string, SkillSummary>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const sortKey = (query.get('sort') as SortKey) || 'updated_at'
@@ -75,8 +79,17 @@ export default function FilesBrowserPage() {
           updated_at: result.updated_at,
         }))
         setItems(sortNodes(mapped, sortKey, sortDir))
+        setSkillLookup({})
       } else {
-        const root = await api.getTree(currentPath)
+        const [root, skills] = await Promise.all([
+          api.getTree(currentPath),
+          currentPath === '/skills' ? api.getSkills() : Promise.resolve<SkillSummary[]>([]),
+        ])
+        if (skills.length > 0) {
+          setSkillLookup(buildSkillSummaryLookup(skills))
+        } else {
+          setSkillLookup({})
+        }
         setItems(sortNodes(root.children || [], sortKey, sortDir))
       }
       setSelected(new Set())
@@ -91,12 +104,26 @@ export default function FilesBrowserPage() {
     void refresh()
   }, [refresh])
 
-  const toggleSort = (key: SortKey) => {
-    const dir: SortDir = sortKey === key ? (sortDir === 'asc' ? 'desc' : 'asc') : 'asc'
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAppliedSearch(searchInput.trim())
+    }, 180)
+    return () => window.clearTimeout(timer)
+  }, [searchInput])
+
+  const updateSort = (key: SortKey, dir: SortDir) => {
     const params = new URLSearchParams(location.search)
     params.set('sort', key)
     params.set('dir', dir)
     navigate({ search: params.toString() })
+  }
+
+  const toggleSortDir = () => {
+    updateSort(sortKey, sortDir === 'asc' ? 'desc' : 'asc')
+  }
+
+  const changeSortKey = (key: SortKey) => {
+    updateSort(key, sortDir)
   }
 
   const onNavigatePath = (pathValue: string) => {
@@ -104,13 +131,8 @@ export default function FilesBrowserPage() {
     navigate(normalized ? `/data/files/${encodeURIComponent(normalized)}` : '/data/files')
   }
 
-  const runSearch = () => {
-    setAppliedSearch(searchInput.trim())
-  }
-
   const clearSearch = () => {
     setSearchInput('')
-    setAppliedSearch('')
   }
 
   const isEditableNode = useCallback((item: FileNode) => {
@@ -125,7 +147,7 @@ export default function FilesBrowserPage() {
       return
     }
     if (!isEditableNode(item)) return
-    navigate(`/data/files/edit/${encodeURIComponent(item.path.replace(/^\/+/, ''))}`)
+    navigate(dataFileEditorRoute(item.path))
   }, [isEditableNode, navigate])
 
   const handleSelect = (pathValue: string, multi = false) => {
@@ -215,53 +237,51 @@ export default function FilesBrowserPage() {
   }, [items, openNode, selected])
 
   const isSelected = (pathValue: string) => selected.has(pathValue)
+  const currentLabel = currentPath === '/' ? '根目录' : currentPath.split('/').filter(Boolean).slice(-1)[0] || '根目录'
 
   if (loading) return <div className="page-loading">加载中...</div>
 
   return (
-    <div className="page">
-      <div className="page-header page-header-stack">
-        <div>
-          <h2>文件管理器</h2>
+    <div className="page materials-page">
+      <section className="materials-hero">
+        <div className="materials-hero-copy">
           <Breadcrumbs path={currentPath} onNavigate={onNavigatePath} />
+          <div className="materials-kicker">Agent Hub Data</div>
+          <h2 className="materials-title">文件管理器</h2>
+          <p className="materials-subtitle">参考你给的 Materials 卡片墙，把当前目录里的文件和文件夹统一显示成卡片。点文件名直接打开，双击目录继续下钻。</p>
         </div>
-        <div className="page-actions" style={{ gap: 6 }}>
+        <div className="materials-actions">
           <input
-            placeholder="搜索文件（回车执行）"
+            className="files-browser-hero-search"
+            placeholder="Search"
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') runSearch()
               if (event.key === 'Escape') clearSearch()
             }}
           />
-          <button className="btn" onClick={runSearch}>搜索</button>
-          {searchMode && <button className="btn" onClick={clearSearch}>清除</button>}
-          <button className="btn" onClick={() => setCreatingDir((value) => !value)}>新建文件夹</button>
-          <button className="btn" onClick={() => setCreatingFile((value) => !value)}>新建文件</button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".md,.txt"
-            style={{ display: 'none' }}
-            onChange={(event) => {
-              const file = event.target.files?.[0]
-              if (file) void handleUpload(file)
-              event.currentTarget.value = ''
-            }}
-          />
-          <button className="btn" onClick={() => fileInputRef.current?.click()}>上传文本</button>
-          <button className="btn btn-danger" disabled={selected.size === 0} onClick={() => void handleDelete(Array.from(selected))}>删除</button>
         </div>
-      </div>
+      </section>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".md,.txt"
+        style={{ display: 'none' }}
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          if (file) void handleUpload(file)
+          event.currentTarget.value = ''
+        }}
+      />
 
       {error && <div className="alert alert-warn">{error}</div>}
-      <div className="alert" style={{ background: '#fffbeb', border: '1px solid #fde68a', marginBottom: 12 }}>
-        部分系统路径为只读（例如内置技能/设备配置）。如遇“path is read-only”，请改在 <code>/notes/</code>、<code>/projects/</code> 或你的 <code>/skills/</code> 子目录。
+      <div className="materials-note">
+        部分系统路径为只读（例如内置技能或受保护目录）。如遇“path is read-only”，请改在 <code>/notes/</code>、<code>/projects/</code> 或你的 <code>/skills/</code> 子目录。
       </div>
 
       {creatingDir && (
-        <div className="card" style={{ marginBottom: 12 }}>
+        <div className="materials-panel" style={{ marginBottom: 12 }}>
           <div className="form-row">
             <div className="form-group">
               <label>文件夹名称</label>
@@ -279,7 +299,7 @@ export default function FilesBrowserPage() {
       )}
 
       {creatingFile && (
-        <div className="card" style={{ marginBottom: 12 }}>
+        <div className="materials-panel" style={{ marginBottom: 12 }}>
           <div className="form-row">
             <div className="form-group">
               <label>文件名称</label>
@@ -296,44 +316,81 @@ export default function FilesBrowserPage() {
         </div>
       )}
 
-      <div className="card">
-        <div className="files-table">
-          <div className="files-thead">
-            <div className="files-th files-col-name" onClick={() => toggleSort('name')}>名称</div>
-            <div className="files-th files-col-time" onClick={() => toggleSort('updated_at')}>更新时间</div>
+      <section className="materials-section">
+        <div className="materials-section-head">
+          <div>
+            <h3 className="materials-section-title">{searchMode ? '搜索结果' : currentLabel}</h3>
+            <p className="materials-section-copy">
+              {searchMode ? '搜索命中的路径会显示在卡片里。' : '单击卡片选中，双击进入目录；点文件名会直接执行打开动作。'}
+            </p>
           </div>
-          <div className="files-tbody">
-            {items.length === 0 ? (
-              <div className="files-empty">{searchMode ? '无搜索结果' : '该目录暂无内容'}</div>
-            ) : items.map((item) => (
-              <div
-                key={item.path}
-                className={`files-tr${isSelected(item.path) ? ' is-selected' : ''}`}
-                onClick={(event) => handleSelect(item.path, event.metaKey || event.ctrlKey || event.shiftKey)}
-                onDoubleClick={() => openNode(item)}
-              >
-                <div className="files-td files-col-name">
-                  <span className={`file-icon ${item.is_dir ? 'fi-folder' : /\.md$/i.test(item.name) ? 'fi-md' : 'fi-file'}`} />
-                  <div className="file-name-stack">
-                    <button
-                      type="button"
-                      className="btn-text file-name-button"
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        openNode(item)
-                      }}
-                    >
-                      {item.name}
-                    </button>
-                    {searchMode && <div className="file-row-secondary">{item.path}</div>}
-                  </div>
-                </div>
-                <div className="files-td files-col-time">{new Date(item.updated_at || item.created_at || 0).toLocaleString('zh-CN')}</div>
-              </div>
-            ))}
-          </div>
+          <MaterialsSectionToolbar
+            count={items.length}
+            sortKey={sortKey}
+            sortOptions={[
+              { value: 'updated_at', label: '按时间' },
+              { value: 'name', label: '按名称' },
+            ]}
+            sortDir={sortDir}
+            onSortKeyChange={(value) => changeSortKey(value as SortKey)}
+            onSortDirToggle={toggleSortDir}
+          >
+            <button className="btn btn-sm materials-toolbar-control" onClick={() => setCreatingDir((value) => !value)}>
+              {creatingDir ? '取消文件夹' : '新建文件夹'}
+            </button>
+            <button className="btn btn-sm materials-toolbar-control" onClick={() => setCreatingFile((value) => !value)}>
+              {creatingFile ? '取消文件' : '新建文件'}
+            </button>
+            <button className="btn btn-sm materials-toolbar-control" onClick={() => fileInputRef.current?.click()}>上传文本</button>
+            <button className="btn btn-sm materials-toolbar-control is-danger" disabled={selected.size === 0} onClick={() => void handleDelete(Array.from(selected))}>删除</button>
+          </MaterialsSectionToolbar>
         </div>
-      </div>
+
+        {items.length === 0 ? (
+          <div className="materials-panel files-empty">{searchMode ? '无搜索结果' : '该目录暂无内容'}</div>
+        ) : (
+          <div className="materials-grid">
+            {items.map((item) => {
+              const skillSummary = skillSummaryForPath(item.path, skillLookup)
+              const tile = searchMode
+                ? buildFileTileModel({
+                    node: item,
+                    variant: 'search',
+                    currentLabel,
+                    skillLookup,
+                  })
+                : currentPath === '/skills' && item.is_dir && skillSummary
+                  ? buildSkillBundleTileModel(skillSummary)
+                  : currentPath.startsWith('/skills/') && currentPath !== '/skills'
+                    ? buildFileTileModel({
+                        node: item,
+                        variant: 'skill-bundle-entry',
+                        bundleLabel: currentLabel,
+                      })
+                    : buildFileTileModel({
+                        node: item,
+                        variant: 'browser',
+                        currentLabel,
+                        skillLookup,
+                      })
+              return (
+                <FileMaterialsTile
+                  key={item.path}
+                  node={tile.node}
+                  subtitle={tile.subtitle}
+                  description={tile.description}
+                  path={tile.path}
+                  footerStart={tile.footerStart}
+                  footerEnd={tile.footerEnd}
+                  selected={isSelected(item.path)}
+                  onSelect={({ multi }) => handleSelect(item.path, multi)}
+                  onOpen={() => openNode(item)}
+                />
+              )
+            })}
+          </div>
+        )}
+      </section>
     </div>
   )
 }

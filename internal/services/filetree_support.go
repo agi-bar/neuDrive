@@ -123,6 +123,10 @@ func skillMetadataForPath(rawPath, content string, metadata map[string]interface
 	return mergeMetadata(metadata, summary)
 }
 
+func SkillMetadataForPath(rawPath, content string, metadata map[string]interface{}) map[string]interface{} {
+	return skillMetadataForPath(rawPath, content, metadata)
+}
+
 func parseSkillFrontmatter(content string) (map[string]interface{}, string, error) {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {

@@ -197,8 +197,19 @@ func (s *Server) handleValidateToken(w http.ResponseWriter, r *http.Request) {
 
 // handleListScopes returns the available scope definitions for UI display.
 func (s *Server) handleListScopes(w http.ResponseWriter, r *http.Request) {
+	publicScopes := []string{
+		models.ScopeReadProfile, models.ScopeWriteProfile,
+		models.ScopeReadMemory, models.ScopeWriteMemory,
+		models.ScopeReadVault, models.ScopeReadVaultAuth, models.ScopeWriteVault,
+		models.ScopeReadSkills, models.ScopeWriteSkills,
+		models.ScopeReadProjects, models.ScopeWriteProjects,
+		models.ScopeReadTree, models.ScopeWriteTree,
+		models.ScopeReadBundle, models.ScopeWriteBundle,
+		models.ScopeSearch,
+		models.ScopeAdmin,
+	}
 	respondOK(w, map[string]interface{}{
-		"scopes":     models.AllScopes,
+		"scopes":     publicScopes,
 		"categories": models.ScopeCategories(),
 		"bundles": map[string][]string{
 			"read_only": models.ScopeBundleReadOnly,

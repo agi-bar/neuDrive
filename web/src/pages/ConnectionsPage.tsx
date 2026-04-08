@@ -1,9 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api, ConnectionResponse, OAuthGrantResponse } from '../api'
+import MaterialsSectionToolbar from '../components/MaterialsSectionToolbar'
+import MaterialsTile from '../components/MaterialsTile'
 
 const TRUST_LEVELS = [
   { value: 1, label: 'L1 访客', className: 'trust-l1' },
-  { value: 2, label: 'L2 协作', className: 'trust-l2' },
+  { value: 2, label: 'L2 共享', className: 'trust-l2' },
   { value: 3, label: 'L3 工作信任', className: 'trust-l3' },
   { value: 4, label: 'L4 完全信任', className: 'trust-l4' },
 ]
@@ -43,16 +46,56 @@ const PLATFORM_LABELS: Record<string, string> = {
   other: '其他',
 }
 
+const SETUP_ENTRY_CARDS = [
+  {
+    key: 'web-apps',
+    title: 'Web / Desktop Apps',
+    subtitle: '网页应用',
+    description: '在 Claude、ChatGPT、Cursor、Windsurf 等图形界面里，把 Agent Hub 添加成远程 MCP Server。',
+    route: '/setup/web-apps',
+    iconClassName: 'icon-device',
+  },
+  {
+    key: 'cloud',
+    title: 'CLI Apps',
+    subtitle: '云端模式',
+    description: '给 Claude Code、Codex CLI、Gemini CLI、Cursor Agent 配置远程 HTTP MCP 和浏览器授权。',
+    route: '/setup/cloud',
+    iconClassName: 'icon-sync',
+  },
+  {
+    key: 'local',
+    title: 'Local Mode',
+    subtitle: '本地模式',
+    description: '通过本地 stdio MCP binary 和 scoped token 接入，适合本机开发或内网环境。',
+    route: '/setup/local',
+    iconClassName: 'icon-file',
+  },
+  {
+    key: 'advanced',
+    title: 'Advanced',
+    subtitle: '高级模式',
+    description: '查看完整命令、环境变量和更底层的配置方式，适合需要自定义接法的场景。',
+    route: '/setup/advanced',
+    iconClassName: 'icon-stack',
+  },
+  {
+    key: 'gpt-actions',
+    title: 'ChatGPT GPT Actions',
+    subtitle: 'GPT Actions',
+    description: '在自定义 GPT 中通过 OpenAPI 和 Bearer Token 连接 Agent Hub。',
+    route: '/setup/gpt-actions',
+    iconClassName: 'icon-mail',
+  },
+] as const
+
 export default function ConnectionsPage() {
+  const navigate = useNavigate()
   const [connections, setConnections] = useState<ConnectionResponse[]>([])
   const [oauthGrants, setOAuthGrants] = useState<OAuthGrantResponse[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [newConn, setNewConn] = useState({ name: '', platform: '', trust_level: 2 })
-  const [creating, setCreating] = useState(false)
-  const [createdKey, setCreatedKey] = useState('')
-  const [keyCopied, setKeyCopied] = useState(false)
+  const [showSetupCards, setShowSetupCards] = useState(true)
 
   useEffect(() => {
     loadConnections()
@@ -90,36 +133,6 @@ export default function ConnectionsPage() {
     }
   }
 
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!newConn.name.trim() || !newConn.platform.trim()) return
-
-    setCreating(true)
-    setError('')
-
-    try {
-      const result = await api.createConnection({
-        name: newConn.name,
-        type: newConn.platform,
-        trust_level: newConn.trust_level,
-      })
-      if (result.api_key) {
-        setCreatedKey(result.api_key)
-      }
-      // API returns {connection: {...}, api_key: "..."} — extract connection object
-      const conn = result.connection || result
-      setConnections((prev) => [...prev, conn])
-      setNewConn({ name: '', platform: '', trust_level: 2 })
-      if (!result.api_key) {
-        setShowForm(false)
-      }
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setCreating(false)
-    }
-  }
-
   const handleTrustChange = async (id: string, trust_level: number) => {
     try {
       await api.updateConnection(id, { trust_level })
@@ -151,30 +164,6 @@ export default function ConnectionsPage() {
     } catch (err: any) {
       setError(err.message)
     }
-  }
-
-  const copyKey = async () => {
-    try {
-      await navigator.clipboard.writeText(createdKey)
-      setKeyCopied(true)
-      setTimeout(() => setKeyCopied(false), 2000)
-    } catch {
-      // Fallback
-      const textarea = document.createElement('textarea')
-      textarea.value = createdKey
-      document.body.appendChild(textarea)
-      textarea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textarea)
-      setKeyCopied(true)
-      setTimeout(() => setKeyCopied(false), 2000)
-    }
-  }
-
-  const dismissKey = () => {
-    setCreatedKey('')
-    setKeyCopied(false)
-    setShowForm(false)
   }
 
   const formatTime = (ts?: string) => {
@@ -290,194 +279,146 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page materials-page">
       <div className="page-header">
         <div>
           <h2>连接管理</h2>
-          <p className="empty-hint">这里会显示手动创建的 API Key 连接，以及 OAuth / MCP 授权过的平台连接</p>
+          <p className="page-subtitle">上面负责新增连接入口，下面负责展示已经接入的 API Key 连接和 OAuth / MCP 平台连接。</p>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => {
-            setShowForm(true)
-            setCreatedKey('')
-          }}
-        >
-          添加连接
-        </button>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
 
-      {createdKey && (
-        <div className="alert alert-success">
-          <div className="key-display">
-            <p className="api-key-warning">
-              此密钥仅显示一次
-            </p>
-            <div className="api-key-box">
-              <code>{createdKey}</code>
-              <button className="btn btn-sm" onClick={copyKey} style={{ marginLeft: 12, color: '#68d391' }}>
-                {keyCopied ? '已复制' : '复制'}
-              </button>
-            </div>
-            <button className="btn btn-text" onClick={dismissKey}>
-              我已保存，关闭
-            </button>
+      <section className="materials-section">
+        <div className="materials-section-head">
+          <div>
+            <h3 className="materials-section-title">添加连接</h3>
+            <p className="materials-section-copy">先选择一种接法，再进入对应说明页完成连接。独立 token 的生成和管理请放到下面的 Token 管理页。</p>
           </div>
+          <MaterialsSectionToolbar count={showSetupCards ? SETUP_ENTRY_CARDS.length : undefined}>
+            <button
+              type="button"
+              className="btn btn-sm materials-toolbar-control"
+              onClick={() => setShowSetupCards((value) => !value)}
+            >
+              {showSetupCards ? '收起' : '展开'}
+            </button>
+          </MaterialsSectionToolbar>
         </div>
-      )}
+        {showSetupCards ? (
+          <div className="materials-grid materials-grid-wide">
+            {SETUP_ENTRY_CARDS.map((entry) => (
+              <MaterialsTile
+                key={entry.key}
+                iconClassName={entry.iconClassName}
+                title={entry.title}
+                titleActionAriaLabel={`打开 ${entry.title}`}
+                subtitle={entry.subtitle}
+                description={entry.description}
+                path={entry.route}
+                footerStart="连接设置"
+                footerEnd="打开说明"
+                onOpen={() => navigate(entry.route)}
+              />
+            ))}
+          </div>
+        ) : null}
+      </section>
 
-      {showForm && !createdKey && (
-        <div className="card form-card">
-          <h3 className="card-title">新建连接</h3>
-          <form onSubmit={handleCreate}>
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="conn-name">名称</label>
-                <input
-                  id="conn-name"
-                  type="text"
-                  value={newConn.name}
-                  onChange={(e) => setNewConn({ ...newConn, name: e.target.value })}
-                  placeholder="例如：我的 Telegram Bot"
-                  disabled={creating}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="conn-platform">平台</label>
-                <select
-                  id="conn-platform"
-                  value={newConn.platform}
-                  onChange={(e) => setNewConn({ ...newConn, platform: e.target.value })}
-                  disabled={creating}
-                >
-                  <option value="">请选择平台</option>
-                  <option value="claude">Claude</option>
-                  <option value="gpt">GPT</option>
-                  <option value="feishu">飞书</option>
-                  <option value="other">其他</option>
-                </select>
-              </div>
-              <div className="form-group">
-                <label htmlFor="conn-trust">信任等级</label>
-                <select
-                  id="conn-trust"
-                  value={newConn.trust_level}
-                  onChange={(e) =>
-                    setNewConn({ ...newConn, trust_level: Number(e.target.value) })
-                  }
-                  disabled={creating}
-                >
-                  {TRUST_LEVELS.map((t) => (
-                    <option key={t.value} value={t.value}>
-                      {t.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary" disabled={creating}>
-                {creating ? '创建中...' : '创建'}
-              </button>
-              <button
-                type="button"
-                className="btn"
-                onClick={() => setShowForm(false)}
-                disabled={creating}
-              >
-                取消
-              </button>
-            </div>
-          </form>
+      <section className="materials-section">
+        <div className="materials-section-head">
+          <div>
+            <h3 className="materials-section-title">连接列表</h3>
+            <p className="materials-section-copy">这里统一显示已经创建的 API Key 连接，以及通过 OAuth / MCP 授权过的平台连接。</p>
+          </div>
+          <MaterialsSectionToolbar count={rows.length} />
         </div>
-      )}
 
-      {rows.length === 0 ? (
-        <div className="empty-state">
-          <p>还没有连接</p>
-          <p className="empty-hint">添加 API Key 连接，或者先在 Claude Connector 等平台完成 OAuth 授权</p>
-        </div>
-      ) : (
-        <div className="table-container">
-          <table className="table">
-            <thead>
-              <tr>
-                <th>名称</th>
-                <th>平台</th>
-                <th>信任等级</th>
-                <th>最后使用</th>
-                <th>操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => {
-                const trust = getTrustInfo(row.trustLevel)
-                return (
-                  <tr key={`${row.kind}-${row.id}`}>
-                    <td className="cell-name">
-                      <div>{row.name}</div>
-                      {row.secondaryDetail && (
-                        <div className="cell-key-prefix">{row.badgeDetail} · {row.secondaryDetail}</div>
-                      )}
-                    </td>
-                    <td>
-                      <span className="badge badge-platform">{row.platform}</span>
-                      {row.platformDetail && (
-                        <div className="cell-key-prefix">{row.platformDetail}</div>
-                      )}
-                    </td>
-                    <td>
-                      <span className={`badge badge-l${row.trustLevel}`} style={{ marginRight: 8 }}>
-                        {trust.label}
-                      </span>
-                      {row.kind === 'manual' ? (
-                        <select
-                          className={`trust-select ${trust.className}`}
-                          value={row.trustLevel}
-                          onChange={(e) =>
-                            handleTrustChange(row.id, Number(e.target.value))
-                          }
-                        >
-                          {TRUST_LEVELS.map((t) => (
-                            <option key={t.value} value={t.value}>
-                              {t.label}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span className="cell-key-prefix">OAuth 授权当前按完整访问处理</span>
-                      )}
-                    </td>
-                    <td className="cell-time">
-                      <div>{formatTime(row.activityAt)}</div>
-                      <div className="cell-key-prefix">{row.activityLabel}</div>
-                    </td>
-                    <td>
-                      {row.kind === 'manual' ? (
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleDelete(row.id, row.name)}
-                        >
-                          删除
-                        </button>
-                      ) : (
-                        <button
-                          className="btn btn-sm btn-danger"
-                          onClick={() => handleRevokeGrant(row.id, row.name)}
-                        >
-                          撤销授权
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+        {rows.length === 0 ? (
+          <div className="empty-state">
+            <p>还没有连接</p>
+            <p className="empty-hint">先从上面的六种接法里选一种完成接入，或者到 Token 管理里单独创建 Bearer Token。</p>
+          </div>
+        ) : (
+          <div className="table-container">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>名称</th>
+                  <th>平台</th>
+                  <th>信任等级</th>
+                  <th>最后使用</th>
+                  <th>操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const trust = getTrustInfo(row.trustLevel)
+                  return (
+                    <tr key={`${row.kind}-${row.id}`}>
+                      <td className="cell-name">
+                        <div>{row.name}</div>
+                        {row.secondaryDetail && (
+                          <div className="cell-key-prefix">{row.badgeDetail} · {row.secondaryDetail}</div>
+                        )}
+                      </td>
+                      <td>
+                        <span className="badge badge-platform">{row.platform}</span>
+                        {row.platformDetail && (
+                          <div className="cell-key-prefix">{row.platformDetail}</div>
+                        )}
+                      </td>
+                      <td>
+                        <span className={`badge badge-l${row.trustLevel}`} style={{ marginRight: 8 }}>
+                          {trust.label}
+                        </span>
+                        {row.kind === 'manual' ? (
+                          <select
+                            className={`trust-select ${trust.className}`}
+                            value={row.trustLevel}
+                            onChange={(e) =>
+                              handleTrustChange(row.id, Number(e.target.value))
+                            }
+                          >
+                            {TRUST_LEVELS.map((t) => (
+                              <option key={t.value} value={t.value}>
+                                {t.label}
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="cell-key-prefix">OAuth 授权当前按完整访问处理</span>
+                        )}
+                      </td>
+                      <td className="cell-time">
+                        <div>{formatTime(row.activityAt)}</div>
+                        <div className="cell-key-prefix">{row.activityLabel}</div>
+                      </td>
+                      <td>
+                        {row.kind === 'manual' ? (
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => handleDelete(row.id, row.name)}
+                          >
+                            删除
+                          </button>
+                        ) : (
+                          <button
+                            className="btn btn-sm btn-danger"
+                            onClick={() => handleRevokeGrant(row.id, row.name)}
+                          >
+                            撤销授权
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </section>
     </div>
   )
 }

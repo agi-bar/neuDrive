@@ -52,19 +52,7 @@ func (s *Server) searchHub(ctx context.Context, userID uuid.UUID, trustLevel int
 		scope = "all"
 	}
 
-	prefixes := []string{}
-	switch scope {
-	case "memory":
-		prefixes = []string{"/memory", "/identity"}
-	case "projects":
-		prefixes = []string{"/projects"}
-	case "inbox":
-		prefixes = []string{"/inbox"}
-	case "skills":
-		prefixes = []string{"/skills", "/devices", "/roles"}
-	default:
-		prefixes = []string{"/memory", "/identity", "/projects", "/inbox", "/skills", "/devices", "/roles"}
-	}
+	prefixes := publicSearchPrefixes(scope)
 
 	results := make([]SearchHit, 0, 64)
 	seen := make(map[string]bool)
@@ -75,6 +63,9 @@ func (s *Server) searchHub(ctx context.Context, userID uuid.UUID, trustLevel int
 		}
 		for _, entry := range entries {
 			publicPath := hubpath.StorageToPublic(entry.Path)
+			if isHiddenPublicFeaturePath(publicPath) {
+				continue
+			}
 			if seen[publicPath] {
 				continue
 			}

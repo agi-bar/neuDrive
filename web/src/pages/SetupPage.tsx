@@ -10,7 +10,7 @@ import { api, CreateTokenRequest, ScopedTokenResponse } from '../api'
 
 export const TRUST_LEVELS = [
   { value: 1, label: 'L1 访客', desc: '只能读取公开信息' },
-  { value: 2, label: 'L2 协作', desc: '可读取大部分资源' },
+  { value: 2, label: 'L2 共享', desc: '可读取有限共享资源' },
   { value: 3, label: 'L3 工作', desc: '可读写常规资源' },
   { value: 4, label: 'L4 完全信任', desc: '完整访问权限' },
 ]
@@ -184,8 +184,6 @@ export default function SetupPage() {
       return scopeInfo?.bundles?.agent ?? [
         'read:profile', 'read:memory', 'write:memory',
         'read:skills', 'read:vault.auth',
-        'read:devices', 'call:devices',
-        'read:inbox', 'write:inbox',
         'read:projects', 'write:projects',
         'read:tree', 'write:tree',
         'search',
@@ -424,7 +422,7 @@ export default function SetupPage() {
     : '把 Agent Hub 配置到网页应用、CLI 和其他 MCP 客户端。'
 
   return (
-    <div className="page">
+    <div className="page materials-page">
       <div className="page-header page-header-stack">
         <div>
           <h2>{pageTitle}</h2>

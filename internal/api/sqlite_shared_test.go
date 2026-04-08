@@ -229,6 +229,50 @@ func TestSQLiteSharedServerRegisterLoginRefresh(t *testing.T) {
 	}
 }
 
+func TestSQLiteSharedServerSkillsListDashboardRoute(t *testing.T) {
+	ts, store, _, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	if _, err := store.WriteEntry(ctx, user.ID, "/skills/demo-bundle/SKILL.md", "---\nname: Demo Bundle\ndescription: Dashboard skill bundle test\n---\n# Demo Bundle\n", "text/markdown", models.FileTreeWriteOptions{}); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+
+	jwt, err := auth.GenerateToken(user.ID, user.Slug, testJWTSecret)
+	if err != nil {
+		t.Fatalf("GenerateToken: %v", err)
+	}
+
+	req, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/skills", nil)
+	req.Header.Set("Authorization", "Bearer "+jwt)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("GET /api/skills: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("skills status = %d body=%s", resp.StatusCode, string(body))
+	}
+
+	var payload testEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode skills payload: %v", err)
+	}
+	if !payload.OK {
+		t.Fatalf("expected ok envelope: %+v", payload)
+	}
+	if !bytes.Contains(payload.Data, []byte(`"/skills/demo-bundle/SKILL.md"`)) {
+		t.Fatalf("expected custom skill in payload: %s", string(payload.Data))
+	}
+	if !bytes.Contains(payload.Data, []byte(`"source":"system"`)) {
+		t.Fatalf("expected system skills in payload: %s", string(payload.Data))
+	}
+}
+
 func TestSQLiteSharedServerScopeGatingAndSyncFlow(t *testing.T) {
 	ts, _, adminToken, readBundleToken, writeBundleToken := newTestHTTPServer(t)
 
@@ -394,19 +438,6 @@ func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("WriteEntry skill: %v", err)
 	}
-	status, createdDevice := doJSON(t, http.MethodPost, ts.URL+"/api/devices", adminToken, []byte(`{"name":"desk-light","device_type":"light","protocol":"http","endpoint":"http://127.0.0.1/device"}`))
-	if status != http.StatusCreated || !createdDevice.OK {
-		t.Fatalf("POST /api/devices failed: status=%d body=%+v", status, createdDevice)
-	}
-	status, createdRole := doJSON(t, http.MethodPost, ts.URL+"/api/roles", adminToken, []byte(`{"name":"researcher","role_type":"worker","lifecycle":"project","allowed_paths":["/projects","/skills"]}`))
-	if status != http.StatusCreated || !createdRole.OK {
-		t.Fatalf("POST /api/roles failed: status=%d body=%+v", status, createdRole)
-	}
-	inboxPayload := []byte(`{"to":"assistant","subject":"Test message","body":"hello inbox"}`)
-	status, sentInbox := doJSON(t, http.MethodPost, ts.URL+"/api/inbox/send", adminToken, inboxPayload)
-	if status != http.StatusCreated || !sentInbox.OK {
-		t.Fatalf("POST /api/inbox/send failed: status=%d body=%+v", status, sentInbox)
-	}
 
 	status, projects := doJSON(t, http.MethodGet, ts.URL+"/api/projects", adminToken, nil)
 	if status != http.StatusOK || !projects.OK {
@@ -443,28 +474,25 @@ func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 		}
 	}
 
-	status, devices := doJSON(t, http.MethodGet, ts.URL+"/api/devices", adminToken, nil)
-	if status != http.StatusOK || !devices.OK || !bytes.Contains(devices.Data, []byte(`"name":"desk-light"`)) {
-		t.Fatalf("GET /api/devices failed: status=%d body=%+v", status, devices)
-	}
-
-	status, roles := doJSON(t, http.MethodGet, ts.URL+"/api/roles", adminToken, nil)
-	if status != http.StatusOK || !roles.OK || !bytes.Contains(roles.Data, []byte(`"name":"researcher"`)) {
-		t.Fatalf("GET /api/roles failed: status=%d body=%+v", status, roles)
-	}
-
-	status, inbox := doJSON(t, http.MethodGet, ts.URL+"/api/inbox/assistant?status=incoming", adminToken, nil)
-	if status != http.StatusOK || !inbox.OK || !bytes.Contains(inbox.Data, []byte(`"subject":"Test message"`)) {
-		t.Fatalf("GET /api/inbox/assistant failed: status=%d body=%+v", status, inbox)
+	for _, hiddenPath := range []string{"/api/devices", "/api/roles", "/api/inbox/assistant?status=incoming"} {
+		status, hidden := doJSON(t, http.MethodGet, ts.URL+hiddenPath, adminToken, nil)
+		if status != http.StatusNotFound || hidden.OK {
+			t.Fatalf("expected %s to be hidden: status=%d body=%+v", hiddenPath, status, hidden)
+		}
 	}
 
 	status, root := doJSON(t, http.MethodGet, ts.URL+"/api/tree/", adminToken, nil)
 	if status != http.StatusOK || !root.OK {
 		t.Fatalf("GET /api/tree/ failed: status=%d body=%+v", status, root)
 	}
-	for _, expected := range []string{`"/devices"`, `"/roles"`, `"/inbox"`, `"/projects"`} {
+	for _, expected := range []string{`"/projects"`, `"/skills/"`} {
 		if !bytes.Contains(root.Data, []byte(expected)) {
 			t.Fatalf("expected %q in root tree payload: %s", expected, string(root.Data))
+		}
+	}
+	for _, unexpected := range []string{`"/devices"`, `"/roles"`, `"/inbox"`} {
+		if bytes.Contains(root.Data, []byte(unexpected)) {
+			t.Fatalf("did not expect %q in root tree payload: %s", unexpected, string(root.Data))
 		}
 	}
 }

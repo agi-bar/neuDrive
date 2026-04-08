@@ -25,8 +25,6 @@ const DASHBOARD_STATS = [
   { key: 'skills', label: '技能', to: '/data/skills' },
   { key: 'memory', label: 'Memory', to: '/data/memory' },
   { key: 'profile', label: '我的资料', to: '/data/profile' },
-  { key: 'devices', label: '设备', to: '/data/devices' },
-  { key: 'inbox', label: 'Inbox', to: '/data/inbox' },
 ] as const
 
 export default function DashboardPage() {
@@ -37,8 +35,6 @@ export default function DashboardPage() {
     skills: 0,
     memory: 0,
     profile: 0,
-    devices: 0,
-    inbox: 0,
     weekly_activity: [],
     pending: [],
   })
@@ -136,9 +132,12 @@ export default function DashboardPage() {
   const hasPending = stats.pending && stats.pending.length > 0
 
   return (
-    <div className="page">
+    <div className="page materials-page">
       <div className="page-header">
-        <h2>概览</h2>
+        <div>
+          <h2>概览</h2>
+          <p className="page-subtitle">用和文件管理器同一套视觉语言，快速查看 Hub 的连接、文件、资料和同步状态。</p>
+        </div>
       </div>
 
       {error && <div className="alert alert-warn">{error}</div>}
@@ -154,7 +153,9 @@ export default function DashboardPage() {
         {DASHBOARD_STATS.map((item) => (
           <Link key={item.key} to={item.to} className="stat-card">
             <div className="stat-value">{stats[item.key] ?? '-'}</div>
-            <div className="stat-label">{item.label}</div>
+            <div className="stat-label">
+              {item.key === 'connections' && (stats.connections ?? 0) === 0 ? '添加平台' : item.label}
+            </div>
           </Link>
         ))}
       </div>
@@ -193,11 +194,11 @@ export default function DashboardPage() {
         <div className="card dashboard-card">
           <div className="card-header">
             <h3 className="card-title">最近更新</h3>
-            <Link to="/data/files/recent" className="dashboard-card-link">更多</Link>
+            <Link to="/data/files" className="dashboard-card-link">文件管理器</Link>
           </div>
 
           <div className="dashboard-profile-meta dashboard-preview-meta">
-            首页只显示最近改过的 2 个文档，完整列表请到“最近更新”页面查看。
+            首页只显示最近改过的 2 个文档，完整列表请到“文件管理器”查看。
           </div>
 
           {recentFiles.length > 0 ? (

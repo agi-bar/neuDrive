@@ -182,7 +182,7 @@ export default function SetupWebAppsPage() {
               <li>如果界面要求填写 URL，就把 <code>Remote MCP Server URL</code> 设为 <code>{mcpUrl}</code>；如果要求粘贴配置，也可以直接使用上面的 <code>~/.cursor/mcp.json</code> 片段。</li>
               <li>保存后点击 <code>Connect</code> 或 <code>Authenticate</code>；Cursor 会自动发现 Agent Hub 的 OAuth metadata。</li>
               <li>浏览器会跳转到 Agent Hub 的登录与授权页；完成登录和批准后，Cursor 会回到已连接状态。</li>
-              <li>接通后，Cursor 会立即拉取工具和资源列表；你可以直接在对话里让它读取 profile、项目、技能或调用设备。</li>
+              <li>接通后，Cursor 会立即拉取工具和资源列表；你可以直接在对话里让它读取 profile、Memory、项目或技能。</li>
             </ol>
 
             <p className="setup-note">

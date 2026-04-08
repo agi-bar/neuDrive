@@ -74,6 +74,10 @@ func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
 
 	trustLevel := trustLevelFromCtx(r.Context())
 	path := chi.URLParam(r, "*")
+	if isHiddenPublicFeaturePath(path) {
+		respondNotFound(w, "file")
+		return
+	}
 	node, err := s.readOrListTreePath(r.Context(), userID, trustLevel, path)
 	if err != nil {
 		respondNotFound(w, "file")
@@ -87,6 +91,10 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
 		respondValidationError(w, "path", "path is required")
+		return
+	}
+	if isHiddenPublicFeaturePath(path) {
+		respondNotFound(w, "file")
 		return
 	}
 	if s.FileTreeService == nil {
@@ -155,6 +163,10 @@ func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
 		respondValidationError(w, "path", "path is required")
+		return
+	}
+	if isHiddenPublicFeaturePath(path) {
+		respondNotFound(w, "file")
 		return
 	}
 	if s.FileTreeService == nil {
@@ -260,6 +272,10 @@ func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
+	if isHiddenPublicFeaturePath(path) {
+		respondNotFound(w, "file")
+		return
+	}
 	trustLevel := trustLevelFromCtx(r.Context())
 	snapshot, err := s.FileTreeService.Snapshot(r.Context(), userID, path, trustLevel)
 	if err != nil {
@@ -268,7 +284,7 @@ func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nodes := make([]*FileNode, 0, len(snapshot.Entries))
-	for _, entry := range snapshot.Entries {
+	for _, entry := range filterVisibleEntries(snapshot.Entries) {
 		nodes = append(nodes, fileTreeEntryToNode(&entry))
 	}
 	respondOK(w, SnapshotResponse{
@@ -303,6 +319,10 @@ func (s *Server) handleTreeChanges(w http.ResponseWriter, r *http.Request) {
 	if path == "" {
 		path = "/"
 	}
+	if isHiddenPublicFeaturePath(path) {
+		respondNotFound(w, "file")
+		return
+	}
 
 	changes, nextCursor, err := s.FileTreeService.Changes(r.Context(), userID, cursor, path, trustLevelFromCtx(r.Context()))
 	if err != nil {
@@ -312,6 +332,9 @@ func (s *Server) handleTreeChanges(w http.ResponseWriter, r *http.Request) {
 
 	payload := make([]map[string]interface{}, 0, len(changes))
 	for _, change := range changes {
+		if isHiddenPublicFeaturePath(change.Entry.Path) {
+			continue
+		}
 		node := fileTreeEntryToNode(&change.Entry)
 		payload = append(payload, map[string]interface{}{
 			"cursor":      change.Cursor,
@@ -360,6 +383,7 @@ func (s *Server) listTreeNode(ctx context.Context, userID uuid.UUID, trustLevel 
 	if err != nil {
 		return nil, err
 	}
+	entries = filterVisibleEntries(entries)
 
 	publicPath := hubpath.StorageToPublic(storagePath)
 	if publicPath != "/" && !strings.HasSuffix(publicPath, "/") {

@@ -269,10 +269,8 @@ func (s *Server) setupRoutes() {
 		r.Put("/api/connections/{id}", s.handleConnectionsUpdate)
 		r.Delete("/api/connections/{id}", s.handleConnectionsDelete)
 
-		// Roles
-		r.Get("/api/roles", s.handleRolesList)
-		r.Post("/api/roles", s.handleRolesCreate)
-		r.Delete("/api/roles/{name}", s.handleRolesDelete)
+		// Skills
+		r.Get("/api/skills", s.handleSkillsList)
 
 		// Memory
 		r.Get("/api/memory/profile", s.handleMemoryProfileGet)
@@ -290,17 +288,6 @@ func (s *Server) setupRoutes() {
 		r.Put("/api/projects/{name}/archive", s.handleArchiveProject)
 		r.Post("/api/projects/{name}/summarize", s.handleSummarizeProject)
 
-		// Inbox (search must be before {role} to avoid matching "search" as role)
-		r.Get("/api/inbox/search", s.handleInboxSearch)
-		r.Get("/api/inbox/{role}", s.handleInboxList)
-		r.Post("/api/inbox/send", s.handleInboxSend)
-		r.Put("/api/inbox/{id}/archive", s.handleInboxArchive)
-
-		// Devices
-		r.Get("/api/devices", s.handleDevicesList)
-		r.Post("/api/devices", s.handleRegisterDevice)
-		r.Post("/api/devices/{name}/call", s.handleDeviceCall)
-
 		// Dashboard
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
 
@@ -312,7 +299,6 @@ func (s *Server) setupRoutes() {
 			r.Use(MaxBodySizeMiddleware(50 << 20))
 			r.With(MaxBodySizeMiddleware(50<<20)).Post("/api/import/skills", s.HandleImportSkills)
 			r.Post("/api/import/vault", s.HandleImportVault)
-			r.Post("/api/import/devices", s.HandleImportDevices)
 			r.Post("/api/import/full", s.HandleImportFull)
 		})
 		r.Get("/api/export/full", s.HandleExportFull)
@@ -329,11 +315,6 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/export/all", s.handleExportAll)
 		r.Get("/api/export/zip", s.handleExportZip)
 		r.Get("/api/export/json", s.handleExportJSON)
-
-		// Collaborations
-		r.Get("/api/collaborations", s.handleListCollaborations)
-		r.Post("/api/collaborations", s.handleCreateCollaboration)
-		r.Delete("/api/collaborations/{id}", s.handleRevokeCollaboration)
 
 		// Tokens (scoped access tokens)
 		r.Post("/api/tokens", s.handleCreateToken)
@@ -376,17 +357,11 @@ func (s *Server) setupRoutes() {
 		r.Get("/agent/vault/{scope}", s.handleAgentVaultRead)
 		r.Put("/agent/vault/{scope}", s.handleAgentVaultWrite)
 		r.Put("/agent/memory/profile", s.handleAgentUpdateProfile)
-		r.Get("/agent/inbox", s.handleAgentGetInbox)
-		r.Get("/agent/inbox/{role}", s.handleAgentGetInbox)
-		r.Post("/agent/inbox/send", s.handleAgentSendMessage)
-		r.Put("/agent/inbox/{id}/archive", s.handleAgentArchiveInbox)
 		r.Post("/agent/projects", s.handleAgentCreateProject)
 		r.Get("/agent/projects", s.handleAgentListProjects)
 		r.Get("/agent/projects/{name}", s.handleAgentGetProject)
 		r.Post("/agent/projects/{name}/log", s.handleAgentAppendProjectLog)
-		r.Get("/agent/devices", s.handleAgentDevicesList)
 		r.Get("/agent/dashboard/stats", s.handleDashboardStats)
-		r.Post("/agent/devices/{name}/call", s.handleAgentCallDevice)
 		r.Get("/agent/memory/profile", s.handleAgentGetProfile)
 
 		// Agent cross-user shared access
@@ -412,7 +387,19 @@ func (s *Server) setupRoutes() {
 	})
 
 	// Embedded frontend (SPA) — catch-all for non-API routes.
-	r.NotFound(web.Handler().ServeHTTP)
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		path := r.URL.Path
+		if strings.HasPrefix(path, "/api/") ||
+			strings.HasPrefix(path, "/agent/") ||
+			strings.HasPrefix(path, "/oauth/") ||
+			strings.HasPrefix(path, "/gpt/") ||
+			strings.HasPrefix(path, "/.well-known/") ||
+			path == "/mcp" {
+			respondNotFound(w, "endpoint")
+			return
+		}
+		web.Handler().ServeHTTP(w, r)
+	})
 }
 
 // ---------------------------------------------------------------------------

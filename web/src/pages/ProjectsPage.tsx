@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
+import MaterialsSectionToolbar from '../components/MaterialsSectionToolbar'
+import MaterialsTile from '../components/MaterialsTile'
+import { MATERIALS_SORT_OPTIONS, type MaterialsSortDir, type MaterialsSortKey, dataFileEditorRoute, sortMaterialsItems } from './data/DataShared'
 
 interface Project {
   name: string
@@ -22,6 +26,7 @@ interface LogEntry {
 }
 
 export default function ProjectsPage() {
+  const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -30,6 +35,8 @@ export default function ProjectsPage() {
   const [showNewForm, setShowNewForm] = useState(false)
   const [newName, setNewName] = useState('')
   const [creating, setCreating] = useState(false)
+  const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
+  const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
 
   useEffect(() => {
     loadProjects()
@@ -64,11 +71,8 @@ export default function ProjectsPage() {
   }
 
   const handleSelectProject = (project: Project) => {
-    if (selectedProject?.name === project.name) {
-      setSelectedProject(null)
-    } else {
-      loadProjectDetail(project.name)
-    }
+    if (selectedProject?.name === project.name) return
+    void loadProjectDetail(project.name)
   }
 
   const handleCreate = async (e: React.FormEvent) => {
@@ -114,19 +118,6 @@ export default function ProjectsPage() {
     }
   }
 
-  const getStatusClass = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case 'active':
-        return 'status-active'
-      case 'archived':
-        return 'status-archived'
-      case 'paused':
-        return 'status-paused'
-      default:
-        return ''
-    }
-  }
-
   const getStatusLabel = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'active':
@@ -140,28 +131,44 @@ export default function ProjectsPage() {
     }
   }
 
+  const getProjectLastActivity = (project: Project) => project.last_activity || project.updated_at
+  const projectContextPath = (name: string) => `/projects/${name}/context.md`
+  const sortedProjects = useMemo(
+    () =>
+      sortMaterialsItems({
+        items: projects,
+        sortKey,
+        sortDir,
+        getName: (project) => project.name,
+        getUpdatedAt: (project) => getProjectLastActivity(project),
+      }),
+    [projects, sortDir, sortKey],
+  )
+
   if (loading) {
     return <div className="page-loading">加载中...</div>
   }
 
-  const getProjectLastActivity = (project: Project) => project.last_activity || project.updated_at
-
   return (
-    <div className="page">
-      <div className="page-header">
-        <h2>项目</h2>
-        <div className="page-actions">
-          <button className="btn btn-primary" onClick={() => setShowNewForm(true)}>
-            新建项目
-          </button>
+    <div className="page materials-page">
+      <section className="materials-hero">
+        <div className="materials-hero-copy">
+          <div className="materials-kicker">Agent Hub Data</div>
+          <h2 className="materials-title">项目</h2>
+          <p className="materials-subtitle">把项目看成一组长期上下文卡片。点击任意项目卡片，可以继续查看 context 和最近日志。</p>
         </div>
-      </div>
+      </section>
 
       {error && <div className="alert alert-error">{error}</div>}
 
       {showNewForm && (
-        <div className="card form-card">
-          <h3 className="card-title">新建项目</h3>
+        <div className="materials-panel form-card">
+          <div className="materials-section-head">
+            <div>
+              <h3 className="materials-section-title">新建项目</h3>
+              <p className="materials-section-copy">创建一个新的项目空间，用来整理任务上下文、日志和相关资料。</p>
+            </div>
+          </div>
           <form onSubmit={handleCreate}>
             <div className="form-group">
               <label htmlFor="proj-name">项目名称</label>
@@ -192,107 +199,123 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      {projects.length === 0 ? (
-        <div className="empty-state">
-          <p>暂无项目</p>
-          <p className="empty-hint">项目帮助 Agent 组织不同任务的上下文和进度</p>
+      <section className="materials-section">
+        <div className="materials-section-head">
+          <div>
+            <h3 className="materials-section-title">Project Library</h3>
+            <p className="materials-section-copy">统一浏览项目卡片，选中后在下方查看 context 和日志。</p>
+          </div>
+          <MaterialsSectionToolbar
+            count={projects.length}
+            sortKey={sortKey}
+            sortOptions={MATERIALS_SORT_OPTIONS}
+            sortDir={sortDir}
+            onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
+            onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
+          >
+            <button className="btn btn-sm materials-toolbar-control" onClick={() => setShowNewForm((value) => !value)}>
+              {showNewForm ? '取消新建' : '新建项目'}
+            </button>
+          </MaterialsSectionToolbar>
         </div>
-      ) : (
-        <div className="project-list">
-          {projects.map((project) => (
-            <div key={project.name} className="project-item">
-              <div
-                className={`card project-card ${
-                  selectedProject?.name === project.name ? 'selected' : ''
-                }`}
-                onClick={() => handleSelectProject(project)}
-              >
-                <div className="project-header">
-                  <span className="project-name">{project.name}</span>
-                  <div className="project-header-actions">
-                    <span className={`badge ${project.status === 'active' ? 'badge-active' : 'badge-archived'}`}>
-                      {getStatusLabel(project.status)}
-                    </span>
-                    {project.status === 'active' && (
-                      <button
-                        className="btn btn-sm btn-outline"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handleArchive(project.name)
-                        }}
-                      >
-                        归档
-                      </button>
-                    )}
-                  </div>
-                </div>
-                {project.description && (
-                  <p className="project-desc">{project.description}</p>
-                )}
-                <div className="project-meta">
-                  <span>最后活动：{formatTime(getProjectLastActivity(project))}</span>
-                </div>
-              </div>
 
-              {selectedProject?.name === project.name && (
-                <div className="project-detail">
-                  {detailLoading ? (
-                    <div className="page-loading">加载详情...</div>
-                  ) : (
-                    <>
-                      {selectedProject.context_md && (
-                        <div className="card">
-                          <h4 className="card-title">context.md</h4>
-                          <pre className="context-content">
-                            {selectedProject.context_md}
-                          </pre>
-                        </div>
-                      )}
+        {projects.length === 0 ? (
+          <div className="empty-state">
+            <p>暂无项目</p>
+            <p className="empty-hint">项目帮助 Agent 组织不同任务的上下文和进度。</p>
+          </div>
+        ) : (
+          <div className="materials-grid materials-grid-wide">
+            {sortedProjects.map((project) => (
+                <MaterialsTile
+                  key={project.name}
+                  iconClassName="icon-folder"
+                  title={project.name}
+                  titleActionAriaLabel={`打开项目 ${project.name} 的 context.md`}
+                  subtitle={getStatusLabel(project.status)}
+                  description={project.description || '这个项目还没有补充描述。'}
+                  path={projectContextPath(project.name)}
+                  footerStart="最后活动"
+                  footerEnd={formatTime(getProjectLastActivity(project))}
+                  selected={selectedProject?.name === project.name}
+                  onSelect={() => handleSelectProject(project)}
+                  onOpen={() => navigate(dataFileEditorRoute(projectContextPath(project.name)))}
+                />
+              ))}
+          </div>
+        )}
+      </section>
 
-                      {selectedProject.logs && selectedProject.logs.length > 0 && (
-                        <div className="card">
-                          <h4 className="card-title">最近日志</h4>
-                          <div className="log-timeline">
-                            {selectedProject.logs.map((log, i) => (
-                              <div key={i} className="timeline-item">
-                                <div className="time">
-                                  {formatTime(log.timestamp)}
-                                  {log.source && (
-                                    <span className="source" style={{ marginLeft: 8 }}>{log.source}</span>
-                                  )}
-                                </div>
-                                {log.action && (
-                                  <div style={{ fontSize: 13, fontWeight: 500, marginTop: 2 }}>{log.action}</div>
-                                )}
-                                <div className="summary">
-                                  {log.summary || log.message}
-                                </div>
-                                {log.tags && log.tags.length > 0 && (
-                                  <div className="tags">
-                                    {log.tags.map((tag, j) => (
-                                      <span key={j} className="tag">{tag}</span>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-
-                      {!selectedProject.context_md &&
-                        (!selectedProject.logs || selectedProject.logs.length === 0) && (
-                          <div className="empty-state">
-                            <p>暂无项目详情</p>
-                          </div>
-                        )}
-                    </>
-                  )}
-                </div>
-              )}
+      {selectedProject && (
+        <section className="materials-section">
+          <div className="materials-section-head">
+            <div>
+              <h3 className="materials-section-title">{selectedProject.name}</h3>
+              <p className="materials-section-copy">项目详情会在这里显示，包括 context 和最近日志。</p>
             </div>
-          ))}
-        </div>
+            <MaterialsSectionToolbar>
+              {selectedProject.status === 'active' ? (
+                <button className="btn btn-sm materials-toolbar-control" onClick={() => void handleArchive(selectedProject.name)}>
+                  归档项目
+                </button>
+              ) : null}
+            </MaterialsSectionToolbar>
+          </div>
+          <div className="project-detail">
+            {detailLoading ? (
+              <div className="page-loading">加载详情...</div>
+            ) : (
+              <>
+                {selectedProject.context_md && (
+                  <div className="materials-panel">
+                    <h4 className="card-title">context.md</h4>
+                    <pre className="context-content">
+                      {selectedProject.context_md}
+                    </pre>
+                  </div>
+                )}
+
+                {selectedProject.logs && selectedProject.logs.length > 0 && (
+                  <div className="materials-panel">
+                    <h4 className="card-title">最近日志</h4>
+                    <div className="log-timeline">
+                      {selectedProject.logs.map((log, i) => (
+                        <div key={i} className="timeline-item">
+                          <div className="time">
+                            {formatTime(log.timestamp)}
+                            {log.source && (
+                              <span className="source" style={{ marginLeft: 8 }}>{log.source}</span>
+                            )}
+                          </div>
+                          {log.action && (
+                            <div style={{ fontSize: 13, fontWeight: 500, marginTop: 2 }}>{log.action}</div>
+                          )}
+                          <div className="summary">
+                            {log.summary || log.message}
+                          </div>
+                          {log.tags && log.tags.length > 0 && (
+                            <div className="tags">
+                              {log.tags.map((tag, j) => (
+                                <span key={j} className="tag">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {!selectedProject.context_md &&
+                  (!selectedProject.logs || selectedProject.logs.length === 0) && (
+                    <div className="empty-state">
+                      <p>暂无项目详情</p>
+                    </div>
+                  )}
+              </>
+            )}
+          </div>
+        </section>
       )}
     </div>
   )

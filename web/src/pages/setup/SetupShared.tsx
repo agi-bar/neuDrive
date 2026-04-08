@@ -45,7 +45,7 @@ export function SetupSection({
           <p className="setup-section-desc">{description}</p>
         </div>
       </div>
-      {children}
+      <div className="setup-section-body">{children}</div>
     </div>
   )
 }

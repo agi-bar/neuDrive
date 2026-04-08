@@ -24,7 +24,7 @@ const PROFILE_CATEGORIES = [
 
 const TRUST_LABELS: Record<number, string> = {
   1: 'L1 访客',
-  2: 'L2 协作',
+  2: 'L2 共享',
   3: 'L3 工作信任',
   4: 'L4 完全信任',
 }
@@ -147,9 +147,12 @@ export default function InfoPage({ title = '我的资料' }: InfoPageProps) {
   }
 
   return (
-    <div className="page">
+    <div className="page materials-page">
       <div className="page-header">
-        <h2>{title}</h2>
+        <div>
+          <h2>{title}</h2>
+          <p className="page-subtitle">这里统一管理个人偏好、行为准则、冲突记录和 Vault 访问范围。</p>
+        </div>
       </div>
 
       {error && <div className="alert alert-error">{error}</div>}
@@ -290,8 +293,8 @@ export default function InfoPage({ title = '我的资料' }: InfoPageProps) {
               <span>只能访问公开信息</span>
             </div>
             <div className="legend-item">
-              <span className="trust-badge trust-l2">L2 协作</span>
-              <span>可访问工作相关信息</span>
+              <span className="trust-badge trust-l2">L2 共享</span>
+              <span>可访问有限共享信息</span>
             </div>
             <div className="legend-item">
               <span className="trust-badge trust-l3">L3 工作信任</span>

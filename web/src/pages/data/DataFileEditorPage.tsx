@@ -137,7 +137,7 @@ export default function DataFileEditorPage() {
   if (loading) return <div className="page-loading">加载中...</div>
   if (!node) {
     return (
-      <div className="page">
+      <div className="page materials-page">
         <div className="page-header">
           <h2>未找到文件</h2>
           <div className="page-actions">
@@ -150,7 +150,7 @@ export default function DataFileEditorPage() {
   }
 
   return (
-    <div className="page">
+    <div className="page materials-page">
       <div className="page-header">
         <div>
           <h2>编辑：{title}</h2>

@@ -110,27 +110,6 @@ func agentOpenAPIPaths() map[string]interface{} {
 			"changes": arr(obj(M{"cursor": num, "change_type": str, "entry": obj(M{"path": str, "kind": str, "checksum": str, "version": num})})),
 		})),
 
-		// Devices
-		"/agent/devices": get("listDevices", "列出已注册设备", obj(M{
-			"devices": arr(obj(M{"name": str, "type": str, "status": str})),
-		})),
-		"/agent/devices/{name}/call": M{"post": M{
-			"operationId": "callDevice", "summary": "调用设备执行操作",
-			"parameters":  []M{pp("name")},
-			"requestBody": body([]string{"action"}, M{"action": str, "params": M{"type": "object"}}),
-			"responses":   rsp(obj(M{"device": str, "action": str, "status": str})),
-		}},
-
-		// Inbox
-		"/agent/inbox": get("getInbox", "读取收件箱消息", obj(M{
-			"messages": arr(obj(M{"from_address": str, "subject": str, "body": str, "status": str, "created_at": str})),
-		})),
-		"/agent/inbox/send": M{"post": M{
-			"operationId": "sendMessage", "summary": "发送消息到收件箱",
-			"requestBody": body([]string{"to"}, M{"to": str, "subject": str, "body": str}),
-			"responses":   rsp(obj(M{"status": str})),
-		}},
-
 		// Vault
 		"/agent/vault/scopes": get("listSecrets", "列出保险库范围", obj(M{
 			"scopes": arr(obj(M{"scope": str, "description": str})),
@@ -143,7 +122,7 @@ func agentOpenAPIPaths() map[string]interface{} {
 
 		// Dashboard
 		"/agent/dashboard/stats": get("getStats", "获取 Hub 统计概览", obj(M{
-			"connections": num, "skills": num, "devices": num, "projects": num,
+			"connections": num, "skills": num, "projects": num,
 		})),
 	}
 }

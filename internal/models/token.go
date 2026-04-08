@@ -66,8 +66,6 @@ var ScopeBundleReadOnly = []string{
 var ScopeBundleAgent = []string{
 	ScopeReadProfile, ScopeReadMemory, ScopeWriteMemory,
 	ScopeReadSkills, ScopeReadVaultAuth,
-	ScopeReadDevices, ScopeCallDevices,
-	ScopeReadInbox, ScopeWriteInbox,
 	ScopeReadProjects, ScopeWriteProjects,
 	ScopeReadTree, ScopeWriteTree,
 	ScopeSearch,
@@ -82,8 +80,6 @@ func ScopeCategories() map[string][]string {
 		"Memory":   {ScopeReadMemory, ScopeWriteMemory},
 		"Vault":    {ScopeReadVault, ScopeReadVaultAuth, ScopeWriteVault},
 		"Skills":   {ScopeReadSkills, ScopeWriteSkills},
-		"Devices":  {ScopeReadDevices, ScopeCallDevices},
-		"Inbox":    {ScopeReadInbox, ScopeWriteInbox},
 		"Projects": {ScopeReadProjects, ScopeWriteProjects},
 		"Tree":     {ScopeReadTree, ScopeWriteTree},
 		"Bundle":   {ScopeReadBundle, ScopeWriteBundle},

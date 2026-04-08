@@ -50,9 +50,13 @@ func buildLargeFixtureBundle(t *testing.T, multiplier int) models.Bundle {
 	binary := readRealisticBinaryFixture(t)
 	plan := loadSyncFixturePlan(t)
 
+	createdAt := time.Now().UTC().Add(-6 * time.Hour).Truncate(time.Second)
+	memoryCreatedAt := createdAt.Add(-150 * time.Minute)
+	memoryExpiresAt := createdAt.Add(30 * 24 * time.Hour)
+
 	bundle := models.Bundle{
 		Version:   models.BundleVersionV1,
-		CreatedAt: time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC).Format(time.RFC3339),
+		CreatedAt: createdAt.Format(time.RFC3339),
 		Source:    "sync-fixture",
 		Mode:      bundleModeMerge,
 		Profile: map[string]string{
@@ -65,8 +69,8 @@ func buildLargeFixtureBundle(t *testing.T, multiplier int) models.Bundle {
 				Title:     "fixture-memory",
 				Content:   strings.Repeat("同步流程演练\n", 60*multiplier),
 				Source:    "fixture",
-				CreatedAt: time.Date(2026, 4, 6, 9, 30, 0, 0, time.UTC).Format(time.RFC3339),
-				ExpiresAt: time.Date(2026, 4, 9, 9, 30, 0, 0, time.UTC).Format(time.RFC3339),
+				CreatedAt: memoryCreatedAt.Format(time.RFC3339),
+				ExpiresAt: memoryExpiresAt.Format(time.RFC3339),
 			},
 		},
 	}

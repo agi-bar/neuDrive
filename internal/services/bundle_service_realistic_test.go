@@ -144,8 +144,8 @@ func TestBundleImportExport_RoundTripRealisticFixture(t *testing.T) {
 	binary := readRealisticBinaryFixture(t)
 	sum := sha256.Sum256(binary)
 
-	createdAt := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
-	expiresAt := createdAt.Add(48 * time.Hour)
+	createdAt := time.Now().UTC().Add(-6 * time.Hour).Truncate(time.Second)
+	expiresAt := createdAt.Add(30 * 24 * time.Hour)
 
 	bundle := models.Bundle{
 		Version: models.BundleVersionV1,

@@ -155,8 +155,8 @@ func TestBundleImportExportRoundTrip(t *testing.T) {
 	if err := sourceStore.UpsertProfile(ctx, sourceUserID, "preferences", "prefers local-first", "test"); err != nil {
 		t.Fatalf("UpsertProfile: %v", err)
 	}
-	createdAt := time.Date(2026, 4, 6, 12, 0, 0, 0, time.UTC)
-	expiresAt := createdAt.Add(7 * 24 * time.Hour)
+	createdAt := time.Now().UTC().Add(-6 * time.Hour).Truncate(time.Second)
+	expiresAt := createdAt.Add(30 * 24 * time.Hour)
 	if _, err := sourceStore.ImportScratch(ctx, sourceUserID, "remember this", "test", "note", createdAt, &expiresAt); err != nil {
 		t.Fatalf("ImportScratch: %v", err)
 	}

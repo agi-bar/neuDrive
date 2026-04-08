@@ -88,10 +88,10 @@ test.describe('Bundle Sync', () => {
         cli_callback: callback.url,
         cli_state: 'pw-sync-state',
       })
-      await page.goto(`/data/sync?${params.toString()}`)
-      await expect(page.getByText(/当前页面由 CLI 打开/)).toBeVisible()
-      await page.getByRole('button', { name: '生成 Sync Token' }).click()
-      await expect(page.getByText(/已把 Sync Token 发送到本地 CLI profile：prod/)).toBeVisible({ timeout: 15000 })
+      await page.goto(`/sync/login?${params.toString()}`)
+      await expect(page.getByRole('heading', { name: '授权本次 Sync 登录' })).toBeVisible()
+      await page.getByRole('button', { name: '继续并授权 CLI' }).click()
+      await expect(page.getByText(/已把 Sync Token 发回本地 CLI profile：prod/)).toBeVisible({ timeout: 15000 })
       const payload = await callback.received
       expect(payload.state).toBe('pw-sync-state')
       expect(payload.profile).toBe('prod')
@@ -158,7 +158,7 @@ test.describe('Bundle Sync', () => {
     try {
       await page.goto('/data/sync')
       await page.getByRole('button', { name: '生成 Sync Token' }).click()
-      await expect(page.getByText('当前 Token')).toBeVisible()
+      await expect(page.getByText('当前 Token', { exact: true })).toBeVisible()
 
       await page.getByLabel('Bundle file').setInputFiles(initialBundlePath)
       await page.getByRole('button', { name: '开始导入' }).click()
@@ -216,7 +216,7 @@ test.describe('Bundle Sync', () => {
     try {
       await page.goto('/data/sync')
       await page.getByRole('button', { name: '生成 Sync Token' }).click()
-      await expect(page.getByText('当前 Token')).toBeVisible()
+      await expect(page.getByText('当前 Token', { exact: true })).toBeVisible()
       await expect(page.locator('.token-list-prefix').filter({ hasText: /^session / })).toBeVisible({ timeout: 15000 })
       await page.getByRole('button', { name: '选择并继续这个 Session' }).click()
       await expect(page.locator('.alert-warn').filter({ hasText: '已选择继续未完成 session' })).toBeVisible()

@@ -14,8 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/auth"
+	"github.com/agi-bar/agenthub/internal/config"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/services"
 	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
+	"github.com/agi-bar/agenthub/internal/vault"
 	"github.com/google/uuid"
 )
 
@@ -52,14 +56,68 @@ func newTestHTTPServer(t *testing.T) (*httptest.Server, *sqlitestorage.Store, st
 		t.Fatalf("CreateToken write: %v", err)
 	}
 
-	s := NewSQLiteServer(store, "http://127.0.0.1:0")
-	ts := httptest.NewServer(s.Handler())
-	s.baseURL = ts.URL
+	cfg := &config.Config{
+		JWTSecret:      testJWTSecret,
+		VaultMasterKey: strings.Repeat("0", 64),
+		CORSOrigins:    []string{"http://localhost:3000"},
+		RateLimit:      100,
+		MaxBodySize:    10 * 1024 * 1024,
+		PublicBaseURL:  "http://127.0.0.1:0",
+	}
+	v, err := vault.NewVault(cfg.VaultMasterKey)
+	if err != nil {
+		t.Fatalf("NewVault: %v", err)
+	}
+	fileTreeSvc := services.NewFileTreeServiceWithRepo(sqlitestorage.NewFileTreeRepo(store))
+	memorySvc := services.NewMemoryServiceWithRepo(sqlitestorage.NewMemoryRepo(store), nil)
+	userSvc := services.NewUserServiceWithRepo(sqlitestorage.NewUserRepo(store))
+	connSvc := services.NewConnectionServiceWithRepo(sqlitestorage.NewConnectionRepo(store))
+	vaultSvc := services.NewVaultServiceWithRepo(sqlitestorage.NewVaultRepo(store), v)
+	roleSvc := services.NewRoleServiceWithRepo(sqlitestorage.NewRoleRepo(store), fileTreeSvc)
+	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
+	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
+	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
+	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
+	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
+	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
+	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
+		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
+	}
+	authSvc := services.NewAuthServiceWithRepo(sqlitestorage.NewAuthRepo(store), tokenGen, nil)
+	oauthSvc := services.NewOAuthServiceWithRepo(sqlitestorage.NewOAuthRepo(store), cfg.JWTSecret)
+
+	s := NewServerWithDeps(ServerDeps{
+		Storage:            "sqlite",
+		Config:             cfg,
+		UserService:        userSvc,
+		AuthService:        authSvc,
+		ConnectionService:  connSvc,
+		FileTreeService:    fileTreeSvc,
+		VaultService:       vaultSvc,
+		MemoryService:      memorySvc,
+		ProjectService:     projectSvc,
+		RoleService:        roleSvc,
+		InboxService:       inboxSvc,
+		DeviceService:      deviceSvc,
+		DashboardService:   dashboardSvc,
+		TokenService:       tokenSvc,
+		ImportService:      importSvc,
+		ExportService:      exportSvc,
+		SyncService:        syncSvc,
+		OAuthService:       oauthSvc,
+		Vault:              v,
+		JWTSecret:          cfg.JWTSecret,
+		GitHubClientID:     cfg.GithubClientID,
+		GitHubClientSecret: cfg.GithubClientSecret,
+	})
+	ts := httptest.NewServer(s.Router)
 	t.Cleanup(ts.Close)
 	return ts, store, admin.Token, readBundle.Token, writeBundle.Token
 }
 
-func TestLocalServerHealthAndDisabledOAuth(t *testing.T) {
+func TestSQLiteSharedServerHealthAndAuth(t *testing.T) {
 	ts, _, _, _, _ := newTestHTTPServer(t)
 
 	resp, err := http.Get(ts.URL + "/api/health")
@@ -80,20 +138,16 @@ func TestLocalServerHealthAndDisabledOAuth(t *testing.T) {
 
 	req, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/login", bytes.NewReader([]byte(`{}`)))
 	req.Header.Set("Content-Type", "application/json")
-	disabledResp, err := http.DefaultClient.Do(req)
+	authResp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("POST /api/auth/login: %v", err)
 	}
-	defer disabledResp.Body.Close()
-	if disabledResp.StatusCode != http.StatusNotImplemented {
-		t.Fatalf("disabled auth status = %d", disabledResp.StatusCode)
+	defer authResp.Body.Close()
+	if authResp.StatusCode == http.StatusNotImplemented {
+		t.Fatalf("expected shared auth route, got %d", authResp.StatusCode)
 	}
-	var disabled testEnvelope
-	if err := json.NewDecoder(disabledResp.Body).Decode(&disabled); err != nil {
-		t.Fatalf("decode disabled: %v", err)
-	}
-	if disabled.OK || disabled.Error.Message == "" {
-		t.Fatalf("unexpected disabled payload: %+v", disabled)
+	if authResp.StatusCode != http.StatusUnauthorized && authResp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("unexpected auth status = %d", authResp.StatusCode)
 	}
 
 	rootResp, err := http.Get(ts.URL + "/")
@@ -113,7 +167,69 @@ func TestLocalServerHealthAndDisabledOAuth(t *testing.T) {
 	}
 }
 
-func TestLocalServerScopeGatingAndSyncFlow(t *testing.T) {
+func TestSQLiteSharedServerRegisterLoginRefresh(t *testing.T) {
+	ts, _, _, _, _ := newTestHTTPServer(t)
+
+	registerBody := []byte(`{"email":"new@example.com","password":"hunter22","display_name":"New User","slug":"new-user"}`)
+	registerReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/register", bytes.NewReader(registerBody))
+	registerReq.Header.Set("Content-Type", "application/json")
+	registerResp, err := http.DefaultClient.Do(registerReq)
+	if err != nil {
+		t.Fatalf("POST /api/auth/register: %v", err)
+	}
+	defer registerResp.Body.Close()
+	if registerResp.StatusCode != http.StatusCreated {
+		body, _ := io.ReadAll(registerResp.Body)
+		t.Fatalf("register status = %d body=%s", registerResp.StatusCode, string(body))
+	}
+	var registered models.AuthResponse
+	if err := json.NewDecoder(registerResp.Body).Decode(&registered); err != nil {
+		t.Fatalf("decode register: %v", err)
+	}
+	if registered.AccessToken == "" || registered.RefreshToken == "" {
+		t.Fatalf("expected auth tokens in register response: %+v", registered)
+	}
+
+	meReq, _ := http.NewRequest(http.MethodGet, ts.URL+"/api/auth/me", nil)
+	meReq.Header.Set("Authorization", "Bearer "+registered.AccessToken)
+	meResp, err := http.DefaultClient.Do(meReq)
+	if err != nil {
+		t.Fatalf("GET /api/auth/me: %v", err)
+	}
+	defer meResp.Body.Close()
+	if meResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(meResp.Body)
+		t.Fatalf("auth me status = %d body=%s", meResp.StatusCode, string(body))
+	}
+	var me testEnvelope
+	if err := json.NewDecoder(meResp.Body).Decode(&me); err != nil {
+		t.Fatalf("decode auth me: %v", err)
+	}
+	if !bytes.Contains(me.Data, []byte(`"slug":"new-user"`)) {
+		t.Fatalf("unexpected auth me payload: %s", string(me.Data))
+	}
+
+	refreshReq, _ := http.NewRequest(http.MethodPost, ts.URL+"/api/auth/refresh", bytes.NewReader([]byte(`{"refresh_token":"`+registered.RefreshToken+`"}`)))
+	refreshReq.Header.Set("Content-Type", "application/json")
+	refreshResp, err := http.DefaultClient.Do(refreshReq)
+	if err != nil {
+		t.Fatalf("POST /api/auth/refresh: %v", err)
+	}
+	defer refreshResp.Body.Close()
+	if refreshResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(refreshResp.Body)
+		t.Fatalf("refresh status = %d body=%s", refreshResp.StatusCode, string(body))
+	}
+	var refreshed models.AuthResponse
+	if err := json.NewDecoder(refreshResp.Body).Decode(&refreshed); err != nil {
+		t.Fatalf("decode refresh: %v", err)
+	}
+	if refreshed.AccessToken == "" || refreshed.RefreshToken == "" {
+		t.Fatalf("expected auth tokens in refresh response: %+v", refreshed)
+	}
+}
+
+func TestSQLiteSharedServerScopeGatingAndSyncFlow(t *testing.T) {
 	ts, _, adminToken, readBundleToken, writeBundleToken := newTestHTTPServer(t)
 
 	bundle := models.Bundle{
@@ -173,7 +289,7 @@ func TestLocalServerScopeGatingAndSyncFlow(t *testing.T) {
 	}
 }
 
-func TestLocalServerWebDashboardEndpoints(t *testing.T) {
+func TestSQLiteSharedServerWebDashboardEndpoints(t *testing.T) {
 	ts, store, adminToken, _, _ := newTestHTTPServer(t)
 	ctx := context.Background()
 	userID, err := store.FirstUserID(ctx)
@@ -222,7 +338,7 @@ func TestLocalServerWebDashboardEndpoints(t *testing.T) {
 	}
 }
 
-func TestLocalServerProjectsAndSkillsEndpoints(t *testing.T) {
+func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 	ts, store, adminToken, _, _ := newTestHTTPServer(t)
 	ctx := context.Background()
 	userID, err := store.FirstUserID(ctx)
@@ -245,43 +361,18 @@ func TestLocalServerProjectsAndSkillsEndpoints(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("WriteEntry skill: %v", err)
 	}
-	if _, err := store.WriteEntry(ctx, userID, "/devices/desk-light/SKILL.md", "# Desk Light\n", "text/markdown", models.FileTreeWriteOptions{
-		MinTrustLevel: models.TrustLevelGuest,
-		Metadata: map[string]interface{}{
-			"device_type": "light",
-			"status":      "online",
-			"protocol":    "http",
-		},
-	}); err != nil {
-		t.Fatalf("WriteEntry device: %v", err)
+	status, createdDevice := doJSON(t, http.MethodPost, ts.URL+"/api/devices", adminToken, []byte(`{"name":"desk-light","device_type":"light","protocol":"http","endpoint":"http://127.0.0.1/device"}`))
+	if status != http.StatusCreated || !createdDevice.OK {
+		t.Fatalf("POST /api/devices failed: status=%d body=%+v", status, createdDevice)
 	}
-	if _, err := store.WriteEntry(ctx, userID, "/roles/researcher/SKILL.md", "# Researcher\n", "text/markdown", models.FileTreeWriteOptions{
-		MinTrustLevel: models.TrustLevelGuest,
-		Metadata: map[string]interface{}{
-			"role_type":            "worker",
-			"lifecycle":            "project",
-			"allowed_paths":        []string{"/projects", "/skills"},
-			"allowed_vault_scopes": []string{"auth.github"},
-		},
-	}); err != nil {
-		t.Fatalf("WriteEntry role: %v", err)
+	status, createdRole := doJSON(t, http.MethodPost, ts.URL+"/api/roles", adminToken, []byte(`{"name":"researcher","role_type":"worker","lifecycle":"project","allowed_paths":["/projects","/skills"]}`))
+	if status != http.StatusCreated || !createdRole.OK {
+		t.Fatalf("POST /api/roles failed: status=%d body=%+v", status, createdRole)
 	}
-	inboxBody, err := json.Marshal(models.InboxMessage{
-		ID:          mustUUID(t, "11111111-1111-1111-1111-111111111111"),
-		FromAddress: "worker:policy@de.hub",
-		ToAddress:   "assistant",
-		Subject:     "Test message",
-		Body:        "hello inbox",
-		Status:      "incoming",
-		CreatedAt:   time.Now().UTC(),
-	})
-	if err != nil {
-		t.Fatalf("Marshal inbox: %v", err)
-	}
-	if _, err := store.WriteEntry(ctx, userID, "/inbox/assistant/incoming/11111111-1111-1111-1111-111111111111.json", string(inboxBody), "application/json", models.FileTreeWriteOptions{
-		MinTrustLevel: models.TrustLevelGuest,
-	}); err != nil {
-		t.Fatalf("WriteEntry inbox: %v", err)
+	inboxPayload := []byte(`{"to":"assistant","subject":"Test message","body":"hello inbox"}`)
+	status, sentInbox := doJSON(t, http.MethodPost, ts.URL+"/api/inbox/send", adminToken, inboxPayload)
+	if status != http.StatusCreated || !sentInbox.OK {
+		t.Fatalf("POST /api/inbox/send failed: status=%d body=%+v", status, sentInbox)
 	}
 
 	status, projects := doJSON(t, http.MethodGet, ts.URL+"/api/projects", adminToken, nil)
@@ -298,7 +389,7 @@ func TestLocalServerProjectsAndSkillsEndpoints(t *testing.T) {
 	if status != http.StatusOK || !project.OK {
 		t.Fatalf("GET /api/projects/demo-project failed: status=%d body=%+v", status, project)
 	}
-	for _, expected := range []string{`"project"`, `"logs"`, `"timestamp"`, `"hello project"`} {
+	for _, expected := range []string{`"project"`, `"logs"`, `"created_at"`, `"hello project"`} {
 		if !bytes.Contains(project.Data, []byte(expected)) {
 			t.Fatalf("expected %q in project payload: %s", expected, string(project.Data))
 		}
@@ -309,11 +400,11 @@ func TestLocalServerProjectsAndSkillsEndpoints(t *testing.T) {
 		t.Fatalf("PUT /api/projects/demo-project/archive failed: status=%d body=%+v", status, archived)
 	}
 
-	status, skills := doJSON(t, http.MethodGet, ts.URL+"/api/skills", adminToken, nil)
+	status, skills := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/", adminToken, nil)
 	if status != http.StatusOK || !skills.OK {
-		t.Fatalf("GET /api/skills failed: status=%d body=%+v", status, skills)
+		t.Fatalf("GET /api/tree/skills/ failed: status=%d body=%+v", status, skills)
 	}
-	for _, expected := range []string{`"/skills/demo/SKILL.md"`, `"/skills/agenthub/SKILL.md"`} {
+	for _, expected := range []string{`"/skills/demo"`, `"/skills/agenthub/"`} {
 		if !bytes.Contains(skills.Data, []byte(expected)) {
 			t.Fatalf("expected %q in skills payload: %s", expected, string(skills.Data))
 		}
@@ -338,23 +429,14 @@ func TestLocalServerProjectsAndSkillsEndpoints(t *testing.T) {
 	if status != http.StatusOK || !root.OK {
 		t.Fatalf("GET /api/tree/ failed: status=%d body=%+v", status, root)
 	}
-	for _, expected := range []string{`"/skills"`, `"/devices"`, `"/roles"`, `"/inbox"`} {
+	for _, expected := range []string{`"/devices"`, `"/roles"`, `"/inbox"`, `"/projects"`} {
 		if !bytes.Contains(root.Data, []byte(expected)) {
 			t.Fatalf("expected %q in root tree payload: %s", expected, string(root.Data))
 		}
 	}
 }
 
-func mustUUID(t *testing.T, value string) uuid.UUID {
-	t.Helper()
-	parsed, err := uuid.Parse(value)
-	if err != nil {
-		t.Fatalf("uuid.Parse(%q): %v", value, err)
-	}
-	return parsed
-}
-
-func TestLocalServerImportSkillsZip(t *testing.T) {
+func TestSQLiteSharedServerImportSkillsZip(t *testing.T) {
 	ts, store, _, _, _ := newTestHTTPServer(t)
 	ctx := context.Background()
 	userID, err := store.FirstUserID(ctx)
@@ -415,6 +497,56 @@ func TestLocalServerImportSkillsZip(t *testing.T) {
 	}
 	if binaryEntry.Metadata["capture_mode"] != "archive" || binaryEntry.Metadata["source_platform"] != "claude-web" {
 		t.Fatalf("unexpected logo metadata: %+v", binaryEntry.Metadata)
+	}
+}
+
+func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	writeBody := []byte(`{"content":"# Demo Skill\n","mime_type":"text/markdown"}`)
+	status, wrote := doJSON(t, http.MethodPut, ts.URL+"/api/tree/skills/demo/SKILL.md", adminToken, writeBody)
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("write skill failed: status=%d body=%+v", status, wrote)
+	}
+
+	status, dirNoSlash := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/demo", adminToken, nil)
+	if status != http.StatusOK || !dirNoSlash.OK {
+		t.Fatalf("browse dir without slash failed: status=%d body=%+v", status, dirNoSlash)
+	}
+	for _, expected := range []string{`"path":"/skills/demo"`, `"is_dir":true`, `"kind":"directory"`} {
+		if !bytes.Contains(dirNoSlash.Data, []byte(expected)) {
+			t.Fatalf("expected %q in dir browse payload: %s", expected, string(dirNoSlash.Data))
+		}
+	}
+
+	status, dirWithSlash := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/demo/", adminToken, nil)
+	if status != http.StatusOK || !dirWithSlash.OK {
+		t.Fatalf("browse dir with slash failed: status=%d body=%+v", status, dirWithSlash)
+	}
+	for _, expected := range []string{`"path":"/skills/demo/"`, `"is_dir":true`, `"name":"SKILL.md"`} {
+		if !bytes.Contains(dirWithSlash.Data, []byte(expected)) {
+			t.Fatalf("expected %q in slash browse payload: %s", expected, string(dirWithSlash.Data))
+		}
+	}
+
+	status, systemDir := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/portability/chatgpt", adminToken, nil)
+	if status != http.StatusOK || !systemDir.OK {
+		t.Fatalf("browse system dir without slash failed: status=%d body=%+v", status, systemDir)
+	}
+	for _, expected := range []string{`"path":"/skills/portability/chatgpt/"`, `"is_dir":true`, `"name":"SKILL.md"`} {
+		if !bytes.Contains(systemDir.Data, []byte(expected)) {
+			t.Fatalf("expected %q in system dir payload: %s", expected, string(systemDir.Data))
+		}
+	}
+
+	status, systemSkill := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/portability/chatgpt/SKILL.md", adminToken, nil)
+	if status != http.StatusOK || !systemSkill.OK {
+		t.Fatalf("read system skill failed: status=%d body=%+v", status, systemSkill)
+	}
+	for _, expected := range []string{`"kind":"skill"`, `## Current User Snapshot`, `Connected to ChatGPT: no`} {
+		if !bytes.Contains(systemSkill.Data, []byte(expected)) {
+			t.Fatalf("expected %q in rendered system skill payload: %s", expected, string(systemSkill.Data))
+		}
 	}
 }
 

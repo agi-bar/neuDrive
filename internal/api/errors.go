@@ -46,6 +46,10 @@ func respondError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, APIError{Code: code, Message: message})
 }
 
+func respondNotConfigured(w http.ResponseWriter, service string) {
+	respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, service+" not configured")
+}
+
 // respondValidationError writes a 422 validation error for a specific field.
 func respondValidationError(w http.ResponseWriter, field, message string) {
 	writeJSON(w, http.StatusUnprocessableEntity, APIError{

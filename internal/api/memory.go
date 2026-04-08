@@ -40,6 +40,10 @@ type ProjectLogRequest struct {
 }
 
 func (s *Server) handleMemoryProfileGet(w http.ResponseWriter, r *http.Request) {
+	if s.MemoryService == nil {
+		respondNotConfigured(w, "memory service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -72,6 +76,10 @@ func (s *Server) handleMemoryProfileGet(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleMemoryProfileUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.MemoryService == nil {
+		respondNotConfigured(w, "memory service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -110,6 +118,10 @@ func (s *Server) handleMemoryProfileUpdate(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleWriteScratch(w http.ResponseWriter, r *http.Request) {
+	if s.MemoryService == nil {
+		respondNotConfigured(w, "memory service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)

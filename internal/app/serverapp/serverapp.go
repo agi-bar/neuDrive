@@ -31,14 +31,7 @@ type Options struct {
 }
 
 func Run(ctx context.Context, opts Options) error {
-	storage := strings.ToLower(strings.TrimSpace(opts.Storage))
-	if storage == "" {
-		if strings.TrimSpace(opts.DatabaseURL) != "" {
-			storage = "postgres"
-		} else {
-			storage = "sqlite"
-		}
-	}
+	storage := appcore.ResolveStorageBackend(opts.Storage, opts.SQLitePath, opts.DatabaseURL, appcore.DefaultServerStorage)
 	if storage == "sqlite" {
 		sqlitePath := strings.TrimSpace(opts.SQLitePath)
 		if sqlitePath == "" {
@@ -116,12 +109,10 @@ func Run(ctx context.Context, opts Options) error {
 		serverErr <- nil
 	}()
 
-	if app.Storage == "postgres" && app.MemoryService != nil && app.InboxService != nil && app.SyncService != nil {
-		if tokenSvc, ok := app.TokenService.(*services.TokenService); ok {
-			scheduler := jobs.NewScheduler(app.MemoryService, tokenSvc, app.InboxService, app.SyncService, slog.Default())
-			scheduler.Start(context.Background())
-			defer scheduler.Stop()
-		}
+	if tokenSvc, schedulerCfg, ok := schedulerConfigForApp(app); ok {
+		scheduler := jobs.NewSchedulerWithConfig(app.MemoryService, tokenSvc, app.InboxService, app.SyncService, slog.Default(), schedulerCfg)
+		scheduler.Start(context.Background())
+		defer scheduler.Stop()
 	}
 
 	select {
@@ -135,4 +126,20 @@ func Run(ctx context.Context, opts Options) error {
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	return httpServer.Shutdown(shutdownCtx)
+}
+
+func schedulerConfigForApp(app *appcore.App) (*services.TokenService, jobs.SchedulerConfig, bool) {
+	cfg := jobs.DefaultSchedulerConfig()
+	if app == nil || app.MemoryService == nil || app.InboxService == nil || app.SyncService == nil {
+		return nil, cfg, false
+	}
+	tokenSvc, ok := app.TokenService.(*services.TokenService)
+	if !ok || tokenSvc == nil {
+		return nil, cfg, false
+	}
+	if !app.MemoryService.SupportsScratchMaintenance() {
+		cfg.CleanExpiredScratch.Enabled = false
+		cfg.GenerateDailyScratch.Enabled = false
+	}
+	return tokenSvc, cfg, true
 }

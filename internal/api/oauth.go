@@ -22,6 +22,10 @@ var errOAuthConflictingClientAuth = errors.New("conflicting client authenticatio
 
 // handleOAuthAuthorizeGet renders the consent page for GET /oauth/authorize.
 func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		auth.RenderConsentPage(w, auth.ConsentPageData{Error: "OAuth is not configured."})
+		return
+	}
 	clientID := r.URL.Query().Get("client_id")
 	redirectURI := r.URL.Query().Get("redirect_uri")
 	scope := r.URL.Query().Get("scope")
@@ -108,6 +112,10 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 
 // handleOAuthAuthorizePost processes the user's approve/deny action.
 func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil || s.AuthService == nil {
+		auth.RenderConsentPage(w, auth.ConsentPageData{Error: "OAuth is not configured."})
+		return
+	}
 	if err := r.ParseForm(); err != nil {
 		auth.RenderConsentPage(w, auth.ConsentPageData{
 			Error: "Invalid form data.",
@@ -245,6 +253,10 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 
 // handleOAuthToken handles POST /oauth/token (code exchange).
 func (s *Server) handleOAuthToken(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		writeOAuthError(w, http.StatusServiceUnavailable, "server_error", "OAuth is not configured.")
+		return
+	}
 	req, err := parseOAuthTokenRequest(r)
 	if err != nil {
 		switch {
@@ -329,6 +341,10 @@ func parseOAuthTokenRequest(r *http.Request) (models.OAuthTokenRequest, error) {
 
 // handleOAuthUserInfo handles GET /oauth/userinfo.
 func (s *Server) handleOAuthUserInfo(w http.ResponseWriter, r *http.Request) {
+	if s.UserService == nil {
+		writeOAuthError(w, http.StatusServiceUnavailable, "server_error", "OAuth is not configured.")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		writeOAuthError(w, http.StatusUnauthorized, "invalid_token", "Missing or invalid access token.")
@@ -360,6 +376,10 @@ func (s *Server) handleOAuthUserInfo(w http.ResponseWriter, r *http.Request) {
 
 // handleListOAuthApps handles GET /api/oauth/apps.
 func (s *Server) handleListOAuthApps(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "oauth service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -384,6 +404,10 @@ func (s *Server) handleListOAuthApps(w http.ResponseWriter, r *http.Request) {
 
 // handleRegisterOAuthApp handles POST /api/oauth/apps.
 func (s *Server) handleRegisterOAuthApp(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "oauth service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -416,6 +440,10 @@ func (s *Server) handleRegisterOAuthApp(w http.ResponseWriter, r *http.Request) 
 
 // handleDeleteOAuthApp handles DELETE /api/oauth/apps/{id}.
 func (s *Server) handleDeleteOAuthApp(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "oauth service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -439,6 +467,10 @@ func (s *Server) handleDeleteOAuthApp(w http.ResponseWriter, r *http.Request) {
 
 // handleListOAuthGrants handles GET /api/oauth/grants.
 func (s *Server) handleListOAuthGrants(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "oauth service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -458,6 +490,10 @@ func (s *Server) handleListOAuthGrants(w http.ResponseWriter, r *http.Request) {
 
 // handleRevokeOAuthGrant handles DELETE /api/oauth/grants/{id}.
 func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "oauth service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -482,6 +518,10 @@ func (s *Server) handleRevokeOAuthGrant(w http.ResponseWriter, r *http.Request) 
 // handleOAuthAuthorizeInfo returns app info for the SPA consent page.
 // GET /api/oauth/authorize-info?client_id=...&redirect_uri=...&scope=...&state=...&response_type=code
 func (s *Server) handleOAuthAuthorizeInfo(w http.ResponseWriter, r *http.Request) {
+	if s.OAuthService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "oauth service not configured")
+		return
+	}
 	clientID := r.URL.Query().Get("client_id")
 	redirectURI := r.URL.Query().Get("redirect_uri")
 	scope := r.URL.Query().Get("scope")

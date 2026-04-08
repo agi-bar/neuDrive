@@ -28,6 +28,10 @@ type CreateRoleRequest struct {
 }
 
 func (s *Server) handleRolesList(w http.ResponseWriter, r *http.Request) {
+	if s.RoleService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "role service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -46,12 +50,6 @@ func (s *Server) handleRolesList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRolesCreate(w http.ResponseWriter, r *http.Request) {
-	userID, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
-		return
-	}
-
 	var req CreateRoleRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
@@ -60,6 +58,15 @@ func (s *Server) handleRolesCreate(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name == "" {
 		respondValidationError(w, "name", "role name is required")
+		return
+	}
+	if s.RoleService == nil {
+		respondNotConfigured(w, "role service")
+		return
+	}
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
 		return
 	}
 
@@ -90,6 +97,10 @@ func (s *Server) handleRolesCreate(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRolesDelete(w http.ResponseWriter, r *http.Request) {
+	if s.RoleService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "role service not configured")
+		return
+	}
 	name := chi.URLParam(r, "name")
 
 	userID, ok := userIDFromCtx(r.Context())

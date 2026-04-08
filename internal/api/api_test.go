@@ -291,9 +291,8 @@ func TestFileTreeList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/tree/: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -306,9 +305,8 @@ func TestFileTreeReadFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/tree/skills/test.md: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -325,9 +323,8 @@ func TestFileTreeWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT /api/tree/test/hello.md: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -354,9 +351,8 @@ func TestFileTreeDelete(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DELETE /api/tree/test/file.md: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -449,9 +445,8 @@ func TestVaultListScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/vault/scopes: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -464,9 +459,8 @@ func TestVaultReadSecret(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/vault/auth.github: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -479,9 +473,8 @@ func TestVaultWrite(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT /api/vault/auth.test: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -498,9 +491,8 @@ func TestMemoryGetProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/memory/profile: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -517,9 +509,8 @@ func TestMemoryUpdateProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT /api/memory/profile: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -536,9 +527,8 @@ func TestProjectsList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/projects: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -552,8 +542,8 @@ func TestProjectGetByName(t *testing.T) {
 		t.Fatalf("GET /api/projects/my-app: %v", err)
 	}
 	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -569,8 +559,8 @@ func TestProjectCreateAndLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/projects: %v", err)
 	}
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 
@@ -583,8 +573,8 @@ func TestProjectCreateAndLog(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/projects/proj1/log: %v", err)
 	}
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -609,8 +599,8 @@ func TestInboxSendAndRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/inbox/send: %v", err)
 	}
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 
@@ -619,8 +609,8 @@ func TestInboxSendAndRead(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/inbox/assistant: %v", err)
 	}
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -650,9 +640,8 @@ func TestInboxArchive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT /api/inbox/some-msg-id/archive: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -722,9 +711,8 @@ func TestSearchWithQuery(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/search?q=hello: %v", err)
 	}
-	// Handler calls real service; test server has no database, so expect 500.
-	if resp.StatusCode != http.StatusInternalServerError {
-		t.Fatalf("expected 500 (no service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (no service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }

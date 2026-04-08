@@ -11,6 +11,10 @@ import (
 
 // handleListConflicts returns all pending memory conflicts for the authenticated user.
 func (s *Server) handleListConflicts(w http.ResponseWriter, r *http.Request) {
+	if s.MemoryService == nil {
+		respondNotConfigured(w, "memory service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -31,6 +35,10 @@ func (s *Server) handleListConflicts(w http.ResponseWriter, r *http.Request) {
 
 // handleResolveConflict resolves a specific memory conflict.
 func (s *Server) handleResolveConflict(w http.ResponseWriter, r *http.Request) {
+	if s.MemoryService == nil {
+		respondNotConfigured(w, "memory service")
+		return
+	}
 	_, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)

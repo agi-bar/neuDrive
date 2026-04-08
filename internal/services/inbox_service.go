@@ -16,12 +16,17 @@ import (
 
 type InboxService struct {
 	db       *pgxpool.Pool
+	repo     InboxRepo
 	fileTree *FileTreeService
 	Webhook  *WebhookService
 }
 
 func NewInboxService(db *pgxpool.Pool, fileTree *FileTreeService) *InboxService {
 	return &InboxService{db: db, fileTree: fileTree}
+}
+
+func NewInboxServiceWithRepo(repo InboxRepo, fileTree *FileTreeService) *InboxService {
+	return &InboxService{repo: repo, fileTree: fileTree}
 }
 
 // GetMessages retrieves inbox messages for a user, optionally filtered by role address and status.
@@ -34,6 +39,9 @@ func (s *InboxService) GetMessages(ctx context.Context, userID uuid.UUID, role, 
 		if err != nil && err != ErrEntryNotFound {
 			return nil, err
 		}
+	}
+	if s.repo != nil {
+		return s.repo.ListMessages(ctx, userID, role, status)
 	}
 
 	query := `SELECT id, from_address, to_address, thread_id, priority, action_required, ttl, expires_at,
@@ -78,19 +86,24 @@ func (s *InboxService) Send(ctx context.Context, userID uuid.UUID, msg models.In
 			return nil, err
 		}
 	}
-
-	_, err := s.db.Exec(ctx,
-		`INSERT INTO inbox_messages (id, user_id, from_address, to_address, thread_id, priority, action_required, ttl, expires_at,
-		                             domain, action_type, tags, context_hash,
-		                             subject, body, structured_payload, attachments,
-		                             status, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
-		msg.ID, userID, msg.FromAddress, msg.ToAddress, msg.ThreadID, msg.Priority, msg.ActionRequired, msg.TTL, msg.ExpiresAt,
-		msg.Domain, msg.ActionType, msg.Tags, msg.ContextHash,
-		msg.Subject, msg.Body, msg.StructuredPayload, msg.Attachments,
-		msg.Status, msg.CreatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("inbox.Send: %w", err)
+	if s.repo != nil {
+		if err := s.repo.CreateMessage(ctx, userID, msg); err != nil {
+			return nil, err
+		}
+	} else {
+		_, err := s.db.Exec(ctx,
+			`INSERT INTO inbox_messages (id, user_id, from_address, to_address, thread_id, priority, action_required, ttl, expires_at,
+			                             domain, action_type, tags, context_hash,
+			                             subject, body, structured_payload, attachments,
+			                             status, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)`,
+			msg.ID, userID, msg.FromAddress, msg.ToAddress, msg.ThreadID, msg.Priority, msg.ActionRequired, msg.TTL, msg.ExpiresAt,
+			msg.Domain, msg.ActionType, msg.Tags, msg.ContextHash,
+			msg.Subject, msg.Body, msg.StructuredPayload, msg.Attachments,
+			msg.Status, msg.CreatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("inbox.Send: %w", err)
+		}
 	}
 
 	if s.Webhook != nil {
@@ -112,6 +125,9 @@ func (s *InboxService) Archive(ctx context.Context, msgID uuid.UUID) error {
 
 // ArchiveExpiredMessages moves messages with a past expires_at to archived status.
 func (s *InboxService) ArchiveExpiredMessages(ctx context.Context) (int64, error) {
+	if s.repo != nil {
+		return s.repo.ArchiveExpiredMessages(ctx, time.Now().UTC())
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id FROM inbox_messages
 		 WHERE expires_at IS NOT NULL AND expires_at <= NOW() AND status != 'archived'`)
@@ -157,6 +173,9 @@ func (s *InboxService) Search(ctx context.Context, userID uuid.UUID, query, scop
 		if err != nil && err != ErrEntryNotFound {
 			return nil, err
 		}
+	}
+	if s.repo != nil {
+		return s.repo.SearchMessages(ctx, userID, query, scope)
 	}
 
 	sqlQuery := `SELECT id, from_address, to_address, thread_id, priority, action_required, ttl, expires_at,
@@ -258,7 +277,9 @@ func (s *InboxService) moveStatus(ctx context.Context, msgID uuid.UUID, nextStat
 			return err
 		}
 	}
-
+	if s.repo != nil {
+		return s.repo.UpdateMessageStatus(ctx, msgID, nextStatus, msg.ArchivedAt)
+	}
 	if nextStatus == "archived" {
 		_, err = s.db.Exec(ctx,
 			`UPDATE inbox_messages SET status = 'archived', archived_at = $1 WHERE id = $2`,
@@ -275,6 +296,9 @@ func (s *InboxService) moveStatus(ctx context.Context, msgID uuid.UUID, nextStat
 }
 
 func (s *InboxService) lookupMessage(ctx context.Context, msgID uuid.UUID) (models.InboxMessage, uuid.UUID, error) {
+	if s.repo != nil {
+		return s.repo.GetMessage(ctx, msgID)
+	}
 	var userID uuid.UUID
 	var m models.InboxMessage
 	err := s.db.QueryRow(ctx,

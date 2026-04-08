@@ -92,19 +92,19 @@ func NewSchedulerWithConfig(memory *services.MemoryService, token *services.Toke
 func (s *Scheduler) Start(ctx context.Context) {
 	s.logger.Info("starting background job scheduler")
 
-	if s.config.CleanExpiredScratch.Enabled {
+	if s.config.CleanExpiredScratch.Enabled && s.memory != nil {
 		s.startJob(ctx, "CleanExpiredScratch", s.config.CleanExpiredScratch.Interval, s.cleanExpiredScratch)
 	}
-	if s.config.CleanExpiredTokens.Enabled {
+	if s.config.CleanExpiredTokens.Enabled && s.token != nil {
 		s.startJob(ctx, "CleanExpiredTokens", s.config.CleanExpiredTokens.Interval, s.cleanExpiredTokens)
 	}
 	if s.config.CleanExpiredSync.Enabled && s.sync != nil {
 		s.startJob(ctx, "CleanExpiredSyncSessions", s.config.CleanExpiredSync.Interval, s.cleanExpiredSyncSessions)
 	}
-	if s.config.ArchiveExpiredMessages.Enabled {
+	if s.config.ArchiveExpiredMessages.Enabled && s.inbox != nil {
 		s.startJob(ctx, "ArchiveExpiredMessages", s.config.ArchiveExpiredMessages.Interval, s.archiveExpiredMessages)
 	}
-	if s.config.GenerateDailyScratch.Enabled {
+	if s.config.GenerateDailyScratch.Enabled && s.memory != nil {
 		s.startJob(ctx, "GenerateDailyScratch", s.config.GenerateDailyScratch.Interval, s.generateDailyScratch)
 	}
 

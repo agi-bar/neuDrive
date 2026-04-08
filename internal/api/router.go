@@ -36,6 +36,7 @@ const (
 // Server holds the HTTP router and all service dependencies.
 type Server struct {
 	Router               *chi.Mux
+	Storage              string
 	UserService          *services.UserService
 	AuthService          *services.AuthService
 	ConnectionService    *services.ConnectionService
@@ -58,6 +59,34 @@ type Server struct {
 	Vault                *vaultpkg.Vault
 	AuthHandler          *auth.Handler
 	Config               *config.Config
+	JWTSecret            string
+	GitHubClientID       string
+	GitHubClientSecret   string
+}
+
+type ServerDeps struct {
+	Storage              string
+	Config               *config.Config
+	UserService          *services.UserService
+	AuthService          *services.AuthService
+	ConnectionService    *services.ConnectionService
+	FileTreeService      *services.FileTreeService
+	VaultService         *services.VaultService
+	MemoryService        *services.MemoryService
+	ProjectService       *services.ProjectService
+	SummaryService       *services.SummaryService
+	RoleService          *services.RoleService
+	InboxService         *services.InboxService
+	DeviceService        *services.DeviceService
+	DashboardService     *services.DashboardService
+	TokenService         *services.TokenService
+	ImportService        *services.ImportService
+	ExportService        *services.ExportService
+	SyncService          *services.SyncService
+	CollaborationService *services.CollaborationService
+	WebhookService       *services.WebhookService
+	OAuthService         *services.OAuthService
+	Vault                *vaultpkg.Vault
 	JWTSecret            string
 	GitHubClientID       string
 	GitHubClientSecret   string
@@ -90,8 +119,9 @@ func NewServer(
 	ghClientID string,
 	ghClientSecret string,
 ) *Server {
-	s := &Server{
-		Router:               chi.NewRouter(),
+	return NewServerWithDeps(ServerDeps{
+		Storage:              "postgres",
+		Config:               cfg,
 		UserService:          userSvc,
 		AuthService:          authSvc,
 		ConnectionService:    connSvc,
@@ -106,18 +136,50 @@ func NewServer(
 		DashboardService:     dashboardSvc,
 		TokenService:         tokenSvc,
 		ImportService:        importSvc,
+		ExportService:        exportSvc,
 		SyncService:          syncSvc,
 		CollaborationService: collabSvc,
 		WebhookService:       webhookSvc,
 		OAuthService:         oauthSvc,
-		ExportService:        exportSvc,
 		Vault:                vault,
 		JWTSecret:            jwtSecret,
-		Config:               cfg,
 		GitHubClientID:       ghClientID,
 		GitHubClientSecret:   ghClientSecret,
+	})
+}
+
+func NewServerWithDeps(deps ServerDeps) *Server {
+	s := &Server{
+		Router:               chi.NewRouter(),
+		Storage:              deps.Storage,
+		UserService:          deps.UserService,
+		AuthService:          deps.AuthService,
+		ConnectionService:    deps.ConnectionService,
+		FileTreeService:      deps.FileTreeService,
+		VaultService:         deps.VaultService,
+		MemoryService:        deps.MemoryService,
+		ProjectService:       deps.ProjectService,
+		SummaryService:       deps.SummaryService,
+		RoleService:          deps.RoleService,
+		InboxService:         deps.InboxService,
+		DeviceService:        deps.DeviceService,
+		DashboardService:     deps.DashboardService,
+		TokenService:         deps.TokenService,
+		ImportService:        deps.ImportService,
+		SyncService:          deps.SyncService,
+		CollaborationService: deps.CollaborationService,
+		WebhookService:       deps.WebhookService,
+		OAuthService:         deps.OAuthService,
+		ExportService:        deps.ExportService,
+		Vault:                deps.Vault,
+		JWTSecret:            deps.JWTSecret,
+		Config:               deps.Config,
+		GitHubClientID:       deps.GitHubClientID,
+		GitHubClientSecret:   deps.GitHubClientSecret,
 	}
-	s.AuthHandler = auth.NewHandler(userSvc, authSvc, jwtSecret, ghClientID, ghClientSecret)
+	if deps.UserService != nil && deps.AuthService != nil {
+		s.AuthHandler = auth.NewHandler(deps.UserService, deps.AuthService, deps.JWTSecret, deps.GitHubClientID, deps.GitHubClientSecret)
+	}
 	s.setupRoutes()
 	return s
 }
@@ -156,13 +218,13 @@ func (s *Server) setupRoutes() {
 	r.Post("/api/adapters/feishu/{slug}/events", s.handleFeishuEventCallback)
 
 	// Auth (public)
-	r.Post("/api/auth/register", s.AuthHandler.HandleRegister)
-	r.Post("/api/auth/login", s.AuthHandler.HandleLogin)
-	r.Post("/api/auth/refresh", s.AuthHandler.HandleRefresh)
-	r.Post("/api/auth/logout", s.AuthHandler.HandleLogout)
-	r.Get("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
-	r.Post("/api/auth/github/callback", s.AuthHandler.HandleGitHubCallback)
-	r.Post("/api/auth/token/dev", s.AuthHandler.HandleDevToken)
+	r.Post("/api/auth/register", s.handleAuthRegister)
+	r.Post("/api/auth/login", s.handleAuthLogin)
+	r.Post("/api/auth/refresh", s.handleAuthRefresh)
+	r.Post("/api/auth/logout", s.handleAuthLogout)
+	r.Get("/api/auth/github/callback", s.handleAuthGitHubCallback)
+	r.Post("/api/auth/github/callback", s.handleAuthGitHubCallback)
+	r.Post("/api/auth/token/dev", s.handleAuthDevToken)
 
 	// OAuth 2.0 Provider (public endpoints)
 	// GET /oauth/authorize serves the SPA which renders the consent UI
@@ -181,11 +243,11 @@ func (s *Server) setupRoutes() {
 	r.Group(func(r chi.Router) {
 		r.Use(s.authMiddleware)
 
-		r.Get("/api/auth/me", s.AuthHandler.HandleMe)
-		r.Put("/api/auth/me", s.AuthHandler.HandleUpdateMe)
-		r.Post("/api/auth/change-password", s.AuthHandler.HandleChangePassword)
-		r.Get("/api/auth/sessions", s.AuthHandler.HandleListSessions)
-		r.Delete("/api/auth/sessions/{id}", s.AuthHandler.HandleRevokeSession)
+		r.Get("/api/auth/me", s.handleAuthMe)
+		r.Put("/api/auth/me", s.handleAuthUpdateMe)
+		r.Post("/api/auth/change-password", s.handleAuthChangePassword)
+		r.Get("/api/auth/sessions", s.handleAuthListSessions)
+		r.Delete("/api/auth/sessions/{id}", s.handleAuthRevokeSession)
 
 		// File tree
 		r.Get("/api/tree/snapshot", s.handleTreeSnapshot)
@@ -384,6 +446,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		// Try Bearer JWT first.
 		tokenStr, err := auth.ExtractTokenFromHeader(r)
 		if err == nil {
+			if strings.HasPrefix(tokenStr, "aht_") && s.TokenService != nil {
+				s.handleScopedTokenAuth(w, r, next, tokenStr)
+				return
+			}
 			claims, err := auth.ValidateToken(tokenStr, s.JWTSecret)
 			if err == nil {
 				ctx := context.WithValue(r.Context(), ctxKeyUserID, claims.UserID)
@@ -397,6 +463,10 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		// Fall back to X-API-Key.
 		apiKey := auth.ExtractAPIKey(r)
 		if apiKey != "" {
+			if strings.HasPrefix(apiKey, "aht_") && s.TokenService != nil {
+				s.handleScopedTokenAuth(w, r, next, apiKey)
+				return
+			}
 			conn, err := s.lookupConnection(r.Context(), apiKey)
 			if err == nil {
 				ctx := context.WithValue(r.Context(), ctxKeyUserID, conn.UserID)
@@ -515,6 +585,9 @@ func requireScope(scope string) func(http.Handler) http.Handler {
 
 // lookupConnection hashes the raw API key and looks it up in the connections table.
 func (s *Server) lookupConnection(ctx context.Context, rawKey string) (*models.Connection, error) {
+	if s.ConnectionService == nil {
+		return nil, fmt.Errorf("connection service not configured")
+	}
 	hash := sha256.Sum256([]byte(rawKey))
 	hashedKey := hex.EncodeToString(hash[:])
 	return s.ConnectionService.GetByAPIKey(ctx, hashedKey)
@@ -557,19 +630,28 @@ func scopesFromCtx(ctx context.Context) []string {
 // ---------------------------------------------------------------------------
 
 func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
-	respondOK(w, map[string]interface{}{
+	payload := map[string]interface{}{
 		"status":  "ok",
 		"service": "agenthub",
 		"time":    time.Now().UTC().Format(time.RFC3339),
-	})
+	}
+	if s.Storage != "" {
+		payload["storage"] = s.Storage
+	}
+	respondOK(w, payload)
 }
 
 // handlePublicConfig returns non-sensitive configuration for the frontend.
 func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
-	respondOK(w, map[string]interface{}{
+	payload := map[string]interface{}{
 		"github_client_id": s.GitHubClientID,
 		"github_enabled":   s.GitHubClientID != "",
-	})
+	}
+	if s.Storage != "" {
+		payload["storage"] = s.Storage
+		payload["local_mode"] = s.Storage == "sqlite"
+	}
+	respondOK(w, payload)
 }
 
 // ---------------------------------------------------------------------------
@@ -577,6 +659,10 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleGetScratch(w http.ResponseWriter, r *http.Request) {
+	if s.MemoryService == nil {
+		respondNotConfigured(w, "memory service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -597,6 +683,10 @@ func (s *Server) handleGetScratch(w http.ResponseWriter, r *http.Request) {
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
+	if s.ProjectService == nil {
+		respondNotConfigured(w, "project service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -613,12 +703,6 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
-	userID, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
-		return
-	}
-
 	var req struct {
 		Name string `json:"name"`
 	}
@@ -629,6 +713,15 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name == "" {
 		respondValidationError(w, "name", "project name is required")
+		return
+	}
+	if s.ProjectService == nil {
+		respondNotConfigured(w, "project service")
+		return
+	}
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
 		return
 	}
 
@@ -649,6 +742,10 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
+	if s.ProjectService == nil {
+		respondNotConfigured(w, "project service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -675,6 +772,10 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
+	if s.ProjectService == nil {
+		respondNotConfigured(w, "project service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -728,6 +829,10 @@ func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
+	if s.ProjectService == nil {
+		respondNotConfigured(w, "project service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -970,6 +1075,10 @@ func (s *Server) handleAgentTreeChanges(w http.ResponseWriter, r *http.Request) 
 }
 
 func (s *Server) handleAgentVaultRead(w http.ResponseWriter, r *http.Request) {
+	if s.VaultService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "vault service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -1020,6 +1129,10 @@ func (s *Server) handleAgentGetInbox(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadInbox) {
 		return
 	}
+	if s.InboxService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "inbox service not configured")
+		return
+	}
 	userID, _ := userIDFromCtx(r.Context())
 	role := chi.URLParam(r, "role")
 
@@ -1034,6 +1147,10 @@ func (s *Server) handleAgentGetInbox(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteInbox) {
+		return
+	}
+	if s.InboxService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "inbox service not configured")
 		return
 	}
 	userID, _ := userIDFromCtx(r.Context())
@@ -1071,6 +1188,10 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeCallDevices) {
+		return
+	}
+	if s.DeviceService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "device service not configured")
 		return
 	}
 	userID, _ := userIDFromCtx(r.Context())

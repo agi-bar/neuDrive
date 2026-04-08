@@ -58,13 +58,12 @@ func TestE2E_ConnectionsPage_List(t *testing.T) {
 	ts, _ := newTestServer()
 	defer ts.Close()
 
-	// Handler calls real service; test server has no database, so expect 500.
 	resp, err := authGet(ts, "/api/connections")
 	if err != nil {
 		t.Fatalf("GET /api/connections: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -79,9 +78,8 @@ func TestE2E_ConnectionsPage_Create(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/connections: %v", err)
 	}
-	// Expect 500 since ConnectionService is nil
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -203,13 +201,12 @@ func TestE2E_InfoPage_GetProfile(t *testing.T) {
 	ts, _ := newTestServer()
 	defer ts.Close()
 
-	// Handler calls MemoryService (nil), expect 500
 	resp, err := authGet(ts, "/api/memory/profile")
 	if err != nil {
 		t.Fatalf("GET /api/memory/profile: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -224,8 +221,8 @@ func TestE2E_InfoPage_UpdateProfile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT /api/memory/profile: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -238,8 +235,8 @@ func TestE2E_InfoPage_GetVaultScopes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/vault/scopes: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -252,10 +249,8 @@ func TestE2E_InfoPage_GetConflicts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/memory/conflicts: %v", err)
 	}
-	// Conflicts handler is wired as s.handleListConflicts on Server
-	// which calls MemoryService - nil, so 500
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -270,8 +265,8 @@ func TestE2E_ProjectsPage_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/projects: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -286,8 +281,8 @@ func TestE2E_ProjectsPage_Create(t *testing.T) {
 	if err != nil {
 		t.Fatalf("POST /api/projects: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -317,8 +312,8 @@ func TestE2E_ProjectsPage_GetByName(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/projects/test-project: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -331,8 +326,8 @@ func TestE2E_ProjectsPage_Archive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("PUT /api/projects/test-project/archive: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -347,9 +342,8 @@ func TestE2E_CollaborationsPage_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/collaborations: %v", err)
 	}
-	// Collaborations handler calls CollaborationService (nil) - 500
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -364,8 +358,8 @@ func TestE2E_Inbox_ListMessages(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/inbox/assistant: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -397,8 +391,8 @@ func TestE2E_Devices_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/devices: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }
@@ -428,8 +422,8 @@ func TestE2E_Roles_List(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GET /api/roles: %v", err)
 	}
-	if resp.StatusCode != 500 {
-		t.Fatalf("expected 500 (nil service), got %d", resp.StatusCode)
+	if resp.StatusCode != http.StatusNotImplemented {
+		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
 	}
 	resp.Body.Close()
 }

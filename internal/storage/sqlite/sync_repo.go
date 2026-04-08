@@ -155,6 +155,14 @@ func (r *SyncRepo) ExportArchive(ctx context.Context, userID uuid.UUID, filters 
 	return archive, manifest, nil
 }
 
+func (r *SyncRepo) InsertJob(ctx context.Context, job models.SyncJob) error {
+	return r.insertSyncJob(ctx, job)
+}
+
+func (r *SyncRepo) FinishJob(ctx context.Context, jobID, userID uuid.UUID, status string, summary models.SyncJobSummary, errorMessage string) error {
+	return r.finishSyncJob(ctx, jobID, userID, status, summary, errorMessage)
+}
+
 func (r *SyncRepo) StartSession(ctx context.Context, userID uuid.UUID, req models.SyncStartSessionRequest) (*models.SyncSessionResponse, error) {
 	if req.TransportVersion == "" {
 		req.TransportVersion = models.SyncTransportVersionV1

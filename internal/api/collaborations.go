@@ -23,6 +23,10 @@ type createCollaborationRequest struct {
 }
 
 func (s *Server) handleListCollaborations(w http.ResponseWriter, r *http.Request) {
+	if s.CollaborationService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "collaboration service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -48,6 +52,10 @@ func (s *Server) handleListCollaborations(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleCreateCollaboration(w http.ResponseWriter, r *http.Request) {
+	if s.CollaborationService == nil || s.UserService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "collaboration service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -101,6 +109,10 @@ func (s *Server) handleCreateCollaboration(w http.ResponseWriter, r *http.Reques
 }
 
 func (s *Server) handleRevokeCollaboration(w http.ResponseWriter, r *http.Request) {
+	if s.CollaborationService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "collaboration service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -127,6 +139,10 @@ func (s *Server) handleRevokeCollaboration(w http.ResponseWriter, r *http.Reques
 // ---------------------------------------------------------------------------
 
 func (s *Server) handleAgentSharedTree(w http.ResponseWriter, r *http.Request) {
+	if s.CollaborationService == nil || s.UserService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "collaboration service not configured")
+		return
+	}
 	if !s.agentCheckAuth(w, r, 2, "") { // L2 Collaborate
 		return
 	}

@@ -59,3 +59,32 @@ func TestBuildSQLiteAppProvidesHTTPAndMCP(t *testing.T) {
 		t.Fatalf("GET /api/health status = %d, want %d", rec.Code, http.StatusOK)
 	}
 }
+
+func TestResolveStorageBackend(t *testing.T) {
+	t.Run("explicit storage wins", func(t *testing.T) {
+		if got := ResolveStorageBackend("sqlite", "", "postgres://ignored", DefaultServerStorage); got != "sqlite" {
+			t.Fatalf("got %q want sqlite", got)
+		}
+	})
+
+	t.Run("database url beats default", func(t *testing.T) {
+		if got := ResolveStorageBackend("", "", "postgres://db", DefaultLocalStorage); got != "postgres" {
+			t.Fatalf("got %q want postgres", got)
+		}
+	})
+
+	t.Run("sqlite path beats server default", func(t *testing.T) {
+		if got := ResolveStorageBackend("", "/tmp/agenthub.db", "", DefaultServerStorage); got != "sqlite" {
+			t.Fatalf("got %q want sqlite", got)
+		}
+	})
+
+	t.Run("falls back to requested mode default", func(t *testing.T) {
+		if got := ResolveStorageBackend("", "", "", DefaultServerStorage); got != "postgres" {
+			t.Fatalf("got %q want postgres", got)
+		}
+		if got := ResolveStorageBackend("", "", "", DefaultLocalStorage); got != "sqlite" {
+			t.Fatalf("got %q want sqlite", got)
+		}
+	})
+}

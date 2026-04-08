@@ -26,6 +26,10 @@ type SendMessageRequest struct {
 }
 
 func (s *Server) handleInboxList(w http.ResponseWriter, r *http.Request) {
+	if s.InboxService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "inbox service not configured")
+		return
+	}
 	role := chi.URLParam(r, "role")
 
 	userID, ok := userIDFromCtx(r.Context())
@@ -49,12 +53,6 @@ func (s *Server) handleInboxList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleInboxSend(w http.ResponseWriter, r *http.Request) {
-	userID, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
-		return
-	}
-
 	var req SendMessageRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
@@ -63,6 +61,15 @@ func (s *Server) handleInboxSend(w http.ResponseWriter, r *http.Request) {
 
 	if req.To == "" || req.Body == "" {
 		respondValidationError(w, "to,body", "to and body are required")
+		return
+	}
+	if s.InboxService == nil {
+		respondNotConfigured(w, "inbox service")
+		return
+	}
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
 		return
 	}
 
@@ -84,6 +91,10 @@ func (s *Server) handleInboxSend(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleInboxArchive(w http.ResponseWriter, r *http.Request) {
+	if s.InboxService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "inbox service not configured")
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	msgID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -105,6 +116,10 @@ func (s *Server) handleInboxArchive(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleInboxSearch(w http.ResponseWriter, r *http.Request) {
+	if s.InboxService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "inbox service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)

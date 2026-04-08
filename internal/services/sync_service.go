@@ -1113,6 +1113,9 @@ func (s *SyncService) updateSessionStatus(ctx context.Context, sessionID, userID
 }
 
 func (s *SyncService) insertSyncJob(ctx context.Context, job models.SyncJob) error {
+	if s.repo != nil {
+		return s.repo.InsertJob(ctx, job)
+	}
 	if s.db == nil {
 		return fmt.Errorf("sync.insertSyncJob: database not configured")
 	}
@@ -1146,6 +1149,9 @@ func (s *SyncService) insertSyncJob(ctx context.Context, job models.SyncJob) err
 }
 
 func (s *SyncService) finishSyncJob(ctx context.Context, jobID, userID uuid.UUID, status string, summary models.SyncJobSummary, errorMessage string) error {
+	if s.repo != nil {
+		return s.repo.FinishJob(ctx, jobID, userID, status, summary, errorMessage)
+	}
 	if s.db == nil {
 		return fmt.Errorf("sync.finishSyncJob: database not configured")
 	}

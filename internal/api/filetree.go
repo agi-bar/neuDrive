@@ -62,6 +62,10 @@ type ChangesResponse struct {
 }
 
 func (s *Server) handleTreeRead(w http.ResponseWriter, r *http.Request) {
+	if s.FileTreeService == nil {
+		respondNotConfigured(w, "file tree service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -83,6 +87,10 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	path := chi.URLParam(r, "*")
 	if path == "" {
 		respondValidationError(w, "path", "path is required")
+		return
+	}
+	if s.FileTreeService == nil {
+		respondNotConfigured(w, "file tree service")
 		return
 	}
 
@@ -149,6 +157,10 @@ func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
 		respondValidationError(w, "path", "path is required")
 		return
 	}
+	if s.FileTreeService == nil {
+		respondNotConfigured(w, "file tree service")
+		return
+	}
 
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
@@ -172,6 +184,10 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query().Get("q")
 	if query == "" {
 		respondValidationError(w, "q", "query parameter 'q' is required")
+		return
+	}
+	if s.FileTreeService == nil {
+		respondNotConfigured(w, "file tree service")
 		return
 	}
 
@@ -230,6 +246,10 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 }
 
 func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
+	if s.FileTreeService == nil {
+		respondNotConfigured(w, "file tree service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -260,6 +280,10 @@ func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTreeChanges(w http.ResponseWriter, r *http.Request) {
+	if s.FileTreeService == nil {
+		respondNotConfigured(w, "file tree service")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)

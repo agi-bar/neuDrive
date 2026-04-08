@@ -12,14 +12,26 @@ import (
 )
 
 type UserService struct {
-	db *pgxpool.Pool
+	db   *pgxpool.Pool
+	repo UserRepo
 }
 
 func NewUserService(db *pgxpool.Pool) *UserService {
 	return &UserService{db: db}
 }
 
+func NewUserServiceWithRepo(repo UserRepo) *UserService {
+	return &UserService{repo: repo}
+}
+
 func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
+	if s.repo != nil {
+		user, err := s.repo.GetByID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("user.GetByID: %w", err)
+		}
+		return user, nil
+	}
 	var u models.User
 	err := s.db.QueryRow(ctx,
 		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
@@ -32,6 +44,13 @@ func (s *UserService) GetByID(ctx context.Context, id uuid.UUID) (*models.User, 
 }
 
 func (s *UserService) GetBySlug(ctx context.Context, slug string) (*models.User, error) {
+	if s.repo != nil {
+		user, err := s.repo.GetBySlug(ctx, slug)
+		if err != nil {
+			return nil, fmt.Errorf("user.GetBySlug: %w", err)
+		}
+		return user, nil
+	}
 	var u models.User
 	err := s.db.QueryRow(ctx,
 		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
@@ -44,6 +63,9 @@ func (s *UserService) GetBySlug(ctx context.Context, slug string) (*models.User,
 }
 
 func (s *UserService) CreateOrUpdateFromGitHub(ctx context.Context, githubID string, login string, name string) (*models.User, error) {
+	if s.repo != nil {
+		return nil, fmt.Errorf("user.CreateOrUpdateFromGitHub: not supported by configured repo")
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("user.CreateOrUpdateFromGitHub: begin tx: %w", err)
@@ -96,6 +118,13 @@ func (s *UserService) CreateOrUpdateFromGitHub(ctx context.Context, githubID str
 }
 
 func (s *UserService) GetAuthBinding(ctx context.Context, provider string, providerID string) (*models.AuthBinding, error) {
+	if s.repo != nil {
+		binding, err := s.repo.GetAuthBinding(ctx, provider, providerID)
+		if err != nil {
+			return nil, fmt.Errorf("user.GetAuthBinding: %w", err)
+		}
+		return binding, nil
+	}
 	var ab models.AuthBinding
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, provider, provider_id, provider_data, created_at

@@ -14,14 +14,22 @@ import (
 )
 
 type ConnectionService struct {
-	db *pgxpool.Pool
+	db   *pgxpool.Pool
+	repo ConnectionRepo
 }
 
 func NewConnectionService(db *pgxpool.Pool) *ConnectionService {
 	return &ConnectionService{db: db}
 }
 
+func NewConnectionServiceWithRepo(repo ConnectionRepo) *ConnectionService {
+	return &ConnectionService{repo: repo}
+}
+
 func (s *ConnectionService) ListByUser(ctx context.Context, userID uuid.UUID) ([]models.Connection, error) {
+	if s.repo != nil {
+		return s.repo.ListByUser(ctx, userID)
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, name, platform, trust_level, api_key_hash, api_key_prefix,
 		        config, last_used_at, created_at, updated_at
@@ -44,6 +52,9 @@ func (s *ConnectionService) ListByUser(ctx context.Context, userID uuid.UUID) ([
 }
 
 func (s *ConnectionService) GetByID(ctx context.Context, id uuid.UUID) (*models.Connection, error) {
+	if s.repo != nil {
+		return s.repo.GetByID(ctx, id)
+	}
 	var c models.Connection
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, name, platform, trust_level, api_key_hash, api_key_prefix,
@@ -58,6 +69,9 @@ func (s *ConnectionService) GetByID(ctx context.Context, id uuid.UUID) (*models.
 }
 
 func (s *ConnectionService) GetByAPIKey(ctx context.Context, apiKeyHash string) (*models.Connection, error) {
+	if s.repo != nil {
+		return s.repo.GetByAPIKey(ctx, apiKeyHash)
+	}
 	var c models.Connection
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, name, platform, trust_level, api_key_hash, api_key_prefix,
@@ -81,6 +95,29 @@ func (s *ConnectionService) Create(ctx context.Context, userID uuid.UUID, name, 
 	now := time.Now().UTC()
 	id := uuid.New()
 
+	if s.repo != nil {
+		conn := models.Connection{
+			ID:           id,
+			UserID:       userID,
+			Name:         name,
+			Platform:     platform,
+			TrustLevel:   trustLevel,
+			APIKeyHash:   hashedKey,
+			APIKeyPrefix: prefix,
+			Config:       map[string]interface{}{},
+			CreatedAt:    now,
+			UpdatedAt:    now,
+		}
+		if err := s.repo.Create(ctx, conn); err != nil {
+			return nil, "", fmt.Errorf("connection.Create: %w", err)
+		}
+		created, err := s.GetByID(ctx, id)
+		if err != nil {
+			return nil, "", err
+		}
+		return created, rawKey, nil
+	}
+
 	_, err = s.db.Exec(ctx,
 		`INSERT INTO connections (id, user_id, name, platform, trust_level, api_key_hash, api_key_prefix, config, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, '{}', $8, $8)`,
@@ -97,6 +134,12 @@ func (s *ConnectionService) Create(ctx context.Context, userID uuid.UUID, name, 
 }
 
 func (s *ConnectionService) Update(ctx context.Context, id uuid.UUID, name string, trustLevel int) (*models.Connection, error) {
+	if s.repo != nil {
+		if err := s.repo.Update(ctx, id, name, trustLevel, time.Now().UTC()); err != nil {
+			return nil, fmt.Errorf("connection.Update: %w", err)
+		}
+		return s.GetByID(ctx, id)
+	}
 	_, err := s.db.Exec(ctx,
 		`UPDATE connections SET name = $1, trust_level = $2, updated_at = $3 WHERE id = $4`,
 		name, trustLevel, time.Now().UTC(), id)
@@ -107,6 +150,9 @@ func (s *ConnectionService) Update(ctx context.Context, id uuid.UUID, name strin
 }
 
 func (s *ConnectionService) Delete(ctx context.Context, id uuid.UUID) error {
+	if s.repo != nil {
+		return s.repo.Delete(ctx, id)
+	}
 	_, err := s.db.Exec(ctx, `DELETE FROM connections WHERE id = $1`, id)
 	if err != nil {
 		return fmt.Errorf("connection.Delete: %w", err)
@@ -115,6 +161,9 @@ func (s *ConnectionService) Delete(ctx context.Context, id uuid.UUID) error {
 }
 
 func (s *ConnectionService) UpdateLastUsed(ctx context.Context, id uuid.UUID) error {
+	if s.repo != nil {
+		return s.repo.UpdateLastUsed(ctx, id, time.Now().UTC())
+	}
 	_, err := s.db.Exec(ctx,
 		`UPDATE connections SET last_used_at = $1 WHERE id = $2`, time.Now().UTC(), id)
 	if err != nil {

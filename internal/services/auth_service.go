@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"fmt"
 	"log/slog"
@@ -45,6 +46,7 @@ var emailRegexp = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA
 
 type AuthService struct {
 	db             *pgxpool.Pool
+	repo           AuthRepo
 	generateToken  TokenGeneratorFunc
 	exchangeGitHub GitHubExchangeFunc
 }
@@ -52,6 +54,14 @@ type AuthService struct {
 func NewAuthService(db *pgxpool.Pool, tokenGen TokenGeneratorFunc, ghExchange GitHubExchangeFunc) *AuthService {
 	return &AuthService{
 		db:             db,
+		generateToken:  tokenGen,
+		exchangeGitHub: ghExchange,
+	}
+}
+
+func NewAuthServiceWithRepo(repo AuthRepo, tokenGen TokenGeneratorFunc, ghExchange GitHubExchangeFunc) *AuthService {
+	return &AuthService{
+		repo:           repo,
 		generateToken:  tokenGen,
 		exchangeGitHub: ghExchange,
 	}
@@ -87,16 +97,22 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
+	now := time.Now().UTC()
+	if s.repo != nil {
+		user, err := s.repo.RegisterUser(ctx, email, slug, displayName, string(hash), now)
+		if err != nil {
+			return nil, err
+		}
+		return s.generateAuthResponse(ctx, user, "", "")
+	}
+
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("register: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	now := time.Now().UTC()
 	userID := uuid.New()
-
-	// Check if email already exists
 	var existing uuid.UUID
 	err = tx.QueryRow(ctx, `SELECT id FROM credentials WHERE email = $1`, email).Scan(&existing)
 	if err == nil {
@@ -105,8 +121,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if err != pgx.ErrNoRows {
 		return nil, fmt.Errorf("register: check email: %w", err)
 	}
-
-	// Check if slug already exists
 	err = tx.QueryRow(ctx, `SELECT id FROM users WHERE slug = $1`, slug).Scan(&existing)
 	if err == nil {
 		return nil, fmt.Errorf("slug already taken")
@@ -114,8 +128,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if err != pgx.ErrNoRows {
 		return nil, fmt.Errorf("register: check slug: %w", err)
 	}
-
-	// Create user
 	_, err = tx.Exec(ctx,
 		`INSERT INTO users (id, slug, display_name, email, timezone, language, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, 'UTC', 'en', $5, $5)`,
@@ -123,8 +135,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("register: insert user: %w", err)
 	}
-
-	// Create credentials
 	credID := uuid.New()
 	_, err = tx.Exec(ctx,
 		`INSERT INTO credentials (id, user_id, email, password_hash, email_verified, login_count, created_at, updated_at)
@@ -133,8 +143,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("register: insert credentials: %w", err)
 	}
-
-	// Create default 'assistant' role
 	_, err = tx.Exec(ctx,
 		`INSERT INTO roles (id, user_id, name, role_type, config, allowed_paths, allowed_vault_scopes, lifecycle, created_at)
 		 VALUES ($1, $2, 'assistant', 'assistant', '{}', ARRAY['/'], ARRAY[]::TEXT[], 'permanent', $3)
@@ -143,12 +151,9 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	if err != nil {
 		return nil, fmt.Errorf("register: insert default role: %w", err)
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("register: commit: %w", err)
 	}
-
-	// Generate tokens
 	user := models.User{
 		ID:          userID,
 		Slug:        slug,
@@ -159,7 +164,6 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-
 	return s.generateAuthResponse(ctx, &user, "", "")
 }
 
@@ -174,16 +178,32 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest, userAg
 	}
 
 	// Look up credentials
-	var cred models.Credentials
-	err := s.db.QueryRow(ctx,
-		`SELECT id, user_id, email, password_hash, email_verified, login_count
-		 FROM credentials WHERE email = $1`, email).
-		Scan(&cred.ID, &cred.UserID, &cred.Email, &cred.PasswordHash, &cred.EmailVerified, &cred.LoginCount)
-	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("invalid email or password")
-	}
-	if err != nil {
-		return nil, fmt.Errorf("login: query credentials: %w", err)
+	var (
+		cred *models.Credentials
+		user *models.User
+		err  error
+	)
+	if s.repo != nil {
+		cred, user, err = s.repo.LookupLogin(ctx, email)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("invalid email or password")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("login: query credentials: %w", err)
+		}
+	} else {
+		var currentCred models.Credentials
+		err = s.db.QueryRow(ctx,
+			`SELECT id, user_id, email, password_hash, email_verified, login_count
+			 FROM credentials WHERE email = $1`, email).
+			Scan(&currentCred.ID, &currentCred.UserID, &currentCred.Email, &currentCred.PasswordHash, &currentCred.EmailVerified, &currentCred.LoginCount)
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("invalid email or password")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("login: query credentials: %w", err)
+		}
+		cred = &currentCred
 	}
 
 	// Verify password
@@ -193,24 +213,32 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest, userAg
 
 	// Update last_login_at and login_count
 	now := time.Now().UTC()
-	_, err = s.db.Exec(ctx,
-		`UPDATE credentials SET last_login_at = $1, login_count = login_count + 1, updated_at = $1 WHERE id = $2`,
-		now, cred.ID)
-	if err != nil {
-		return nil, fmt.Errorf("login: update login stats: %w", err)
+	if s.repo != nil {
+		if err := s.repo.UpdateLoginStats(ctx, cred.ID, now); err != nil {
+			return nil, fmt.Errorf("login: update login stats: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx,
+			`UPDATE credentials SET last_login_at = $1, login_count = login_count + 1, updated_at = $1 WHERE id = $2`,
+			now, cred.ID)
+		if err != nil {
+			return nil, fmt.Errorf("login: update login stats: %w", err)
+		}
 	}
 
-	// Get user
-	var user models.User
-	err = s.db.QueryRow(ctx,
-		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
-		 FROM users WHERE id = $1`, cred.UserID).
-		Scan(&user.ID, &user.Slug, &user.DisplayName, &user.Email, &user.AvatarURL, &user.Timezone, &user.Language, &user.CreatedAt, &user.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("login: get user: %w", err)
+	if user == nil {
+		var loaded models.User
+		err = s.db.QueryRow(ctx,
+			`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
+			 FROM users WHERE id = $1`, cred.UserID).
+			Scan(&loaded.ID, &loaded.Slug, &loaded.DisplayName, &loaded.Email, &loaded.AvatarURL, &loaded.Timezone, &loaded.Language, &loaded.CreatedAt, &loaded.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("login: get user: %w", err)
+		}
+		user = &loaded
 	}
 
-	return s.generateAuthResponse(ctx, &user, userAgent, ipAddress)
+	return s.generateAuthResponse(ctx, user, userAgent, ipAddress)
 }
 
 // RefreshToken validates a refresh token and issues a new token pair.
@@ -221,43 +249,64 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken, userAgent,
 
 	tokenHash := hashRefreshToken(refreshToken)
 
-	var session models.Session
-	var userID uuid.UUID
-	err := s.db.QueryRow(ctx,
-		`SELECT id, user_id, expires_at FROM sessions WHERE refresh_token_hash = $1`, tokenHash).
-		Scan(&session.ID, &userID, &session.ExpiresAt)
-	if err == pgx.ErrNoRows {
-		return nil, fmt.Errorf("invalid refresh token")
-	}
-	if err != nil {
-		return nil, fmt.Errorf("refresh: query session: %w", err)
+	var (
+		session *models.Session
+		err     error
+	)
+	if s.repo != nil {
+		session, err = s.repo.GetSession(ctx, tokenHash)
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("invalid refresh token")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("refresh: query session: %w", err)
+		}
+	} else {
+		var current models.Session
+		var userID uuid.UUID
+		err := s.db.QueryRow(ctx,
+			`SELECT id, user_id, expires_at FROM sessions WHERE refresh_token_hash = $1`, tokenHash).
+			Scan(&current.ID, &userID, &current.ExpiresAt)
+		if err == pgx.ErrNoRows {
+			return nil, fmt.Errorf("invalid refresh token")
+		}
+		if err != nil {
+			return nil, fmt.Errorf("refresh: query session: %w", err)
+		}
+		current.UserID = userID
+		session = &current
 	}
 
 	if time.Now().After(session.ExpiresAt) {
 		// Delete expired session
-		if _, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, session.ID); err != nil {
+		if s.repo != nil {
+			if err := s.repo.DeleteSessionByID(ctx, session.ID); err != nil {
+				slog.Warn("failed to delete expired session", "session_id", session.ID, "error", err)
+			}
+		} else if _, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, session.ID); err != nil {
 			slog.Warn("failed to delete expired session", "session_id", session.ID, "error", err)
 		}
 		return nil, fmt.Errorf("refresh token expired")
 	}
 
 	// Delete old session (rotation)
-	_, err = s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, session.ID)
-	if err != nil {
-		return nil, fmt.Errorf("refresh: delete old session: %w", err)
+	if s.repo != nil {
+		if err := s.repo.DeleteSessionByID(ctx, session.ID); err != nil {
+			return nil, fmt.Errorf("refresh: delete old session: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx, `DELETE FROM sessions WHERE id = $1`, session.ID)
+		if err != nil {
+			return nil, fmt.Errorf("refresh: delete old session: %w", err)
+		}
 	}
 
-	// Get user
-	var user models.User
-	err = s.db.QueryRow(ctx,
-		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
-		 FROM users WHERE id = $1`, userID).
-		Scan(&user.ID, &user.Slug, &user.DisplayName, &user.Email, &user.AvatarURL, &user.Timezone, &user.Language, &user.CreatedAt, &user.UpdatedAt)
+	user, err := s.GetProfile(ctx, session.UserID)
 	if err != nil {
 		return nil, fmt.Errorf("refresh: get user: %w", err)
 	}
 
-	return s.generateAuthResponse(ctx, &user, userAgent, ipAddress)
+	return s.generateAuthResponse(ctx, user, userAgent, ipAddress)
 }
 
 // Logout invalidates a refresh token by deleting the session.
@@ -266,6 +315,12 @@ func (s *AuthService) Logout(ctx context.Context, refreshToken string) error {
 		return nil
 	}
 	tokenHash := hashRefreshToken(refreshToken)
+	if s.repo != nil {
+		if err := s.repo.DeleteSessionByRefreshHash(ctx, tokenHash); err != nil {
+			return fmt.Errorf("logout: delete session: %w", err)
+		}
+		return nil
+	}
 	_, err := s.db.Exec(ctx, `DELETE FROM sessions WHERE refresh_token_hash = $1`, tokenHash)
 	if err != nil {
 		return fmt.Errorf("logout: delete session: %w", err)
@@ -291,25 +346,27 @@ func (s *AuthService) GitHubLogin(ctx context.Context, code, userAgent, ipAddres
 
 	ghID := strconv.Itoa(ghUser.ID)
 
+	now := time.Now().UTC()
+	avatarURL := fmt.Sprintf("https://avatars.githubusercontent.com/u/%d", ghUser.ID)
+	if s.repo != nil {
+		user, err := s.repo.CreateOrUpdateGitHubUser(ctx, ghID, ghUser.Login, displayName, ghUser.Email, avatarURL, now)
+		if err != nil {
+			return nil, err
+		}
+		return s.generateAuthResponse(ctx, user, userAgent, ipAddress)
+	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("github login: begin tx: %w", err)
 	}
 	defer tx.Rollback(ctx)
-
 	var userID uuid.UUID
-	now := time.Now().UTC()
-
 	err = tx.QueryRow(ctx,
 		`SELECT user_id FROM auth_bindings WHERE provider = 'github' AND provider_id = $1`, ghID).
 		Scan(&userID)
-
 	if err == pgx.ErrNoRows {
-		// New user
 		userID = uuid.New()
 		email := ghUser.Email
-		avatarURL := fmt.Sprintf("https://avatars.githubusercontent.com/u/%d", ghUser.ID)
-
 		_, err = tx.Exec(ctx,
 			`INSERT INTO users (id, slug, display_name, email, avatar_url, timezone, language, created_at, updated_at)
 			 VALUES ($1, $2, $3, $4, $5, 'UTC', 'en', $6, $6)`,
@@ -317,7 +374,6 @@ func (s *AuthService) GitHubLogin(ctx context.Context, code, userAgent, ipAddres
 		if err != nil {
 			return nil, fmt.Errorf("github login: insert user: %w", err)
 		}
-
 		_, err = tx.Exec(ctx,
 			`INSERT INTO auth_bindings (id, user_id, provider, provider_id, provider_data, created_at)
 			 VALUES ($1, $2, 'github', $3, '{}', $4)`,
@@ -325,8 +381,6 @@ func (s *AuthService) GitHubLogin(ctx context.Context, code, userAgent, ipAddres
 		if err != nil {
 			return nil, fmt.Errorf("github login: insert binding: %w", err)
 		}
-
-		// Create default role
 		_, err = tx.Exec(ctx,
 			`INSERT INTO roles (id, user_id, name, role_type, config, allowed_paths, allowed_vault_scopes, lifecycle, created_at)
 			 VALUES ($1, $2, 'assistant', 'assistant', '{}', ARRAY['/'], ARRAY[]::TEXT[], 'permanent', $3)
@@ -338,7 +392,6 @@ func (s *AuthService) GitHubLogin(ctx context.Context, code, userAgent, ipAddres
 	} else if err != nil {
 		return nil, fmt.Errorf("github login: lookup binding: %w", err)
 	} else {
-		// Existing user: update display name
 		_, err = tx.Exec(ctx,
 			`UPDATE users SET display_name = $1, updated_at = $2 WHERE id = $3`,
 			displayName, now, userID)
@@ -346,26 +399,21 @@ func (s *AuthService) GitHubLogin(ctx context.Context, code, userAgent, ipAddres
 			return nil, fmt.Errorf("github login: update user: %w", err)
 		}
 	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("github login: commit: %w", err)
 	}
-
-	// Load user
-	var user models.User
-	err = s.db.QueryRow(ctx,
-		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''), timezone, language, created_at, updated_at
-		 FROM users WHERE id = $1`, userID).
-		Scan(&user.ID, &user.Slug, &user.DisplayName, &user.Email, &user.AvatarURL, &user.Timezone, &user.Language, &user.CreatedAt, &user.UpdatedAt)
+	user, err := s.GetProfile(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("github login: get user: %w", err)
 	}
-
-	return s.generateAuthResponse(ctx, &user, userAgent, ipAddress)
+	return s.generateAuthResponse(ctx, user, userAgent, ipAddress)
 }
 
 // ListSessions returns all active sessions for a user.
 func (s *AuthService) ListSessions(ctx context.Context, userID uuid.UUID) ([]models.Session, error) {
+	if s.repo != nil {
+		return s.repo.ListSessions(ctx, userID)
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, user_agent, ip_address, expires_at, created_at
 		 FROM sessions WHERE user_id = $1 AND expires_at > NOW() ORDER BY created_at DESC`, userID)
@@ -397,6 +445,9 @@ func (s *AuthService) ListSessions(ctx context.Context, userID uuid.UUID) ([]mod
 
 // RevokeSession deletes a specific session belonging to the user.
 func (s *AuthService) RevokeSession(ctx context.Context, userID uuid.UUID, sessionID uuid.UUID) error {
+	if s.repo != nil {
+		return s.repo.RevokeSession(ctx, userID, sessionID)
+	}
 	tag, err := s.db.Exec(ctx,
 		`DELETE FROM sessions WHERE id = $1 AND user_id = $2`, sessionID, userID)
 	if err != nil {
@@ -427,12 +478,18 @@ func (s *AuthService) generateAuthResponse(ctx context.Context, user *models.Use
 	// Store session
 	now := time.Now().UTC()
 	expiresAt := now.Add(refreshTokenExpiry)
-	_, err = s.db.Exec(ctx,
-		`INSERT INTO sessions (id, user_id, refresh_token_hash, user_agent, ip_address, expires_at, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		uuid.New(), user.ID, refreshHash, userAgent, ipAddress, expiresAt, now)
-	if err != nil {
-		return nil, fmt.Errorf("create session: %w", err)
+	if s.repo != nil {
+		if err := s.repo.CreateSession(ctx, user.ID, refreshHash, userAgent, ipAddress, expiresAt, now); err != nil {
+			return nil, fmt.Errorf("create session: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx,
+			`INSERT INTO sessions (id, user_id, refresh_token_hash, user_agent, ip_address, expires_at, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			uuid.New(), user.ID, refreshHash, userAgent, ipAddress, expiresAt, now)
+		if err != nil {
+			return nil, fmt.Errorf("create session: %w", err)
+		}
 	}
 
 	return &models.AuthResponse{
@@ -453,15 +510,30 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 	}
 
 	// Look up credentials by user_id
-	var cred models.Credentials
-	err := s.db.QueryRow(ctx,
-		`SELECT id, password_hash FROM credentials WHERE user_id = $1`, userID).
-		Scan(&cred.ID, &cred.PasswordHash)
-	if err == pgx.ErrNoRows {
-		return fmt.Errorf("no password credentials found for this account")
-	}
-	if err != nil {
-		return fmt.Errorf("change password: query credentials: %w", err)
+	var (
+		cred *models.Credentials
+		err  error
+	)
+	if s.repo != nil {
+		cred, err = s.repo.GetCredentialsByUserID(ctx, userID)
+		if err == sql.ErrNoRows {
+			return fmt.Errorf("no password credentials found for this account")
+		}
+		if err != nil {
+			return fmt.Errorf("change password: query credentials: %w", err)
+		}
+	} else {
+		var current models.Credentials
+		err = s.db.QueryRow(ctx,
+			`SELECT id, password_hash FROM credentials WHERE user_id = $1`, userID).
+			Scan(&current.ID, &current.PasswordHash)
+		if err == pgx.ErrNoRows {
+			return fmt.Errorf("no password credentials found for this account")
+		}
+		if err != nil {
+			return fmt.Errorf("change password: query credentials: %w", err)
+		}
+		cred = &current
 	}
 
 	// Verify old password
@@ -476,11 +548,17 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 	}
 
 	now := time.Now().UTC()
-	_, err = s.db.Exec(ctx,
-		`UPDATE credentials SET password_hash = $1, updated_at = $2 WHERE id = $3`,
-		string(hash), now, cred.ID)
-	if err != nil {
-		return fmt.Errorf("change password: update: %w", err)
+	if s.repo != nil {
+		if err := s.repo.UpdatePasswordHash(ctx, cred.ID, string(hash), now); err != nil {
+			return fmt.Errorf("change password: update: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx,
+			`UPDATE credentials SET password_hash = $1, updated_at = $2 WHERE id = $3`,
+			string(hash), now, cred.ID)
+		if err != nil {
+			return fmt.Errorf("change password: update: %w", err)
+		}
 	}
 
 	return nil
@@ -488,6 +566,9 @@ func (s *AuthService) ChangePassword(ctx context.Context, userID uuid.UUID, oldP
 
 // GetProfile returns the user profile for the given user ID.
 func (s *AuthService) GetProfile(ctx context.Context, userID uuid.UUID) (*models.User, error) {
+	if s.repo != nil {
+		return s.repo.GetProfile(ctx, userID)
+	}
 	var user models.User
 	err := s.db.QueryRow(ctx,
 		`SELECT id, slug, display_name, COALESCE(email, ''), COALESCE(avatar_url, ''),
@@ -504,6 +585,9 @@ func (s *AuthService) GetProfile(ctx context.Context, userID uuid.UUID) (*models
 // UpdateProfile updates the user's display name, bio, timezone, and language.
 func (s *AuthService) UpdateProfile(ctx context.Context, userID uuid.UUID, displayName, bio, timezone, language string) (*models.User, error) {
 	now := time.Now().UTC()
+	if s.repo != nil {
+		return s.repo.UpdateProfile(ctx, userID, displayName, bio, timezone, language, now)
+	}
 	_, err := s.db.Exec(ctx,
 		`UPDATE users SET display_name = $1, bio = $2, timezone = $3, language = $4, updated_at = $5
 		 WHERE id = $6`,

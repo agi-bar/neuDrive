@@ -1,6 +1,10 @@
 package cli
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/agi-bar/agenthub/internal/app/appcore"
+)
 
 func TestShouldUseLocalSyncDefaults(t *testing.T) {
 	if shouldUseLocalSyncDefaults([]string{"--help"}) {
@@ -20,27 +24,33 @@ func TestShouldUseLocalSyncDefaults(t *testing.T) {
 func TestChooseStorageBackend(t *testing.T) {
 	t.Run("explicit storage wins", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://env")
-		if got := chooseStorageBackend("sqlite", ""); got != "sqlite" {
+		if got := chooseStorageBackend(appcore.DefaultServerStorage, "sqlite", "", ""); got != "sqlite" {
 			t.Fatalf("got %q want sqlite", got)
 		}
 	})
 
 	t.Run("explicit database url selects postgres", func(t *testing.T) {
-		if got := chooseStorageBackend("", "postgres://flag"); got != "postgres" {
+		if got := chooseStorageBackend(appcore.DefaultLocalStorage, "", "", "postgres://flag"); got != "postgres" {
 			t.Fatalf("got %q want postgres", got)
 		}
 	})
 
-	t.Run("database url env selects postgres", func(t *testing.T) {
+	t.Run("explicit sqlite path selects sqlite", func(t *testing.T) {
+		if got := chooseStorageBackend(appcore.DefaultServerStorage, "", "/tmp/agenthub.db", ""); got != "sqlite" {
+			t.Fatalf("got %q want sqlite", got)
+		}
+	})
+
+	t.Run("server mode defaults postgres", func(t *testing.T) {
 		t.Setenv("DATABASE_URL", "postgres://env")
-		if got := chooseStorageBackend("", ""); got != "postgres" {
+		if got := chooseStorageBackend(appcore.DefaultServerStorage, "", "", ""); got != "postgres" {
 			t.Fatalf("got %q want postgres", got)
 		}
 	})
 
-	t.Run("no postgres hint defaults sqlite", func(t *testing.T) {
-		t.Setenv("DATABASE_URL", "")
-		if got := chooseStorageBackend("", ""); got != "sqlite" {
+	t.Run("local mode defaults sqlite even with database url env", func(t *testing.T) {
+		t.Setenv("DATABASE_URL", "postgres://env")
+		if got := chooseStorageBackend(appcore.DefaultLocalStorage, "", "", ""); got != "sqlite" {
 			t.Fatalf("got %q want sqlite", got)
 		}
 	})

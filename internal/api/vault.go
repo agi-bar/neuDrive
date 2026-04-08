@@ -23,6 +23,10 @@ type VaultWriteRequest struct {
 }
 
 func (s *Server) HandleVaultListScopes(w http.ResponseWriter, r *http.Request) {
+	if s.VaultService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "vault service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -43,6 +47,10 @@ func (s *Server) HandleVaultListScopes(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleVaultRead(w http.ResponseWriter, r *http.Request) {
+	if s.VaultService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "vault service not configured")
+		return
+	}
 	scope := chi.URLParam(r, "scope")
 
 	userID, ok := userIDFromCtx(r.Context())
@@ -74,6 +82,10 @@ func (s *Server) HandleVaultRead(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
+	if s.VaultService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "vault service not configured")
+		return
+	}
 	scope := chi.URLParam(r, "scope")
 
 	userID, ok := userIDFromCtx(r.Context())
@@ -107,6 +119,10 @@ func (s *Server) HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) HandleVaultDelete(w http.ResponseWriter, r *http.Request) {
+	if s.VaultService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "vault service not configured")
+		return
+	}
 	scope := chi.URLParam(r, "scope")
 
 	userID, ok := userIDFromCtx(r.Context())

@@ -19,6 +19,10 @@ type registerWebhookRequest struct {
 // --- Handlers ---
 
 func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
+	if s.WebhookService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "webhook service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -41,6 +45,10 @@ func (s *Server) handleListWebhooks(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRegisterWebhook(w http.ResponseWriter, r *http.Request) {
+	if s.WebhookService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "webhook service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -83,6 +91,10 @@ func (s *Server) handleRegisterWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
+	if s.WebhookService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "webhook service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -105,6 +117,10 @@ func (s *Server) handleDeleteWebhook(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleTestWebhook(w http.ResponseWriter, r *http.Request) {
+	if s.WebhookService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "webhook service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)

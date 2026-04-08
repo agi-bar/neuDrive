@@ -34,6 +34,10 @@ type UpdateConnectionRequest struct {
 }
 
 func (s *Server) handleConnectionsList(w http.ResponseWriter, r *http.Request) {
+	if s.ConnectionService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "connection service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -52,12 +56,6 @@ func (s *Server) handleConnectionsList(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConnectionsCreate(w http.ResponseWriter, r *http.Request) {
-	userID, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
-		return
-	}
-
 	var req CreateConnectionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
@@ -66,6 +64,15 @@ func (s *Server) handleConnectionsCreate(w http.ResponseWriter, r *http.Request)
 
 	if req.Name == "" || req.Type == "" {
 		respondValidationError(w, "name,type", "name and type are required")
+		return
+	}
+	if s.ConnectionService == nil {
+		respondNotConfigured(w, "connection service")
+		return
+	}
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
 		return
 	}
 
@@ -82,6 +89,10 @@ func (s *Server) handleConnectionsCreate(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
+	if s.ConnectionService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "connection service not configured")
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	connID, err := uuid.Parse(idStr)
 	if err != nil {
@@ -110,6 +121,10 @@ func (s *Server) handleConnectionsUpdate(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleConnectionsDelete(w http.ResponseWriter, r *http.Request) {
+	if s.ConnectionService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "connection service not configured")
+		return
+	}
 	idStr := chi.URLParam(r, "id")
 	connID, err := uuid.Parse(idStr)
 	if err != nil {

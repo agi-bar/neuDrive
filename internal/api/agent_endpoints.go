@@ -42,6 +42,10 @@ func (s *Server) handleAgentVaultListScopes(w http.ResponseWriter, r *http.Reque
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeReadVault) {
 		return
 	}
+	if s.VaultService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "vault service not configured")
+		return
+	}
 
 	userID, _ := userIDFromCtx(r.Context())
 	trustLevel := trustLevelFromCtx(r.Context())
@@ -56,6 +60,10 @@ func (s *Server) handleAgentVaultListScopes(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) handleAgentVaultWrite(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeWriteVault) {
+		return
+	}
+	if s.VaultService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "vault service not configured")
 		return
 	}
 
@@ -264,6 +272,10 @@ func (s *Server) handleAgentDevicesList(w http.ResponseWriter, r *http.Request) 
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadDevices) {
 		return
 	}
+	if s.DeviceService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "device service not configured")
+		return
+	}
 
 	userID, _ := userIDFromCtx(r.Context())
 	devices, err := s.DeviceService.List(r.Context(), userID)
@@ -276,6 +288,10 @@ func (s *Server) handleAgentDevicesList(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAgentArchiveInbox(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteInbox) {
+		return
+	}
+	if s.InboxService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "inbox service not configured")
 		return
 	}
 

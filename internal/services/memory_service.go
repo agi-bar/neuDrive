@@ -30,6 +30,10 @@ func NewMemoryServiceWithRepo(repo MemoryRepo, fileTree *FileTreeService) *Memor
 	return &MemoryService{repo: repo, fileTree: fileTree}
 }
 
+func (s *MemoryService) SupportsScratchMaintenance() bool {
+	return s != nil && s.db != nil
+}
+
 func (s *MemoryService) GetProfile(ctx context.Context, userID uuid.UUID) ([]models.MemoryProfile, error) {
 	if s.repo != nil {
 		return s.repo.GetProfiles(ctx, userID)
@@ -438,6 +442,9 @@ func (s *MemoryService) DetectConflict(ctx context.Context, userID uuid.UUID, ca
 }
 
 func (s *MemoryService) ListConflicts(ctx context.Context, userID uuid.UUID) ([]models.MemoryConflict, error) {
+	if s.db == nil {
+		return []models.MemoryConflict{}, nil
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, category, source_a, content_a, source_b, content_b, status, resolved_at, created_at
 		 FROM memory_conflicts
@@ -461,6 +468,9 @@ func (s *MemoryService) ListConflicts(ctx context.Context, userID uuid.UUID) ([]
 }
 
 func (s *MemoryService) ResolveConflict(ctx context.Context, conflictID uuid.UUID, resolution string) error {
+	if s.db == nil {
+		return fmt.Errorf("memory.ResolveConflict: conflict resolution not configured")
+	}
 	validResolutions := map[string]bool{
 		"keep_a":    true,
 		"keep_b":    true,

@@ -13,6 +13,7 @@ import (
 
 type VaultService struct {
 	db    *pgxpool.Pool
+	repo  VaultRepo
 	vault *vault.Vault
 }
 
@@ -20,8 +21,15 @@ func NewVaultService(db *pgxpool.Pool, v *vault.Vault) *VaultService {
 	return &VaultService{db: db, vault: v}
 }
 
+func NewVaultServiceWithRepo(repo VaultRepo, v *vault.Vault) *VaultService {
+	return &VaultService{repo: repo, vault: v}
+}
+
 // ListScopes returns vault scope metadata (without decrypted data) filtered by trust level.
 func (s *VaultService) ListScopes(ctx context.Context, userID uuid.UUID, trustLevel int) ([]models.VaultScope, error) {
+	if s.repo != nil {
+		return s.repo.ListScopes(ctx, userID, trustLevel)
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, scope, description, min_trust_level, created_at
 		 FROM vault_entries
@@ -46,16 +54,28 @@ func (s *VaultService) ListScopes(ctx context.Context, userID uuid.UUID, trustLe
 
 // Read retrieves and decrypts a vault entry by scope, checking trust level.
 func (s *VaultService) Read(ctx context.Context, userID uuid.UUID, scope string, trustLevel int) (string, error) {
-	var entry models.VaultEntry
-	err := s.db.QueryRow(ctx,
-		`SELECT id, user_id, scope, encrypted_data, nonce, description, min_trust_level, created_at, updated_at
-		 FROM vault_entries
-		 WHERE user_id = $1 AND scope = $2`,
-		userID, scope).
-		Scan(&entry.ID, &entry.UserID, &entry.Scope, &entry.EncryptedData, &entry.Nonce,
-			&entry.Description, &entry.MinTrustLevel, &entry.CreatedAt, &entry.UpdatedAt)
-	if err != nil {
-		return "", fmt.Errorf("vault.Read: %w", err)
+	var (
+		entry *models.VaultEntry
+		err   error
+	)
+	if s.repo != nil {
+		entry, err = s.repo.GetEntry(ctx, userID, scope)
+		if err != nil {
+			return "", fmt.Errorf("vault.Read: %w", err)
+		}
+	} else {
+		var current models.VaultEntry
+		err = s.db.QueryRow(ctx,
+			`SELECT id, user_id, scope, encrypted_data, nonce, description, min_trust_level, created_at, updated_at
+			 FROM vault_entries
+			 WHERE user_id = $1 AND scope = $2`,
+			userID, scope).
+			Scan(&current.ID, &current.UserID, &current.Scope, &current.EncryptedData, &current.Nonce,
+				&current.Description, &current.MinTrustLevel, &current.CreatedAt, &current.UpdatedAt)
+		if err != nil {
+			return "", fmt.Errorf("vault.Read: %w", err)
+		}
+		entry = &current
 	}
 
 	if entry.MinTrustLevel > trustLevel {
@@ -80,6 +100,19 @@ func (s *VaultService) Write(ctx context.Context, userID uuid.UUID, scope, plain
 	}
 
 	now := time.Now().UTC()
+	if s.repo != nil {
+		return s.repo.UpsertEntry(ctx, models.VaultEntry{
+			ID:            uuid.New(),
+			UserID:        userID,
+			Scope:         scope,
+			EncryptedData: ciphertext,
+			Nonce:         nonce,
+			Description:   description,
+			MinTrustLevel: minTrustLevel,
+			CreatedAt:     now,
+			UpdatedAt:     now,
+		})
+	}
 	_, err = s.db.Exec(ctx,
 		`INSERT INTO vault_entries (id, user_id, scope, encrypted_data, nonce, description, min_trust_level, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8)
@@ -98,6 +131,9 @@ func (s *VaultService) Write(ctx context.Context, userID uuid.UUID, scope, plain
 
 // Delete removes a vault entry by scope.
 func (s *VaultService) Delete(ctx context.Context, userID uuid.UUID, scope string) error {
+	if s.repo != nil {
+		return s.repo.DeleteEntry(ctx, userID, scope)
+	}
 	_, err := s.db.Exec(ctx,
 		`DELETE FROM vault_entries WHERE user_id = $1 AND scope = $2`, userID, scope)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 
 type RoleService struct {
 	db       *pgxpool.Pool
+	repo     RoleRepo
 	fileTree *FileTreeService
 }
 
@@ -22,7 +23,14 @@ func NewRoleService(db *pgxpool.Pool, fileTree *FileTreeService) *RoleService {
 	return &RoleService{db: db, fileTree: fileTree}
 }
 
+func NewRoleServiceWithRepo(repo RoleRepo, fileTree *FileTreeService) *RoleService {
+	return &RoleService{repo: repo, fileTree: fileTree}
+}
+
 func (s *RoleService) List(ctx context.Context, userID uuid.UUID) ([]models.Role, error) {
+	if s.repo != nil {
+		return s.repo.List(ctx, userID)
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, name, role_type, config, allowed_paths, allowed_vault_scopes, lifecycle, created_at
 		 FROM roles WHERE user_id = $1 ORDER BY name ASC`, userID)
@@ -47,14 +55,6 @@ func (s *RoleService) Create(ctx context.Context, userID uuid.UUID, name, roleTy
 	id := uuid.New()
 	now := time.Now().UTC()
 
-	_, err := s.db.Exec(ctx,
-		`INSERT INTO roles (id, user_id, name, role_type, config, allowed_paths, allowed_vault_scopes, lifecycle, created_at)
-		 VALUES ($1, $2, $3, $4, '{}', $5, $6, $7, $8)`,
-		id, userID, name, roleType, allowedPaths, allowedVaultScopes, lifecycle, now)
-	if err != nil {
-		return nil, fmt.Errorf("role.Create: %w", err)
-	}
-
 	r := &models.Role{
 		ID:                 id,
 		UserID:             userID,
@@ -66,6 +66,19 @@ func (s *RoleService) Create(ctx context.Context, userID uuid.UUID, name, roleTy
 		Lifecycle:          lifecycle,
 		CreatedAt:          now,
 	}
+	if s.repo != nil {
+		if err := s.repo.Create(ctx, *r); err != nil {
+			return nil, fmt.Errorf("role.Create: %w", err)
+		}
+	} else {
+		_, err := s.db.Exec(ctx,
+			`INSERT INTO roles (id, user_id, name, role_type, config, allowed_paths, allowed_vault_scopes, lifecycle, created_at)
+			 VALUES ($1, $2, $3, $4, '{}', $5, $6, $7, $8)`,
+			id, userID, name, roleType, allowedPaths, allowedVaultScopes, lifecycle, now)
+		if err != nil {
+			return nil, fmt.Errorf("role.Create: %w", err)
+		}
+	}
 	if err := s.syncRoleTree(ctx, *r); err != nil {
 		return nil, err
 	}
@@ -73,10 +86,16 @@ func (s *RoleService) Create(ctx context.Context, userID uuid.UUID, name, roleTy
 }
 
 func (s *RoleService) Delete(ctx context.Context, userID uuid.UUID, name string) error {
-	_, err := s.db.Exec(ctx,
-		`DELETE FROM roles WHERE user_id = $1 AND name = $2`, userID, name)
-	if err != nil {
-		return fmt.Errorf("role.Delete: %w", err)
+	if s.repo != nil {
+		if err := s.repo.Delete(ctx, userID, name); err != nil {
+			return fmt.Errorf("role.Delete: %w", err)
+		}
+	} else {
+		_, err := s.db.Exec(ctx,
+			`DELETE FROM roles WHERE user_id = $1 AND name = $2`, userID, name)
+		if err != nil {
+			return fmt.Errorf("role.Delete: %w", err)
+		}
 	}
 	if s.fileTree != nil {
 		_ = s.fileTree.Delete(ctx, userID, hubpath.RoleSkillPath(name))
@@ -86,12 +105,23 @@ func (s *RoleService) Delete(ctx context.Context, userID uuid.UUID, name string)
 
 // EnsureDefaultRoles creates the default 'assistant' role if it does not exist.
 func (s *RoleService) EnsureDefaultRoles(ctx context.Context, userID uuid.UUID) error {
-	var exists bool
-	err := s.db.QueryRow(ctx,
-		`SELECT EXISTS(SELECT 1 FROM roles WHERE user_id = $1 AND name = 'assistant')`, userID).
-		Scan(&exists)
-	if err != nil && err != pgx.ErrNoRows {
-		return fmt.Errorf("role.EnsureDefaultRoles: check: %w", err)
+	var (
+		exists bool
+		err    error
+	)
+	if s.repo != nil {
+		repoExists, err := s.repo.HasRole(ctx, userID, "assistant")
+		if err != nil {
+			return fmt.Errorf("role.EnsureDefaultRoles: check: %w", err)
+		}
+		exists = repoExists
+	} else {
+		err := s.db.QueryRow(ctx,
+			`SELECT EXISTS(SELECT 1 FROM roles WHERE user_id = $1 AND name = 'assistant')`, userID).
+			Scan(&exists)
+		if err != nil && err != pgx.ErrNoRows {
+			return fmt.Errorf("role.EnsureDefaultRoles: check: %w", err)
+		}
 	}
 	if exists {
 		return nil

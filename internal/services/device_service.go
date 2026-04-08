@@ -27,6 +27,7 @@ var (
 
 type DeviceService struct {
 	db       *pgxpool.Pool
+	repo     DeviceRepo
 	fileTree *FileTreeService
 }
 
@@ -34,7 +35,28 @@ func NewDeviceService(db *pgxpool.Pool, fileTree *FileTreeService) *DeviceServic
 	return &DeviceService{db: db, fileTree: fileTree}
 }
 
+func NewDeviceServiceWithRepo(repo DeviceRepo, fileTree *FileTreeService) *DeviceService {
+	return &DeviceService{repo: repo, fileTree: fileTree}
+}
+
 func (s *DeviceService) List(ctx context.Context, userID uuid.UUID) ([]models.Device, error) {
+	if s.repo != nil {
+		devices, err := s.repo.List(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		for i := range devices {
+			if s.fileTree != nil {
+				if skill, err := s.fileTree.Read(ctx, userID, hubpath.DeviceSkillPath(devices[i].Name), models.TrustLevelFull); err == nil {
+					devices[i].SkillMD = skill.Content
+				}
+				if cfg, err := s.fileTree.Read(ctx, userID, hubpath.DeviceConfigPath(devices[i].Name), models.TrustLevelFull); err == nil {
+					_ = json.Unmarshal([]byte(cfg.Content), &devices[i].Config)
+				}
+			}
+		}
+		return devices, nil
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, name, device_type, brand, protocol, endpoint, skill_md, config, status, created_at, updated_at
 		 FROM devices WHERE user_id = $1 ORDER BY name ASC`, userID)
@@ -71,14 +93,20 @@ func (s *DeviceService) Register(ctx context.Context, userID uuid.UUID, device m
 	device.CreatedAt = now
 	device.UpdatedAt = now
 
-	_, err := s.db.Exec(ctx,
-		`INSERT INTO devices (id, user_id, name, device_type, brand, protocol, endpoint, skill_md, config, status, created_at, updated_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		device.ID, device.UserID, device.Name, device.DeviceType, device.Brand,
-		device.Protocol, device.Endpoint, device.SkillMD, device.Config, device.Status,
-		device.CreatedAt, device.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("device.Register: %w", err)
+	if s.repo != nil {
+		if err := s.repo.Create(ctx, device); err != nil {
+			return nil, fmt.Errorf("device.Register: %w", err)
+		}
+	} else {
+		_, err := s.db.Exec(ctx,
+			`INSERT INTO devices (id, user_id, name, device_type, brand, protocol, endpoint, skill_md, config, status, created_at, updated_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+			device.ID, device.UserID, device.Name, device.DeviceType, device.Brand,
+			device.Protocol, device.Endpoint, device.SkillMD, device.Config, device.Status,
+			device.CreatedAt, device.UpdatedAt)
+		if err != nil {
+			return nil, fmt.Errorf("device.Register: %w", err)
+		}
 	}
 	if err := s.syncDeviceTree(ctx, device); err != nil {
 		return nil, err
@@ -92,17 +120,30 @@ func (s *DeviceService) Call(ctx context.Context, userID uuid.UUID, deviceName, 
 		return nil, fmt.Errorf("%w: action is required", ErrDeviceInvalidRequest)
 	}
 
-	var deviceID uuid.UUID
-	var protocol, endpoint string
-	err := s.db.QueryRow(ctx,
-		`SELECT id, protocol, endpoint FROM devices WHERE user_id = $1 AND name = $2`,
-		userID, deviceName).
-		Scan(&deviceID, &protocol, &endpoint)
-	if err != nil {
-		if errors.Is(err, pgx.ErrNoRows) {
+	var (
+		deviceID uuid.UUID
+		protocol string
+		endpoint string
+	)
+	if s.repo != nil {
+		device, err := s.repo.GetByName(ctx, userID, deviceName)
+		if err != nil {
 			return nil, fmt.Errorf("%w: %s", ErrDeviceNotFound, deviceName)
 		}
-		return nil, fmt.Errorf("device.Call: lookup: %w", err)
+		deviceID = device.ID
+		protocol = device.Protocol
+		endpoint = device.Endpoint
+	} else {
+		err := s.db.QueryRow(ctx,
+			`SELECT id, protocol, endpoint FROM devices WHERE user_id = $1 AND name = $2`,
+			userID, deviceName).
+			Scan(&deviceID, &protocol, &endpoint)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, fmt.Errorf("%w: %s", ErrDeviceNotFound, deviceName)
+			}
+			return nil, fmt.Errorf("device.Call: lookup: %w", err)
+		}
 	}
 
 	switch strings.ToLower(strings.TrimSpace(protocol)) {

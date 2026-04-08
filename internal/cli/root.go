@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/api"
+	"github.com/agi-bar/agenthub/internal/app/appcore"
 	"github.com/agi-bar/agenthub/internal/app/mcpapp"
 	"github.com/agi-bar/agenthub/internal/app/serverapp"
 	"github.com/agi-bar/agenthub/internal/platforms"
@@ -107,7 +108,7 @@ func runServer(args []string) int {
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	listen := fs.String("listen", "127.0.0.1:42690", "listen address")
-	storage := fs.String("storage", "", "storage backend: sqlite or postgres")
+	storage := fs.String("storage", "", "storage backend: sqlite or postgres (default: postgres)")
 	sqlitePath := fs.String("sqlite-path", "", "sqlite database path")
 	databaseURL := fs.String("database-url", "", "database URL override")
 	jwtSecret := fs.String("jwt-secret", "", "JWT secret override")
@@ -119,7 +120,7 @@ func runServer(args []string) int {
 		}
 		return 2
 	}
-	selectedStorage := chooseStorageBackend(*storage, *databaseURL)
+	selectedStorage := chooseStorageBackend(appcore.DefaultServerStorage, *storage, *sqlitePath, *databaseURL)
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -140,7 +141,7 @@ func runServer(args []string) int {
 
 func runMCP(args []string) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		fmt.Println("Usage: agenthub mcp stdio [--token TOKEN|--token-env ENV] [--database-url URL] [--jwt-secret SECRET] [--vault-master-key KEY] [--public-base-url URL]")
+		fmt.Println("Usage: agenthub mcp stdio [--token TOKEN|--token-env ENV] [--storage sqlite|postgres] [--sqlite-path PATH] [--database-url URL] [--jwt-secret SECRET] [--vault-master-key KEY] [--public-base-url URL]")
 		return 0
 	}
 	if args[0] != "stdio" {
@@ -151,7 +152,7 @@ func runMCP(args []string) int {
 	fs.SetOutput(os.Stderr)
 	token := fs.String("token", "", "scoped access token")
 	tokenEnv := fs.String("token-env", mcpapp.DefaultTokenEnvVar, "environment variable containing the scoped access token")
-	storage := fs.String("storage", "", "storage backend: sqlite or postgres")
+	storage := fs.String("storage", "", "storage backend: sqlite or postgres (default: sqlite)")
 	sqlitePath := fs.String("sqlite-path", "", "sqlite database path")
 	databaseURL := fs.String("database-url", "", "database URL override")
 	jwtSecret := fs.String("jwt-secret", "", "JWT secret override")
@@ -163,7 +164,7 @@ func runMCP(args []string) int {
 		}
 		return 2
 	}
-	selectedStorage := chooseStorageBackend(*storage, *databaseURL)
+	selectedStorage := chooseStorageBackend(appcore.DefaultLocalStorage, *storage, *sqlitePath, *databaseURL)
 	if err := mcpapp.RunStdio(context.Background(), mcpapp.Options{
 		Storage:        selectedStorage,
 		SQLitePath:     *sqlitePath,
@@ -180,18 +181,8 @@ func runMCP(args []string) int {
 	return 0
 }
 
-func chooseStorageBackend(explicitStorage, explicitDatabaseURL string) string {
-	selectedStorage := strings.ToLower(strings.TrimSpace(explicitStorage))
-	if selectedStorage != "" {
-		return selectedStorage
-	}
-	if strings.TrimSpace(explicitDatabaseURL) != "" {
-		return "postgres"
-	}
-	if envDatabaseURL, ok := os.LookupEnv("DATABASE_URL"); ok && strings.TrimSpace(envDatabaseURL) != "" {
-		return "postgres"
-	}
-	return "sqlite"
+func chooseStorageBackend(defaultStorage, explicitStorage, explicitSQLitePath, explicitDatabaseURL string) string {
+	return appcore.ResolveStorageBackend(explicitStorage, explicitSQLitePath, explicitDatabaseURL, defaultStorage)
 }
 
 func runStatus(args []string) int {

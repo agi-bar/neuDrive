@@ -20,6 +20,7 @@ import (
 // OAuthService handles OAuth 2.0 provider operations.
 type OAuthService struct {
 	db        *pgxpool.Pool
+	repo      OAuthRepo
 	jwtSecret string
 }
 
@@ -31,6 +32,10 @@ const (
 // NewOAuthService creates a new OAuthService.
 func NewOAuthService(db *pgxpool.Pool, jwtSecret string) *OAuthService {
 	return &OAuthService{db: db, jwtSecret: jwtSecret}
+}
+
+func NewOAuthServiceWithRepo(repo OAuthRepo, jwtSecret string) *OAuthService {
+	return &OAuthService{repo: repo, jwtSecret: jwtSecret}
 }
 
 // RegisterApp creates a new OAuth application and returns it along with the
@@ -59,15 +64,34 @@ func (s *OAuthService) RegisterApp(ctx context.Context, userID uuid.UUID, name s
 	id := uuid.New()
 	now := time.Now().UTC()
 
-	_, err = s.db.Exec(ctx,
-		`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, logo_url, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
-		id, userID, name, clientID, secretHash, redirectURIs, scopes, description, logoURL, now)
-	if err != nil {
-		return nil, fmt.Errorf("oauth.RegisterApp: %w", err)
+	app := models.OAuthApp{
+		ID:               id,
+		UserID:           userID,
+		Name:             name,
+		ClientID:         clientID,
+		ClientSecretHash: secretHash,
+		RedirectURIs:     redirectURIs,
+		Scopes:           scopes,
+		Description:      description,
+		LogoURL:          logoURL,
+		IsActive:         true,
+		CreatedAt:        now,
+	}
+	if s.repo != nil {
+		if err := s.repo.CreateApp(ctx, app); err != nil {
+			return nil, fmt.Errorf("oauth.RegisterApp: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx,
+			`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, logo_url, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			id, userID, name, clientID, secretHash, redirectURIs, scopes, description, logoURL, now)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.RegisterApp: %w", err)
+		}
 	}
 
-	app, err := s.getAppByID(ctx, id)
+	registeredApp, err := s.getAppByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -75,7 +99,7 @@ func (s *OAuthService) RegisterApp(ctx context.Context, userID uuid.UUID, name s
 	return &models.RegisterOAuthAppResponse{
 		ClientID:     clientID,
 		ClientSecret: clientSecret,
-		App:          app.ToResponse(),
+		App:          registeredApp.ToResponse(),
 	}, nil
 }
 
@@ -99,13 +123,31 @@ func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.
 	id := uuid.New()
 	now := time.Now().UTC()
 
-	_, err = s.db.Exec(ctx,
-		`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, logo_url, created_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '', $9)
-		 ON CONFLICT (client_id) DO NOTHING`,
-		id, userID, name, clientID, secretHash, redirectURIs, scopes, "Auto-registered MCP client", now)
-	if err != nil {
-		return nil, fmt.Errorf("oauth.RegisterAppWithClientID: %w", err)
+	if s.repo != nil {
+		err = s.repo.CreateApp(ctx, models.OAuthApp{
+			ID:               id,
+			UserID:           userID,
+			Name:             name,
+			ClientID:         clientID,
+			ClientSecretHash: secretHash,
+			RedirectURIs:     redirectURIs,
+			Scopes:           scopes,
+			Description:      "Auto-registered MCP client",
+			IsActive:         true,
+			CreatedAt:        now,
+		})
+		if err != nil && !strings.Contains(strings.ToLower(err.Error()), "unique") {
+			return nil, fmt.Errorf("oauth.RegisterAppWithClientID: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx,
+			`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, logo_url, created_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '', $9)
+			 ON CONFLICT (client_id) DO NOTHING`,
+			id, userID, name, clientID, secretHash, redirectURIs, scopes, "Auto-registered MCP client", now)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.RegisterAppWithClientID: %w", err)
+		}
 	}
 
 	return s.GetAppByClientID(ctx, clientID)
@@ -124,22 +166,46 @@ func (s *OAuthService) Authorize(ctx context.Context, appID, userID uuid.UUID, s
 	expiresAt := time.Now().UTC().Add(10 * time.Minute)
 
 	id := uuid.New()
-	_, err = s.db.Exec(ctx,
-		`INSERT INTO oauth_codes (id, app_id, user_id, code_hash, scopes, redirect_uri, code_challenge, code_challenge_method, expires_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-		id, appID, userID, codeHash, scopes, redirectURI, codeChallenge, codeChallengeMethod, expiresAt)
-	if err != nil {
-		return "", fmt.Errorf("oauth.Authorize: insert code: %w", err)
-	}
-
-	// Upsert the grant.
-	_, err = s.db.Exec(ctx,
-		`INSERT INTO oauth_grants (id, app_id, user_id, scopes)
-		 VALUES ($1, $2, $3, $4)
-		 ON CONFLICT (app_id, user_id) DO UPDATE SET scopes = $4`,
-		uuid.New(), appID, userID, scopes)
-	if err != nil {
-		return "", fmt.Errorf("oauth.Authorize: upsert grant: %w", err)
+	if s.repo != nil {
+		if err := s.repo.CreateCode(ctx, models.OAuthCode{
+			ID:                  id,
+			AppID:               appID,
+			UserID:              userID,
+			CodeHash:            codeHash,
+			Scopes:              scopes,
+			RedirectURI:         redirectURI,
+			CodeChallenge:       codeChallenge,
+			CodeChallengeMethod: codeChallengeMethod,
+			ExpiresAt:           expiresAt,
+			CreatedAt:           time.Now().UTC(),
+		}); err != nil {
+			return "", fmt.Errorf("oauth.Authorize: insert code: %w", err)
+		}
+		if err := s.repo.UpsertGrant(ctx, models.OAuthGrant{
+			ID:        uuid.New(),
+			AppID:     appID,
+			UserID:    userID,
+			Scopes:    scopes,
+			CreatedAt: time.Now().UTC(),
+		}); err != nil {
+			return "", fmt.Errorf("oauth.Authorize: upsert grant: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx,
+			`INSERT INTO oauth_codes (id, app_id, user_id, code_hash, scopes, redirect_uri, code_challenge, code_challenge_method, expires_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			id, appID, userID, codeHash, scopes, redirectURI, codeChallenge, codeChallengeMethod, expiresAt)
+		if err != nil {
+			return "", fmt.Errorf("oauth.Authorize: insert code: %w", err)
+		}
+		_, err = s.db.Exec(ctx,
+			`INSERT INTO oauth_grants (id, app_id, user_id, scopes)
+			 VALUES ($1, $2, $3, $4)
+			 ON CONFLICT (app_id, user_id) DO UPDATE SET scopes = $4`,
+			uuid.New(), appID, userID, scopes)
+		if err != nil {
+			return "", fmt.Errorf("oauth.Authorize: upsert grant: %w", err)
+		}
 	}
 
 	return code, nil
@@ -157,16 +223,28 @@ func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret,
 	}
 
 	codeHash := hashString(code)
-	var oc models.OAuthCode
-	err = s.db.QueryRow(ctx,
-		`SELECT id, app_id, user_id, code_hash, scopes, redirect_uri, code_challenge, code_challenge_method, expires_at, used
-		 FROM oauth_codes
-		 WHERE code_hash = $1 AND used = false`, codeHash).
-		Scan(&oc.ID, &oc.AppID, &oc.UserID, &oc.CodeHash, &oc.Scopes, &oc.RedirectURI, &oc.CodeChallenge, &oc.CodeChallengeMethod, &oc.ExpiresAt, &oc.Used)
-	if err != nil {
-		return nil, fmt.Errorf("oauth.ExchangeCode: invalid or already-used code")
+	var oc *models.OAuthCode
+	if s.repo != nil {
+		oc, err = s.repo.GetCodeByHash(ctx, codeHash)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.ExchangeCode: invalid or already-used code")
+		}
+	} else {
+		var current models.OAuthCode
+		err = s.db.QueryRow(ctx,
+			`SELECT id, app_id, user_id, code_hash, scopes, redirect_uri, code_challenge, code_challenge_method, expires_at, used
+			 FROM oauth_codes
+			 WHERE code_hash = $1 AND used = false`, codeHash).
+			Scan(&current.ID, &current.AppID, &current.UserID, &current.CodeHash, &current.Scopes, &current.RedirectURI, &current.CodeChallenge, &current.CodeChallengeMethod, &current.ExpiresAt, &current.Used)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.ExchangeCode: invalid or already-used code")
+		}
+		oc = &current
 	}
 
+	if oc.Used {
+		return nil, fmt.Errorf("oauth.ExchangeCode: invalid or already-used code")
+	}
 	if oc.AppID != app.ID {
 		return nil, fmt.Errorf("oauth.ExchangeCode: code does not belong to this app")
 	}
@@ -184,17 +262,30 @@ func (s *OAuthService) ExchangeCode(ctx context.Context, clientID, clientSecret,
 	}
 
 	// Mark the code as used.
-	_, err = s.db.Exec(ctx,
-		`UPDATE oauth_codes SET used = true WHERE id = $1`, oc.ID)
-	if err != nil {
-		return nil, fmt.Errorf("oauth.ExchangeCode: failed to mark code used: %w", err)
+	if s.repo != nil {
+		if err := s.repo.MarkCodeUsed(ctx, oc.ID); err != nil {
+			return nil, fmt.Errorf("oauth.ExchangeCode: failed to mark code used: %w", err)
+		}
+	} else {
+		_, err = s.db.Exec(ctx,
+			`UPDATE oauth_codes SET used = true WHERE id = $1`, oc.ID)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.ExchangeCode: failed to mark code used: %w", err)
+		}
 	}
 
 	// Look up the user to get slug for JWT.
 	var slug string
-	err = s.db.QueryRow(ctx, `SELECT slug FROM users WHERE id = $1`, oc.UserID).Scan(&slug)
-	if err != nil {
-		return nil, fmt.Errorf("oauth.ExchangeCode: user not found")
+	if s.repo != nil {
+		slug, err = s.repo.GetUserSlug(ctx, oc.UserID)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.ExchangeCode: user not found")
+		}
+	} else {
+		err = s.db.QueryRow(ctx, `SELECT slug FROM users WHERE id = $1`, oc.UserID).Scan(&slug)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.ExchangeCode: user not found")
+		}
 	}
 
 	accessToken, err := s.generateOAuthAccessToken(oc.UserID, slug)
@@ -259,6 +350,14 @@ func (s *OAuthService) ExchangeRefreshToken(ctx context.Context, clientID, clien
 
 // ValidateGrant checks if a user has authorized a specific app.
 func (s *OAuthService) ValidateGrant(ctx context.Context, userID, appID uuid.UUID) (*models.OAuthGrant, error) {
+	if s.repo != nil {
+		g, err := s.repo.GetGrant(ctx, userID, appID)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.ValidateGrant: no grant found")
+		}
+		g.Scopes = normalizeOAuthStringSlice(g.Scopes)
+		return g, nil
+	}
 	var g models.OAuthGrant
 	err := s.db.QueryRow(ctx,
 		`SELECT id, app_id, user_id, scopes, created_at
@@ -274,6 +373,9 @@ func (s *OAuthService) ValidateGrant(ctx context.Context, userID, appID uuid.UUI
 
 // ListApps returns all OAuth apps registered by the given user.
 func (s *OAuthService) ListApps(ctx context.Context, userID uuid.UUID) ([]models.OAuthApp, error) {
+	if s.repo != nil {
+		return s.repo.ListApps(ctx, userID)
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, COALESCE(logo_url, ''), is_active, created_at
 		 FROM oauth_apps
@@ -299,6 +401,12 @@ func (s *OAuthService) ListApps(ctx context.Context, userID uuid.UUID) ([]models
 
 // DeleteApp removes an OAuth app, cascading to codes and grants.
 func (s *OAuthService) DeleteApp(ctx context.Context, userID, appID uuid.UUID) error {
+	if s.repo != nil {
+		if err := s.repo.DeleteApp(ctx, userID, appID); err != nil {
+			return fmt.Errorf("oauth.DeleteApp: app not found or not owned by user")
+		}
+		return nil
+	}
 	tag, err := s.db.Exec(ctx,
 		`DELETE FROM oauth_apps WHERE id = $1 AND user_id = $2`, appID, userID)
 	if err != nil {
@@ -312,6 +420,9 @@ func (s *OAuthService) DeleteApp(ctx context.Context, userID, appID uuid.UUID) e
 
 // ListGrants returns all apps that a user has authorized, along with app details.
 func (s *OAuthService) ListGrants(ctx context.Context, userID uuid.UUID) ([]models.OAuthGrantResponse, error) {
+	if s.repo != nil {
+		return s.repo.ListGrants(ctx, userID)
+	}
 	rows, err := s.db.Query(ctx,
 		`SELECT g.id, g.scopes, g.created_at,
 		        a.id, a.name, a.client_id, a.redirect_uris, a.scopes, a.description, COALESCE(a.logo_url, ''), a.is_active, a.created_at
@@ -342,6 +453,12 @@ func (s *OAuthService) ListGrants(ctx context.Context, userID uuid.UUID) ([]mode
 
 // RevokeGrant removes a user's authorization for an app.
 func (s *OAuthService) RevokeGrant(ctx context.Context, userID, grantID uuid.UUID) error {
+	if s.repo != nil {
+		if err := s.repo.RevokeGrant(ctx, userID, grantID); err != nil {
+			return fmt.Errorf("oauth.RevokeGrant: grant not found")
+		}
+		return nil
+	}
 	tag, err := s.db.Exec(ctx,
 		`DELETE FROM oauth_grants WHERE id = $1 AND user_id = $2`, grantID, userID)
 	if err != nil {
@@ -355,6 +472,14 @@ func (s *OAuthService) RevokeGrant(ctx context.Context, userID, grantID uuid.UUI
 
 // GetAppByClientID looks up an app by its public client_id.
 func (s *OAuthService) GetAppByClientID(ctx context.Context, clientID string) (*models.OAuthApp, error) {
+	if s.repo != nil {
+		app, err := s.repo.GetAppByClientID(ctx, clientID)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.GetAppByClientID: %w", err)
+		}
+		normalizeOAuthApp(app)
+		return app, nil
+	}
 	var a models.OAuthApp
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, COALESCE(logo_url, ''), is_active, created_at
@@ -371,6 +496,14 @@ func (s *OAuthService) GetAppByClientID(ctx context.Context, clientID string) (*
 
 // getAppByID fetches an app by primary key (internal).
 func (s *OAuthService) getAppByID(ctx context.Context, id uuid.UUID) (*models.OAuthApp, error) {
+	if s.repo != nil {
+		app, err := s.repo.GetAppByID(ctx, id)
+		if err != nil {
+			return nil, fmt.Errorf("oauth.getAppByID: %w", err)
+		}
+		normalizeOAuthApp(app)
+		return app, nil
+	}
 	var a models.OAuthApp
 	err := s.db.QueryRow(ctx,
 		`SELECT id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, COALESCE(logo_url, ''), is_active, created_at

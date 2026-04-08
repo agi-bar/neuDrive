@@ -22,6 +22,14 @@ func (s *Server) handleCreateSyncToken(w http.ResponseWriter, r *http.Request) {
 		respondUnauthorized(w)
 		return
 	}
+	if trustLevelFromCtx(r.Context()) < models.TrustLevelFull {
+		respondForbidden(w, "full trust level is required")
+		return
+	}
+	if token := scopedTokenFromCtx(r.Context()); token != nil && !models.HasScope(token.Scopes, models.ScopeAdmin) {
+		respondForbidden(w, "token missing required scope: "+models.ScopeAdmin)
+		return
+	}
 	if s.TokenService == nil {
 		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "token service not configured")
 		return

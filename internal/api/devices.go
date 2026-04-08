@@ -41,6 +41,10 @@ type RegisterDeviceRequest struct {
 }
 
 func (s *Server) handleDevicesList(w http.ResponseWriter, r *http.Request) {
+	if s.DeviceService == nil {
+		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "device service not configured")
+		return
+	}
 	userID, ok := userIDFromCtx(r.Context())
 	if !ok {
 		respondUnauthorized(w)
@@ -61,12 +65,6 @@ func (s *Server) handleDevicesList(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeviceCall(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 
-	userID, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
-		return
-	}
-
 	var req DeviceCallRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
@@ -75,6 +73,15 @@ func (s *Server) handleDeviceCall(w http.ResponseWriter, r *http.Request) {
 
 	if req.Action == "" {
 		respondValidationError(w, "action", "action is required")
+		return
+	}
+	if s.DeviceService == nil {
+		respondNotConfigured(w, "device service")
+		return
+	}
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
 		return
 	}
 
@@ -96,12 +103,6 @@ func (s *Server) handleDeviceCall(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
-	userID, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
-		return
-	}
-
 	var req RegisterDeviceRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
@@ -110,6 +111,15 @@ func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 
 	if req.Name == "" || req.DeviceType == "" {
 		respondValidationError(w, "name,device_type", "name and device_type are required")
+		return
+	}
+	if s.DeviceService == nil {
+		respondNotConfigured(w, "device service")
+		return
+	}
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
+		respondUnauthorized(w)
 		return
 	}
 

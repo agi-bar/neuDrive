@@ -52,15 +52,29 @@ type App struct {
 	SyncService   *services.SyncService
 }
 
-func Build(ctx context.Context, opts Options) (*App, error) {
-	storage := strings.ToLower(strings.TrimSpace(opts.Storage))
-	if storage == "" {
-		if strings.TrimSpace(opts.DatabaseURL) != "" {
-			storage = "postgres"
-		} else {
-			storage = "sqlite"
-		}
+const (
+	DefaultLocalStorage  = "sqlite"
+	DefaultServerStorage = "postgres"
+)
+
+func ResolveStorageBackend(explicitStorage, explicitSQLitePath, explicitDatabaseURL, defaultStorage string) string {
+	if storage := strings.ToLower(strings.TrimSpace(explicitStorage)); storage != "" {
+		return storage
 	}
+	if strings.TrimSpace(explicitDatabaseURL) != "" {
+		return "postgres"
+	}
+	if strings.TrimSpace(explicitSQLitePath) != "" {
+		return "sqlite"
+	}
+	if storage := strings.ToLower(strings.TrimSpace(defaultStorage)); storage != "" {
+		return storage
+	}
+	return DefaultLocalStorage
+}
+
+func Build(ctx context.Context, opts Options) (*App, error) {
+	storage := ResolveStorageBackend(opts.Storage, opts.SQLitePath, opts.DatabaseURL, DefaultLocalStorage)
 
 	switch storage {
 	case "sqlite":
@@ -73,6 +87,10 @@ func Build(ctx context.Context, opts Options) (*App, error) {
 }
 
 func buildSQLite(ctx context.Context, opts Options) (*App, error) {
+	cfg, err := loadSQLiteConfig(opts)
+	if err != nil {
+		return nil, err
+	}
 	sqlitePath := strings.TrimSpace(opts.SQLitePath)
 	if sqlitePath == "" {
 		sqlitePath = runtimecfg.DefaultSQLitePath()
@@ -86,37 +104,99 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 		return nil, err
 	}
 
-	httpServer := api.NewSQLiteServer(store, opts.PublicBaseURL)
+	v, err := vault.NewVault(cfg.VaultMasterKey)
+	if err != nil {
+		_ = store.Close()
+		return nil, err
+	}
 	fileTreeSvc := services.NewFileTreeServiceWithRepo(sqlitestorage.NewFileTreeRepo(store))
 	memorySvc := services.NewMemoryServiceWithRepo(sqlitestorage.NewMemoryRepo(store), nil)
-	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), nil, nil)
+	userSvc := services.NewUserServiceWithRepo(sqlitestorage.NewUserRepo(store))
+	connSvc := services.NewConnectionServiceWithRepo(sqlitestorage.NewConnectionRepo(store))
+	vaultSvc := services.NewVaultServiceWithRepo(sqlitestorage.NewVaultRepo(store), v)
+	roleSvc := services.NewRoleServiceWithRepo(sqlitestorage.NewRoleRepo(store), fileTreeSvc)
+	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
+	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
 	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
-	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, nil)
-	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, nil, nil, nil, nil, nil)
+	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
+	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
+	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
+		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
+	}
+	var ghExchange services.GitHubExchangeFunc
+	if cfg.GithubClientID != "" && cfg.GithubClientSecret != "" {
+		ghExchange = func(ctx context.Context, code string) (*services.GitHubUser, error) {
+			ghUser, err := auth.ExchangeGitHubCode(ctx, cfg.GithubClientID, cfg.GithubClientSecret, code)
+			if err != nil {
+				return nil, err
+			}
+			return &services.GitHubUser{
+				ID:    ghUser.ID,
+				Login: ghUser.Login,
+				Name:  ghUser.Name,
+				Email: ghUser.Email,
+			}, nil
+		}
+	}
+	authSvc := services.NewAuthServiceWithRepo(sqlitestorage.NewAuthRepo(store), tokenGen, ghExchange)
+	oauthSvc := services.NewOAuthServiceWithRepo(sqlitestorage.NewOAuthRepo(store), cfg.JWTSecret)
+	httpServer := api.NewServerWithDeps(api.ServerDeps{
+		Storage:            "sqlite",
+		Config:             cfg,
+		UserService:        userSvc,
+		AuthService:        authSvc,
+		ConnectionService:  connSvc,
+		FileTreeService:    fileTreeSvc,
+		VaultService:       vaultSvc,
+		MemoryService:      memorySvc,
+		ProjectService:     projectSvc,
+		RoleService:        roleSvc,
+		InboxService:       inboxSvc,
+		DeviceService:      deviceSvc,
+		DashboardService:   dashboardSvc,
+		TokenService:       tokenSvc,
+		ImportService:      importSvc,
+		ExportService:      exportSvc,
+		SyncService:        syncSvc,
+		OAuthService:       oauthSvc,
+		Vault:              v,
+		JWTSecret:          cfg.JWTSecret,
+		GitHubClientID:     cfg.GithubClientID,
+		GitHubClientSecret: cfg.GithubClientSecret,
+	})
 	app := &App{
 		Storage:       "sqlite",
-		HTTPHandler:   httpServer.Handler(),
+		Config:        cfg,
+		HTTPHandler:   httpServer.Router,
 		MemoryService: memorySvc,
 		TokenService:  tokenSvc,
+		InboxService:  inboxSvc,
 		SyncService:   syncSvc,
 		NewMCPServer: func(token string) (mcp.JSONRPCHandler, error) {
-			scopedToken, err := store.ValidateToken(ctx, token)
+			scopedToken, err := tokenSvc.ValidateToken(ctx, token)
 			if err != nil {
 				return nil, fmt.Errorf("invalid token: %w", err)
 			}
 			return &mcp.MCPServer{
-				UserID:     scopedToken.UserID,
-				TrustLevel: scopedToken.MaxTrustLevel,
-				Scopes:     scopedToken.Scopes,
-				BaseURL:    opts.PublicBaseURL,
-				FileTree:   fileTreeSvc,
-				Memory:     memorySvc,
-				Project:    projectSvc,
-				Dashboard:  dashboardSvc,
-				Import:     importSvc,
-				Token:      tokenSvc,
+				UserID:      scopedToken.UserID,
+				TrustLevel:  scopedToken.MaxTrustLevel,
+				Scopes:      scopedToken.Scopes,
+				BaseURL:     cfg.PublicBaseURL,
+				Connection:  connSvc,
+				OAuth:       oauthSvc,
+				FileTree:    fileTreeSvc,
+				Vault:       vaultSvc,
+				VaultCrypto: v,
+				Memory:      memorySvc,
+				Project:     projectSvc,
+				Inbox:       inboxSvc,
+				Device:      deviceSvc,
+				Dashboard:   dashboardSvc,
+				Import:      importSvc,
+				Token:       tokenSvc,
 			}, nil
 		},
 		Close: store.Close,
@@ -147,32 +227,33 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 		return nil, err
 	}
 
-	httpServer := api.NewServer(
-		cfg,
-		deps.userSvc,
-		deps.authSvc,
-		deps.connSvc,
-		deps.fileTreeSvc,
-		deps.vaultSvc,
-		deps.memorySvc,
-		deps.projectSvc,
-		deps.summarySvc,
-		deps.roleSvc,
-		deps.inboxSvc,
-		deps.deviceSvc,
-		deps.dashboardSvc,
-		deps.tokenSvc,
-		deps.importSvc,
-		deps.exportSvc,
-		deps.syncSvc,
-		deps.collabSvc,
-		deps.webhookSvc,
-		deps.oauthSvc,
-		deps.vaultCrypto,
-		cfg.JWTSecret,
-		cfg.GithubClientID,
-		cfg.GithubClientSecret,
-	)
+	httpServer := api.NewServerWithDeps(api.ServerDeps{
+		Storage:              "postgres",
+		Config:               cfg,
+		UserService:          deps.userSvc,
+		AuthService:          deps.authSvc,
+		ConnectionService:    deps.connSvc,
+		FileTreeService:      deps.fileTreeSvc,
+		VaultService:         deps.vaultSvc,
+		MemoryService:        deps.memorySvc,
+		ProjectService:       deps.projectSvc,
+		SummaryService:       deps.summarySvc,
+		RoleService:          deps.roleSvc,
+		InboxService:         deps.inboxSvc,
+		DeviceService:        deps.deviceSvc,
+		DashboardService:     deps.dashboardSvc,
+		TokenService:         deps.tokenSvc,
+		ImportService:        deps.importSvc,
+		ExportService:        deps.exportSvc,
+		SyncService:          deps.syncSvc,
+		CollaborationService: deps.collabSvc,
+		WebhookService:       deps.webhookSvc,
+		OAuthService:         deps.oauthSvc,
+		Vault:                deps.vaultCrypto,
+		JWTSecret:            cfg.JWTSecret,
+		GitHubClientID:       cfg.GithubClientID,
+		GitHubClientSecret:   cfg.GithubClientSecret,
+	})
 
 	app := &App{
 		Storage:       "postgres",
@@ -341,6 +422,17 @@ func loadConfig(opts Options) (*config.Config, error) {
 		overrides["LOG_FORMAT"] = opts.LogFormat
 	}
 	return config.LoadWithOverrides(overrides)
+}
+
+func loadSQLiteConfig(opts Options) (*config.Config, error) {
+	sqliteOpts := opts
+	if strings.TrimSpace(sqliteOpts.JWTSecret) == "" {
+		sqliteOpts.JWTSecret = "agenthub-local-sqlite-jwt-secret"
+	}
+	if strings.TrimSpace(sqliteOpts.VaultMasterKey) == "" {
+		sqliteOpts.VaultMasterKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+	}
+	return loadConfig(sqliteOpts)
 }
 
 func resolveMigrationsDir() string {

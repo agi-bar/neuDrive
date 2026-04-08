@@ -38,14 +38,7 @@ func RunStdio(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	storage := strings.ToLower(strings.TrimSpace(opts.Storage))
-	if storage == "" {
-		if strings.TrimSpace(opts.DatabaseURL) != "" {
-			storage = "postgres"
-		} else {
-			storage = "sqlite"
-		}
-	}
+	storage := appcore.ResolveStorageBackend(opts.Storage, opts.SQLitePath, opts.DatabaseURL, appcore.DefaultLocalStorage)
 	if storage == "sqlite" {
 		sqlitePath := strings.TrimSpace(opts.SQLitePath)
 		if sqlitePath == "" {

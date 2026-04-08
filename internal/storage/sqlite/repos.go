@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
@@ -31,28 +32,97 @@ func (r *TokenRepo) ValidateToken(ctx context.Context, rawToken string) (*models
 	return r.Store.ValidateToken(ctx, rawToken)
 }
 
-func (r *TokenRepo) ListTokens(_ context.Context, _ uuid.UUID) ([]models.ScopedToken, error) {
-	return nil, nil
+func (r *TokenRepo) ListTokens(ctx context.Context, userID uuid.UUID) ([]models.ScopedToken, error) {
+	return r.listTokens(ctx, userID)
 }
 
 func (r *TokenRepo) RevokeToken(ctx context.Context, userID, tokenID uuid.UUID) error {
 	return r.Store.RevokeToken(ctx, userID, tokenID)
 }
 
-func (r *TokenRepo) UpdateTokenName(_ context.Context, _, _ uuid.UUID, _ string) error {
+func (r *TokenRepo) UpdateTokenName(ctx context.Context, userID, tokenID uuid.UUID, name string) error {
+	result, err := r.Store.DB().ExecContext(ctx,
+		`UPDATE scoped_tokens
+		    SET name = ?
+		  WHERE id = ? AND user_id = ?`,
+		name,
+		tokenID.String(),
+		userID.String(),
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite.TokenRepo.UpdateTokenName: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return services.ErrEntryNotFound
+	}
 	return nil
 }
 
-func (r *TokenRepo) GetTokenByID(_ context.Context, _, _ uuid.UUID) (*models.ScopedToken, error) {
-	return nil, nil
+func (r *TokenRepo) GetTokenByID(ctx context.Context, tokenID, userID uuid.UUID) (*models.ScopedToken, error) {
+	row := r.Store.DB().QueryRowContext(ctx,
+		`SELECT id, user_id, name, token_hash, token_prefix, scopes_json, max_trust_level,
+		        expires_at, rate_limit, request_count, rate_limit_reset_at,
+		        last_used_at, last_used_ip, created_at, revoked_at
+		   FROM scoped_tokens
+		  WHERE id = ? AND user_id = ?`,
+		tokenID.String(),
+		userID.String(),
+	)
+	token, err := scanScopedToken(row)
+	if err != nil {
+		return nil, services.ErrEntryNotFound
+	}
+	return token, nil
 }
 
 func (r *TokenRepo) CheckRateLimit(ctx context.Context, token *models.ScopedToken) error {
 	return r.Store.CheckRateLimit(ctx, token)
 }
 
-func (r *TokenRepo) DeactivateExpiredTokens(_ context.Context) (int64, error) {
-	return 0, nil
+func (r *TokenRepo) DeactivateExpiredTokens(ctx context.Context) (int64, error) {
+	result, err := r.Store.DB().ExecContext(ctx,
+		`UPDATE scoped_tokens
+		    SET revoked_at = expires_at
+		  WHERE revoked_at IS NULL AND expires_at < ?`,
+		timeText(time.Now().UTC()),
+	)
+	if err != nil {
+		return 0, fmt.Errorf("sqlite.TokenRepo.DeactivateExpiredTokens: %w", err)
+	}
+	return result.RowsAffected()
+}
+
+func (r *TokenRepo) listTokens(ctx context.Context, userID uuid.UUID) ([]models.ScopedToken, error) {
+	rows, err := r.Store.DB().QueryContext(ctx,
+		`SELECT id, user_id, name, token_hash, token_prefix, scopes_json, max_trust_level,
+		        expires_at, rate_limit, request_count, rate_limit_reset_at,
+		        last_used_at, last_used_ip, created_at, revoked_at
+		   FROM scoped_tokens
+		  WHERE user_id = ?
+		  ORDER BY created_at DESC`,
+		userID.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("sqlite.TokenRepo.ListTokens: %w", err)
+	}
+	defer rows.Close()
+
+	var tokens []models.ScopedToken
+	for rows.Next() {
+		token, scanErr := scanScopedToken(rows)
+		if scanErr != nil {
+			return nil, fmt.Errorf("sqlite.TokenRepo.ListTokens: %w", scanErr)
+		}
+		tokens = append(tokens, *token)
+	}
+	if tokens == nil {
+		tokens = []models.ScopedToken{}
+	}
+	return tokens, rows.Err()
 }
 
 type MemoryRepo struct {

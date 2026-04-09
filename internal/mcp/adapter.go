@@ -109,7 +109,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": "Use /skills/agenthub/SKILL.md as the umbrella entrypoint for Agent Hub platform workflows. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync. Platform portability manuals remain available under /skills/portability/<platform>/SKILL.md for migration-specific details.",
+				"instructions": "Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.",
 			},
 		}
 	case "notifications/initialized":
@@ -806,14 +806,52 @@ func (s *MCPServer) getResources() []MCPResource {
 		}
 	}
 
-	// Add well-known resources
-	wellKnown := []MCPResource{
-		{URI: "agenthub://identity/profile.json", Name: "用户身份信息", MimeType: "application/json"},
-		{URI: "agenthub://memory/SKILL.md", Name: "记忆系统说明", MimeType: "text/markdown"},
-		{URI: "agenthub://vault/SKILL.md", Name: "保险柜说明", MimeType: "text/markdown"},
-	}
-	resources = append(resources, wellKnown...)
+	resources = append(resources, wellKnownResources()...)
 	return resources
+}
+
+func wellKnownResources() []MCPResource {
+	return []MCPResource{
+		{
+			URI:         "agenthub://skills/agenthub/SKILL.md",
+			Name:        "/skills/agenthub/SKILL.md",
+			Description: "Agent Hub umbrella skill entrypoint",
+			MimeType:    "text/markdown",
+		},
+		{
+			URI:         "agenthub://skills/portability/claude/SKILL.md",
+			Name:        "/skills/portability/claude/SKILL.md",
+			Description: "Claude portability manual",
+			MimeType:    "text/markdown",
+		},
+		{
+			URI:         "agenthub://skills/portability/chatgpt/SKILL.md",
+			Name:        "/skills/portability/chatgpt/SKILL.md",
+			Description: "ChatGPT portability manual",
+			MimeType:    "text/markdown",
+		},
+		{
+			URI:         "agenthub://skills/portability/codex/SKILL.md",
+			Name:        "/skills/portability/codex/SKILL.md",
+			Description: "Codex portability manual",
+			MimeType:    "text/markdown",
+		},
+		{
+			URI:      "agenthub://identity/profile.json",
+			Name:     "用户身份信息",
+			MimeType: "application/json",
+		},
+		{
+			URI:      "agenthub://memory/SKILL.md",
+			Name:     "记忆系统说明",
+			MimeType: "text/markdown",
+		},
+		{
+			URI:      "agenthub://vault/SKILL.md",
+			Name:     "保险柜说明",
+			MimeType: "text/markdown",
+		},
+	}
 }
 
 func (s *MCPServer) readResource(uri string) (string, error) {

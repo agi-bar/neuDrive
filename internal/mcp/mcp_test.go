@@ -148,8 +148,14 @@ func TestInitialize(t *testing.T) {
 		t.Errorf("expected server name=agenthub, got %v", serverInfo["name"])
 	}
 	instructions, _ := serverInfo["instructions"].(string)
-	if !strings.Contains(instructions, "/skills/portability/<platform>/SKILL.md") {
+	if !strings.Contains(instructions, "agenthub://skills/agenthub/SKILL.md") {
+		t.Fatalf("expected agenthub resource hint in serverInfo, got %q", instructions)
+	}
+	if !strings.Contains(instructions, "agenthub://skills/portability/<platform>/SKILL.md") {
 		t.Fatalf("expected portability instructions in serverInfo, got %q", instructions)
+	}
+	if !strings.Contains(instructions, "list_skills") {
+		t.Fatalf("expected list_skills hint in serverInfo, got %q", instructions)
 	}
 
 	caps, ok := result["capabilities"].(map[string]interface{})
@@ -426,7 +432,6 @@ func TestToolsCallInvalidParams(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestResourcesList(t *testing.T) {
-	// With nil FileTree service, getResources panics. Use a recover wrapper.
 	s := newTestMCPServer()
 
 	req := JSONRPCRequest{
@@ -465,6 +470,82 @@ func TestResourcesList(t *testing.T) {
 	// Verify the resources key exists.
 	if _, ok := result["resources"]; !ok {
 		t.Error("expected resources key in result")
+	}
+}
+
+func TestResourcesListIncludesSystemSkillManuals(t *testing.T) {
+	s := newTestMCPServer()
+
+	req := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      8,
+		Method:  "resources/list",
+	}
+
+	resp := s.HandleJSONRPC(req)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+
+	result, ok := resp.Result.(map[string]interface{})
+	if !ok {
+		t.Fatal("expected result map")
+	}
+
+	resources, ok := result["resources"].([]MCPResource)
+	if !ok {
+		t.Fatalf("expected resources to be []MCPResource, got %T", result["resources"])
+	}
+
+	resourceURIs := make(map[string]bool, len(resources))
+	for _, resource := range resources {
+		resourceURIs[resource.URI] = true
+	}
+
+	for _, uri := range []string{
+		"agenthub://skills/agenthub/SKILL.md",
+		"agenthub://skills/portability/claude/SKILL.md",
+		"agenthub://skills/portability/chatgpt/SKILL.md",
+		"agenthub://skills/portability/codex/SKILL.md",
+	} {
+		if !resourceURIs[uri] {
+			t.Fatalf("expected resource %q in resources/list", uri)
+		}
+	}
+}
+
+func TestResourcesReadSystemSkillManual(t *testing.T) {
+	s := &MCPServer{
+		UserID:     testUserID,
+		TrustLevel: models.TrustLevelGuest,
+		FileTree:   &services.FileTreeService{},
+	}
+
+	req := JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      9,
+		Method:  "resources/read",
+		Params:  json.RawMessage(`{"uri":"agenthub://skills/portability/claude/SKILL.md"}`),
+	}
+
+	resp := s.HandleJSONRPC(req)
+	if resp.Error != nil {
+		t.Fatalf("unexpected error: %v", resp.Error)
+	}
+
+	result, ok := resp.Result.(map[string]interface{})
+	if !ok {
+		t.Fatal("expected result map")
+	}
+
+	contents, ok := result["contents"].([]map[string]interface{})
+	if !ok || len(contents) == 0 {
+		t.Fatalf("expected non-empty contents, got %#v", result["contents"])
+	}
+
+	text, _ := contents[0]["text"].(string)
+	if !strings.Contains(text, "Claude Portability Manual") {
+		t.Fatalf("expected Claude portability manual content, got %q", text)
 	}
 }
 

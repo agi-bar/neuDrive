@@ -65,25 +65,17 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 		return nil, fmt.Errorf("filetree.List: database not configured")
 	}
 
-	altPath := hubpath.AlternateSkillsPath(path)
-	parentDepth := strings.Count(path, "/")
-	altDepth := strings.Count(altPath, "/")
-
+	args := []interface{}{userID, trustLevel}
+	args = append(args, s.prefixArgs(path)...)
 	rows, err := s.db.Query(ctx,
 		fmt.Sprintf(`SELECT %s
 		 FROM file_tree
 		 WHERE user_id = $1
 		   AND deleted_at IS NULL
-		   AND (path LIKE $2 OR path LIKE $6)
-		   AND path != $3 AND path != $7
-		   AND min_trust_level <= $4
-		   AND (
-		     (NOT is_directory AND (array_length(string_to_array(path, '/'), 1) = $5 + 1 OR array_length(string_to_array(path, '/'), 1) = $8 + 1))
-		     OR
-		     (is_directory AND (array_length(string_to_array(path, '/'), 1) = $5 + 2 OR array_length(string_to_array(path, '/'), 1) = $8 + 2))
-		   )
-		 ORDER BY is_directory DESC, path ASC`, fileTreeSelectColumns),
-		userID, path+"%", path, trustLevel, parentDepth, altPath+"%", altPath, altDepth)
+		   AND min_trust_level <= $2
+		   AND %s
+		 ORDER BY path ASC`, fileTreeSelectColumns, s.prefixCondition(path, 3)),
+		args...)
 	if err != nil {
 		return nil, fmt.Errorf("filetree.List: %w", err)
 	}
@@ -93,6 +85,7 @@ func (s *FileTreeService) List(ctx context.Context, userID uuid.UUID, path strin
 	if err != nil {
 		return nil, err
 	}
+	entries = immediateChildEntries(path, userID, entries)
 	if !handledBySystem {
 		return entries, nil
 	}
@@ -937,6 +930,69 @@ func scanFileTreeEntries(rows pgx.Rows) ([]models.FileTreeEntry, error) {
 		entries = append(entries, entry)
 	}
 	return entries, rows.Err()
+}
+
+func immediateChildEntries(parentPath string, userID uuid.UUID, entries []models.FileTreeEntry) []models.FileTreeEntry {
+	publicParentPath := hubpath.NormalizePublic(parentPath)
+	if !strings.HasSuffix(publicParentPath, "/") {
+		publicParentPath += "/"
+	}
+
+	children := make(map[string]models.FileTreeEntry)
+	for _, entry := range entries {
+		publicEntryPath := hubpath.NormalizePublic(entry.Path)
+		if publicEntryPath == publicParentPath || !strings.HasPrefix(publicEntryPath, publicParentPath) {
+			continue
+		}
+
+		rest := strings.TrimPrefix(publicEntryPath, publicParentPath)
+		trimmedRest := strings.TrimSuffix(rest, "/")
+		if trimmedRest == "" {
+			continue
+		}
+
+		segments := strings.Split(trimmedRest, "/")
+		childName := segments[0]
+		childPath := pathpkg.Join(strings.TrimSuffix(publicParentPath, "/"), childName)
+		isDirectChild := len(segments) == 1
+
+		if entry.IsDirectory || !isDirectChild {
+			childPath += "/"
+		}
+		childPath = hubpath.NormalizeStorage(childPath)
+
+		if _, ok := children[childPath]; ok {
+			continue
+		}
+
+		if !isDirectChild {
+			now := entry.UpdatedAt
+			children[childPath] = models.FileTreeEntry{
+				ID:            uuid.Nil,
+				UserID:        userID,
+				Path:          childPath,
+				Kind:          "directory",
+				IsDirectory:   true,
+				ContentType:   "directory",
+				Metadata:      map[string]interface{}{},
+				Checksum:      entryChecksum(hubpath.NormalizePublic(childPath), "", "directory", map[string]interface{}{}),
+				Version:       1,
+				MinTrustLevel: models.TrustLevelGuest,
+				CreatedAt:     now,
+				UpdatedAt:     now,
+			}
+			continue
+		}
+
+		entry.Path = childPath
+		children[childPath] = entry
+	}
+
+	out := make([]models.FileTreeEntry, 0, len(children))
+	for _, entry := range children {
+		out = append(out, entry)
+	}
+	return mergeFileTreeEntries(out)
 }
 
 func entryToSkillSummary(entry models.FileTreeEntry, source string) models.SkillSummary {

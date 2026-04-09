@@ -217,7 +217,7 @@ test.describe('Bundle Sync', () => {
       await page.goto('/data/sync')
       await page.getByRole('button', { name: '生成 Sync Token' }).click()
       await expect(page.getByText('当前 Token', { exact: true })).toBeVisible()
-      await expect(page.locator('.token-list-prefix').filter({ hasText: /^session / })).toBeVisible({ timeout: 15000 })
+      await expect(page.locator('.token-list-prefix').filter({ hasText: /^(会话|Session|session) / })).toBeVisible({ timeout: 15000 })
       await page.getByRole('button', { name: '选择并继续这个 Session' }).click()
       await expect(page.locator('.alert-warn').filter({ hasText: '已选择继续未完成 session' })).toBeVisible()
       await page.getByLabel('Bundle file').setInputFiles(archivePath)

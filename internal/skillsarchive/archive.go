@@ -20,6 +20,11 @@ type Entry struct {
 	Data      []byte
 }
 
+type archiveFile struct {
+	Name string
+	Data []byte
+}
+
 func ParseZipBytes(data []byte, archiveName string) ([]Entry, error) {
 	reader := bytes.NewReader(data)
 	return ParseZipReader(reader, int64(len(data)), archiveName)
@@ -32,38 +37,42 @@ func ParseZipReader(readerAt io.ReaderAt, size int64, archiveName string) ([]Ent
 	}
 
 	inferredSkill := InferArchiveSkillName(archiveName)
-	entries := make([]Entry, 0, len(zr.File))
-	hasSkillManifest := map[string]bool{}
+	files := make([]archiveFile, 0, len(zr.File))
 
 	for _, file := range zr.File {
 		if file.FileInfo().IsDir() {
 			continue
 		}
-		skillName, relPath, ok := classifyEntry(file.Name, inferredSkill)
+		cleanName, ok := normalizeArchivePath(file.Name)
 		if !ok {
 			continue
 		}
 		rc, err := file.Open()
 		if err != nil {
-			return nil, fmt.Errorf("open archive entry %s: %w", file.Name, err)
+			return nil, fmt.Errorf("open archive entry %s: %w", cleanName, err)
 		}
 		entryData, err := io.ReadAll(rc)
 		_ = rc.Close()
 		if err != nil {
-			return nil, fmt.Errorf("read archive entry %s: %w", file.Name, err)
+			return nil, fmt.Errorf("read archive entry %s: %w", cleanName, err)
 		}
-		entries = append(entries, Entry{
-			SkillName: skillName,
-			RelPath:   relPath,
-			Data:      entryData,
-		})
-		if relPath == "SKILL.md" {
-			hasSkillManifest[skillName] = true
-		}
+		files = append(files, archiveFile{Name: cleanName, Data: entryData})
+	}
+
+	manifestRoots := detectManifestRoots(files, inferredSkill)
+	entries := entriesFromManifestRoots(files, manifestRoots)
+	if len(entries) == 0 {
+		entries = entriesFromLegacyLayout(files, inferredSkill)
 	}
 
 	if len(entries) == 0 {
 		return nil, fmt.Errorf("no skill files found in archive")
+	}
+	hasSkillManifest := map[string]bool{}
+	for _, entry := range entries {
+		if entry.RelPath == "SKILL.md" {
+			hasSkillManifest[entry.SkillName] = true
+		}
 	}
 	for _, entry := range entries {
 		if !hasSkillManifest[entry.SkillName] {
@@ -122,15 +131,111 @@ func LooksBinary(pathValue string, data []byte) bool {
 	return false
 }
 
-func classifyEntry(name, inferredSkill string) (string, string, bool) {
+func normalizeArchivePath(name string) (string, bool) {
 	clean := path.Clean(strings.TrimPrefix(strings.ReplaceAll(name, "\\", "/"), "/"))
 	if clean == "." || clean == "" {
-		return "", "", false
+		return "", false
 	}
 	if strings.HasPrefix(clean, "../") || clean == ".." {
-		return "", "", false
+		return "", false
 	}
 	if strings.HasPrefix(clean, "__MACOSX/") || strings.HasSuffix(clean, "/.DS_Store") || path.Base(clean) == ".DS_Store" {
+		return "", false
+	}
+	return clean, true
+}
+
+func detectManifestRoots(files []archiveFile, inferredSkill string) map[string]string {
+	roots := make(map[string]string)
+	for _, file := range files {
+		if path.Base(file.Name) != "SKILL.md" {
+			continue
+		}
+		root := path.Dir(file.Name)
+		skillName := inferredSkill
+		if root != "." {
+			skillName = strings.TrimSpace(strings.TrimSuffix(path.Base(root), ".skill"))
+		}
+		if skillName == "" {
+			continue
+		}
+		roots[root] = skillName
+	}
+	return roots
+}
+
+func entriesFromManifestRoots(files []archiveFile, manifestRoots map[string]string) []Entry {
+	if len(manifestRoots) == 0 {
+		return nil
+	}
+	roots := make([]string, 0, len(manifestRoots))
+	for root := range manifestRoots {
+		roots = append(roots, root)
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		iDepth := strings.Count(roots[i], "/")
+		jDepth := strings.Count(roots[j], "/")
+		if iDepth != jDepth {
+			return iDepth > jDepth
+		}
+		return len(roots[i]) > len(roots[j])
+	})
+
+	entries := make([]Entry, 0, len(files))
+	for _, file := range files {
+		for _, root := range roots {
+			relPath, ok := relPathWithinRoot(file.Name, root)
+			if !ok {
+				continue
+			}
+			entries = append(entries, Entry{
+				SkillName: manifestRoots[root],
+				RelPath:   relPath,
+				Data:      file.Data,
+			})
+			break
+		}
+	}
+	return entries
+}
+
+func entriesFromLegacyLayout(files []archiveFile, inferredSkill string) []Entry {
+	entries := make([]Entry, 0, len(files))
+	for _, file := range files {
+		skillName, relPath, ok := classifyLegacyEntry(file.Name, inferredSkill)
+		if !ok {
+			continue
+		}
+		entries = append(entries, Entry{
+			SkillName: skillName,
+			RelPath:   relPath,
+			Data:      file.Data,
+		})
+	}
+	return entries
+}
+
+func relPathWithinRoot(fileName, root string) (string, bool) {
+	if root == "." {
+		if fileName == "" {
+			return "", false
+		}
+		return fileName, true
+	}
+	prefix := root + "/"
+	if !strings.HasPrefix(fileName, prefix) {
+		return "", false
+	}
+	relPath := strings.TrimPrefix(fileName, prefix)
+	if relPath == "" || strings.HasPrefix(relPath, "../") {
+		return "", false
+	}
+	return relPath, true
+}
+
+func classifyLegacyEntry(name, inferredSkill string) (string, string, bool) {
+	clean, ok := normalizeArchivePath(name)
+	if !ok {
 		return "", "", false
 	}
 

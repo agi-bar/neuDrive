@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -797,13 +798,15 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		uploadURL := strings.TrimRight(s.BaseURL, "/") + "/agent/import/skills?platform=" + platform
+		browserUploadURL := strings.TrimRight(s.BaseURL, "/") + "/import/skills?token=" + url.QueryEscape(resp.Token) + "&platform=" + url.QueryEscape(platform)
 		payload, _ := json.MarshalIndent(map[string]interface{}{
-			"token":        resp.Token,
-			"expires_at":   resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
-			"api_base":     s.BaseURL,
-			"upload_url":   uploadURL,
-			"scopes":       resp.ScopedToken.Scopes,
-			"curl_example": fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/agenthub-skills.zip" "%s"`, resp.Token, platform, uploadURL),
+			"token":              resp.Token,
+			"expires_at":         resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
+			"api_base":           s.BaseURL,
+			"upload_url":         uploadURL,
+			"browser_upload_url": browserUploadURL,
+			"scopes":             resp.ScopedToken.Scopes,
+			"curl_example":       fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/agenthub-skills.zip" "%s"`, resp.Token, platform, uploadURL),
 		}, "", "  ")
 		return string(payload), false
 

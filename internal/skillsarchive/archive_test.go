@@ -42,6 +42,49 @@ func TestParseZipBytes_MultiSkillArchive(t *testing.T) {
 	}
 }
 
+func TestParseZipBytes_NamespacedMultiSkillArchive(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	write := func(name string, data []byte) {
+		t.Helper()
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("Create(%s): %v", name, err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatalf("Write(%s): %v", name, err)
+		}
+	}
+	write("public/docx/SKILL.md", []byte("# Docx\n"))
+	write("public/docx/LICENSE.txt", []byte("license\n"))
+	write("public/docx/scripts/run.py", []byte("print('docx')\n"))
+	write("examples/brand-guidelines/SKILL.md", []byte("# Brand\n"))
+	write("examples/brand-guidelines/assets/logo.txt", []byte("logo\n"))
+	if err := zw.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	entries, err := ParseZipBytes(buf.Bytes(), "claude-skills-all.zip")
+	if err != nil {
+		t.Fatalf("ParseZipBytes: %v", err)
+	}
+	if len(entries) != 5 {
+		t.Fatalf("expected 5 entries, got %d", len(entries))
+	}
+	if entries[0].SkillName != "brand-guidelines" || entries[0].RelPath != "SKILL.md" {
+		t.Fatalf("unexpected first entry: %+v", entries[0])
+	}
+	if entries[2].SkillName != "docx" || entries[2].RelPath != "LICENSE.txt" {
+		t.Fatalf("unexpected docx license entry: %+v", entries[2])
+	}
+	if entries[3].SkillName != "docx" || entries[3].RelPath != "SKILL.md" {
+		t.Fatalf("unexpected docx manifest entry: %+v", entries[3])
+	}
+	if entries[4].SkillName != "docx" || entries[4].RelPath != "scripts/run.py" {
+		t.Fatalf("unexpected last entry: %+v", entries[4])
+	}
+}
+
 func TestParseZipBytes_RequiresSkillManifest(t *testing.T) {
 	var buf bytes.Buffer
 	zw := zip.NewWriter(&buf)
@@ -58,6 +101,40 @@ func TestParseZipBytes_RequiresSkillManifest(t *testing.T) {
 
 	if _, err := ParseZipBytes(buf.Bytes(), "demo.zip"); err == nil {
 		t.Fatal("expected missing SKILL.md error")
+	}
+}
+
+func TestParseZipBytes_RootSingleSkillArchive(t *testing.T) {
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	write := func(name string, data []byte) {
+		t.Helper()
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("Create(%s): %v", name, err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatalf("Write(%s): %v", name, err)
+		}
+	}
+	write("SKILL.md", []byte("# Root Skill\n"))
+	write("scripts/run.py", []byte("print('root')\n"))
+	if err := zw.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	entries, err := ParseZipBytes(buf.Bytes(), "root-demo.zip")
+	if err != nil {
+		t.Fatalf("ParseZipBytes: %v", err)
+	}
+	if len(entries) != 2 {
+		t.Fatalf("expected 2 entries, got %d", len(entries))
+	}
+	if entries[0].SkillName != "root-demo" || entries[0].RelPath != "SKILL.md" {
+		t.Fatalf("unexpected first entry: %+v", entries[0])
+	}
+	if entries[1].SkillName != "root-demo" || entries[1].RelPath != "scripts/run.py" {
+		t.Fatalf("unexpected second entry: %+v", entries[1])
 	}
 }
 

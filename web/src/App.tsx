@@ -22,6 +22,7 @@ import DataSkillsPage from './pages/data/DataSkillsPage'
 import DataMemoryPage from './pages/data/DataMemoryPage'
 import DataSyncPage from './pages/data/DataSyncPage'
 import SyncLoginPage from './pages/SyncLoginPage'
+import SkillsImportPage from './pages/SkillsImportPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -104,6 +105,7 @@ function App() {
   const isProfileRoute = location.pathname === '/data/profile'
   const isDataRoute = location.pathname.startsWith('/data') && !isProfileRoute
   const isSyncLoginRoute = location.pathname === '/sync/login'
+  const isSkillsImportRoute = location.pathname === '/import/skills'
   const isLegacySyncLoginRoute =
     location.pathname === '/data/sync' &&
     new URLSearchParams(location.search).get('cli_login') === '1'
@@ -124,6 +126,10 @@ function App() {
   // OAuth authorize is a standalone page (no sidebar), regardless of login state
   if (location.pathname === '/oauth/authorize') {
     return <OAuthAuthorizePage />
+  }
+
+  if (isSkillsImportRoute) {
+    return <SkillsImportPage />
   }
 
   if (!user) {

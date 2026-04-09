@@ -537,6 +537,9 @@ func TestSQLiteSharedServerImportSkillsZip(t *testing.T) {
 	if !bytes.Contains(env.Data, []byte(`"imported":3`)) {
 		t.Fatalf("unexpected import payload: %s", string(env.Data))
 	}
+	if !bytes.Contains(env.Data, []byte(`"skills":["claude-web-skill"]`)) {
+		t.Fatalf("expected imported skill names in payload: %s", string(env.Data))
+	}
 
 	entry, err := store.Read(ctx, userID, "/skills/claude-web-skill/SKILL.md", models.TrustLevelWork)
 	if err != nil {

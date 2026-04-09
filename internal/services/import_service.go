@@ -94,6 +94,7 @@ type SkillsArchiveImportResult struct {
 	Imported int      `json:"imported"`
 	Skipped  int      `json:"skipped"`
 	Errors   []string `json:"errors,omitempty"`
+	Skills   []string `json:"skills,omitempty"`
 }
 
 // ImportSkillsArchive imports a zip archive that contains one or more skills.
@@ -162,9 +163,19 @@ func (s *ImportService) ImportSkillsArchiveEntries(ctx context.Context, userID u
 			}
 		}
 		result.Imported++
+		result.Skills = appendUniqueString(result.Skills, entry.SkillName)
 	}
 
 	return result, nil
+}
+
+func appendUniqueString(items []string, value string) []string {
+	for _, existing := range items {
+		if existing == value {
+			return items
+		}
+	}
+	return append(items, value)
 }
 
 // claudeMemoryExport is the expected JSON structure from Claude memory exports.

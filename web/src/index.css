@@ -226,8 +226,140 @@ a:hover {
   margin: 20px 0;
 }
 
+.skills-upload-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(14, 165, 233, 0.12), transparent 30%),
+    linear-gradient(180deg, #f6fbff 0%, #f8fafc 100%);
+}
+
+.skills-upload-card {
+  width: 100%;
+  max-width: 640px;
+  padding: 40px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: var(--shadow);
+}
+
+.skills-upload-dropzone {
+  margin-top: 18px;
+  padding: 28px 20px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(241, 245, 249, 0.9));
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.skills-upload-dropzone:hover {
+  border-color: var(--color-primary);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.92), rgba(236, 253, 245, 0.92));
+}
+
+.skills-upload-dropzone.is-dragging {
+  border-color: var(--color-primary);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.96), rgba(224, 242, 254, 0.92));
+  transform: translateY(-1px);
+}
+
+.skills-upload-dropzone.is-disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.skills-upload-input {
+  display: none;
+}
+
+.skills-upload-dropzone-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.skills-upload-dropzone-copy {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.skills-upload-file-meta {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
+.skills-upload-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.skills-upload-progress {
+  margin-top: 18px;
+}
+
+.skills-upload-progress-bar {
+  width: 100%;
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.2);
+}
+
+.skills-upload-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0f766e 0%, #0284c7 100%);
+  transition: width 0.2s ease;
+}
+
+.skills-upload-results {
+  margin-top: 20px;
+}
+
+.skills-upload-skill-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.skills-upload-skill-chip {
+  padding: 6px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface-subtle);
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.skills-upload-error-list {
+  margin: 10px 0 0;
+  padding-left: 18px;
+}
+
+.skills-upload-error-list li + li {
+  margin-top: 6px;
+}
+
 @media (max-width: 640px) {
   .sync-login-card {
+    padding: 28px 20px;
+  }
+
+  .skills-upload-card {
     padding: 28px 20px;
   }
 

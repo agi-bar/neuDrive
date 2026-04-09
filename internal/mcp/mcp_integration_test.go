@@ -478,6 +478,9 @@ func TestMCPInteg_ImportSkillsArchive(t *testing.T) {
 	if !strings.Contains(text, `"imported": 3`) {
 		t.Fatalf("unexpected import_skills_archive result: %s", text)
 	}
+	if !strings.Contains(text, `"skills": [`) || !strings.Contains(text, `"integ-archive"`) {
+		t.Fatalf("expected imported skill names in result: %s", text)
+	}
 
 	entry, err := s.FileTree.Read(context.Background(), s.UserID, "/skills/integ-archive/helper.py", models.TrustLevelFull)
 	if err != nil {
@@ -537,6 +540,9 @@ func TestMCPInteg_CreateSkillsImportToken(t *testing.T) {
 	}
 	if !strings.Contains(text, "/agent/import/skills?platform=claude-web") {
 		t.Fatalf("expected upload_url in output, got %s", text)
+	}
+	if !strings.Contains(text, "/import/skills?token=") {
+		t.Fatalf("expected browser_upload_url in output, got %s", text)
 	}
 }
 

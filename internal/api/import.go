@@ -104,6 +104,7 @@ type ImportResult struct {
 	Imported int      `json:"imported"`
 	Skipped  int      `json:"skipped"`
 	Errors   []string `json:"errors,omitempty"`
+	Skills   []string `json:"skills,omitempty"`
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +142,7 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 			Imported: result.Imported,
 			Skipped:  result.Skipped,
 			Errors:   result.Errors,
+			Skills:   result.Skills,
 		}, nil
 	}
 
@@ -175,8 +177,24 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 			continue
 		}
 		result.Imported++
+		if skillName := importedSkillNameFromPath(path); skillName != "" {
+			result.Skills = appendUnique(result.Skills, skillName)
+		}
 	}
 	return result, nil
+}
+
+func importedSkillNameFromPath(path string) string {
+	normalized := hubpath.NormalizePublic(path)
+	trimmed := strings.TrimPrefix(normalized, "/skills/")
+	if trimmed == normalized || trimmed == "" {
+		return ""
+	}
+	parts := strings.SplitN(trimmed, "/", 2)
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(parts[0])
 }
 
 func extractSkillsArchive(r *http.Request) ([]byte, string, string, error) {

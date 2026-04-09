@@ -109,7 +109,6 @@ func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path strin
 	if s.db == nil {
 		return nil, ErrEntryNotFound
 	}
-	altPath := hubpath.AlternateSkillsPath(path)
 
 	var entry models.FileTreeEntry
 	err := s.db.QueryRow(ctx,
@@ -117,10 +116,9 @@ func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path strin
 		 FROM file_tree
 		 WHERE user_id = $1
 		   AND deleted_at IS NULL
-		   AND (path = $2 OR path = $3)
-		 ORDER BY CASE WHEN path = $2 THEN 0 ELSE 1 END
+		   AND path = $2
 		 LIMIT 1`, fileTreeSelectColumns),
-		userID, path, altPath).
+		userID, path).
 		Scan(
 			&entry.ID,
 			&entry.UserID,
@@ -792,17 +790,15 @@ func (s *FileTreeService) latestCursor(ctx context.Context, userID uuid.UUID, pa
 }
 
 func (s *FileTreeService) lockEntry(ctx context.Context, tx pgx.Tx, userID uuid.UUID, path string) (*models.FileTreeEntry, error) {
-	altPath := hubpath.AlternateSkillsPath(path)
 	var entry models.FileTreeEntry
 	err := tx.QueryRow(ctx,
 		fmt.Sprintf(`SELECT %s
 		 FROM file_tree
 		 WHERE user_id = $1
-		   AND (path = $2 OR path = $3)
-		 ORDER BY CASE WHEN path = $2 THEN 0 ELSE 1 END
+		   AND path = $2
 		 LIMIT 1
 		 FOR UPDATE`, fileTreeSelectColumns),
-		userID, path, altPath,
+		userID, path,
 	).Scan(
 		&entry.ID,
 		&entry.UserID,
@@ -857,14 +853,7 @@ func (s *FileTreeService) prefixCondition(pathPrefix string, argStart int) strin
 		return "TRUE"
 	}
 
-	argsCount := len(s.prefixArgs(pathPrefix))
-	if argsCount == 2 {
-		return fmt.Sprintf("(path = $%d OR path LIKE $%d)", argStart, argStart+1)
-	}
-	return fmt.Sprintf(`(
-		path = $%d OR path LIKE $%d OR
-		path = $%d OR path LIKE $%d
-	)`, argStart, argStart+1, argStart+2, argStart+3)
+	return fmt.Sprintf("(path = $%d OR path LIKE $%d)", argStart, argStart+1)
 }
 
 func (s *FileTreeService) entryVersionPrefixCondition(pathPrefix string, argStart int) string {
@@ -872,14 +861,7 @@ func (s *FileTreeService) entryVersionPrefixCondition(pathPrefix string, argStar
 		return "TRUE"
 	}
 
-	argsCount := len(s.prefixArgs(pathPrefix))
-	if argsCount == 2 {
-		return fmt.Sprintf("(path = $%d OR path LIKE $%d)", argStart, argStart+1)
-	}
-	return fmt.Sprintf(`(
-		path = $%d OR path LIKE $%d OR
-		path = $%d OR path LIKE $%d
-	)`, argStart, argStart+1, argStart+2, argStart+3)
+	return fmt.Sprintf("(path = $%d OR path LIKE $%d)", argStart, argStart+1)
 }
 
 func (s *FileTreeService) prefixArgs(pathPrefix string) []interface{} {
@@ -887,12 +869,7 @@ func (s *FileTreeService) prefixArgs(pathPrefix string) []interface{} {
 		return nil
 	}
 	storage := hubpath.NormalizeStorage(pathPrefix)
-	values := []interface{}{storage, prefixMatchValue(storage)}
-	alt := hubpath.AlternateSkillsPath(storage)
-	if alt != storage {
-		values = append(values, alt, prefixMatchValue(alt))
-	}
-	return values
+	return []interface{}{storage, prefixMatchValue(storage)}
 }
 
 func prefixMatchValue(pathPrefix string) string {

@@ -10,9 +10,9 @@ func TestNormalizeStorageAndPublic(t *testing.T) {
 		storage string
 		public  string
 	}{
-		{input: "/skills/demo/SKILL.md", storage: ".skills/demo/SKILL.md", public: "/skills/demo/SKILL.md"},
-		{input: "skills/demo/", storage: ".skills/demo/", public: "/skills/demo/"},
-		{input: "/.skills/demo/notes.md", storage: ".skills/demo/notes.md", public: "/skills/demo/notes.md"},
+		{input: "/skills/demo/SKILL.md", storage: "/skills/demo/SKILL.md", public: "/skills/demo/SKILL.md"},
+		{input: "skills/demo/", storage: "/skills/demo/", public: "/skills/demo/"},
+		{input: "/.skills/demo/notes.md", storage: "/skills/demo/notes.md", public: "/skills/demo/notes.md"},
 		{input: "/projects/demo/context.md", storage: "/projects/demo/context.md", public: "/projects/demo/context.md"},
 		{input: "/", storage: "/", public: "/"},
 	}
@@ -33,7 +33,7 @@ func TestNormalizeStorageAndPublic(t *testing.T) {
 func TestBaseName(t *testing.T) {
 	t.Parallel()
 
-	if got := BaseName(".skills/demo/"); got != "demo" {
+	if got := BaseName("/skills/demo/"); got != "demo" {
 		t.Fatalf("BaseName(skill dir) = %q, want demo", got)
 	}
 	if got := BaseName("/projects/demo/context.md"); got != "context.md" {

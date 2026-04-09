@@ -2,7 +2,9 @@ package sqlite
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -11,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
@@ -355,7 +358,109 @@ func (s *Store) init(ctx context.Context) error {
 			return fmt.Errorf("sqlite.init: %w", err)
 		}
 	}
+	if err := s.canonicalizeLegacySkillPaths(ctx); err != nil {
+		return fmt.Errorf("sqlite.init: canonicalize legacy skill paths: %w", err)
+	}
 	return nil
+}
+
+func (s *Store) canonicalizeLegacySkillPaths(ctx context.Context) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	rows, err := tx.QueryContext(ctx,
+		`SELECT id, user_id, path, COALESCE(content, ''), COALESCE(content_type, ''), COALESCE(metadata_json, '{}')
+		 FROM file_tree
+		 WHERE path = '.skills' OR path LIKE '.skills/%'
+		 ORDER BY user_id, path`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	type legacyRow struct {
+		id           string
+		userID       string
+		path         string
+		content      string
+		contentType  string
+		metadataJSON string
+	}
+
+	legacyRows := make([]legacyRow, 0, 16)
+	for rows.Next() {
+		var row legacyRow
+		if err := rows.Scan(&row.id, &row.userID, &row.path, &row.content, &row.contentType, &row.metadataJSON); err != nil {
+			return err
+		}
+		legacyRows = append(legacyRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+
+	for _, row := range legacyRows {
+		newPath := hubpath.NormalizeStorage(row.path)
+		if newPath == row.path {
+			continue
+		}
+
+		var existingID string
+		err := tx.QueryRowContext(ctx,
+			`SELECT id FROM file_tree WHERE user_id = ? AND path = ?`,
+			row.userID,
+			newPath,
+		).Scan(&existingID)
+		if err == nil {
+			if existingID != row.id {
+				if _, err := tx.ExecContext(ctx, `DELETE FROM file_blobs WHERE entry_id = ?`, row.id); err != nil {
+					return err
+				}
+				if _, err := tx.ExecContext(ctx, `DELETE FROM file_tree WHERE id = ?`, row.id); err != nil {
+					return err
+				}
+			}
+			continue
+		}
+		if err != sql.ErrNoRows {
+			return err
+		}
+
+		metadata := map[string]interface{}{}
+		if strings.TrimSpace(row.metadataJSON) != "" {
+			if err := json.Unmarshal([]byte(row.metadataJSON), &metadata); err != nil {
+				return err
+			}
+		}
+
+		if _, err := tx.ExecContext(ctx,
+			`UPDATE file_tree
+			 SET path = ?, checksum = ?
+			 WHERE id = ?`,
+			newPath,
+			sqliteEntryChecksum(newPath, row.content, row.contentType, metadata),
+			row.id,
+		); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func sqliteEntryChecksum(path, content, contentType string, metadata map[string]interface{}) string {
+	payload, _ := json.Marshal(map[string]interface{}{
+		"path":         path,
+		"content":      content,
+		"content_type": contentType,
+		"metadata":     metadata,
+	})
+	sum := sha256.Sum256(payload)
+	return hex.EncodeToString(sum[:])
 }
 
 func (s *Store) EnsureOwner(ctx context.Context) (*models.User, error) {

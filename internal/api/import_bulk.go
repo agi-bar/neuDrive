@@ -98,7 +98,7 @@ func (s *Server) handleImportSkill(w http.ResponseWriter, r *http.Request) {
 	// Collect imported paths.
 	paths := make([]string, 0, len(req.Files))
 	for relPath := range req.Files {
-		paths = append(paths, hubpath.NormalizePublic(".skills/"+req.Name+"/"+relPath))
+		paths = append(paths, hubpath.NormalizePublic("/skills/"+req.Name+"/"+relPath))
 	}
 
 	respondOK(w, ImportResponse{
@@ -349,7 +349,7 @@ func (s *Server) handleAgentImportSkill(w http.ResponseWriter, r *http.Request) 
 
 	paths := make([]string, 0, len(req.Files))
 	for relPath := range req.Files {
-		paths = append(paths, hubpath.NormalizePublic(".skills/"+req.Name+"/"+relPath))
+		paths = append(paths, hubpath.NormalizePublic("/skills/"+req.Name+"/"+relPath))
 	}
 
 	respondOK(w, ImportResponse{

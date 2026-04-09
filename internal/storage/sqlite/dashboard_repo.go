@@ -72,15 +72,13 @@ func (r *DashboardRepo) GetStats(ctx context.Context, userID uuid.UUID) (*models
 	}
 
 	skillStoragePat := hubpath.NormalizeStorage("/skills/") + "%"
-	skillAltPat := hubpath.AlternateSkillsPath(hubpath.NormalizeStorage("/skills/")) + "%"
 	if err := db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM file_tree
 		  WHERE user_id = ? AND is_directory = 0 AND deleted_at IS NULL
-		    AND (path LIKE ? OR path LIKE ?)
+		    AND path LIKE ?
 		    AND path LIKE '%/SKILL.md'`,
 		userID.String(),
 		skillStoragePat,
-		skillAltPat,
 	).Scan(&stats.TotalSkills); err != nil {
 		return nil, fmt.Errorf("sqlite.DashboardRepo.GetStats: skills count: %w", err)
 	}

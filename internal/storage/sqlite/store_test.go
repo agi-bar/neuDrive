@@ -3,6 +3,7 @@ package sqlite_test
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"path/filepath"
@@ -146,6 +147,72 @@ func TestFileAndBlobRoundTrip(t *testing.T) {
 	}
 	if _, err := store.Read(ctx, userID, entry.Path, models.TrustLevelGuest); err == nil {
 		t.Fatal("deleted text entry still readable")
+	}
+}
+
+func TestOpenCanonicalizesLegacySkillPaths(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "legacy.db")
+
+	store, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open initial store: %v", err)
+	}
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	if _, err := store.WriteEntry(ctx, user.ID, "/skills/legacy/SKILL.md", "# Legacy\n", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+	if err := store.Close(); err != nil {
+		t.Fatalf("Close initial store: %v", err)
+	}
+
+	rawDB, err := sql.Open("sqlite", dbPath+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)")
+	if err != nil {
+		t.Fatalf("Open raw sqlite: %v", err)
+	}
+	defer rawDB.Close()
+
+	if _, err := rawDB.ExecContext(ctx,
+		`UPDATE file_tree
+		 SET path = replace(path, '/skills', '.skills')
+		 WHERE path = '/skills/' OR path LIKE '/skills/%'`,
+	); err != nil {
+		t.Fatalf("Rewrite legacy skill paths: %v", err)
+	}
+
+	reopened, err := sqlite.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Reopen canonicalized store: %v", err)
+	}
+	defer reopened.Close()
+
+	entry, err := reopened.Read(ctx, user.ID, "/skills/legacy/SKILL.md", models.TrustLevelGuest)
+	if err != nil {
+		t.Fatalf("Read canonical skill path: %v", err)
+	}
+	if entry.Path != "/skills/legacy/SKILL.md" {
+		t.Fatalf("canonical path mismatch: got %q", entry.Path)
+	}
+
+	rows, err := reopened.DB().QueryContext(ctx, `SELECT path FROM file_tree WHERE path LIKE '.skills/%' OR path = '.skills'`)
+	if err != nil {
+		t.Fatalf("Query legacy paths: %v", err)
+	}
+	defer rows.Close()
+	if rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			t.Fatalf("Scan legacy path: %v", err)
+		}
+		t.Fatalf("expected legacy paths to be canonicalized, found %q", path)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("legacy path rows: %v", err)
 	}
 }
 

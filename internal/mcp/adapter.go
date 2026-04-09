@@ -541,7 +541,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
-		// Normalize storage paths to public paths (e.g. .skills/ → /skills/).
+		// Normalize any legacy storage aliases to canonical public paths.
 		filtered := entries[:0]
 		for i := range entries {
 			rendered := s.renderSystemSkillEntry(ctx, &entries[i])

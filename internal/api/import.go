@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/google/uuid"
@@ -163,10 +165,11 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 			ct = "text/plain"
 		}
 
-		path := skill.Path
-		if !strings.HasPrefix(path, ".skills/") && !strings.HasPrefix(path, "/skills/") {
-			path = ".skills/" + strings.TrimPrefix(path, "/")
+		path := strings.TrimSpace(skill.Path)
+		if !strings.HasPrefix(path, ".skills/") && !strings.HasPrefix(path, "/skills/") && !strings.HasPrefix(path, "skills/") {
+			path = "/skills/" + strings.TrimPrefix(path, "/")
 		}
+		path = hubpath.NormalizeStorage(path)
 		if _, err := s.FileTreeService.Write(r.Context(), userID, path, skill.Content, ct, models.TrustLevelGuest); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("skill %s: %v", skill.Path, err))
 			continue
@@ -439,10 +442,11 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 			if ct == "" {
 				ct = "text/markdown"
 			}
-			path := skill.Path
-			if !strings.HasPrefix(path, ".skills/") {
-				path = ".skills/" + path
+			path := strings.TrimSpace(skill.Path)
+			if !strings.HasPrefix(path, ".skills/") && !strings.HasPrefix(path, "/skills/") && !strings.HasPrefix(path, "skills/") {
+				path = "/skills/" + strings.TrimPrefix(path, "/")
 			}
+			path = hubpath.NormalizeStorage(path)
 			dir := filepath.Dir(path)
 			if dir != "." && dir != "" {
 				_ = s.FileTreeService.EnsureDirectory(r.Context(), userID, dir)
@@ -542,26 +546,9 @@ func (s *Server) HandleExportFull(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Export skills from file tree (everything under .skills/).
+	// Export skills from file tree (everything under /skills/).
 	if s.FileTreeService != nil {
-		entries, err := s.FileTreeService.List(r.Context(), userID, ".skills/", models.TrustLevelFull)
-		if err == nil {
-			for _, e := range entries {
-				if e.IsDirectory {
-					continue
-				}
-				// Read full content for each skill file.
-				full, err := s.FileTreeService.Read(r.Context(), userID, e.Path, models.TrustLevelFull)
-				if err != nil {
-					continue
-				}
-				export.Skills = append(export.Skills, SkillFile{
-					Path:        strings.TrimPrefix(full.Path, ".skills/"),
-					Content:     full.Content,
-					ContentType: full.ContentType,
-				})
-			}
-		}
+		_ = s.collectSkillExportFiles(r.Context(), userID, "/skills/", &export.Skills)
 	}
 
 	// Export devices.
@@ -607,6 +594,34 @@ func (s *Server) HandleExportFull(w http.ResponseWriter, r *http.Request) {
 	}
 
 	respondOK(w, export)
+}
+
+func (s *Server) collectSkillExportFiles(ctx context.Context, userID uuid.UUID, root string, out *[]SkillFile) error {
+	entries, err := s.FileTreeService.List(ctx, userID, root, models.TrustLevelFull)
+	if err != nil {
+		return err
+	}
+
+	for _, entry := range entries {
+		if entry.IsDirectory {
+			if err := s.collectSkillExportFiles(ctx, userID, entry.Path, out); err != nil {
+				return err
+			}
+			continue
+		}
+
+		full, err := s.FileTreeService.Read(ctx, userID, entry.Path, models.TrustLevelFull)
+		if err != nil {
+			continue
+		}
+		*out = append(*out, SkillFile{
+			Path:        strings.TrimPrefix(full.Path, "/skills/"),
+			Content:     full.Content,
+			ContentType: full.ContentType,
+		})
+	}
+
+	return nil
 }
 
 // ---------------------------------------------------------------------------

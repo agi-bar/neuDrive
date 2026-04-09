@@ -73,10 +73,10 @@ func (s *ExportService) ExportToZip(ctx context.Context, userID uuid.UUID, w io.
 		}
 	}
 
-	// skills/ — files from the file tree under .skills/
+	// skills/ — files from the file tree under /skills/
 	for path, content := range data.SkillFiles {
-		// Convert .skills/cyberzen-write/SKILL.md -> export/skills/cyberzen-write/SKILL.md
-		zipPath := "export/skills/" + strings.TrimPrefix(path, ".skills/")
+		// Convert /skills/cyberzen-write/SKILL.md -> export/skills/cyberzen-write/SKILL.md
+		zipPath := "export/skills/" + strings.TrimPrefix(path, "/skills/")
 		if err := writeZipString(zw, zipPath, content); err != nil {
 			return err
 		}
@@ -288,9 +288,9 @@ func (s *ExportService) gatherExportData(ctx context.Context, userID uuid.UUID) 
 		}
 	}
 
-	// Skills from file tree (everything under .skills/).
+	// Skills from file tree (everything under /skills/).
 	if s.FileTree != nil {
-		if err := s.collectSkillFiles(ctx, userID, ".skills/", data.SkillFiles); err != nil {
+		if err := s.collectSkillFiles(ctx, userID, "/skills/", data.SkillFiles); err != nil {
 			return nil, err
 		}
 	}

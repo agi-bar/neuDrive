@@ -6,52 +6,36 @@ import (
 )
 
 const (
-	publicSkillsRoot  = "/skills"
-	storageSkillsRoot = ".skills"
+	skillsRoot = "/skills"
 )
 
-// NormalizeStorage converts user-facing paths into the canonical file-tree
-// storage namespace. Skills always live under ".skills/" internally.
+// NormalizeStorage converts paths into the canonical file-tree storage
+// namespace. Skills now live under "/skills/" internally and publicly.
+// Legacy ".skills/" inputs are still accepted and normalized.
 func NormalizeStorage(raw string) string {
-	return normalize(raw, true)
+	return normalize(raw)
 }
 
 // NormalizePublic converts any accepted path form into the canonical public
-// representation. Skills are always exposed as "/skills/...".
+// representation. Legacy ".skills/" inputs are normalized to "/skills/...".
 func NormalizePublic(raw string) string {
-	return normalize(raw, false)
+	return normalize(raw)
 }
 
-// StorageToPublic converts a stored file-tree path into the public path form.
+// StorageToPublic converts a stored file-tree path into the canonical public
+// path form.
 func StorageToPublic(raw string) string {
 	if raw == "" || raw == "/" {
 		return "/"
 	}
-	return normalize(raw, false)
+	return normalize(raw)
 }
 
-// IsSkillsStoragePath reports whether the stored path points at the internal
+// IsSkillsStoragePath reports whether the stored path points at the canonical
 // skills namespace.
 func IsSkillsStoragePath(raw string) bool {
 	p := NormalizeStorage(raw)
-	return p == storageSkillsRoot || strings.HasPrefix(p, storageSkillsRoot+"/")
-}
-
-// AlternateSkillsPath returns the other path variant for skills paths.
-// If the path starts with .skills/, it returns /skills/ and vice versa.
-// For non-skills paths, returns the input unchanged (query will just match twice, harmless).
-func AlternateSkillsPath(path string) string {
-	// storageSkillsRoot = ".skills", publicSkillsRoot = "/skills"
-	switch {
-	case path == storageSkillsRoot || strings.HasPrefix(path, storageSkillsRoot+"/"):
-		// .skills/foo → /skills/foo
-		return publicSkillsRoot + strings.TrimPrefix(path, storageSkillsRoot)
-	case path == publicSkillsRoot || strings.HasPrefix(path, publicSkillsRoot+"/"):
-		// /skills/foo → .skills/foo
-		return storageSkillsRoot + strings.TrimPrefix(path, publicSkillsRoot)
-	default:
-		return path
-	}
+	return p == skillsRoot || strings.HasPrefix(p, skillsRoot+"/")
 }
 
 // BaseName returns the final visible path segment.
@@ -68,7 +52,7 @@ func BaseName(raw string) string {
 	return parts[len(parts)-1]
 }
 
-func normalize(raw string, storage bool) string {
+func normalize(raw string) string {
 	raw = strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
 	if raw == "" || raw == "/" {
 		return "/"
@@ -83,24 +67,14 @@ func normalize(raw string, storage bool) string {
 	trimmed := strings.TrimPrefix(cleaned, "/")
 	switch {
 	case trimmed == "skills" || strings.HasPrefix(trimmed, "skills/"):
-		trimmed = storageSkillsRoot + strings.TrimPrefix(trimmed, "skills")
-	case trimmed == storageSkillsRoot || strings.HasPrefix(trimmed, storageSkillsRoot+"/"):
-		// Already canonical for storage.
-	}
-
-	if !storage && (trimmed == storageSkillsRoot || strings.HasPrefix(trimmed, storageSkillsRoot+"/")) {
-		trimmed = "skills" + strings.TrimPrefix(trimmed, storageSkillsRoot)
+		trimmed = "skills" + strings.TrimPrefix(trimmed, "skills")
+	case trimmed == ".skills" || strings.HasPrefix(trimmed, ".skills/"):
+		trimmed = "skills" + strings.TrimPrefix(trimmed, ".skills")
 	}
 
 	if hasTrailingSlash && trimmed != "" && !strings.HasSuffix(trimmed, "/") {
 		trimmed += "/"
 	}
 
-	if storage {
-		if trimmed == storageSkillsRoot || strings.HasPrefix(trimmed, storageSkillsRoot+"/") {
-			return trimmed
-		}
-		return "/" + trimmed
-	}
 	return "/" + trimmed
 }

@@ -37,7 +37,7 @@ func TestImmediateChildEntriesRootShowsOnlyDirectChildren(t *testing.T) {
 			CreatedAt:   now,
 		},
 		{
-			Path:        ".skills/demo/SKILL.md",
+			Path:        "/skills/demo/SKILL.md",
 			Kind:        "skill",
 			ContentType: "text/markdown",
 			UpdatedAt:   now,
@@ -69,7 +69,7 @@ func TestImmediateChildEntriesSkillsRootCollapsesBundleFiles(t *testing.T) {
 
 	entries := []models.FileTreeEntry{
 		{
-			Path:        ".skills/agenthub/SKILL.md",
+			Path:        "/skills/agenthub/SKILL.md",
 			Kind:        "skill",
 			ContentType: "text/markdown",
 			UpdatedAt:   now,
@@ -83,14 +83,14 @@ func TestImmediateChildEntriesSkillsRootCollapsesBundleFiles(t *testing.T) {
 			CreatedAt:   now,
 		},
 		{
-			Path:        ".skills/notes.md",
+			Path:        "/skills/notes.md",
 			Kind:        "file",
 			ContentType: "text/markdown",
 			UpdatedAt:   now,
 			CreatedAt:   now,
 		},
 		{
-			Path:        ".skills/portability/chatgpt/SKILL.md",
+			Path:        "/skills/portability/chatgpt/SKILL.md",
 			Kind:        "skill",
 			ContentType: "text/markdown",
 			UpdatedAt:   now,

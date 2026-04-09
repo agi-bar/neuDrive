@@ -31,7 +31,6 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 	}
 	stats := &models.DashboardStats{}
 	skillStoragePat := hubpath.NormalizeStorage("/skills/") + "%"
-	skillAltPat := hubpath.AlternateSkillsPath(hubpath.NormalizeStorage("/skills/")) + "%"
 	memoryPat := hubpath.NormalizeStorage("/memory/") + "%"
 	profilePat := hubpath.NormalizeStorage("/memory/profile/") + "%"
 
@@ -79,9 +78,9 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 	// Count skills by SKILL.md documents, plus bundled system skills.
 	err = s.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = false AND deleted_at IS NULL
-		   AND (path LIKE $2 OR path LIKE $3)
+		   AND path LIKE $2
 		   AND path LIKE '%/SKILL.md'`,
-		userID, skillStoragePat, skillAltPat).
+		userID, skillStoragePat).
 		Scan(&stats.TotalSkills)
 	if err != nil {
 		return nil, fmt.Errorf("dashboard.GetStats: skills count: %w", err)

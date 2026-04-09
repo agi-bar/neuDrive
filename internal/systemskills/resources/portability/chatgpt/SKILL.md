@@ -39,6 +39,22 @@ Use this skill for:
 - `Connectors / integrations` -> connection metadata plus vault references
 - `Automations / scheduled behaviors` -> automation shadow records and recreation notes
 
+## Skill And Package Rules
+
+ChatGPT does not expose Claude-style `/mnt/skills/user` directories.
+If the migration still needs reusable prompt/code/tool bundles to land under Agent Hub `/skills`, the agent must assemble that bundle explicitly.
+
+- Use `import_skill(name, files)` for one text/code bundle whose full directory can be represented as `map[path]string`.
+- Nested paths like `scripts/run.py`, `prompts/review.txt`, and `config/tool.yaml` are allowed.
+- Do not simplify a bundle to only `SKILL.md`; include the whole bundle directory and every text/code file it depends on.
+- Use `import_skills_archive` for multi-bundle imports, binary-heavy bundles, or any case where exact bytes matter.
+- Supported zip layouts are:
+  - one skill at zip root: `SKILL.md`, `scripts/...`, `prompts/...`, `assets/...`
+  - many skills as top-level directories: `skill-a/SKILL.md`, `skill-b/SKILL.md`, and related files below each directory
+- Every imported skill directory must contain `SKILL.md`.
+- All skill imports land under Agent Hub `/skills/<name>/...`.
+- If one archive is too large for a single MCP tool call, use `create_skills_import_token` and present both the browser upload link and the curl command when available. Prefer the browser path for ordinary users and curl for terminal-comfortable users.
+
 ## Import Into AgentHub
 
 Recommended order:
@@ -47,8 +63,10 @@ Recommended order:
 2. Classify each item into AgentHub domains before writing.
 3. Write stable rules and preferences into `memory/profile`.
 4. Write project context into `/projects/<name>/context.md`.
-5. Preserve chats, knowledge uploads, and GPT configuration as structured archive or shadow metadata when no first-class domain exists yet.
-6. End with a coverage report: native imports, archived items, manual follow-ups, and unsupported parity.
+5. Use `write_file` for imported data that should be preserved as files even when it does not fit a first-class Agent Hub domain such as profile, memory, project, or skill. The agent may design a sensible custom directory structure for those files.
+6. If the task includes reusable bundles that should live under Agent Hub `/skills`, apply the skill/package rules above and preserve the entire directory contents, not just the instruction file.
+7. Preserve chats, knowledge uploads, GPT configuration, and other unsupported surfaces as structured archive, shadow metadata, or custom file trees when no first-class domain exists yet.
+8. End with a coverage report: native imports, archived items, manual follow-ups, and unsupported parity.
 
 ## Export Back To ChatGPT
 
@@ -72,6 +90,6 @@ When exporting AgentHub data back into ChatGPT:
 
 Use or adapt this prompt when another agent needs to execute ChatGPT portability work:
 
-> Help me migrate data between ChatGPT and AgentHub. First classify the data into profile, memory, projects, knowledge/files, tools/connections, automations, and conversations. Then map each item to the nearest AgentHub canonical domain. Preserve ChatGPT-specific structure as archive or shadow metadata instead of dropping it. If exporting back to ChatGPT, generate the nearest ChatGPT-compatible outputs and clearly mark manual steps and unsupported parity.
+> Help me migrate data between ChatGPT and AgentHub. First classify the data into profile, memory, projects, knowledge/files, tools/connections, automations, conversations, and any reusable bundles that should live under Agent Hub `/skills`. Then map each item to the nearest AgentHub canonical domain. Use `write_file` for additional imported file-like data that should be preserved even when it does not fit a first-class Agent Hub domain, and choose a sensible custom directory structure for those files. If one bundle is a text/code skill-like directory, use `import_skill` with the full directory contents, not just `SKILL.md`. If the bundle is multi-skill, binary-heavy, or too large for one tool call, use `import_skills_archive` or `create_skills_import_token` as appropriate. Preserve ChatGPT-specific structure as archive, shadow metadata, or custom file trees instead of dropping it. If exporting back to ChatGPT, generate the nearest ChatGPT-compatible outputs and clearly mark manual steps and unsupported parity.
 
 {{CURRENT_USER_SNAPSHOT}}

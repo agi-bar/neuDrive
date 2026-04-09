@@ -28,8 +28,8 @@ func TestFileTreeServiceListSystemDirectoriesWithoutDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("List() error = %v", err)
 	}
-	if len(entries) != 3 {
-		t.Fatalf("expected 3 entries, got %d", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 entries, got %d", len(entries))
 	}
 }
 
@@ -40,8 +40,8 @@ func TestFileTreeServiceListSkillSummariesIncludesSystemSkills(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListSkillSummaries() error = %v", err)
 	}
-	if len(summaries) != 4 {
-		t.Fatalf("expected 4 system skills, got %d", len(summaries))
+	if len(summaries) != 5 {
+		t.Fatalf("expected 5 system skills, got %d", len(summaries))
 	}
 	foundAgentHub := false
 	for _, summary := range summaries {

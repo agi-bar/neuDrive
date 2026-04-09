@@ -110,7 +110,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": "Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. Use import_skill for one skill directory, import_skills_archive for full Claude Web /mnt/skills/user archives or multi-skill zips, and reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.",
+				"instructions": "Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. If no platform-specific manual exists, read agenthub://skills/portability/general/SKILL.md or call read_skill with name=portability/general. Use import_skill for one text/code skill directory, import_skills_archive for full Claude Web /mnt/skills/user archives or multi-skill zips, and reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.",
 			},
 		}
 	case "notifications/initialized":
@@ -251,7 +251,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "read_skill",
-			Description: "读取技能的 SKILL.md；当用户提到平台迁移时，也可读取 portability/<platform>",
+			Description: "读取技能的 SKILL.md；当用户提到平台迁移时，也可读取 portability/<platform>，未知平台可读取 portability/general",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"name": prop("string", "技能名称"),
 			}, "name"),
@@ -863,6 +863,12 @@ func wellKnownResources() []MCPResource {
 			URI:         "agenthub://skills/agenthub/SKILL.md",
 			Name:        "/skills/agenthub/SKILL.md",
 			Description: "Agent Hub umbrella skill entrypoint",
+			MimeType:    "text/markdown",
+		},
+		{
+			URI:         "agenthub://skills/portability/general/SKILL.md",
+			Name:        "/skills/portability/general/SKILL.md",
+			Description: "General portability manual",
 			MimeType:    "text/markdown",
 		},
 		{

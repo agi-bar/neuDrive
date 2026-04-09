@@ -190,6 +190,9 @@ func TestListSkillsIncludesSystemPortabilityManuals(t *testing.T) {
 	if !strings.Contains(text, "portability/chatgpt") {
 		t.Fatalf("expected portability/chatgpt in list_skills output, got %s", text)
 	}
+	if !strings.Contains(text, "portability/general") {
+		t.Fatalf("expected portability/general in list_skills output, got %s", text)
+	}
 	if !strings.Contains(text, "\"name\": \"agenthub\"") {
 		t.Fatalf("expected agenthub system skill in list_skills output, got %s", text)
 	}
@@ -510,6 +513,7 @@ func TestResourcesListIncludesSystemSkillManuals(t *testing.T) {
 
 	for _, uri := range []string{
 		"agenthub://skills/agenthub/SKILL.md",
+		"agenthub://skills/portability/general/SKILL.md",
 		"agenthub://skills/portability/claude/SKILL.md",
 		"agenthub://skills/portability/chatgpt/SKILL.md",
 		"agenthub://skills/portability/codex/SKILL.md",

@@ -38,4 +38,5 @@ Use this umbrella skill when the user wants to work with Agent Hub from inside a
 - Use Agent Hub MCP tools for Hub reads and writes instead of inventing local file formats.
 - Preserve exact assets separately from derived summaries.
 - When a platform-specific portability manual exists, read `/skills/portability/<platform>/SKILL.md` before migrating data.
+- When no platform-specific manual exists, fall back to `/skills/portability/general/SKILL.md`.
 - Never silently drop unsupported or partially captured data; preserve it as notes or archive metadata.

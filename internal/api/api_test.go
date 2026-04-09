@@ -423,8 +423,8 @@ func TestFileTreeListSystemPortabilityDirectory(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected children array, got %#v", body["children"])
 	}
-	if len(children) != 3 {
-		t.Fatalf("expected 3 platform directories, got %d", len(children))
+	if len(children) != 4 {
+		t.Fatalf("expected 4 platform directories, got %d", len(children))
 	}
 }
 

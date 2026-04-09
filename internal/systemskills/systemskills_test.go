@@ -54,8 +54,8 @@ func TestListEntriesPortabilityRoot(t *testing.T) {
 	if !ok {
 		t.Fatal("expected portability root to be handled")
 	}
-	if len(entries) != 3 {
-		t.Fatalf("expected 3 platform directories, got %d", len(entries))
+	if len(entries) != 4 {
+		t.Fatalf("expected 4 platform directories, got %d", len(entries))
 	}
 }
 
@@ -121,6 +121,22 @@ func TestReadEntryChatGPTSkill(t *testing.T) {
 	}
 	if readOnly, _ := entry.Metadata["read_only"].(bool); !readOnly {
 		t.Fatal("expected read_only metadata")
+	}
+}
+
+func TestReadEntryGeneralPortabilitySkill(t *testing.T) {
+	entry, ok, err := ReadEntry("/skills/portability/general/SKILL.md")
+	if err != nil {
+		t.Fatalf("ReadEntry() error = %v", err)
+	}
+	if !ok {
+		t.Fatal("expected general portability skill to be found")
+	}
+	if entry.Kind != "skill" {
+		t.Fatalf("expected kind=skill, got %q", entry.Kind)
+	}
+	if !strings.Contains(entry.Content, "General Platform Portability Manual") {
+		t.Fatalf("expected general portability manual content")
 	}
 }
 

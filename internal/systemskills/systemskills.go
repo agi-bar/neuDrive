@@ -29,8 +29,8 @@ var (
 	skillsRoot           = "/skills"
 	agentHubRoot         = "/skills/agenthub"
 	portabilityRoot      = "/skills/portability"
-	portabilityPlatforms = []string{"claude", "chatgpt", "codex"}
-	systemSkillOrder     = []string{"agenthub", "portability/claude", "portability/chatgpt", "portability/codex"}
+	portabilityPlatforms = []string{"general", "claude", "chatgpt", "codex"}
+	systemSkillOrder     = []string{"agenthub", "portability/general", "portability/claude", "portability/chatgpt", "portability/codex"}
 	agenthubManifest     = skillManifest{
 		DisplayName: "Agent Hub",
 		SkillName:   "agenthub",
@@ -41,6 +41,16 @@ var (
 		Tags:        []string{"agenthub", "mcp", "platforms", "sync", "portability"},
 	}
 	platformManifests = map[string]skillManifest{
+		"general": {
+			DisplayName: "General",
+			SkillName:   "portability/general",
+			Path:        portabilityRoot + "/general",
+			ResourceDir: "resources/portability/general",
+			Description: "Fallback guide for migrating data from platforms that do not yet have a dedicated AgentHub portability manual.",
+			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export platform data and no dedicated portability/<platform> manual exists, or the dedicated manual does not cover the needed surface.",
+			Tags:        []string{"portability", "migration", "backup", "general", "agenthub"},
+			Platform:    "general",
+		},
 		"claude": {
 			DisplayName: "Claude",
 			SkillName:   "portability/claude",

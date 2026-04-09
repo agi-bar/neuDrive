@@ -428,30 +428,46 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 }
 
 func (s *Store) Delete(ctx context.Context, userID uuid.UUID, rawPath string) error {
-	storagePath := hubpath.NormalizeStorage(rawPath)
+	storagePath, err := s.resolveDeletePath(ctx, userID, rawPath)
+	if err != nil {
+		return err
+	}
 	if systemskills.IsProtectedPath(storagePath) {
 		return services.ErrReadOnlyPath
 	}
-	if !strings.HasSuffix(storagePath, "/") {
-		if _, err := s.db.ExecContext(ctx, `DELETE FROM file_blobs WHERE entry_id IN (SELECT id FROM file_tree WHERE user_id = ? AND path = ?)`, userID.String(), storagePath); err != nil {
-			return err
-		}
-		result, err := s.db.ExecContext(ctx, `DELETE FROM file_tree WHERE user_id = ? AND path = ?`, userID.String(), storagePath)
-		if err != nil {
-			return err
-		}
-		rows, _ := result.RowsAffected()
-		if rows == 0 {
-			return services.ErrEntryNotFound
-		}
-		return nil
-	}
-	prefix := prefixLike(storagePath)
-	if _, err := s.db.ExecContext(ctx, `DELETE FROM file_blobs WHERE entry_id IN (SELECT id FROM file_tree WHERE user_id = ? AND path LIKE ?)`, userID.String(), prefix); err != nil {
+
+	snapshot, err := s.Snapshot(ctx, userID, storagePath, models.TrustLevelFull)
+	if err != nil {
 		return err
 	}
-	_, err := s.db.ExecContext(ctx, `DELETE FROM file_tree WHERE user_id = ? AND path LIKE ?`, userID.String(), prefix)
-	return err
+	if len(snapshot.Entries) == 0 {
+		if _, handled := systemskills.ListEntries(storagePath); handled {
+			return nil
+		}
+		return services.ErrEntryNotFound
+	}
+
+	entriesToDelete := deletableEntriesForDeletion(storagePath, snapshot.Entries)
+	if len(entriesToDelete) == 0 {
+		return nil
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, entry := range entriesToDelete {
+		if _, err := tx.ExecContext(ctx, `DELETE FROM file_blobs WHERE entry_id = ?`, entry.ID.String()); err != nil {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `DELETE FROM file_tree WHERE user_id = ? AND path = ?`, userID.String(), entry.Path); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
 
 func (s *Store) ReadBinary(ctx context.Context, userID uuid.UUID, rawPath string, trustLevel int) ([]byte, *models.FileTreeEntry, error) {
@@ -573,6 +589,35 @@ func (s *Store) readCurrentEntry(ctx context.Context, userID uuid.UUID, storageP
 	return scanFileTreeEntry(row)
 }
 
+func (s *Store) resolveDeletePath(ctx context.Context, userID uuid.UUID, rawPath string) (string, error) {
+	storagePath := hubpath.NormalizeStorage(rawPath)
+	if systemskills.IsProtectedPath(storagePath) {
+		return "", services.ErrReadOnlyPath
+	}
+	if strings.HasSuffix(storagePath, "/") {
+		return storagePath, nil
+	}
+
+	entry, err := s.Read(ctx, userID, storagePath, models.TrustLevelFull)
+	if err == nil {
+		return entry.Path, nil
+	}
+	if err != nil && !errors.Is(err, services.ErrEntryNotFound) {
+		return "", err
+	}
+
+	dirPath := storagePath + "/"
+	entry, err = s.Read(ctx, userID, dirPath, models.TrustLevelFull)
+	if err == nil {
+		return entry.Path, nil
+	}
+	if err != nil && !errors.Is(err, services.ErrEntryNotFound) {
+		return "", err
+	}
+
+	return storagePath, nil
+}
+
 type fileTreeScanner interface {
 	Scan(dest ...any) error
 }
@@ -639,6 +684,39 @@ func prefixLike(storagePath string) string {
 		return storagePath + "%"
 	}
 	return storagePath + "/%"
+}
+
+func deletableEntriesForDeletion(targetPath string, entries []models.FileTreeEntry) []models.FileTreeEntry {
+	targetPath = hubpath.NormalizeStorage(targetPath)
+	targetBase := strings.TrimSuffix(targetPath, "/")
+	prefix := targetBase + "/"
+
+	deletable := make([]models.FileTreeEntry, 0, len(entries))
+	for _, entry := range entries {
+		entryPath := hubpath.NormalizeStorage(entry.Path)
+		if systemskills.IsProtectedPath(entryPath) {
+			continue
+		}
+		if entryPath == targetPath || entryPath == targetBase || entryPath == prefix || strings.HasPrefix(entryPath, prefix) {
+			deletable = append(deletable, entry)
+		}
+	}
+
+	sort.Slice(deletable, func(i, j int) bool {
+		left := hubpath.NormalizeStorage(deletable[i].Path)
+		right := hubpath.NormalizeStorage(deletable[j].Path)
+		leftDepth := strings.Count(strings.Trim(left, "/"), "/")
+		rightDepth := strings.Count(strings.Trim(right, "/"), "/")
+		if leftDepth != rightDepth {
+			return leftDepth > rightDepth
+		}
+		if len(left) != len(right) {
+			return len(left) > len(right)
+		}
+		return left > right
+	})
+
+	return deletable
 }
 
 func handledSystemPrefix(storagePath string) bool {

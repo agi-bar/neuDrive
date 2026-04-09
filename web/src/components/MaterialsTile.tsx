@@ -18,7 +18,11 @@ type MaterialsTileProps = {
   emphasized?: boolean
   className?: string
   menu?: ReactNode
+  menuOpen?: boolean
+  menuPanel?: ReactNode
+  menuButtonAriaLabel?: string
   titleActionAriaLabel?: string
+  onMenuToggle?: () => void
   onSelect?: (options: MaterialsTileSelectOptions) => void
   onOpen?: () => void
   children?: ReactNode
@@ -42,7 +46,11 @@ export default function MaterialsTile({
   emphasized = false,
   className = '',
   menu = '⋮',
+  menuOpen = false,
+  menuPanel,
+  menuButtonAriaLabel,
   titleActionAriaLabel,
+  onMenuToggle,
   onSelect,
   onOpen,
   children,
@@ -103,7 +111,30 @@ export default function MaterialsTile({
     >
       <div className="materials-tile-top">
         <span className={`materials-tile-icon ${iconClassName}`} />
-        <span className="materials-tile-menu" aria-hidden="true">{menu}</span>
+        {onMenuToggle ? (
+          <div className="materials-tile-menu-wrap" data-resource-menu-root onClick={stopTileEvent} onDoubleClick={stopTileEvent}>
+            <button
+              type="button"
+              className={`materials-tile-menu-button${menuOpen ? ' is-open' : ''}`}
+              aria-label={menuButtonAriaLabel}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={(event) => {
+                event.stopPropagation()
+                onMenuToggle()
+              }}
+            >
+              <span className="materials-tile-menu" aria-hidden="true">{menu}</span>
+            </button>
+            {menuOpen && menuPanel ? (
+              <div className="materials-tile-menu-panel" role="menu" onClick={stopTileEvent} onDoubleClick={stopTileEvent}>
+                {menuPanel}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <span className="materials-tile-menu" aria-hidden="true">{menu}</span>
+        )}
       </div>
       <div className="materials-tile-body">
         {titleAction ? (

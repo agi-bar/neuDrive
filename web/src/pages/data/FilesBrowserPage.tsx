@@ -3,6 +3,10 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode, type SkillSummary } from '../../api'
 import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
+import ResourceActionMenu from '../../components/ResourceActionMenu'
+import ResourceConfirmDialog from '../../components/ResourceConfirmDialog'
+import useResourceCardMenu from '../../hooks/useResourceCardMenu'
+import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
 import { useI18n } from '../../i18n'
 import { buildFileTileModel, buildSkillBundleTileModel, buildSkillSummaryLookup, dataFileEditorRoute, skillSummaryForPath } from './DataShared'
 
@@ -71,6 +75,7 @@ export default function FilesBrowserPage() {
   const [appliedSearch, setAppliedSearch] = useState('')
   const [skillLookup, setSkillLookup] = useState<Record<string, SkillSummary>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const { activeMenuId, closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
 
   const sortKey = (query.get('sort') as SortKey) || 'updated_at'
   const sortDir = (query.get('dir') as SortDir) || 'desc'
@@ -104,13 +109,22 @@ export default function FilesBrowserPage() {
         }
         setItems(sortNodes(root.children || [], sortKey, sortDir))
       }
+      closeMenu()
       setSelected(new Set())
     } catch (err: any) {
       setError(err.message || tx('加载失败', 'Failed to load files'))
     } finally {
       setLoading(false)
     }
-  }, [appliedSearch, currentPath, searchMode, sortDir, sortKey, tx])
+  }, [appliedSearch, closeMenu, currentPath, searchMode, sortDir, sortKey, tx])
+
+  const {
+    closeDialog: closeDeleteDialog,
+    confirmDelete,
+    dialog: deleteDialog,
+    requestDelete,
+    submitting: deleteSubmitting,
+  } = useTreeDeleteDialog({ tx, onDeleted: refresh })
 
   useEffect(() => {
     void refresh()
@@ -154,13 +168,14 @@ export default function FilesBrowserPage() {
   }, [])
 
   const openNode = useCallback((item: FileNode) => {
+    closeMenu()
     if (item.is_dir) {
       onNavigatePath(item.path)
       return
     }
     if (!isEditableNode(item)) return
     navigate(dataFileEditorRoute(item.path))
-  }, [isEditableNode, navigate])
+  }, [closeMenu, isEditableNode, navigate])
 
   const handleSelect = (pathValue: string, multi = false) => {
     setSelected((prev) => {
@@ -219,24 +234,13 @@ export default function FilesBrowserPage() {
     }
   }
 
-  const handleDelete = async (paths: string[]) => {
-    if (!confirm(tx(`确定删除以下 ${paths.length} 个条目？\n${paths.join('\n')}`, `Delete these ${paths.length} entries?\n${paths.join('\n')}`))) return
-    for (const pathValue of paths) {
-      try {
-        await api.deleteTree(pathValue)
-      } catch (err: any) {
-        alert(tx(`删除失败：${pathValue}\n${err.message || err}`, `Failed to delete: ${pathValue}\n${err.message || err}`))
-      }
-    }
-    await refresh()
-  }
-
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if (deleteDialog || activeMenuId) return
       if (event.key === 'Escape') setSelected(new Set())
       if (event.key === 'Delete' && selected.size > 0) {
         event.preventDefault()
-        void handleDelete(Array.from(selected))
+        void requestDelete(Array.from(selected))
       }
       if (event.key === 'Enter' && selected.size === 1) {
         const pathValue = Array.from(selected)[0]
@@ -246,7 +250,7 @@ export default function FilesBrowserPage() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [items, openNode, selected])
+  }, [activeMenuId, deleteDialog, items, openNode, requestDelete, selected])
 
   const isSelected = (pathValue: string) => selected.has(pathValue)
   const currentLabel = currentPath === '/' ? tx('根目录', 'Root') : currentPath.split('/').filter(Boolean).slice(-1)[0] || tx('根目录', 'Root')
@@ -365,7 +369,7 @@ export default function FilesBrowserPage() {
               {creatingFile ? tx('取消文件', 'Close file form') : tx('新建文件', 'New file')}
             </button>
             <button className="btn btn-sm materials-toolbar-control" onClick={() => fileInputRef.current?.click()}>{tx('上传文本', 'Upload text')}</button>
-            <button className="btn btn-sm materials-toolbar-control is-danger" disabled={selected.size === 0} onClick={() => void handleDelete(Array.from(selected))}>{tx('删除', 'Delete')}</button>
+            <button className="btn btn-sm materials-toolbar-control is-danger" disabled={selected.size === 0} onClick={() => void requestDelete(Array.from(selected))}>{tx('删除', 'Delete')}</button>
           </MaterialsSectionToolbar>
         </div>
 
@@ -409,6 +413,42 @@ export default function FilesBrowserPage() {
                   footerStart={tile.footerStart}
                   footerEnd={tile.footerEnd}
                   selected={isSelected(item.path)}
+                  menuOpen={isMenuOpen(item.path)}
+                  menuButtonAriaLabel={tx(`打开 ${item.name} 的工具菜单`, `Open tools menu for ${item.name}`)}
+                  menuPanel={(
+                    <ResourceActionMenu
+                      items={[
+                        ...((item.is_dir || isEditableNode(item))
+                          ? [{
+                              key: 'open',
+                              label: item.is_dir ? tx('进入目录', 'Open folder') : tx('打开文件', 'Open file'),
+                              onSelect: () => {
+                                closeMenu()
+                                openNode(item)
+                              },
+                            }]
+                          : []),
+                        {
+                          key: 'select',
+                          label: isSelected(item.path) ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
+                          onSelect: () => {
+                            closeMenu()
+                            handleSelect(item.path, true)
+                          },
+                        },
+                        {
+                          key: 'delete',
+                          label: tx('删除', 'Delete'),
+                          tone: 'danger' as const,
+                          onSelect: () => {
+                            closeMenu()
+                            void requestDelete([item.path])
+                          },
+                        },
+                      ]}
+                    />
+                  )}
+                  onMenuToggle={() => toggleMenu(item.path)}
                   onSelect={({ multi }) => handleSelect(item.path, multi)}
                   onOpen={() => openNode(item)}
                 />
@@ -417,6 +457,21 @@ export default function FilesBrowserPage() {
           </div>
         )}
       </section>
+
+      <ResourceConfirmDialog
+        open={Boolean(deleteDialog)}
+        kicker={tx('删除确认', 'Delete confirmation')}
+        title={deleteDialog?.nonEmptyDirectories.length ? tx('这些目录不是空的', 'These folders are not empty') : tx('确认删除选中条目', 'Confirm deletion')}
+        description={deleteDialog?.nonEmptyDirectories.length
+          ? tx('确认后会递归删除其中所有可写文件和文件夹。只读内容不会被删除，可能会继续保留。', 'Continuing will recursively delete all writable files and folders inside. Read-only content will not be deleted and may remain in place.')
+          : tx('这个操作会删除选中的文件或文件夹，且不可撤销。', 'This will delete the selected files or folders and cannot be undone.')}
+        cancelLabel={tx('取消', 'Cancel')}
+        confirmLabel={deleteSubmitting ? tx('删除中...', 'Deleting...') : tx('确认删除', 'Delete')}
+        tone="danger"
+        submitting={deleteSubmitting}
+        onCancel={closeDeleteDialog}
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   )
 }

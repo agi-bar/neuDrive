@@ -3,6 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import MaterialsSectionToolbar from '../components/MaterialsSectionToolbar'
 import MaterialsTile from '../components/MaterialsTile'
+import ResourceActionMenu from '../components/ResourceActionMenu'
+import ResourceConfirmDialog from '../components/ResourceConfirmDialog'
+import useResourceCardMenu from '../hooks/useResourceCardMenu'
 import { useI18n } from '../i18n'
 import { getMaterialsSortOptions, type MaterialsSortDir, type MaterialsSortKey, dataFileEditorRoute, sortMaterialsItems } from './data/DataShared'
 
@@ -39,6 +42,9 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false)
   const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
   const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
+  const [archiveTarget, setArchiveTarget] = useState<Project | null>(null)
+  const [archiveSubmitting, setArchiveSubmitting] = useState(false)
+  const { activeMenuId, closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
 
   useEffect(() => {
     loadProjects()
@@ -77,6 +83,8 @@ export default function ProjectsPage() {
     void loadProjectDetail(project.name)
   }
 
+  const projectContextRoute = (name: string) => dataFileEditorRoute(projectContextPath(name))
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newName.trim()) return
@@ -96,18 +104,31 @@ export default function ProjectsPage() {
     }
   }
 
-  const handleArchive = async (name: string) => {
-    if (!window.confirm(tx(`确认归档项目 "${name}"？`, `Archive project "${name}"?`))) return
+  const requestArchive = (project: Project) => {
+    closeMenu()
+    setArchiveTarget(project)
+  }
+
+  const closeArchiveDialog = () => {
+    if (archiveSubmitting) return
+    setArchiveTarget(null)
+  }
+
+  const handleArchive = async (project: Project) => {
+    setArchiveSubmitting(true)
     try {
-      await api.archiveProject(name)
+      await api.archiveProject(project.name)
       setProjects((prev) =>
-        prev.map((p) => (p.name === name ? { ...p, status: 'archived' } : p))
+        prev.map((p) => (p.name === project.name ? { ...p, status: 'archived' } : p))
       )
-      if (selectedProject?.name === name) {
+      if (selectedProject?.name === project.name) {
         setSelectedProject({ ...selectedProject, status: 'archived' })
       }
+      setArchiveTarget(null)
     } catch (err: any) {
       setError(err.message)
+    } finally {
+      setArchiveSubmitting(false)
     }
   }
 
@@ -148,6 +169,26 @@ export default function ProjectsPage() {
       }),
     [projects, sortDir, sortKey],
   )
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (archiveTarget || activeMenuId) return
+      if (event.key === 'Escape') {
+        setSelectedProject(null)
+        return
+      }
+      if (event.key === 'Delete' && selectedProject?.status === 'active') {
+        event.preventDefault()
+        requestArchive(selectedProject)
+        return
+      }
+      if (event.key === 'Enter' && selectedProject) {
+        navigate(projectContextRoute(selectedProject.name))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeMenuId, archiveTarget, navigate, selectedProject])
 
   if (loading) {
     return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
@@ -220,6 +261,15 @@ export default function ProjectsPage() {
             <button className="btn btn-sm materials-toolbar-control" onClick={() => setShowNewForm((value) => !value)}>
               {showNewForm ? tx('取消新建', 'Close form') : tx('新建项目', 'New project')}
             </button>
+            <button
+              className="btn btn-sm materials-toolbar-control is-danger"
+              disabled={selectedProject?.status !== 'active'}
+              onClick={() => {
+                if (selectedProject) requestArchive(selectedProject)
+              }}
+            >
+              {tx('归档项目', 'Archive project')}
+            </button>
           </MaterialsSectionToolbar>
         </div>
 
@@ -242,8 +292,45 @@ export default function ProjectsPage() {
                   footerStart={tx('最后活动', 'Last activity')}
                   footerEnd={formatTime(getProjectLastActivity(project))}
                   selected={selectedProject?.name === project.name}
+                  menuOpen={isMenuOpen(project.name)}
+                  menuButtonAriaLabel={tx(`打开项目 ${project.name} 的工具菜单`, `Open tools menu for project ${project.name}`)}
+                  menuPanel={(
+                    <ResourceActionMenu
+                      items={[
+                        {
+                          key: 'open',
+                          label: tx('打开 context', 'Open context'),
+                          onSelect: () => {
+                            closeMenu()
+                            navigate(projectContextRoute(project.name))
+                          },
+                        },
+                        {
+                          key: 'select',
+                          label: selectedProject?.name === project.name ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
+                          onSelect: () => {
+                            closeMenu()
+                            if (selectedProject?.name === project.name) {
+                              setSelectedProject(null)
+                              return
+                            }
+                            handleSelectProject(project)
+                          },
+                        },
+                        ...(project.status === 'active'
+                          ? [{
+                              key: 'archive',
+                              label: tx('归档项目', 'Archive project'),
+                              tone: 'danger' as const,
+                              onSelect: () => requestArchive(project),
+                            }]
+                          : []),
+                      ]}
+                    />
+                  )}
+                  onMenuToggle={() => toggleMenu(project.name)}
                   onSelect={() => handleSelectProject(project)}
-                  onOpen={() => navigate(dataFileEditorRoute(projectContextPath(project.name)))}
+                  onOpen={() => navigate(projectContextRoute(project.name))}
                 />
               ))}
           </div>
@@ -257,9 +344,9 @@ export default function ProjectsPage() {
               <h3 className="materials-section-title">{selectedProject.name}</h3>
               <p className="materials-section-copy">{tx('项目详情会在这里显示，包括 context 和最近日志。', 'Project details appear here, including context and recent logs.')}</p>
             </div>
-            <MaterialsSectionToolbar>
+              <MaterialsSectionToolbar>
               {selectedProject.status === 'active' ? (
-                <button className="btn btn-sm materials-toolbar-control" onClick={() => void handleArchive(selectedProject.name)}>
+                <button className="btn btn-sm materials-toolbar-control" onClick={() => requestArchive(selectedProject)}>
                   {tx('归档项目', 'Archive project')}
                 </button>
               ) : null}
@@ -321,6 +408,21 @@ export default function ProjectsPage() {
           </div>
         </section>
       )}
+
+      <ResourceConfirmDialog
+        open={Boolean(archiveTarget)}
+        kicker={tx('危险操作', 'Danger zone')}
+        title={archiveTarget ? tx(`确认归档项目 “${archiveTarget.name}”`, `Archive project "${archiveTarget.name}"`) : ''}
+        description={tx('归档不会删除项目文件，但项目会退出活跃状态。你之后仍然可以在文件树里查看它的 context 和历史内容。', 'Archiving does not delete project files, but the project will leave the active state. You can still inspect its context and history from the file tree later.')}
+        cancelLabel={tx('取消', 'Cancel')}
+        confirmLabel={archiveSubmitting ? tx('归档中...', 'Archiving...') : tx('确认归档', 'Archive')}
+        tone="danger"
+        submitting={archiveSubmitting}
+        onCancel={closeArchiveDialog}
+        onConfirm={() => {
+          if (archiveTarget) void handleArchive(archiveTarget)
+        }}
+      />
     </div>
   )
 }

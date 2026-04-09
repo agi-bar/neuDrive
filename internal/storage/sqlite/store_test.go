@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -147,6 +148,80 @@ func TestFileAndBlobRoundTrip(t *testing.T) {
 	}
 	if _, err := store.Read(ctx, userID, entry.Path, models.TrustLevelGuest); err == nil {
 		t.Fatal("deleted text entry still readable")
+	}
+}
+
+func TestDeleteDirectoryRecursively(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+
+	paths := []string{
+		"/projects/demo/context.md",
+		"/projects/demo/notes/todo.md",
+		"/projects/demo/notes/archive/done.md",
+	}
+	for _, path := range paths {
+		if _, err := store.WriteEntry(ctx, userID, path, "# test\n", "text/markdown", models.FileTreeWriteOptions{
+			MinTrustLevel: models.TrustLevelGuest,
+		}); err != nil {
+			t.Fatalf("WriteEntry(%q): %v", path, err)
+		}
+	}
+
+	if err := store.Delete(ctx, userID, "/projects/demo"); err != nil {
+		t.Fatalf("Delete: %v", err)
+	}
+
+	for _, path := range paths {
+		if _, err := store.Read(ctx, userID, path, models.TrustLevelGuest); !errors.Is(err, services.ErrEntryNotFound) {
+			t.Fatalf("Read(%q) after delete = %v, want ErrEntryNotFound", path, err)
+		}
+	}
+
+	children, err := store.List(ctx, userID, "/projects", models.TrustLevelGuest)
+	if err != nil {
+		t.Fatalf("List /projects: %v", err)
+	}
+	if len(children) != 0 {
+		t.Fatalf("expected /projects to be empty after recursive delete, got %d entries", len(children))
+	}
+}
+
+func TestDeleteDirectoryKeepsProtectedSystemSkills(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+
+	for _, path := range []string{
+		"/skills/custom/SKILL.md",
+		"/skills/custom/notes.md",
+	} {
+		if _, err := store.WriteEntry(ctx, userID, path, "# custom\n", "text/markdown", models.FileTreeWriteOptions{
+			MinTrustLevel: models.TrustLevelGuest,
+		}); err != nil {
+			t.Fatalf("WriteEntry(%q): %v", path, err)
+		}
+	}
+
+	if err := store.Delete(ctx, userID, "/skills"); err != nil {
+		t.Fatalf("Delete /skills: %v", err)
+	}
+
+	if _, err := store.Read(ctx, userID, "/skills/custom/SKILL.md", models.TrustLevelGuest); !errors.Is(err, services.ErrEntryNotFound) {
+		t.Fatalf("custom skill still readable after delete: %v", err)
+	}
+
+	skillRoot, err := store.List(ctx, userID, "/skills", models.TrustLevelGuest)
+	if err != nil {
+		t.Fatalf("List /skills: %v", err)
+	}
+	paths := make([]string, 0, len(skillRoot))
+	for _, entry := range skillRoot {
+		paths = append(paths, entry.Path)
+	}
+	if !reflect.DeepEqual(paths, []string{"/skills/agenthub/", "/skills/portability/"}) {
+		t.Fatalf("/skills children mismatch: got %v", paths)
+	}
+
+	if _, err := store.Read(ctx, userID, "/skills/agenthub/SKILL.md", models.TrustLevelGuest); err != nil {
+		t.Fatalf("system skill missing after delete: %v", err)
 	}
 }
 

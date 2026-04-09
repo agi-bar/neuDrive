@@ -18,6 +18,10 @@ type FileMaterialsTileProps = {
   emphasized?: boolean
   className?: string
   menu?: ReactNode
+  menuOpen?: boolean
+  menuPanel?: ReactNode
+  menuButtonAriaLabel?: string
+  onMenuToggle?: () => void
   onSelect?: (options: MaterialsTileSelectOptions) => void
   onOpen?: () => void
 }
@@ -44,6 +48,10 @@ export default function FileMaterialsTile({
   emphasized = false,
   className = '',
   menu,
+  menuOpen,
+  menuPanel,
+  menuButtonAriaLabel,
+  onMenuToggle,
   onSelect,
   onOpen,
 }: FileMaterialsTileProps) {
@@ -73,6 +81,10 @@ export default function FileMaterialsTile({
       emphasized={emphasized}
       className={tileClassName}
       menu={menu}
+      menuOpen={menuOpen}
+      menuPanel={menuPanel}
+      menuButtonAriaLabel={menuButtonAriaLabel}
+      onMenuToggle={onMenuToggle}
       onSelect={onSelect}
       onOpen={onOpen}
     />

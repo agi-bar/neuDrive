@@ -304,17 +304,35 @@ func (s *FileTreeService) WriteEntry(
 	return entry, nil
 }
 
-// Delete tombstones an entry instead of hard deleting it.
+// Delete tombstones a deletable entry subtree while preserving protected descendants.
 func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path string) error {
 	if s.repo != nil {
 		return s.repo.Delete(ctx, userID, path)
 	}
-	storagePath := hubpath.NormalizeStorage(path)
+	storagePath, err := s.resolveDeletePath(ctx, userID, path)
+	if err != nil {
+		return err
+	}
 	if systemskills.IsProtectedPath(storagePath) {
 		return ErrReadOnlyPath
 	}
 	if s.db == nil {
 		return fmt.Errorf("filetree.Delete: database not configured")
+	}
+
+	snapshot, err := s.Snapshot(ctx, userID, storagePath, models.TrustLevelFull)
+	if err != nil {
+		return err
+	}
+	if len(snapshot.Entries) == 0 {
+		if _, handled := systemskills.ListEntries(storagePath); handled {
+			return nil
+		}
+		return ErrEntryNotFound
+	}
+	entriesToDelete := deletableEntriesForDeletion(storagePath, snapshot.Entries)
+	if len(entriesToDelete) == 0 {
+		return nil
 	}
 
 	tx, err := s.db.Begin(ctx)
@@ -323,48 +341,53 @@ func (s *FileTreeService) Delete(ctx context.Context, userID uuid.UUID, path str
 	}
 	defer tx.Rollback(ctx)
 
-	entry, err := s.lockEntry(ctx, tx, userID, storagePath)
-	if err != nil {
-		return err
-	}
-
 	now := time.Now().UTC()
-	nextVersion := entry.Version + 1
-	var deleted models.FileTreeEntry
-	err = tx.QueryRow(ctx,
-		fmt.Sprintf(`UPDATE file_tree
-		 SET deleted_at = $3,
-		     version = $4,
-		     checksum = $5,
-		     updated_at = $3
-		 WHERE user_id = $1 AND path = $2
-		 RETURNING %s`, fileTreeSelectColumns),
-		userID, entry.Path, now, nextVersion, deletedEntryChecksum(hubpath.NormalizePublic(entry.Path), nextVersion),
-	).Scan(
-		&deleted.ID,
-		&deleted.UserID,
-		&deleted.Path,
-		&deleted.Kind,
-		&deleted.IsDirectory,
-		&deleted.Content,
-		&deleted.ContentType,
-		&deleted.Metadata,
-		&deleted.Checksum,
-		&deleted.Version,
-		&deleted.MinTrustLevel,
-		&deleted.CreatedAt,
-		&deleted.UpdatedAt,
-		&deleted.DeletedAt,
-	)
-	if err != nil {
-		return fmt.Errorf("filetree.Delete: update: %w", err)
-	}
-	if err := s.deleteBlobTx(ctx, tx, deleted.ID); err != nil {
-		return err
-	}
+	for _, entry := range entriesToDelete {
+		current, err := s.lockEntry(ctx, tx, userID, entry.Path)
+		if err != nil {
+			if errors.Is(err, ErrEntryNotFound) {
+				continue
+			}
+			return err
+		}
 
-	if err := s.insertEntryVersion(ctx, tx, &deleted, "delete"); err != nil {
-		return err
+		nextVersion := current.Version + 1
+		var deleted models.FileTreeEntry
+		err = tx.QueryRow(ctx,
+			fmt.Sprintf(`UPDATE file_tree
+			 SET deleted_at = $3,
+			     version = $4,
+			     checksum = $5,
+			     updated_at = $3
+			 WHERE user_id = $1 AND path = $2
+			 RETURNING %s`, fileTreeSelectColumns),
+			userID, current.Path, now, nextVersion, deletedEntryChecksum(hubpath.NormalizePublic(current.Path), nextVersion),
+		).Scan(
+			&deleted.ID,
+			&deleted.UserID,
+			&deleted.Path,
+			&deleted.Kind,
+			&deleted.IsDirectory,
+			&deleted.Content,
+			&deleted.ContentType,
+			&deleted.Metadata,
+			&deleted.Checksum,
+			&deleted.Version,
+			&deleted.MinTrustLevel,
+			&deleted.CreatedAt,
+			&deleted.UpdatedAt,
+			&deleted.DeletedAt,
+		)
+		if err != nil {
+			return fmt.Errorf("filetree.Delete: update: %w", err)
+		}
+		if err := s.deleteBlobTx(ctx, tx, deleted.ID); err != nil {
+			return err
+		}
+
+		if err := s.insertEntryVersion(ctx, tx, &deleted, "delete"); err != nil {
+			return err
+		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
@@ -970,6 +993,68 @@ func immediateChildEntries(parentPath string, userID uuid.UUID, entries []models
 		out = append(out, entry)
 	}
 	return mergeFileTreeEntries(out)
+}
+
+func (s *FileTreeService) resolveDeletePath(ctx context.Context, userID uuid.UUID, rawPath string) (string, error) {
+	storagePath := hubpath.NormalizeStorage(rawPath)
+	if systemskills.IsProtectedPath(storagePath) {
+		return "", ErrReadOnlyPath
+	}
+	if strings.HasSuffix(storagePath, "/") {
+		return storagePath, nil
+	}
+
+	entry, err := s.Read(ctx, userID, storagePath, models.TrustLevelFull)
+	if err == nil {
+		return entry.Path, nil
+	}
+	if !errors.Is(err, ErrEntryNotFound) {
+		return "", err
+	}
+
+	dirPath := storagePath + "/"
+	entry, err = s.Read(ctx, userID, dirPath, models.TrustLevelFull)
+	if err == nil {
+		return entry.Path, nil
+	}
+	if err != nil && !errors.Is(err, ErrEntryNotFound) {
+		return "", err
+	}
+
+	return storagePath, nil
+}
+
+func deletableEntriesForDeletion(targetPath string, entries []models.FileTreeEntry) []models.FileTreeEntry {
+	targetPath = hubpath.NormalizeStorage(targetPath)
+	targetBase := strings.TrimSuffix(targetPath, "/")
+	prefix := targetBase + "/"
+
+	deletable := make([]models.FileTreeEntry, 0, len(entries))
+	for _, entry := range entries {
+		entryPath := hubpath.NormalizeStorage(entry.Path)
+		if systemskills.IsProtectedPath(entryPath) {
+			continue
+		}
+		if entryPath == targetPath || entryPath == targetBase || entryPath == prefix || strings.HasPrefix(entryPath, prefix) {
+			deletable = append(deletable, entry)
+		}
+	}
+
+	sort.Slice(deletable, func(i, j int) bool {
+		left := hubpath.NormalizeStorage(deletable[i].Path)
+		right := hubpath.NormalizeStorage(deletable[j].Path)
+		leftDepth := strings.Count(strings.Trim(left, "/"), "/")
+		rightDepth := strings.Count(strings.Trim(right, "/"), "/")
+		if leftDepth != rightDepth {
+			return leftDepth > rightDepth
+		}
+		if len(left) != len(right) {
+			return len(left) > len(right)
+		}
+		return left > right
+	})
+
+	return deletable
 }
 
 func entryToSkillSummary(entry models.FileTreeEntry, source string) models.SkillSummary {

@@ -1,8 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode, type SkillSummary } from '../../api'
 import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
+import ResourceActionMenu from '../../components/ResourceActionMenu'
+import ResourceConfirmDialog from '../../components/ResourceConfirmDialog'
+import useResourceCardMenu from '../../hooks/useResourceCardMenu'
+import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
 import { useI18n } from '../../i18n'
 import {
   getMaterialsSortOptions,
@@ -86,56 +90,71 @@ export default function DataSkillsPage() {
   const [creating, setCreating] = useState(false)
   const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
   const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
+  const { activeMenuId, closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError('')
+    try {
+      const [skillData, skillsRoot, currentBundle] = await Promise.all([
+        api.getSkills(),
+        api.getTree('/skills'),
+        currentBundlePath ? api.getTree(currentBundlePath) : Promise.resolve<FileNode | null>(null),
+      ])
+
+      const folderLookup = (skillsRoot.children || []).reduce<Record<string, FileNode>>((acc, child) => {
+        acc[child.path] = child
+        return acc
+      }, {})
+
+      const bundles = skillData
+        .filter((skill) => skill.path.startsWith('/skills/'))
+        .map((skill) => {
+          const bundlePath = skillBundlePathFromSkillPath(skill.path)
+          const folder = folderLookup[bundlePath]
+          return {
+            ...skill,
+            bundleId: bundleIdFromSkillPath(skill.path),
+            bundlePath,
+            created_at: folder?.created_at,
+            updated_at: folder?.updated_at || folder?.created_at,
+          }
+        })
+
+      setSkills(bundles)
+      setBundleEntries(currentBundle?.children || [])
+      closeMenu()
+      if (!currentBundlePath) {
+        setSelectedBundlePath(null)
+      }
+      setSelectedEntryPath(null)
+    } catch (err: any) {
+      setError(err.message || tx('加载技能失败', 'Failed to load skills'))
+    } finally {
+      setLoading(false)
+    }
+  }, [closeMenu, currentBundlePath, tx])
+
+  const {
+    closeDialog: closeDeleteDialog,
+    confirmDelete,
+    dialog: deleteDialog,
+    requestDelete,
+    submitting: deleteSubmitting,
+  } = useTreeDeleteDialog({ tx, onDeleted: load })
 
   useEffect(() => {
-    const load = async () => {
-      setLoading(true)
-      setError('')
-      try {
-        const [skillData, skillsRoot, currentBundle] = await Promise.all([
-          api.getSkills(),
-          api.getTree('/skills'),
-          currentBundlePath ? api.getTree(currentBundlePath) : Promise.resolve<FileNode | null>(null),
-        ])
-
-        const folderLookup = (skillsRoot.children || []).reduce<Record<string, FileNode>>((acc, child) => {
-          acc[child.path] = child
-          return acc
-        }, {})
-
-        const bundles = skillData
-          .filter((skill) => skill.path.startsWith('/skills/'))
-          .map((skill) => {
-            const bundlePath = skillBundlePathFromSkillPath(skill.path)
-            const folder = folderLookup[bundlePath]
-            return {
-              ...skill,
-              bundleId: bundleIdFromSkillPath(skill.path),
-              bundlePath,
-              created_at: folder?.created_at,
-              updated_at: folder?.updated_at || folder?.created_at,
-            }
-          })
-
-        setSkills(bundles)
-        setBundleEntries(currentBundle?.children || [])
-        if (!currentBundlePath) {
-          setSelectedBundlePath(null)
-        }
-        setSelectedEntryPath(null)
-      } catch (err: any) {
-        setError(err.message || tx('加载技能失败', 'Failed to load skills'))
-      } finally {
-        setLoading(false)
-      }
-    }
-
     void load()
-  }, [currentBundlePath, tx])
+  }, [load])
 
   const currentSkill = currentBundlePath
     ? skills.find((skill) => skill.bundlePath === currentBundlePath) || null
     : null
+  const selectedBundle = selectedBundlePath
+    ? skills.find((skill) => skill.bundlePath === selectedBundlePath) || null
+    : null
+  const selectedDeletePath = currentBundlePath ? selectedEntryPath : selectedBundle?.bundlePath || null
+  const canDeleteSelection = Boolean(selectedDeletePath && !(currentBundlePath ? currentSkill?.read_only : selectedBundle?.read_only))
 
   const sortedSkills = useMemo(
     () =>
@@ -168,14 +187,17 @@ export default function DataSkillsPage() {
   )
 
   const openBundleDetail = (bundleId: string) => {
+    closeMenu()
     navigate(`/data/skills/${encodeRoutePath(bundleId)}`)
   }
 
   const openFileEditor = (path: string) => {
+    closeMenu()
     navigate(dataFileEditorRoute(path))
   }
 
   const openFolder = (path: string) => {
+    closeMenu()
     navigate(dataFileBrowseRoute(path))
   }
 
@@ -203,6 +225,40 @@ export default function DataSkillsPage() {
   }
 
   const sortOptions = getMaterialsSortOptions(locale)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (deleteDialog || activeMenuId) return
+      if (event.key === 'Escape') {
+        if (currentBundlePath) setSelectedEntryPath(null)
+        else setSelectedBundlePath(null)
+        return
+      }
+      if (event.key === 'Delete' && selectedDeletePath && canDeleteSelection) {
+        event.preventDefault()
+        void requestDelete([selectedDeletePath])
+        return
+      }
+      if (event.key !== 'Enter') return
+      if (currentBundlePath && selectedEntryPath) {
+        const entry = bundleEntries.find((item) => item.path === selectedEntryPath)
+        if (!entry) return
+        if (entry.is_dir) {
+          openFolder(entry.path)
+          return
+        }
+        if (isEditableFile(entry)) {
+          openFileEditor(entry.path)
+        }
+        return
+      }
+      if (!currentBundlePath && selectedBundle) {
+        openBundleDetail(selectedBundle.bundleId)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [activeMenuId, bundleEntries, canDeleteSelection, currentBundlePath, deleteDialog, openBundleDetail, openFileEditor, openFolder, requestDelete, selectedBundle, selectedDeletePath, selectedEntryPath])
 
   if (loading) {
     return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
@@ -243,7 +299,17 @@ export default function DataSkillsPage() {
                 sortDir={sortDir}
                 onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
                 onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
-              />
+              >
+                <button
+                  className="btn btn-sm materials-toolbar-control is-danger"
+                  disabled={!canDeleteSelection}
+                  onClick={() => {
+                    if (selectedDeletePath) void requestDelete([selectedDeletePath])
+                  }}
+                >
+                  {tx('删除', 'Delete')}
+                </button>
+              </MaterialsSectionToolbar>
             </div>
 
             {bundleEntries.length === 0 ? (
@@ -267,6 +333,48 @@ export default function DataSkillsPage() {
                       footerStart={tile.footerStart}
                       footerEnd={tile.footerEnd}
                       selected={selectedEntryPath === entry.path}
+                      menuOpen={isMenuOpen(entry.path)}
+                      menuButtonAriaLabel={tx(`打开 ${entry.name} 的工具菜单`, `Open tools menu for ${entry.name}`)}
+                      menuPanel={(
+                        <ResourceActionMenu
+                          items={[
+                            ...((entry.is_dir || isEditableFile(entry))
+                              ? [{
+                                  key: 'open',
+                                  label: entry.is_dir ? tx('进入目录', 'Open folder') : tx('打开文件', 'Open file'),
+                                  onSelect: () => {
+                                    closeMenu()
+                                    if (entry.is_dir) {
+                                      openFolder(entry.path)
+                                    } else {
+                                      openFileEditor(entry.path)
+                                    }
+                                  },
+                                }]
+                              : []),
+                            {
+                              key: 'select',
+                              label: selectedEntryPath === entry.path ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
+                              onSelect: () => {
+                                closeMenu()
+                                setSelectedEntryPath((value) => value === entry.path ? null : entry.path)
+                              },
+                            },
+                            ...(currentSkill?.read_only
+                              ? []
+                              : [{
+                                  key: 'delete',
+                                  label: tx('删除', 'Delete'),
+                                  tone: 'danger' as const,
+                                  onSelect: () => {
+                                    closeMenu()
+                                    void requestDelete([entry.path])
+                                  },
+                                }]),
+                          ]}
+                        />
+                      )}
+                      onMenuToggle={() => toggleMenu(entry.path)}
                       onSelect={() => setSelectedEntryPath(entry.path)}
                       onOpen={entry.is_dir ? () => openFolder(entry.path) : (isEditableFile(entry) ? () => openFileEditor(entry.path) : undefined)}
                     />
@@ -342,6 +450,15 @@ export default function DataSkillsPage() {
             <button className="btn btn-sm materials-toolbar-control" onClick={() => setShowNewForm((value) => !value)}>
               {showNewForm ? tx('取消新建', 'Close form') : tx('新建技能', 'New skill')}
             </button>
+            <button
+              className="btn btn-sm materials-toolbar-control is-danger"
+              disabled={!canDeleteSelection}
+              onClick={() => {
+                if (selectedDeletePath) void requestDelete([selectedDeletePath])
+              }}
+            >
+              {tx('删除', 'Delete')}
+            </button>
           </MaterialsSectionToolbar>
         </div>
 
@@ -364,6 +481,42 @@ export default function DataSkillsPage() {
                   footerStart={tile.footerStart}
                   footerEnd={tile.footerEnd}
                   selected={selectedBundlePath === tile.node.path}
+                  menuOpen={isMenuOpen(skill.bundlePath)}
+                  menuButtonAriaLabel={tx(`打开 ${skill.name} 的工具菜单`, `Open tools menu for ${skill.name}`)}
+                  menuPanel={(
+                    <ResourceActionMenu
+                      items={[
+                        {
+                          key: 'open',
+                          label: tx('进入 bundle', 'Open bundle'),
+                          onSelect: () => {
+                            closeMenu()
+                            openBundleDetail(skill.bundleId)
+                          },
+                        },
+                        {
+                          key: 'select',
+                          label: selectedBundlePath === tile.node.path ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
+                          onSelect: () => {
+                            closeMenu()
+                            setSelectedBundlePath((value) => value === tile.node.path ? null : tile.node.path)
+                          },
+                        },
+                        ...(!skill.read_only
+                          ? [{
+                              key: 'delete',
+                              label: tx('删除', 'Delete'),
+                              tone: 'danger' as const,
+                              onSelect: () => {
+                                closeMenu()
+                                void requestDelete([skill.bundlePath])
+                              },
+                            }]
+                          : []),
+                      ]}
+                    />
+                  )}
+                  onMenuToggle={() => toggleMenu(skill.bundlePath)}
                   onSelect={() => setSelectedBundlePath(tile.node.path)}
                   onOpen={() => openBundleDetail(skill.bundleId)}
                 />
@@ -372,6 +525,21 @@ export default function DataSkillsPage() {
           </div>
         )}
       </section>
+
+      <ResourceConfirmDialog
+        open={Boolean(deleteDialog)}
+        kicker={tx('删除确认', 'Delete confirmation')}
+        title={deleteDialog?.nonEmptyDirectories.length ? tx('这些目录不是空的', 'These folders are not empty') : tx('确认删除选中条目', 'Confirm deletion')}
+        description={deleteDialog?.nonEmptyDirectories.length
+          ? tx('确认后会递归删除其中所有可写文件和文件夹。只读内容不会被删除，可能会继续保留。', 'Continuing will recursively delete all writable files and folders inside. Read-only content will not be deleted and may remain in place.')
+          : tx('这个操作会删除选中的技能文件或 bundle，且不可撤销。', 'This will delete the selected skill file or bundle and cannot be undone.')}
+        cancelLabel={tx('取消', 'Cancel')}
+        confirmLabel={deleteSubmitting ? tx('删除中...', 'Deleting...') : tx('确认删除', 'Delete')}
+        tone="danger"
+        submitting={deleteSubmitting}
+        onCancel={closeDeleteDialog}
+        onConfirm={() => void confirmDelete()}
+      />
     </div>
   )
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api, type DashboardStats, type FileNode } from '../api'
+import { useI18n } from '../i18n'
 import {
   formatDateTime,
   isProfileEntry,
@@ -18,16 +19,8 @@ interface UserProfileData {
   updated_at?: string
 }
 
-const DASHBOARD_STATS = [
-  { key: 'connections', label: '已连接平台', to: '/connections' },
-  { key: 'files', label: '所有文件', to: '/data/files' },
-  { key: 'projects', label: '项目', to: '/data/projects' },
-  { key: 'skills', label: '技能', to: '/data/skills' },
-  { key: 'memory', label: 'Memory', to: '/data/memory' },
-  { key: 'profile', label: '我的资料', to: '/data/profile' },
-] as const
-
 export default function DashboardPage() {
+  const { locale, tx } = useI18n()
   const [stats, setStats] = useState<DashboardStats>({
     connections: 0,
     files: 0,
@@ -63,7 +56,7 @@ export default function DashboardPage() {
       if (statsData.status === 'fulfilled') {
         setStats(statsData.value)
       } else {
-        setError(statsData.reason?.message || '加载概览失败')
+        setError(statsData.reason?.message || tx('加载概览失败', 'Failed to load overview'))
       }
 
       if (profileData.status === 'fulfilled') {
@@ -94,9 +87,9 @@ export default function DashboardPage() {
     setExportSuccess('')
     try {
       await api.exportZip()
-      setExportSuccess('ZIP 文件已开始下载。')
+      setExportSuccess(tx('ZIP 文件已开始下载。', 'The ZIP download has started.'))
     } catch (err: any) {
-      setExportError(err.message || '导出失败')
+      setExportError(err.message || tx('导出失败', 'Export failed'))
     } finally {
       setExporting(false)
     }
@@ -117,17 +110,26 @@ export default function DashboardPage() {
       a.click()
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
-      setExportSuccess('JSON 文件已开始下载。')
+      setExportSuccess(tx('JSON 文件已开始下载。', 'The JSON download has started.'))
     } catch (err: any) {
-      setExportError(err.message || '导出失败')
+      setExportError(err.message || tx('导出失败', 'Export failed'))
     } finally {
       setExporting(false)
     }
   }
 
   if (loading) {
-    return <div className="page-loading">加载中...</div>
+    return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   }
+
+  const dashboardStats = [
+    { key: 'connections', label: tx('已连接平台', 'Connected apps'), to: '/connections' },
+    { key: 'files', label: tx('所有文件', 'All files'), to: '/data/files' },
+    { key: 'projects', label: tx('项目', 'Projects'), to: '/data/projects' },
+    { key: 'skills', label: tx('技能', 'Skills'), to: '/data/skills' },
+    { key: 'memory', label: 'Memory', to: '/data/memory' },
+    { key: 'profile', label: tx('我的资料', 'My Profile'), to: '/data/profile' },
+  ] as const
 
   const hasPending = stats.pending && stats.pending.length > 0
 
@@ -135,8 +137,8 @@ export default function DashboardPage() {
     <div className="page materials-page">
       <div className="page-header">
         <div>
-          <h2>概览</h2>
-          <p className="page-subtitle">用和文件管理器同一套视觉语言，快速查看 Hub 的连接、文件、资料和同步状态。</p>
+          <h2>{tx('概览', 'Overview')}</h2>
+          <p className="page-subtitle">{tx('用和文件管理器同一套视觉语言，快速查看 Hub 的连接、文件、资料和同步状态。', 'Use the same visual language as the file browser to quickly review connections, files, profile data, and sync status.')}</p>
         </div>
       </div>
 
@@ -145,16 +147,16 @@ export default function DashboardPage() {
       <div className="status-banner">
         <span className="status-icon status-ok">&#10003;</span>
         <span className="status-text">
-          {hasPending ? '有待处理事项' : '一切正常'}
+          {hasPending ? tx('有待处理事项', 'Pending items') : tx('一切正常', 'Everything looks good')}
         </span>
       </div>
 
       <div className="stats-grid">
-        {DASHBOARD_STATS.map((item) => (
+        {dashboardStats.map((item) => (
           <Link key={item.key} to={item.to} className="stat-card">
             <div className="stat-value">{stats[item.key] ?? '-'}</div>
             <div className="stat-label">
-              {item.key === 'connections' && (stats.connections ?? 0) === 0 ? '添加平台' : item.label}
+              {item.key === 'connections' && (stats.connections ?? 0) === 0 ? tx('添加平台', 'Add app') : item.label}
             </div>
           </Link>
         ))}
@@ -163,15 +165,15 @@ export default function DashboardPage() {
       <div className="dashboard-content-grid">
         <div className="card dashboard-card">
           <div className="card-header">
-            <h3 className="card-title">我的资料</h3>
-            <Link to="/data/profile" className="dashboard-card-link">更多</Link>
+            <h3 className="card-title">{tx('我的资料', 'My Profile')}</h3>
+            <Link to="/data/profile" className="dashboard-card-link">{tx('更多', 'More')}</Link>
           </div>
 
           <div className="dashboard-profile-head">
             <div>
-              <div className="dashboard-profile-name">{profile?.display_name || '未设置显示名称'}</div>
+              <div className="dashboard-profile-name">{profile?.display_name || tx('未设置显示名称', 'No display name set')}</div>
               <div className="dashboard-profile-meta">
-                首页只显示最近更新的 2 项资料，完整内容请到“我的资料”页面查看和编辑。
+                {tx('首页只显示最近更新的 2 项资料，完整内容请到“我的资料”页面查看和编辑。', 'This page only shows the two most recently updated profile entries. Open My Profile to view and edit everything.')}
               </div>
             </div>
           </div>
@@ -180,25 +182,25 @@ export default function DashboardPage() {
             <div className="dashboard-profile-list">
               {recentProfileEntries.map((entry) => (
                 <div key={entry.path} className="dashboard-profile-item">
-                  <div className="dashboard-profile-label">{profileLabelFromPath(entry.path)}</div>
-                  <div className="dashboard-profile-value">{summarizeNodeContent(entry, 120)}</div>
-                  <div className="dashboard-profile-item-meta">{formatDateTime(entry.updated_at || entry.created_at)}</div>
+                  <div className="dashboard-profile-label">{profileLabelFromPath(entry.path, locale)}</div>
+                  <div className="dashboard-profile-value">{summarizeNodeContent(entry, 120, locale)}</div>
+                  <div className="dashboard-profile-item-meta">{formatDateTime(entry.updated_at || entry.created_at, locale)}</div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="dashboard-empty-copy">还没有资料内容。</p>
+            <p className="dashboard-empty-copy">{tx('还没有资料内容。', 'No profile data yet.')}</p>
           )}
         </div>
 
         <div className="card dashboard-card">
           <div className="card-header">
-            <h3 className="card-title">最近更新</h3>
-            <Link to="/data/files" className="dashboard-card-link">文件管理器</Link>
+            <h3 className="card-title">{tx('最近更新', 'Recently updated')}</h3>
+            <Link to="/data/files" className="dashboard-card-link">{tx('文件管理器', 'File Browser')}</Link>
           </div>
 
           <div className="dashboard-profile-meta dashboard-preview-meta">
-            首页只显示最近改过的 2 个文档，完整列表请到“文件管理器”查看。
+            {tx('首页只显示最近改过的 2 个文档，完整列表请到“文件管理器”查看。', 'This page only shows the two most recently edited documents. Open the File Browser for the full list.')}
           </div>
 
           {recentFiles.length > 0 ? (
@@ -206,19 +208,19 @@ export default function DashboardPage() {
               {recentFiles.map((entry) => (
                 <div key={entry.path} className="dashboard-file-item">
                   <div className="dashboard-file-path">{entry.path}</div>
-                  <div className="dashboard-file-meta">{formatDateTime(entry.updated_at || entry.created_at)}</div>
+                  <div className="dashboard-file-meta">{formatDateTime(entry.updated_at || entry.created_at, locale)}</div>
                 </div>
               ))}
             </div>
           ) : (
-            <p className="dashboard-empty-copy">还没有文件内容。</p>
+            <p className="dashboard-empty-copy">{tx('还没有文件内容。', 'No files yet.')}</p>
           )}
         </div>
       </div>
 
       {hasPending && (
         <div className="card">
-          <h3 className="card-title">待处理</h3>
+          <h3 className="card-title">{tx('待处理', 'Pending')}</h3>
           <div className="pending-list">
             {stats.pending.map((item, i) => (
               <div key={i} className="pending-item">
@@ -233,7 +235,7 @@ export default function DashboardPage() {
 
       {stats.weekly_activity && stats.weekly_activity.length > 0 && (
         <div className="card">
-          <h3 className="card-title">本周活动</h3>
+          <h3 className="card-title">{tx('本周活动', 'This week')}</h3>
           <div className="activity-list">
             {stats.weekly_activity.map((item, i) => (
               <div key={i} className="activity-row">
@@ -254,27 +256,27 @@ export default function DashboardPage() {
       )}
 
       <div className="card">
-        <h3 className="card-title">数据管理</h3>
+        <h3 className="card-title">{tx('数据管理', 'Data')}</h3>
         <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
-          下载你所有的 Hub 数据，或进入新的 Bundle Sync 页面执行 `.ahub` / `.ahubz` 的导入、导出和历史查看。
+          {tx('下载你所有的 Hub 数据，或进入新的 Bundle Sync 页面执行 `.ahub` / `.ahubz` 的导入、导出和历史查看。', 'Download all Hub data, or open Bundle Sync to import, export, and review `.ahub` / `.ahubz` history.')}
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <Link to="/data/sync" className="btn">
-            打开 Bundle Sync
+            {tx('打开 Bundle Sync', 'Open Bundle Sync')}
           </Link>
           <button
             className="btn btn-primary"
             disabled={exporting}
             onClick={handleExportZip}
           >
-            {exporting ? '导出中...' : '导出数据 (ZIP)'}
+            {exporting ? tx('导出中...', 'Exporting...') : tx('导出数据 (ZIP)', 'Export data (ZIP)')}
           </button>
           <button
             className="btn"
             disabled={exporting}
             onClick={handleExportJSON}
           >
-            导出数据 (JSON)
+            {tx('导出数据 (JSON)', 'Export data (JSON)')}
           </button>
         </div>
         {exportError && <div className="alert alert-warn" style={{ marginTop: '0.75rem' }}>{exportError}</div>}

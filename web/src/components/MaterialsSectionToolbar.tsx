@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useI18n } from '../i18n'
 import type { MaterialsSortDir } from '../pages/data/DataShared'
 
 type SortOption = {
@@ -25,15 +26,16 @@ export default function MaterialsSectionToolbar({
   onSortDirToggle,
   children,
 }: MaterialsSectionToolbarProps) {
+  const { tx } = useI18n()
   const showSort = Boolean(sortOptions && sortOptions.length > 0 && sortKey && onSortKeyChange)
 
   return (
     <div className="materials-compact-toolbar">
-      {typeof count === 'number' ? <span className="materials-tile-pill">{count} 项</span> : null}
+      {typeof count === 'number' ? <span className="materials-tile-pill">{tx(`${count} 项`, `${count} items`)}</span> : null}
       {showSort ? (
         <select
           className="materials-toolbar-control"
-          aria-label="排序字段"
+          aria-label={tx('排序字段', 'Sort field')}
           value={sortKey}
           onChange={(event) => onSortKeyChange?.(event.target.value)}
         >
@@ -46,7 +48,7 @@ export default function MaterialsSectionToolbar({
       ) : null}
       {showSort && onSortDirToggle ? (
         <button type="button" className="btn btn-sm materials-toolbar-control" onClick={onSortDirToggle}>
-          {sortDir === 'desc' ? '倒序' : '正序'}
+          {sortDir === 'desc' ? tx('倒序', 'Descending') : tx('正序', 'Ascending')}
         </button>
       ) : null}
       {children}

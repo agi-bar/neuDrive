@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { strFromU8, unzipSync } from 'fflate'
+import { useI18n } from '../../i18n'
 import {
   api,
   type BundleFilters,
@@ -86,24 +87,25 @@ function previewActionClass(action: string) {
   return `preview-action preview-action-${action}`
 }
 
-function jobStatusLabel(job: SyncJob) {
+function jobStatusLabel(job: SyncJob, locale: 'zh-CN' | 'en') {
   switch (job.status) {
     case 'succeeded':
-      return '已完成'
+      return locale === 'zh-CN' ? '已完成' : 'Succeeded'
     case 'failed':
-      return '失败'
+      return locale === 'zh-CN' ? '失败' : 'Failed'
     case 'aborted':
-      return '已中止'
+      return locale === 'zh-CN' ? '已中止' : 'Aborted'
     case 'running':
-      return '进行中'
+      return locale === 'zh-CN' ? '进行中' : 'Running'
     case 'pending':
-      return '排队中'
+      return locale === 'zh-CN' ? '排队中' : 'Pending'
     default:
       return job.status
   }
 }
 
 export default function DataSyncPage() {
+  const { locale, tx } = useI18n()
   const [syncToken, setSyncToken] = useState<SyncTokenResponse | null>(null)
   const [ttlMinutes, setTTLMinutes] = useState(30)
   const [tokenBusy, setTokenBusy] = useState(false)
@@ -148,7 +150,7 @@ export default function DataSyncPage() {
       const nextJobs = await api.listSyncJobs(tokenValue)
       setJobs(nextJobs)
     } catch (err: any) {
-      setJobsError(err.message || '加载历史失败')
+      setJobsError(err.message || tx('加载历史失败', 'Failed to load history'))
     } finally {
       setJobsBusy(false)
     }
@@ -167,9 +169,9 @@ export default function DataSyncPage() {
     try {
       const created = await api.createSyncToken({ access: 'both', ttl_minutes: ttlMinutes })
       setSyncToken(created)
-      setTokenMessage('已生成临时同步 token，可用于当前页面的导入、导出和历史查询，也可复制到本地 CLI 登录。')
+      setTokenMessage(tx('已生成临时同步 token，可用于当前页面的导入、导出和历史查询，也可复制到本地 CLI 登录。', 'A temporary sync token was created. You can use it on this page for import, export, and history queries, or copy it to a local CLI login.'))
     } catch (err: any) {
-      setTokenError(err.message || '生成同步 token 失败')
+      setTokenError(err.message || tx('生成同步 token 失败', 'Failed to create sync token'))
     } finally {
       setTokenBusy(false)
     }
@@ -193,7 +195,7 @@ export default function DataSyncPage() {
         setPreview(nextPreview)
       }
     } catch (err: any) {
-      setImportError(err.message || '预览失败')
+      setImportError(err.message || tx('预览失败', 'Preview failed'))
     } finally {
       setImportBusy(false)
     }
@@ -206,7 +208,7 @@ export default function DataSyncPage() {
     setImportMessage('')
     try {
       if (resumeSessionId && !importFile.name.endsWith('.ahubz')) {
-        throw new Error('继续未完成 session 时，请重新选择原始 .ahubz 文件。')
+        throw new Error(tx('继续未完成 session 时，请重新选择原始 .ahubz 文件。', 'To continue an unfinished session, reselect the original .ahubz file.'))
       }
       if (importFile.name.endsWith('.ahubz')) {
         const { bytes, manifest } = await readArchiveManifest(importFile)
@@ -232,20 +234,20 @@ export default function DataSyncPage() {
           const end = Math.min(bytes.length, start + chunkSize)
           await api.uploadSyncPart(syncToken.token, sessionId, index, bytes.slice(start, end))
           uploaded += 1
-          setImportMessage(`正在上传分片 ${uploaded}/${missing.length}...`)
+          setImportMessage(tx(`正在上传分片 ${uploaded}/${missing.length}...`, `Uploading chunk ${uploaded}/${missing.length}...`))
         }
         const result = await api.commitSyncSession(syncToken.token, sessionId, preview?.fingerprint)
-        setImportMessage(`导入完成：${JSON.stringify(result)}`)
+        setImportMessage(tx(`导入完成：${JSON.stringify(result)}`, `Import completed: ${JSON.stringify(result)}`))
         setResumeSessionId('')
       } else {
         const bundle = await readJSONBundle(importFile)
         bundle.mode = importMode
         const result = await api.importBundle(syncToken.token, bundle)
-        setImportMessage(`导入完成：${JSON.stringify(result)}`)
+        setImportMessage(tx(`导入完成：${JSON.stringify(result)}`, `Import completed: ${JSON.stringify(result)}`))
       }
       await loadJobs(syncToken.token)
     } catch (err: any) {
-      setImportError(err.message || '导入失败')
+      setImportError(err.message || tx('导入失败', 'Import failed'))
     } finally {
       setImportBusy(false)
     }
@@ -265,7 +267,7 @@ export default function DataSyncPage() {
       }
       await loadJobs(syncToken.token)
     } catch (err: any) {
-      setExportError(err.message || '导出失败')
+      setExportError(err.message || tx('导出失败', 'Export failed'))
     } finally {
       setExportBusy(false)
     }
@@ -277,39 +279,39 @@ export default function DataSyncPage() {
         <div className="materials-hero-copy">
           <div className="materials-kicker">Agent Hub Data</div>
           <h2 className="materials-title">Sync</h2>
-          <p className="materials-subtitle">把同步也收进同一套卡片语言里。这里集中处理 token、bundle 导入导出，以及最近的同步历史。</p>
+          <p className="materials-subtitle">{tx('把同步也收进同一套卡片语言里。这里集中处理 token、bundle 导入导出，以及最近的同步历史。', 'Bring sync into the same card-based language. This page handles tokens, bundle import/export, and recent sync history.')}</p>
         </div>
       </section>
 
       <div className="materials-panel data-sync-card">
         <div className="card-header">
-          <h3 className="card-title">临时同步 Token</h3>
+          <h3 className="card-title">{tx('临时同步 Token', 'Temporary sync token')}</h3>
         </div>
-        <p className="data-record-secondary">生成一个 30 分钟到 2 小时内有效的短命 token，供本页面或本地 CLI 调用 `/agent/*` 同步接口。</p>
+        <p className="data-record-secondary">{tx('生成一个 30 分钟到 2 小时内有效的短命 token，供本页面或本地 CLI 调用 `/agent/*` 同步接口。', 'Create a short-lived token valid for 30 minutes to 2 hours for this page or a local CLI to call `/agent/*` sync endpoints.')}</p>
         <div className="data-sync-cli-box">
-          <div className="data-record-title">推荐 CLI 流程</div>
-          <p className="data-record-secondary">先登录一次保存默认 profile。CLI 会自动打开独立的网页登录页，不再跳进完整管理后台。</p>
+          <div className="data-record-title">{tx('推荐 CLI 流程', 'Recommended CLI flow')}</div>
+          <p className="data-record-secondary">{tx('先登录一次保存默认 profile。CLI 会自动打开独立的网页登录页，不再跳进完整管理后台。', 'Sign in once to save the default profile. The CLI opens a dedicated login page instead of the full dashboard.')}</p>
           <div className="data-sync-cli-steps">
             <code>agenthub sync login --api-base {window.location.origin}</code>
             <code>agenthub sync push --bundle backup.ahubz</code>
           </div>
-          <div className="data-record-secondary">如果你已经生成了当前 token，也可以手工执行：<code>agenthub sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code></div>
+          <div className="data-record-secondary">{tx('如果你已经生成了当前 token，也可以手工执行：', 'If you already generated the current token, you can also run:')}<code>agenthub sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code></div>
         </div>
         <div className="data-sync-row">
           <select aria-label="Sync token TTL" value={ttlMinutes} onChange={(e) => setTTLMinutes(Number(e.target.value))}>
-            <option value={30}>30 分钟</option>
-            <option value={60}>1 小时</option>
-            <option value={120}>2 小时</option>
+            <option value={30}>{tx('30 分钟', '30 minutes')}</option>
+            <option value={60}>{tx('1 小时', '1 hour')}</option>
+            <option value={120}>{tx('2 小时', '2 hours')}</option>
           </select>
           <button className="btn btn-primary" onClick={() => { void handleCreateSyncToken() }} disabled={tokenBusy}>
-            {tokenBusy ? '生成中...' : '生成 Sync Token'}
+            {tokenBusy ? tx('生成中...', 'Creating...') : tx('生成 Sync Token', 'Create Sync token')}
           </button>
         </div>
         {syncToken && (
           <div className="data-sync-token-box">
-            <div className="data-record-title">当前 Token</div>
+            <div className="data-record-title">{tx('当前 Token', 'Current token')}</div>
             <code className="data-sync-token">{syncToken.token}</code>
-            <div className="data-record-meta">过期时间：{formatDateTime(syncToken.expires_at)}</div>
+            <div className="data-record-meta">{tx('过期时间：', 'Expires at: ')}{formatDateTime(syncToken.expires_at, locale)}</div>
             <div className="data-record-secondary">{syncToken.usage}</div>
           </div>
         )}
@@ -319,9 +321,9 @@ export default function DataSyncPage() {
 
       <div className="materials-panel data-sync-card">
         <div className="card-header">
-          <h3 className="card-title">导入上传</h3>
+          <h3 className="card-title">{tx('导入上传', 'Import')}</h3>
         </div>
-        <p className="data-record-secondary">上传 `.ahub` 或 `.ahubz` 文件。JSON bundle 支持先 preview 再导入；archive bundle 会走 resumable session 上传。</p>
+        <p className="data-record-secondary">{tx('上传 `.ahub` 或 `.ahubz` 文件。JSON bundle 支持先 preview 再导入；archive bundle 会走 resumable session 上传。', 'Upload `.ahub` or `.ahubz` files. JSON bundles can be previewed before import, while archive bundles use resumable session uploads.')}</p>
         <div className="data-sync-row">
           <input
             type="file"
@@ -342,16 +344,16 @@ export default function DataSyncPage() {
             Preview
           </button>
           <button className="btn btn-primary" onClick={() => { void handleImport() }} disabled={!syncToken?.token || !importFile || importBusy}>
-            {importBusy ? '处理中...' : '开始导入'}
+            {importBusy ? tx('处理中...', 'Working...') : tx('开始导入', 'Start import')}
           </button>
         </div>
-        {resumeSessionId && <div className="alert alert-warn">将继续未完成 session：{resumeSessionId}</div>}
+        {resumeSessionId && <div className="alert alert-warn">{tx('将继续未完成 session：', 'Continuing unfinished session: ')}{resumeSessionId}</div>}
         {importMode === 'mirror' && (
-          <div className="alert alert-warn">`mirror` 会删除 bundle 中声明的 skill 里未出现的额外文件，执行前请确认 preview 结果。</div>
+          <div className="alert alert-warn">{tx('`mirror` 会删除 bundle 中声明的 skill 里未出现的额外文件，执行前请确认 preview 结果。', '`mirror` removes extra files not present in the bundle for declared skills. Review the preview carefully before continuing.')}</div>
         )}
         {resumeSessionId && (
           <div className="alert alert-warn">
-            已选择继续未完成 session：{resumeSessionId}。请重新选择原始 `.ahubz` 文件，再点击“开始导入”。
+            {tx('已选择继续未完成 session：', 'Selected unfinished session: ')}{resumeSessionId}{tx('。请重新选择原始 `.ahubz` 文件，再点击“开始导入”。', '. Reselect the original `.ahubz` file, then click "Start import".')}
           </div>
         )}
         {preview && (
@@ -360,7 +362,7 @@ export default function DataSyncPage() {
             <div className="data-inline-list">{previewSummaryBadges(preview.summary)}</div>
             {(preview.summary.delete || 0) > 0 && (
               <div className="alert alert-warn" style={{ marginTop: 12 }}>
-                本次 preview 包含删除操作。`mirror` 只会影响 bundle 中声明的 skill，不会全局删除其他 skill。
+                {tx('本次 preview 包含删除操作。`mirror` 只会影响 bundle 中声明的 skill，不会全局删除其他 skill。', 'This preview includes deletions. `mirror` only affects skills declared by the bundle and does not delete other skills globally.')}
               </div>
             )}
             <div className="data-sync-preview-sections">
@@ -397,7 +399,7 @@ export default function DataSyncPage() {
                     <summary className="data-sync-preview-summary">
                       <div>
                         <div className="data-record-title">{skillName}</div>
-                        <div className="data-record-secondary">仅展示将作用于该 skill 的文件变更</div>
+                        <div className="data-record-secondary">{tx('仅展示将作用于该 skill 的文件变更', 'Only file changes affecting this skill are shown')}</div>
                       </div>
                       <div className="data-inline-list">{previewSummaryBadges(skillPreview.summary || {})}</div>
                     </summary>
@@ -415,13 +417,13 @@ export default function DataSyncPage() {
             </div>
           </div>
         )}
-        {importMessage && <div className="alert alert-success">{summarizeText(importMessage, 220)}</div>}
+        {importMessage && <div className="alert alert-success">{summarizeText(importMessage, 220, locale)}</div>}
         {importError && <div className="alert alert-error">{importError}</div>}
       </div>
 
       <div className="materials-panel data-sync-card">
         <div className="card-header">
-          <h3 className="card-title">导出下载</h3>
+          <h3 className="card-title">{tx('导出下载', 'Export')}</h3>
         </div>
         <div className="data-sync-grid">
           <label className="data-sync-checkbox">
@@ -441,12 +443,12 @@ export default function DataSyncPage() {
           <input
             value={includeSkillsText}
             onChange={(e) => setIncludeSkillsText(e.target.value)}
-            placeholder="仅包含这些 skills，逗号分隔"
+            placeholder={tx('仅包含这些 skills，逗号分隔', 'Only include these skills, comma-separated')}
           />
           <input
             value={excludeSkillsText}
             onChange={(e) => setExcludeSkillsText(e.target.value)}
-            placeholder="排除这些 skills，逗号分隔"
+            placeholder={tx('排除这些 skills，逗号分隔', 'Exclude these skills, comma-separated')}
           />
         </div>
         <div className="data-sync-row">
@@ -455,7 +457,7 @@ export default function DataSyncPage() {
             <option value="archive">Archive (.ahubz)</option>
           </select>
           <button className="btn btn-primary" onClick={() => { void handleExport() }} disabled={!syncToken?.token || exportBusy}>
-            {exportBusy ? '导出中...' : '下载 Bundle'}
+            {exportBusy ? tx('导出中...', 'Exporting...') : tx('下载 Bundle', 'Download bundle')}
           </button>
         </div>
         {exportError && <div className="alert alert-error">{exportError}</div>}
@@ -463,11 +465,11 @@ export default function DataSyncPage() {
 
       <div className="materials-panel data-sync-card">
         <div className="card-header">
-          <h3 className="card-title">最近同步历史</h3>
+          <h3 className="card-title">{tx('最近同步历史', 'Recent sync history')}</h3>
         </div>
-        {jobsBusy && <div className="page-loading">加载中...</div>}
+        {jobsBusy && <div className="page-loading">{tx('加载中...', 'Loading...')}</div>}
         {jobsError && <div className="alert alert-error">{jobsError}</div>}
-        {!jobsBusy && jobs.length === 0 && <div className="empty-state"><p>还没有同步记录。</p></div>}
+        {!jobsBusy && jobs.length === 0 && <div className="empty-state"><p>{tx('还没有同步记录。', 'No sync history yet.')}</p></div>}
         {jobs.length > 0 && (
           <div className="data-record-list">
             {jobs.map((job) => (
@@ -477,25 +479,25 @@ export default function DataSyncPage() {
                     <div className="data-record-title">{job.direction} / {job.transport}</div>
                     <div className="data-record-secondary">{job.source || 'agenthub'} · {job.mode || 'merge'}</div>
                   </div>
-                  <div className="data-record-meta">{formatDateTime(job.created_at)}</div>
+                  <div className="data-record-meta">{formatDateTime(job.created_at, locale)}</div>
                 </div>
                 <div className="data-inline-list">
-                  <span className="token-list-prefix">status {jobStatusLabel(job)}</span>
-                  {job.session_id && <span className="token-list-prefix">session {job.session_id.slice(0, 8)}</span>}
+                  <span className="token-list-prefix">{tx('状态', 'Status')} {jobStatusLabel(job, locale)}</span>
+                  {job.session_id && <span className="token-list-prefix">{tx('会话', 'Session')} {job.session_id.slice(0, 8)}</span>}
                 </div>
                 {job.summary && <div className="data-record-secondary">{JSON.stringify(job.summary)}</div>}
                 {job.error && <div className="alert alert-error" style={{ marginTop: 12 }}>{job.error}</div>}
                 {job.session_id && job.status !== 'succeeded' && (
                   <>
                     <div className="data-record-secondary" style={{ marginTop: 12 }}>
-                      重新选择原始 `.ahubz` 文件后，可以继续这个未完成的 session。
+                      {tx('重新选择原始 `.ahubz` 文件后，可以继续这个未完成的 session。', 'After reselecting the original `.ahubz` file, you can continue this unfinished session.')}
                     </div>
                     <button
                       className="btn"
                       style={{ marginTop: 12 }}
                       onClick={() => setResumeSessionId(job.session_id || '')}
                     >
-                      选择并继续这个 Session
+                      {tx('选择并继续这个 Session', 'Select and continue this session')}
                     </button>
                   </>
                 )}

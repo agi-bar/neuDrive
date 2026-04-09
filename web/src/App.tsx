@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Routes, Route, NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { api } from './api'
+import LanguageToggle from './components/LanguageToggle'
+import { useI18n } from './i18n'
 import LoginPage from './pages/LoginPage'
 import DashboardPage from './pages/DashboardPage'
 import ConnectionsPage from './pages/ConnectionsPage'
@@ -24,6 +26,7 @@ import SyncLoginPage from './pages/SyncLoginPage'
 function App() {
   const [user, setUser] = useState<any>(null)
   const [loading, setLoading] = useState(true)
+  const { tx } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const [isDataNavOpen, setIsDataNavOpen] = useState(false)
@@ -113,7 +116,7 @@ function App() {
     return (
       <div className="loading-screen">
         <div className="loading-spinner" />
-        <p>加载中...</p>
+        <p>{tx('加载中...', 'Loading...')}</p>
       </div>
     )
   }
@@ -154,7 +157,7 @@ function App() {
         <nav className="sidebar-nav">
           <NavLink to="/" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9632;</span>
-            <span>概览</span>
+            <span>{tx('概览', 'Overview')}</span>
           </NavLink>
           <div className="nav-group">
             <button
@@ -165,7 +168,7 @@ function App() {
               onClick={handleDataNavToggle}
             >
               <span className="nav-icon">&#9776;</span>
-              <span>数据文件</span>
+              <span>{tx('数据文件', 'Data')}</span>
               <span className={`nav-group-caret ${isDataNavOpen ? 'nav-group-caret-open' : ''}`} aria-hidden="true">
                 &#9654;
               </span>
@@ -174,16 +177,16 @@ function App() {
               <div
                 id="data-nav-submenu"
                 className="nav-submenu"
-                aria-label="数据文件子菜单"
+                aria-label={tx('数据文件子菜单', 'Data navigation submenu')}
               >
                 <NavLink to="/data/files" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                  文件管理器
+                  {tx('文件管理器', 'File Browser')}
                 </NavLink>
                 <NavLink to="/data/projects" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                  项目
+                  {tx('项目', 'Projects')}
                 </NavLink>
                 <NavLink to="/data/skills" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                  技能
+                  {tx('技能', 'Skills')}
                 </NavLink>
                 <NavLink to="/data/memory" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   Memory
@@ -196,19 +199,22 @@ function App() {
           </div>
           <NavLink to="/connections" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9670;</span>
-            <span>平台连接</span>
+            <span>{tx('平台连接', 'Connections')}</span>
           </NavLink>
           <NavLink to="/setup/tokens" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9670;</span>
-            <span>Token 管理</span>
+            <span>{tx('Token 管理', 'Token Manager')}</span>
           </NavLink>
         </nav>
 
         <div className="sidebar-footer">
-          <div className="user-info">
-            <span className="user-name">{user.name || user.slug || 'User'}</span>
+          <LanguageToggle compact />
+          <div className="sidebar-footer-row">
+            <div className="user-info">
+              <span className="user-name">{user.name || user.slug || tx('用户', 'User')}</span>
+            </div>
+            <button className="btn-text" onClick={handleLogout}>{tx('退出', 'Sign out')}</button>
           </div>
-          <button className="btn-text" onClick={handleLogout}>退出</button>
         </div>
       </aside>
 
@@ -234,7 +240,7 @@ function App() {
             <Route path="projects" element={<ProjectsPage />} />
             <Route path="skills/*" element={<DataSkillsPage />} />
             <Route path="memory" element={<DataMemoryPage />} />
-            <Route path="profile" element={<InfoPage title="我的资料" />} />
+            <Route path="profile" element={<InfoPage title={tx('我的资料', 'My Profile')} />} />
             <Route path="devices" element={<Navigate to="/data/files" replace />} />
             <Route path="roles" element={<Navigate to="/data/files" replace />} />
             <Route path="inbox" element={<Navigate to="/data/files" replace />} />

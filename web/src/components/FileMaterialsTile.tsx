@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { FileNode } from '../api'
+import { useI18n } from '../i18n'
 import MaterialsTile, { type MaterialsTileSelectOptions } from './MaterialsTile'
 
 type FileLikeNode = Pick<FileNode, 'path' | 'name' | 'is_dir' | 'kind'>
@@ -46,6 +47,7 @@ export default function FileMaterialsTile({
   onSelect,
   onOpen,
 }: FileMaterialsTileProps) {
+  const { tx } = useI18n()
   const kind = meaningfulKind(node.kind)
   const hasPills = Boolean(kind) || Boolean(extraPills)
   const tileClassName = ['materials-tile-file', className].filter(Boolean).join(' ')
@@ -54,7 +56,7 @@ export default function FileMaterialsTile({
     <MaterialsTile
       iconClassName={node.is_dir ? 'icon-folder' : 'icon-file'}
       title={node.name}
-      titleActionAriaLabel={`打开 ${node.name}`}
+      titleActionAriaLabel={tx(`打开 ${node.name}`, `Open ${node.name}`)}
       subtitle={subtitle}
       description={description}
       path={path}

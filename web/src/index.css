@@ -120,6 +120,13 @@ a:hover {
   box-shadow: var(--shadow);
 }
 
+.login-card-header,
+.oauth-card-header {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
+}
+
 .login-title {
   font-size: 24px;
   font-weight: 600;
@@ -441,14 +448,60 @@ a:hover {
   padding: 14px 16px;
   border-top: 1px solid var(--color-border-light);
   display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.sidebar-footer-row {
+  width: 100%;
+  display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.7);
+  gap: 12px;
 }
 
 .user-name {
   font-size: 13px;
   font-weight: 500;
+  color: var(--materials-title);
+}
+
+.language-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--materials-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
+.language-toggle-compact {
+  width: 100%;
+  justify-content: center;
+}
+
+.language-toggle-btn {
+  min-width: 56px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--materials-copy);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.language-toggle-btn:hover {
+  color: var(--materials-title);
+}
+
+.language-toggle-btn-active {
+  background: rgba(65, 77, 136, 0.12);
   color: var(--materials-title);
 }
 

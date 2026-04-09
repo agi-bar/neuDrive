@@ -1,4 +1,5 @@
 import { type FileNode, type SkillSummary } from '../../api'
+import { getLocaleTag, type AppLocale } from '../../i18n'
 
 const ORDINARY_FILE_EXCLUDED_PREFIXES = [
   '/projects/',
@@ -13,6 +14,10 @@ const PROFILE_LABELS: Record<string, string> = {
   preferences: '个人偏好',
   relationships: '人际关系',
   principles: '行为准则',
+}
+
+function text(locale: AppLocale, zh: string, en: string) {
+  return locale === 'zh-CN' ? zh : en
 }
 
 function hasVisibleContent(node: FileNode) {
@@ -34,25 +39,25 @@ export function normalizeHubPath(path: string) {
   return `/${normalized.replace(/^\/+/, '').replace(/\/+$/, '')}`
 }
 
-export function formatDateTime(value?: string) {
+export function formatDateTime(value?: string, locale: AppLocale = 'zh-CN') {
   if (!value) return '-'
   try {
-    return new Date(value).toLocaleString('zh-CN')
+    return new Date(value).toLocaleString(getLocaleTag(locale))
   } catch {
     return value
   }
 }
 
-export function summarizeText(value?: string, maxLength = 140) {
-  if (!value) return '暂无内容'
+export function summarizeText(value?: string, maxLength = 140, locale: AppLocale = 'zh-CN') {
+  if (!value) return text(locale, '暂无内容', 'No content yet')
   const normalized = value.replace(/\s+/g, ' ').trim()
-  if (!normalized) return '暂无内容'
+  if (!normalized) return text(locale, '暂无内容', 'No content yet')
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, maxLength).trimEnd()}...`
 }
 
-export function summarizeNodeContent(node: FileNode, maxLength = 140) {
-  return summarizeText(node.content, maxLength)
+export function summarizeNodeContent(node: FileNode, maxLength = 140, locale: AppLocale = 'zh-CN') {
+  return summarizeText(node.content, maxLength, locale)
 }
 
 export function recentTimestamp(node: FileNode) {
@@ -66,10 +71,14 @@ export function sortNodesByRecent(entries: FileNode[]) {
 export type MaterialsSortKey = 'name' | 'updated_at'
 export type MaterialsSortDir = 'asc' | 'desc'
 
-export const MATERIALS_SORT_OPTIONS: Array<{ value: MaterialsSortKey; label: string }> = [
-  { value: 'updated_at', label: '按时间' },
-  { value: 'name', label: '按名称' },
-]
+export function getMaterialsSortOptions(locale: AppLocale): Array<{ value: MaterialsSortKey; label: string }> {
+  return [
+    { value: 'updated_at', label: text(locale, '按时间', 'By time') },
+    { value: 'name', label: text(locale, '按名称', 'By name') },
+  ]
+}
+
+export const MATERIALS_SORT_OPTIONS: Array<{ value: MaterialsSortKey; label: string }> = getMaterialsSortOptions('zh-CN')
 
 type SortMaterialsItemsOptions<T> = {
   items: T[]
@@ -155,6 +164,7 @@ type BuildFileTileModelOptions = {
   currentLabel?: string
   bundleLabel?: string
   skillLookup?: Record<string, SkillSummary>
+  locale?: AppLocale
 }
 
 function metadataDescription(node: FileNode) {
@@ -174,8 +184,8 @@ function fileTileName(node: FileNode, variant: FileTileVariant) {
   return node.name
 }
 
-function fileTileFooterEnd(node: FileNode) {
-  return formatDateTime(node.updated_at || node.created_at)
+function fileTileFooterEnd(node: FileNode, locale: AppLocale) {
+  return formatDateTime(node.updated_at || node.created_at, locale)
 }
 
 export function buildFileTileModel({
@@ -184,6 +194,7 @@ export function buildFileTileModel({
   currentLabel,
   bundleLabel,
   skillLookup = {},
+  locale = 'zh-CN',
 }: BuildFileTileModelOptions): FileTileModel {
   const skillSummary = skillSummaryForPath(node.path, skillLookup)
   const skillBundleCard = variant === 'browser' && node.is_dir && Boolean(skillSummary)
@@ -193,8 +204,8 @@ export function buildFileTileModel({
       return {
         node,
         path: node.path,
-        footerStart: fileNamespaceLabel(node.path),
-        footerEnd: fileTileFooterEnd(node),
+        footerStart: fileNamespaceLabel(node.path, locale),
+        footerEnd: fileTileFooterEnd(node, locale),
       }
     case 'memory':
       return {
@@ -202,47 +213,49 @@ export function buildFileTileModel({
           ...node,
           name: fileTileName(node, variant),
         },
-        subtitle: fileTileFooterEnd(node),
-        description: summarizeNodeContent(node, 220),
+        subtitle: fileTileFooterEnd(node, locale),
+        description: summarizeNodeContent(node, 220, locale),
         path: node.path,
         footerStart: 'memory',
-        footerEnd: node.kind || 'entry',
+        footerEnd: node.kind || text(locale, '条目', 'Entry'),
       }
     case 'search':
       return {
         node,
         path: node.path,
-        footerStart: fileNamespaceLabel(node.path),
-        footerEnd: fileTileFooterEnd(node),
+        footerStart: fileNamespaceLabel(node.path, locale),
+        footerEnd: fileTileFooterEnd(node, locale),
       }
     case 'skill-bundle-entry':
       return {
         node,
         description: fileTileDescription(node, skillLookup) || undefined,
-        footerStart: bundleLabel || 'bundle',
-        footerEnd: fileTileFooterEnd(node),
+        footerStart: bundleLabel || 'Bundle',
+        footerEnd: fileTileFooterEnd(node, locale),
       }
     case 'browser':
     default:
       return {
         node,
         description: fileTileDescription(node, skillLookup) || undefined,
-        footerStart: skillBundleCard ? 'skills' : (currentLabel || '根目录'),
-        footerEnd: skillBundleCard ? (skillSummary?.read_only ? '只读' : '可编辑') : fileTileFooterEnd(node),
+        footerStart: skillBundleCard ? text(locale, '技能', 'Skills') : (currentLabel || text(locale, '根目录', 'Root')),
+        footerEnd: skillBundleCard
+          ? (skillSummary?.read_only ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable'))
+          : fileTileFooterEnd(node, locale),
       }
   }
 }
 
-export function buildSkillBundleTileModel(skill: SkillSummary): FileTileModel {
+export function buildSkillBundleTileModel(skill: SkillSummary, locale: AppLocale = 'zh-CN'): FileTileModel {
   return {
     node: {
       path: skillBundlePathFromSkillPath(skill.path),
       name: skill.name,
       is_dir: true,
     },
-    description: skillSummaryDescription(skill) || '这个 bundle 还没有写描述。',
-    footerStart: 'skills',
-    footerEnd: skill.read_only ? '只读' : '可编辑',
+    description: skillSummaryDescription(skill) || text(locale, '这个 bundle 还没有写描述。', 'This bundle does not have a description yet.'),
+    footerStart: text(locale, '技能', 'Skills'),
+    footerEnd: skill.read_only ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable'),
   }
 }
 
@@ -270,9 +283,17 @@ export function isSkillDocument(node: FileNode) {
   return hasVisibleContent(node) && node.path.startsWith('/skills/') && node.path.endsWith('/SKILL.md')
 }
 
-export function profileLabelFromPath(path: string) {
+export function profileLabelFromPath(path: string, locale: AppLocale = 'zh-CN') {
   const key = stripMarkdownSuffix(path.split('/').pop() || path)
-  return PROFILE_LABELS[key] || key.replace(/[_-]+/g, ' ')
+  if (locale === 'zh-CN') {
+    return PROFILE_LABELS[key] || key.replace(/[_-]+/g, ' ')
+  }
+  const englishLabels: Record<string, string> = {
+    preferences: 'Preferences',
+    relationships: 'Relationships',
+    principles: 'Principles',
+  }
+  return englishLabels[key] || key.replace(/[_-]+/g, ' ')
 }
 
 export function displayNameFromPath(path: string) {
@@ -294,21 +315,23 @@ export function dataFileBrowseRoute(path: string) {
   return normalized ? `/data/files/${encodeHubRoutePath(path)}` : '/data/files'
 }
 
-export function fileNamespaceLabel(path: string) {
+export function fileNamespaceLabel(path: string, locale: AppLocale = 'zh-CN') {
   switch (topLevelSegment(path)) {
     case 'projects':
-      return '项目'
+      return text(locale, '项目', 'Projects')
     case 'skills':
-      return '技能'
+      return text(locale, '技能', 'Skills')
     case 'memory':
-      return path.startsWith('/memory/profile/') ? '我的资料' : 'Memory'
+      return path.startsWith('/memory/profile/')
+        ? text(locale, '我的资料', 'My Profile')
+        : 'Memory'
     case 'devices':
-      return '设备'
+      return text(locale, '设备', 'Devices')
     case 'roles':
       return 'Roles'
     case 'inbox':
       return 'Inbox'
     default:
-      return '根文件'
+      return text(locale, '根文件', 'Root Files')
   }
 }

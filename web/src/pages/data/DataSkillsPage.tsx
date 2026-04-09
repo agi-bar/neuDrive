@@ -3,8 +3,9 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode, type SkillSummary } from '../../api'
 import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
+import { useI18n } from '../../i18n'
 import {
-  MATERIALS_SORT_OPTIONS,
+  getMaterialsSortOptions,
   buildFileTileModel,
   buildSkillBundleTileModel,
   dataFileBrowseRoute,
@@ -64,6 +65,7 @@ Describe when this skill should not be used.
 }
 
 export default function DataSkillsPage() {
+  const { locale, tx } = useI18n()
   const navigate = useNavigate()
   const params = useParams()
   const bundleRoute = (params['*'] || '')
@@ -122,14 +124,14 @@ export default function DataSkillsPage() {
         }
         setSelectedEntryPath(null)
       } catch (err: any) {
-        setError(err.message || '加载技能失败')
+        setError(err.message || tx('加载技能失败', 'Failed to load skills'))
       } finally {
         setLoading(false)
       }
     }
 
     void load()
-  }, [currentBundlePath])
+  }, [currentBundlePath, tx])
 
   const currentSkill = currentBundlePath
     ? skills.find((skill) => skill.bundlePath === currentBundlePath) || null
@@ -194,14 +196,16 @@ export default function DataSkillsPage() {
       setNewBundleName('new-skill')
       navigate(dataFileEditorRoute(path))
     } catch (err: any) {
-      setError(err.message || '新建技能失败')
+      setError(err.message || tx('新建技能失败', 'Failed to create skill'))
     } finally {
       setCreating(false)
     }
   }
 
+  const sortOptions = getMaterialsSortOptions(locale)
+
   if (loading) {
-    return <div className="page-loading">加载中...</div>
+    return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   }
 
   if (currentBundlePath) {
@@ -209,33 +213,33 @@ export default function DataSkillsPage() {
       <div className="page materials-page">
         <section className="materials-hero">
           <div className="materials-hero-copy">
-            <nav aria-label="面包屑" className="materials-breadcrumbs">
-              <button className="btn-text" onClick={() => navigate('/data/skills')}>技能</button>
+            <nav aria-label={tx('面包屑', 'Breadcrumbs')} className="materials-breadcrumbs">
+              <button className="btn-text" onClick={() => navigate('/data/skills')}>{tx('技能', 'Skills')}</button>
               <span className="breadcrumbs-sep">/</span>
               <span>{bundleRoute || 'bundle'}</span>
             </nav>
             <div className="materials-kicker">Agent Hub Data</div>
             <h2 className="materials-title">{currentSkill?.name || bundleRoute}</h2>
-            <p className="materials-subtitle">{skillSummaryDescription(currentSkill) || '这个技能 bundle 里的文件现在和文件管理器使用同一套卡片展示。'}</p>
+            <p className="materials-subtitle">{skillSummaryDescription(currentSkill) || tx('这个技能 bundle 里的文件现在和文件管理器使用同一套卡片展示。', 'Files in this skill bundle now use the same card layout as the file browser.')}</p>
           </div>
         </section>
 
         {error && <div className="alert alert-warn">{error}</div>}
         {!error && !currentSkill && (
-          <div className="alert alert-warn">没有找到这个 skill bundle。</div>
+          <div className="alert alert-warn">{tx('没有找到这个 skill bundle。', 'This skill bundle could not be found.')}</div>
         )}
 
         {currentSkill && (
           <section className="materials-section">
             <div className="materials-section-head">
               <div>
-                <h3 className="materials-section-title">Bundle 内容</h3>
-                <p className="materials-section-copy">这个 bundle 里的文件和文件夹按同一套文件卡片规则展示。</p>
+                <h3 className="materials-section-title">{tx('Bundle 内容', 'Bundle contents')}</h3>
+                <p className="materials-section-copy">{tx('这个 bundle 里的文件和文件夹按同一套文件卡片规则展示。', 'Files and folders in this bundle are displayed with the same file card rules.')}</p>
               </div>
               <MaterialsSectionToolbar
                 count={bundleEntries.length}
                 sortKey={sortKey}
-                sortOptions={MATERIALS_SORT_OPTIONS}
+                sortOptions={sortOptions}
                 sortDir={sortDir}
                 onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
                 onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
@@ -243,7 +247,7 @@ export default function DataSkillsPage() {
             </div>
 
             {bundleEntries.length === 0 ? (
-              <p className="dashboard-empty-copy">这个 bundle 目录目前还是空的。</p>
+              <p className="dashboard-empty-copy">{tx('这个 bundle 目录目前还是空的。', 'This bundle is currently empty.')}</p>
             ) : (
               <div className="materials-grid">
                 {sortedBundleEntries.map((entry) => {
@@ -251,6 +255,7 @@ export default function DataSkillsPage() {
                     node: entry,
                     variant: 'skill-bundle-entry',
                     bundleLabel: currentSkill?.name || bundleRoute,
+                    locale,
                   })
                   return (
                     <FileMaterialsTile
@@ -280,8 +285,8 @@ export default function DataSkillsPage() {
       <section className="materials-hero">
         <div className="materials-hero-copy">
           <div className="materials-kicker">Agent Hub Data</div>
-          <h2 className="materials-title">技能</h2>
-          <p className="materials-subtitle">按 skill bundle 展示 <code>/skills</code> 下的技能。一个文件夹就是一个 skill，点开后再看 bundle 详情。</p>
+          <h2 className="materials-title">{tx('技能', 'Skills')}</h2>
+          <p className="materials-subtitle">{tx('按 skill bundle 展示 ', 'Show skills in ')}<code>/skills</code>{tx(' 下的技能。一个文件夹就是一个 skill，点开后再看 bundle 详情。', '. Each folder is a skill. Open it to inspect bundle details.')}</p>
         </div>
       </section>
 
@@ -291,29 +296,29 @@ export default function DataSkillsPage() {
         <div className="materials-panel form-card">
           <div className="materials-section-head">
             <div>
-              <h3 className="materials-section-title">新建技能</h3>
-              <p className="materials-section-copy">创建一个新的 skill bundle，并直接进入 <code>SKILL.md</code> 编辑器。</p>
+              <h3 className="materials-section-title">{tx('新建技能', 'New skill')}</h3>
+              <p className="materials-section-copy">{tx('创建一个新的 skill bundle，并直接进入 ', 'Create a new skill bundle and jump straight into the ')}<code>SKILL.md</code>{tx(' 编辑器。', ' editor.')}</p>
             </div>
           </div>
           <form onSubmit={handleCreateSkill}>
             <div className="form-group">
-              <label htmlFor="skill-name">技能名称</label>
+              <label htmlFor="skill-name">{tx('技能名称', 'Skill name')}</label>
               <input
                 id="skill-name"
                 type="text"
                 value={newBundleName}
                 onChange={(event) => setNewBundleName(event.target.value)}
-                placeholder="例如：meeting-notes"
+                placeholder={tx('例如：meeting-notes', 'For example: meeting-notes')}
                 disabled={creating}
                 autoFocus
               />
             </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary" disabled={creating}>
-                {creating ? '创建中...' : '创建'}
+                {creating ? tx('创建中...', 'Creating...') : tx('创建', 'Create')}
               </button>
               <button type="button" className="btn" onClick={() => setShowNewForm(false)} disabled={creating}>
-                取消
+                {tx('取消', 'Cancel')}
               </button>
             </div>
           </form>
@@ -324,31 +329,31 @@ export default function DataSkillsPage() {
         <div className="materials-section-head">
           <div>
             <h3 className="materials-section-title">Skill Bundles</h3>
-            <p className="materials-section-copy">统一按时间或名称浏览 skill bundle 卡片。</p>
+            <p className="materials-section-copy">{tx('统一按时间或名称浏览 skill bundle 卡片。', 'Browse skill bundle cards by time or name.')}</p>
           </div>
           <MaterialsSectionToolbar
             count={skills.length}
             sortKey={sortKey}
-            sortOptions={MATERIALS_SORT_OPTIONS}
+            sortOptions={sortOptions}
             sortDir={sortDir}
             onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
             onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
           >
             <button className="btn btn-sm materials-toolbar-control" onClick={() => setShowNewForm((value) => !value)}>
-              {showNewForm ? '取消新建' : '新建技能'}
+              {showNewForm ? tx('取消新建', 'Close form') : tx('新建技能', 'New skill')}
             </button>
           </MaterialsSectionToolbar>
         </div>
 
         {skills.length === 0 ? (
           <div className="empty-state">
-            <p>还没有技能内容</p>
-            <p className="empty-hint">导入或创建 skill bundle 后，会在这里看到对应文件夹。</p>
+            <p>{tx('还没有技能内容', 'No skills yet')}</p>
+            <p className="empty-hint">{tx('导入或创建 skill bundle 后，会在这里看到对应文件夹。', 'Imported or newly created skill bundles will appear here.')}</p>
           </div>
         ) : (
           <div className="materials-grid">
             {sortedSkills.map((skill) => {
-              const tile = buildSkillBundleTileModel(skill)
+              const tile = buildSkillBundleTileModel(skill, locale)
               return (
                 <FileMaterialsTile
                   key={skill.path}

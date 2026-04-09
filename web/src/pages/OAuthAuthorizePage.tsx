@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
+import LanguageToggle from '../components/LanguageToggle'
+import { useI18n } from '../i18n'
 
 interface ScopeInfo {
   scope: string
@@ -15,6 +17,7 @@ interface AppInfo {
 }
 
 export default function OAuthAuthorizePage() {
+  const { tx } = useI18n()
   const [searchParams] = useSearchParams()
   const navigate = useNavigate()
 
@@ -71,14 +74,14 @@ export default function OAuthAuthorizePage() {
       .then((res) => res.json())
       .then((body) => {
         if (body.ok === false || body.code) {
-          setError(body.message || 'Failed to load application info')
+          setError(body.message || tx('加载应用信息失败', 'Failed to load application info'))
         } else {
           setAppInfo(body.data || body)
         }
       })
-      .catch(() => setError('Failed to load application info'))
+      .catch(() => setError(tx('加载应用信息失败', 'Failed to load application info')))
       .finally(() => setLoading(false))
-  }, [clientId, redirectUri, scope, state, responseType, navigate])
+  }, [clientId, redirectUri, scope, state, responseType, navigate, tx])
 
   const handleAuthorize = () => {
     setSubmitting(true)
@@ -121,7 +124,10 @@ export default function OAuthAuthorizePage() {
     return (
       <div className="oauth-page">
         <div className="oauth-card">
-          <div className="oauth-loading">Loading...</div>
+          <div className="oauth-card-header">
+            <LanguageToggle />
+          </div>
+          <div className="oauth-loading">{tx('加载中...', 'Loading...')}</div>
         </div>
       </div>
     )
@@ -131,6 +137,9 @@ export default function OAuthAuthorizePage() {
     return (
       <div className="oauth-page">
         <div className="oauth-card">
+          <div className="oauth-card-header">
+            <LanguageToggle />
+          </div>
           <h1 className="oauth-title">Agent Hub</h1>
           <div className="oauth-error">{error}</div>
         </div>
@@ -141,8 +150,11 @@ export default function OAuthAuthorizePage() {
   return (
     <div className="oauth-page">
       <div className="oauth-card">
+        <div className="oauth-card-header">
+          <LanguageToggle />
+        </div>
         <h1 className="oauth-title">Agent Hub</h1>
-        <p className="oauth-subtitle">An application is requesting access to your account</p>
+        <p className="oauth-subtitle">{tx('有应用正在请求访问你的账号', 'An application is requesting access to your account')}</p>
 
         {appInfo && (
           <>
@@ -156,13 +168,13 @@ export default function OAuthAuthorizePage() {
               </div>
               <div>
                 <div className="oauth-app-name">{appInfo.app_name}</div>
-                <div className="oauth-app-sub">wants to access your Agent Hub account</div>
+                <div className="oauth-app-sub">{tx('想要访问你的 Agent Hub 账号', 'wants to access your Agent Hub account')}</div>
               </div>
             </div>
 
             {appInfo.scopes && appInfo.scopes.length > 0 && (
               <div className="oauth-scopes">
-                <h3>This application will be able to:</h3>
+                <h3>{tx('该应用将可以：', 'This application will be able to:')}</h3>
                 {appInfo.scopes.map((s) => (
                   <div key={s.scope} className="oauth-scope-item">
                     <span className="oauth-scope-check">&#10003;</span>
@@ -176,16 +188,16 @@ export default function OAuthAuthorizePage() {
 
         {userName && (
           <div className="oauth-user-status">
-            &#10003; Logged in as <strong>{userName}</strong>
+            &#10003; {tx('当前登录为', 'Logged in as')} <strong>{userName}</strong>
           </div>
         )}
 
         <div className="oauth-actions">
           <button className="btn btn-outline oauth-btn-deny" onClick={handleDeny} disabled={submitting}>
-            Deny
+            {tx('拒绝', 'Deny')}
           </button>
           <button className="btn btn-primary oauth-btn-approve" onClick={handleAuthorize} disabled={submitting}>
-            {submitting ? 'Authorizing...' : 'Authorize'}
+            {submitting ? tx('授权中...', 'Authorizing...') : tx('授权', 'Authorize')}
           </button>
         </div>
       </div>

@@ -7,6 +7,7 @@ import {
 } from 'react'
 import { Outlet, useLocation, useOutletContext } from 'react-router-dom'
 import { api, CreateTokenRequest, ScopedTokenResponse } from '../api'
+import { useI18n } from '../i18n'
 
 export const TRUST_LEVELS = [
   { value: 1, label: 'L1 访客', desc: '只能读取公开信息' },
@@ -129,6 +130,7 @@ export function useSetup() {
 }
 
 export default function SetupPage() {
+  const { tx } = useI18n()
   const location = useLocation()
   const [tokens, setTokens] = useState<ScopedTokenResponse[]>([])
   const [loading, setLoading] = useState(true)
@@ -215,26 +217,36 @@ export default function SetupPage() {
   }, [])
 
   const formatExpiry = useCallback((token: ScopedTokenResponse): string => {
-    if (token.is_revoked) return '已吊销'
-    if (token.is_expired) return '已过期'
+    if (token.is_revoked) return tx('已吊销', 'Revoked')
+    if (token.is_expired) return tx('已过期', 'Expired')
     const days = Math.ceil((new Date(token.expires_at).getTime() - Date.now()) / (1000 * 60 * 60 * 24))
-    if (days > 3650) return '永不过期'
-    return `${days}天后过期`
-  }, [])
+    if (days > 3650) return tx('永不过期', 'Never expires')
+    return tx(`${days}天后过期`, `Expires in ${days} days`)
+  }, [tx])
 
   const trustLabel = useCallback((level: number): string => {
-    const found = TRUST_LEVELS.find((item) => item.value === level)
-    return found ? found.label : `L${level}`
-  }, [])
+    switch (level) {
+      case 1:
+        return tx('L1 访客', 'L1 Visitor')
+      case 2:
+        return tx('L2 共享', 'L2 Shared')
+      case 3:
+        return tx('L3 工作', 'L3 Work')
+      case 4:
+        return tx('L4 完全信任', 'L4 Full Trust')
+      default:
+        return `L${level}`
+    }
+  }, [tx])
 
   const presetLabel = useCallback((token: ScopedTokenResponse): string => {
     const scopes = token.scopes
     if (scopes.includes('admin')) return 'Full'
     if (scopes.length === 2 && scopes.includes('read:bundle') && scopes.includes('write:bundle')) return 'Sync'
-    if (scopes.length >= 13) return 'Agent完整'
-    if (scopes.length <= 6 && scopes.every((scope) => scope.startsWith('read:') || scope === 'search')) return '只读'
-    return `${scopes.length}项权限`
-  }, [])
+    if (scopes.length >= 13) return tx('Agent完整', 'Agent full')
+    if (scopes.length <= 6 && scopes.every((scope) => scope.startsWith('read:') || scope === 'search')) return tx('只读', 'Read-only')
+    return tx(`${scopes.length}项权限`, `${scopes.length} permissions`)
+  }, [tx])
 
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:8080'
   const hostName = typeof window !== 'undefined' ? window.location.hostname : 'localhost'
@@ -330,7 +342,7 @@ export default function SetupPage() {
     },
   }, null, 2)
 
-  const gptTokenText = newToken || '在 Token 管理页创建一个新的 Bearer Token 后填入这里'
+  const gptTokenText = newToken || tx('在 Token 管理页创建一个新的 Bearer Token 后填入这里', 'Create a new Bearer token in Token Manager and paste it here')
 
   const handleCreateToken = useCallback(async () => {
     setManualCreating(true)
@@ -389,7 +401,7 @@ export default function SetupPage() {
   const handleRenameToken = useCallback(async (token: ScopedTokenResponse) => {
     const trimmedName = editingTokenName.trim()
     if (!trimmedName) {
-      setError('Token 名称不能为空')
+      setError(tx('Token 名称不能为空', 'Token name cannot be empty'))
       return
     }
     if (trimmedName === token.name) {
@@ -411,15 +423,15 @@ export default function SetupPage() {
   }, [cancelRenameToken, editingTokenName, loadTokens])
 
   if (loading) {
-    return <div className="page"><div className="page-loading">加载中...</div></div>
+    return <div className="page"><div className="page-loading">{tx('加载中...', 'Loading...')}</div></div>
   }
 
   const activeTokens = tokens.filter((token) => !token.is_revoked && !token.is_expired)
   const isTokenManagementRoute = location.pathname === '/setup/tokens'
-  const pageTitle = isTokenManagementRoute ? 'Token 管理' : '连接设置'
+  const pageTitle = isTokenManagementRoute ? tx('Token 管理', 'Token Manager') : tx('连接设置', 'Connection Setup')
   const pageSubtitle = isTokenManagementRoute
-    ? '创建、改名、吊销和查看用于 API、脚本与高级 MCP 客户端的 Bearer Token。'
-    : '把 Agent Hub 配置到网页应用、CLI 和其他 MCP 客户端。'
+    ? tx('创建、改名、吊销和查看用于 API、脚本与高级 MCP 客户端的 Bearer Token。', 'Create, rename, revoke, and review Bearer tokens for APIs, scripts, and advanced MCP clients.')
+    : tx('把 Agent Hub 配置到网页应用、CLI 和其他 MCP 客户端。', 'Configure Agent Hub for web apps, CLIs, and other MCP clients.')
 
   return (
     <div className="page materials-page">

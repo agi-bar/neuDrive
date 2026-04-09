@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom'
 import { api } from '../api'
 import MaterialsSectionToolbar from '../components/MaterialsSectionToolbar'
 import MaterialsTile from '../components/MaterialsTile'
-import { MATERIALS_SORT_OPTIONS, type MaterialsSortDir, type MaterialsSortKey, dataFileEditorRoute, sortMaterialsItems } from './data/DataShared'
+import { useI18n } from '../i18n'
+import { getMaterialsSortOptions, type MaterialsSortDir, type MaterialsSortKey, dataFileEditorRoute, sortMaterialsItems } from './data/DataShared'
 
 interface Project {
   name: string
@@ -26,6 +27,7 @@ interface LogEntry {
 }
 
 export default function ProjectsPage() {
+  const { locale, tx } = useI18n()
   const navigate = useNavigate()
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
@@ -95,7 +97,7 @@ export default function ProjectsPage() {
   }
 
   const handleArchive = async (name: string) => {
-    if (!window.confirm(`确认归档项目 "${name}"？`)) return
+    if (!window.confirm(tx(`确认归档项目 "${name}"？`, `Archive project "${name}"?`))) return
     try {
       await api.archiveProject(name)
       setProjects((prev) =>
@@ -112,7 +114,7 @@ export default function ProjectsPage() {
   const formatTime = (ts?: string) => {
     if (!ts) return '-'
     try {
-      return new Date(ts).toLocaleString('zh-CN')
+      return new Date(ts).toLocaleString(locale === 'zh-CN' ? 'zh-CN' : 'en-US')
     } catch {
       return ts
     }
@@ -121,15 +123,17 @@ export default function ProjectsPage() {
   const getStatusLabel = (status: string) => {
     switch (status?.toLowerCase()) {
       case 'active':
-        return '进行中'
+        return tx('进行中', 'Active')
       case 'archived':
-        return '已归档'
+        return tx('已归档', 'Archived')
       case 'paused':
-        return '已暂停'
+        return tx('已暂停', 'Paused')
       default:
-        return status || '未知'
+        return status || tx('未知', 'Unknown')
     }
   }
+
+  const sortOptions = getMaterialsSortOptions(locale)
 
   const getProjectLastActivity = (project: Project) => project.last_activity || project.updated_at
   const projectContextPath = (name: string) => `/projects/${name}/context.md`
@@ -146,7 +150,7 @@ export default function ProjectsPage() {
   )
 
   if (loading) {
-    return <div className="page-loading">加载中...</div>
+    return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   }
 
   return (
@@ -154,8 +158,8 @@ export default function ProjectsPage() {
       <section className="materials-hero">
         <div className="materials-hero-copy">
           <div className="materials-kicker">Agent Hub Data</div>
-          <h2 className="materials-title">项目</h2>
-          <p className="materials-subtitle">把项目看成一组长期上下文卡片。点击任意项目卡片，可以继续查看 context 和最近日志。</p>
+          <h2 className="materials-title">{tx('项目', 'Projects')}</h2>
+          <p className="materials-subtitle">{tx('把项目看成一组长期上下文卡片。点击任意项目卡片，可以继续查看 context 和最近日志。', 'Treat projects as long-lived context cards. Open any project card to inspect its context and recent logs.')}</p>
         </div>
       </section>
 
@@ -165,26 +169,26 @@ export default function ProjectsPage() {
         <div className="materials-panel form-card">
           <div className="materials-section-head">
             <div>
-              <h3 className="materials-section-title">新建项目</h3>
-              <p className="materials-section-copy">创建一个新的项目空间，用来整理任务上下文、日志和相关资料。</p>
+              <h3 className="materials-section-title">{tx('新建项目', 'New project')}</h3>
+              <p className="materials-section-copy">{tx('创建一个新的项目空间，用来整理任务上下文、日志和相关资料。', 'Create a new project space to organize task context, logs, and supporting material.')}</p>
             </div>
           </div>
           <form onSubmit={handleCreate}>
             <div className="form-group">
-              <label htmlFor="proj-name">项目名称</label>
+              <label htmlFor="proj-name">{tx('项目名称', 'Project name')}</label>
               <input
                 id="proj-name"
                 type="text"
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
-                placeholder="例如：blog-redesign"
+                placeholder={tx('例如：blog-redesign', 'For example: blog-redesign')}
                 disabled={creating}
                 autoFocus
               />
             </div>
             <div className="form-actions">
               <button type="submit" className="btn btn-primary" disabled={creating}>
-                {creating ? '创建中...' : '创建'}
+                {creating ? tx('创建中...', 'Creating...') : tx('创建', 'Create')}
               </button>
               <button
                 type="button"
@@ -192,7 +196,7 @@ export default function ProjectsPage() {
                 onClick={() => setShowNewForm(false)}
                 disabled={creating}
               >
-                取消
+                {tx('取消', 'Cancel')}
               </button>
             </div>
           </form>
@@ -203,26 +207,26 @@ export default function ProjectsPage() {
         <div className="materials-section-head">
           <div>
             <h3 className="materials-section-title">Project Library</h3>
-            <p className="materials-section-copy">统一浏览项目卡片，选中后在下方查看 context 和日志。</p>
+            <p className="materials-section-copy">{tx('统一浏览项目卡片，选中后在下方查看 context 和日志。', 'Browse project cards here, then inspect context and logs below.')}</p>
           </div>
           <MaterialsSectionToolbar
             count={projects.length}
             sortKey={sortKey}
-            sortOptions={MATERIALS_SORT_OPTIONS}
+            sortOptions={sortOptions}
             sortDir={sortDir}
             onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
             onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
           >
             <button className="btn btn-sm materials-toolbar-control" onClick={() => setShowNewForm((value) => !value)}>
-              {showNewForm ? '取消新建' : '新建项目'}
+              {showNewForm ? tx('取消新建', 'Close form') : tx('新建项目', 'New project')}
             </button>
           </MaterialsSectionToolbar>
         </div>
 
         {projects.length === 0 ? (
           <div className="empty-state">
-            <p>暂无项目</p>
-            <p className="empty-hint">项目帮助 Agent 组织不同任务的上下文和进度。</p>
+            <p>{tx('暂无项目', 'No projects yet')}</p>
+            <p className="empty-hint">{tx('项目帮助 Agent 组织不同任务的上下文和进度。', 'Projects help agents organize context and progress across different tasks.')}</p>
           </div>
         ) : (
           <div className="materials-grid materials-grid-wide">
@@ -231,11 +235,11 @@ export default function ProjectsPage() {
                   key={project.name}
                   iconClassName="icon-folder"
                   title={project.name}
-                  titleActionAriaLabel={`打开项目 ${project.name} 的 context.md`}
+                  titleActionAriaLabel={tx(`打开项目 ${project.name} 的 context.md`, `Open ${project.name} context.md`)}
                   subtitle={getStatusLabel(project.status)}
-                  description={project.description || '这个项目还没有补充描述。'}
+                  description={project.description || tx('这个项目还没有补充描述。', 'This project does not have a description yet.')}
                   path={projectContextPath(project.name)}
-                  footerStart="最后活动"
+                  footerStart={tx('最后活动', 'Last activity')}
                   footerEnd={formatTime(getProjectLastActivity(project))}
                   selected={selectedProject?.name === project.name}
                   onSelect={() => handleSelectProject(project)}
@@ -251,19 +255,19 @@ export default function ProjectsPage() {
           <div className="materials-section-head">
             <div>
               <h3 className="materials-section-title">{selectedProject.name}</h3>
-              <p className="materials-section-copy">项目详情会在这里显示，包括 context 和最近日志。</p>
+              <p className="materials-section-copy">{tx('项目详情会在这里显示，包括 context 和最近日志。', 'Project details appear here, including context and recent logs.')}</p>
             </div>
             <MaterialsSectionToolbar>
               {selectedProject.status === 'active' ? (
                 <button className="btn btn-sm materials-toolbar-control" onClick={() => void handleArchive(selectedProject.name)}>
-                  归档项目
+                  {tx('归档项目', 'Archive project')}
                 </button>
               ) : null}
             </MaterialsSectionToolbar>
           </div>
           <div className="project-detail">
             {detailLoading ? (
-              <div className="page-loading">加载详情...</div>
+              <div className="page-loading">{tx('加载详情...', 'Loading details...')}</div>
             ) : (
               <>
                 {selectedProject.context_md && (
@@ -277,7 +281,7 @@ export default function ProjectsPage() {
 
                 {selectedProject.logs && selectedProject.logs.length > 0 && (
                   <div className="materials-panel">
-                    <h4 className="card-title">最近日志</h4>
+                    <h4 className="card-title">{tx('最近日志', 'Recent logs')}</h4>
                     <div className="log-timeline">
                       {selectedProject.logs.map((log, i) => (
                         <div key={i} className="timeline-item">
@@ -309,7 +313,7 @@ export default function ProjectsPage() {
                 {!selectedProject.context_md &&
                   (!selectedProject.logs || selectedProject.logs.length === 0) && (
                     <div className="empty-state">
-                      <p>暂无项目详情</p>
+                      <p>{tx('暂无项目详情', 'No project details yet')}</p>
                     </div>
                   )}
               </>

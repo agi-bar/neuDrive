@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode } from '../../api'
+import { useI18n } from '../../i18n'
 import { displayNameFromPath, fileNamespaceLabel, formatDateTime } from './DataShared'
 import MDEditor from '@uiw/react-md-editor'
 import '@uiw/react-md-editor/markdown-editor.css'
 import '@uiw/react-markdown-preview/markdown.css'
 
 export default function DataFileEditorPage() {
+  const { locale, tx } = useI18n()
   const params = useParams()
   const navigate = useNavigate()
   const raw = params['*'] || ''
@@ -36,7 +38,7 @@ export default function DataFileEditorPage() {
         setContent(data.content || '')
         setRenamePath(data.path)
       } catch (err: any) {
-        setError(err.message || '加载文件失败')
+        setError(err.message || tx('加载文件失败', 'Failed to load file'))
       } finally {
         setLoading(false)
       }
@@ -59,15 +61,15 @@ export default function DataFileEditorPage() {
         expectedChecksum: node.checksum,
       })
       setNode(saved)
-      setSuccess('保存成功')
+      setSuccess(tx('保存成功', 'Saved'))
     } catch (err: any) {
       const msg = String(err.message || '')
       if (msg.toLowerCase().includes('conflict')) {
-        setError('保存失败：版本冲突。请刷新后重试，或手动合并更改。')
+        setError(tx('保存失败：版本冲突。请刷新后重试，或手动合并更改。', 'Save failed because of a version conflict. Refresh and try again, or merge the changes manually.'))
       } else if (msg.toLowerCase().includes('read-only')) {
-        setError('保存失败：该路径为只读（系统生成或受保护）。建议另存为到 /notes/ 或 /projects/ 路径下，或复制到你自己的 /skills/ 子目录。')
+        setError(tx('保存失败：该路径为只读（系统生成或受保护）。建议另存为到 /notes/ 或 /projects/ 路径下，或复制到你自己的 /skills/ 子目录。', 'Save failed because this path is read-only (system-generated or protected). Save to /notes/ or /projects/, or copy it into your own /skills/ subdirectory instead.'))
       } else {
-        setError(err.message || '保存失败')
+        setError(err.message || tx('保存失败', 'Save failed'))
       }
     } finally {
       setSaving(false)
@@ -93,13 +95,13 @@ export default function DataFileEditorPage() {
       })
       await api.deleteTree(path)
       navigate(`/data/files/edit/${encodeURIComponent(nextPath.replace(/^\/+/, ''))}`, { replace: true })
-      setSuccess('已重命名')
+      setSuccess(tx('已重命名', 'Renamed'))
     } catch (err: any) {
       const msg = String(err.message || '')
       if (msg.toLowerCase().includes('read-only')) {
-        setError('重命名失败：源路径或目标路径是只读目录。')
+        setError(tx('重命名失败：源路径或目标路径是只读目录。', 'Rename failed because the source or destination path is read-only.'))
       } else {
-        setError(err.message || '重命名失败')
+        setError(err.message || tx('重命名失败', 'Rename failed'))
       }
     } finally {
       setSaving(false)
@@ -134,14 +136,14 @@ export default function DataFileEditorPage() {
 
   const title = displayNameFromPath(path)
 
-  if (loading) return <div className="page-loading">加载中...</div>
+  if (loading) return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   if (!node) {
     return (
       <div className="page materials-page">
         <div className="page-header">
-          <h2>未找到文件</h2>
+          <h2>{tx('未找到文件', 'File not found')}</h2>
           <div className="page-actions">
-            <button className="btn" onClick={() => navigate(-1)}>返回</button>
+            <button className="btn" onClick={() => navigate(-1)}>{tx('返回', 'Back')}</button>
           </div>
         </div>
         {error && <div className="alert alert-error">{error}</div>}
@@ -153,11 +155,11 @@ export default function DataFileEditorPage() {
     <div className="page materials-page">
       <div className="page-header">
         <div>
-          <h2>编辑：{title}</h2>
+          <h2>{tx('编辑：', 'Edit: ')}{title}</h2>
           <p className="page-subtitle">
-            <span className="dashboard-inline-chip">{fileNamespaceLabel(node.path)}</span>
+            <span className="dashboard-inline-chip">{fileNamespaceLabel(node.path, locale)}</span>
             {node.kind && <span className="dashboard-inline-chip" style={{ marginLeft: 8 }}>{node.kind}</span>}
-            <span className="data-record-meta" style={{ marginLeft: 8 }}>最近更新：{formatDateTime(node.updated_at || node.created_at)}</span>
+            <span className="data-record-meta" style={{ marginLeft: 8 }}>{tx('最近更新：', 'Updated: ')}{formatDateTime(node.updated_at || node.created_at, locale)}</span>
           </p>
           <div className="data-record-path">{node.path}</div>
         </div>
@@ -165,11 +167,11 @@ export default function DataFileEditorPage() {
           <button
             className="btn"
             onClick={() => {
-              if (isDirty && !confirm('有未保存的更改，确定要离开吗？')) return
+              if (isDirty && !confirm(tx('有未保存的更改，确定要离开吗？', 'You have unsaved changes. Leave anyway?'))) return
               navigate(-1)
             }}
-          >返回</button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? '保存中…' : '保存'}</button>
+          >{tx('返回', 'Back')}</button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? tx('保存中…', 'Saving...') : tx('保存', 'Save')}</button>
         </div>
       </div>
 
@@ -179,15 +181,15 @@ export default function DataFileEditorPage() {
       <div className="card" style={{ marginBottom: 12 }}>
         <div className="form-row">
           <div className="form-group" style={{ gridColumn: '1 / span 2' }}>
-            <label>文件路径</label>
+            <label>{tx('文件路径', 'File path')}</label>
             <input value={renamePath} onChange={(e) => setRenamePath(e.target.value)} />
           </div>
           <div className="form-group">
             <label>&nbsp;</label>
             <div className="form-actions">
-              <button className="btn" disabled={saving || renamePath === path} onClick={() => setRenamePath(path)}>还原</button>
+              <button className="btn" disabled={saving || renamePath === path} onClick={() => setRenamePath(path)}>{tx('还原', 'Reset')}</button>
               <button className="btn btn-primary" disabled={saving || !renamePath.trim() || renamePath === path} onClick={handleRename}>
-                {saving ? '处理中…' : '重命名'}
+                {saving ? tx('处理中…', 'Working...') : tx('重命名', 'Rename')}
               </button>
             </div>
           </div>

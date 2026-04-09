@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { useI18n } from '../../i18n'
 
 interface SetupSectionProps {
   icon: ReactNode
@@ -60,6 +61,10 @@ export function SetupCodeBlock({
   copiedLabel = '已复制',
   action,
 }: SetupCodeBlockProps) {
+  const { tx } = useI18n()
+  const resolvedCopyLabel = copyLabel === '复制' ? tx('复制', 'Copy') : copyLabel
+  const resolvedCopiedLabel = copiedLabel === '已复制' ? tx('已复制', 'Copied') : copiedLabel
+
   return (
     <div className="code-block">
       <div className="code-block-label">{label}</div>
@@ -70,7 +75,7 @@ export function SetupCodeBlock({
             className="copy-btn"
             onClick={() => onCopy(content, copyKey)}
           >
-            {copied === copyKey ? copiedLabel : copyLabel}
+            {copied === copyKey ? resolvedCopiedLabel : resolvedCopyLabel}
           </button>
         ) : null
       )}
@@ -79,9 +84,10 @@ export function SetupCodeBlock({
 }
 
 export function SetupScreenshotPlaceholder({ title, caption }: SetupScreenshotPlaceholderProps) {
+  const { tx } = useI18n()
   return (
-    <div className="setup-screenshot-placeholder" aria-label={`截图占位：${title}`}>
-      <div className="setup-screenshot-label">截图占位</div>
+    <div className="setup-screenshot-placeholder" aria-label={tx(`截图占位：${title}`, `Screenshot placeholder: ${title}`)}>
+      <div className="setup-screenshot-label">{tx('截图占位', 'Screenshot placeholder')}</div>
       <div className="setup-screenshot-title">{title}</div>
       <p className="setup-screenshot-caption">{caption}</p>
     </div>

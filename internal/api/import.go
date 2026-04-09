@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/skillsarchive"
+	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -127,11 +127,19 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 	contentType := r.Header.Get("Content-Type")
 
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		extracted, platform, archiveName, err := extractSkillsArchive(r)
+		archiveData, platform, archiveName, err := extractSkillsArchive(r)
 		if err != nil {
 			return nil, fmt.Errorf("failed to process zip: %w", err)
 		}
-		return s.importSkillsArchiveEntries(r, userID, extracted, platform, archiveName)
+		result, err := s.ImportService.ImportSkillsArchive(r.Context(), userID, archiveData, platform, archiveName)
+		if err != nil {
+			return nil, err
+		}
+		return &ImportResult{
+			Imported: result.Imported,
+			Skipped:  result.Skipped,
+			Errors:   result.Errors,
+		}, nil
 	}
 
 	var req ImportSkillsRequest
@@ -168,8 +176,8 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 	return result, nil
 }
 
-func extractSkillsArchive(r *http.Request) ([]skillsarchive.Entry, string, string, error) {
-	if err := r.ParseMultipartForm(50 << 20); err != nil {
+func extractSkillsArchive(r *http.Request) ([]byte, string, string, error) {
+	if err := r.ParseMultipartForm(services.MaxSkillsArchiveBytes); err != nil {
 		return nil, "", "", fmt.Errorf("parse multipart: %w", err)
 	}
 
@@ -192,57 +200,7 @@ func extractSkillsArchive(r *http.Request) ([]skillsarchive.Entry, string, strin
 	if header != nil {
 		archiveName = header.Filename
 	}
-	entries, err := skillsarchive.ParseZipBytes(buf, archiveName)
-	if err != nil {
-		return nil, "", "", err
-	}
-	return entries, platform, archiveName, nil
-}
-
-func (s *Server) importSkillsArchiveEntries(r *http.Request, userID uuid.UUID, entries []skillsarchive.Entry, platform, archiveName string) (*ImportResult, error) {
-	if s.FileTreeService == nil {
-		return nil, fmt.Errorf("file tree service not configured")
-	}
-
-	if strings.TrimSpace(platform) == "" {
-		platform = "skills-archive"
-	}
-	archiveName = filepath.Base(strings.TrimSpace(archiveName))
-	if archiveName == "" {
-		archiveName = "skills.zip"
-	}
-
-	result := &ImportResult{}
-	for _, entry := range entries {
-		fullPath := filepath.ToSlash(filepath.Join("/skills", entry.SkillName, entry.RelPath))
-		metadata := map[string]interface{}{
-			"source_platform": platform,
-			"source_archive":  archiveName,
-			"capture_mode":    "archive",
-		}
-		contentType := skillsarchive.DetectContentType(entry.RelPath, entry.Data)
-		if skillsarchive.LooksBinary(entry.RelPath, entry.Data) {
-			if _, err := s.FileTreeService.WriteBinaryEntry(r.Context(), userID, fullPath, entry.Data, contentType, models.FileTreeWriteOptions{
-				Kind:          "skill_asset",
-				Metadata:      metadata,
-				MinTrustLevel: models.TrustLevelGuest,
-			}); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("skill %s/%s: %v", entry.SkillName, entry.RelPath, err))
-				continue
-			}
-		} else {
-			if _, err := s.FileTreeService.WriteEntry(r.Context(), userID, fullPath, string(entry.Data), contentType, models.FileTreeWriteOptions{
-				Kind:          "skill_file",
-				Metadata:      metadata,
-				MinTrustLevel: models.TrustLevelGuest,
-			}); err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("skill %s/%s: %v", entry.SkillName, entry.RelPath, err))
-				continue
-			}
-		}
-		result.Imported++
-	}
-	return result, nil
+	return buf, platform, archiveName, nil
 }
 
 // ---------------------------------------------------------------------------

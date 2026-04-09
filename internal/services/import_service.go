@@ -13,9 +13,12 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/skillsarchive"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const MaxSkillsArchiveBytes = 50 << 20
 
 // ImportService handles bulk import and export operations.
 type ImportService struct {
@@ -85,6 +88,83 @@ func (s *ImportService) ImportSkill(ctx context.Context, userID uuid.UUID, skill
 	}
 
 	return imported, nil
+}
+
+type SkillsArchiveImportResult struct {
+	Imported int      `json:"imported"`
+	Skipped  int      `json:"skipped"`
+	Errors   []string `json:"errors,omitempty"`
+}
+
+// ImportSkillsArchive imports a zip archive that contains one or more skills.
+// It preserves both text files and binary assets under /skills/<name>/...
+func (s *ImportService) ImportSkillsArchive(ctx context.Context, userID uuid.UUID, archiveData []byte, platform, archiveName string) (*SkillsArchiveImportResult, error) {
+	if s.fileTree == nil {
+		return nil, fmt.Errorf("import.ImportSkillsArchive: file tree service not configured")
+	}
+	if len(archiveData) == 0 {
+		return nil, fmt.Errorf("import.ImportSkillsArchive: archive data is required")
+	}
+	if len(archiveData) > MaxSkillsArchiveBytes {
+		return nil, fmt.Errorf("import.ImportSkillsArchive: archive exceeds 50 MB limit")
+	}
+
+	entries, err := skillsarchive.ParseZipBytes(archiveData, archiveName)
+	if err != nil {
+		return nil, fmt.Errorf("import.ImportSkillsArchive: %w", err)
+	}
+	return s.ImportSkillsArchiveEntries(ctx, userID, entries, platform, archiveName)
+}
+
+// ImportSkillsArchiveEntries writes parsed archive entries into /skills/<name>/...
+func (s *ImportService) ImportSkillsArchiveEntries(ctx context.Context, userID uuid.UUID, entries []skillsarchive.Entry, platform, archiveName string) (*SkillsArchiveImportResult, error) {
+	if s.fileTree == nil {
+		return nil, fmt.Errorf("import.ImportSkillsArchiveEntries: file tree service not configured")
+	}
+	if len(entries) == 0 {
+		return nil, fmt.Errorf("import.ImportSkillsArchiveEntries: no archive entries provided")
+	}
+
+	if strings.TrimSpace(platform) == "" {
+		platform = "skills-archive"
+	}
+	archiveName = filepath.Base(strings.TrimSpace(archiveName))
+	if archiveName == "" {
+		archiveName = "skills.zip"
+	}
+
+	result := &SkillsArchiveImportResult{}
+	for _, entry := range entries {
+		fullPath := filepath.ToSlash(filepath.Join("/skills", entry.SkillName, entry.RelPath))
+		metadata := map[string]interface{}{
+			"source_platform": platform,
+			"source_archive":  archiveName,
+			"capture_mode":    "archive",
+		}
+		contentType := skillsarchive.DetectContentType(entry.RelPath, entry.Data)
+		if skillsarchive.LooksBinary(entry.RelPath, entry.Data) {
+			if _, err := s.fileTree.WriteBinaryEntry(ctx, userID, fullPath, entry.Data, contentType, models.FileTreeWriteOptions{
+				Kind:          "skill_asset",
+				Metadata:      metadata,
+				MinTrustLevel: models.TrustLevelGuest,
+			}); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("skill %s/%s: %v", entry.SkillName, entry.RelPath, err))
+				continue
+			}
+		} else {
+			if _, err := s.fileTree.WriteEntry(ctx, userID, fullPath, string(entry.Data), contentType, models.FileTreeWriteOptions{
+				Kind:          "skill_file",
+				Metadata:      metadata,
+				MinTrustLevel: models.TrustLevelGuest,
+			}); err != nil {
+				result.Errors = append(result.Errors, fmt.Sprintf("skill %s/%s: %v", entry.SkillName, entry.RelPath, err))
+				continue
+			}
+		}
+		result.Imported++
+	}
+
+	return result, nil
 }
 
 // claudeMemoryExport is the expected JSON structure from Claude memory exports.

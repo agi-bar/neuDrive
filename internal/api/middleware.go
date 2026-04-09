@@ -14,6 +14,12 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	maxSkillsArchiveRequestBytes = 50 << 20
+	maxMCPArchiveRequestBytes    = 80 << 20
+	maxSyncPartRequestBytes      = 8 << 20
+)
+
 // GetUser returns an AuthenticatedUser from the context for backward
 // compatibility with existing package-level handlers (filetree, vault, etc.).
 // It reads from the context keys set by Server.authMiddleware.
@@ -91,11 +97,30 @@ func MaxBodySizeMiddleware(maxBytes int64) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Body != nil {
-				r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+				r.Body = http.MaxBytesReader(w, r.Body, bodySizeLimitForPath(r.URL.Path, maxBytes))
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+func bodySizeLimitForPath(path string, fallback int64) int64 {
+	limit := fallback
+	switch {
+	case path == "/mcp":
+		if limit < maxMCPArchiveRequestBytes {
+			limit = maxMCPArchiveRequestBytes
+		}
+	case path == "/api/import/skills", path == "/agent/import/skills", path == "/agent/import/preview", path == "/agent/import/bundle":
+		if limit < maxSkillsArchiveRequestBytes {
+			limit = maxSkillsArchiveRequestBytes
+		}
+	case strings.HasPrefix(path, "/agent/import/session/") && strings.Contains(path, "/parts/"):
+		if limit < maxSyncPartRequestBytes {
+			limit = maxSyncPartRequestBytes
+		}
+	}
+	return limit
 }
 
 // RequestIDMiddleware generates a UUID for each incoming request, stores it in

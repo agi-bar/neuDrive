@@ -1,7 +1,10 @@
 package mcp
 
 import (
+	"archive/zip"
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -12,13 +15,15 @@ import (
 	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
 )
 
-func TestServerCoreToolsUseUnifiedServices(t *testing.T) {
+func setupSQLiteMCPServer(t *testing.T) (context.Context, *sqlitestorage.Store, *models.User, *MCPServer) {
+	t.Helper()
+
 	ctx := context.Background()
 	store, err := sqlitestorage.Open(filepath.Join(t.TempDir(), "local.db"))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
-	defer store.Close()
+	t.Cleanup(func() { store.Close() })
 
 	user, err := store.EnsureOwner(ctx)
 	if err != nil {
@@ -41,6 +46,31 @@ func TestServerCoreToolsUseUnifiedServices(t *testing.T) {
 		Scopes:     []string{models.ScopeAdmin},
 		BaseURL:    "http://127.0.0.1:42690",
 	}
+	return ctx, store, user, s
+}
+
+func buildSkillArchive(t *testing.T, files map[string][]byte) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	for name, data := range files {
+		w, err := zw.Create(name)
+		if err != nil {
+			t.Fatalf("Create(%s): %v", name, err)
+		}
+		if _, err := w.Write(data); err != nil {
+			t.Fatalf("Write(%s): %v", name, err)
+		}
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatalf("Close zip writer: %v", err)
+	}
+	return buf.Bytes()
+}
+
+func TestServerCoreToolsUseUnifiedServices(t *testing.T) {
+	ctx, store, user, s := setupSQLiteMCPServer(t)
 
 	resp := s.HandleJSONRPC(JSONRPCRequest{
 		JSONRPC: "2.0",
@@ -89,11 +119,11 @@ func TestServerCoreToolsUseUnifiedServices(t *testing.T) {
 		t.Fatalf("unexpected create_sync_token payload: %s", extractToolText(t, resp))
 	}
 
-	profiles, err := memory.GetProfile(ctx, user.ID)
+	profiles, err := s.Memory.GetProfile(ctx, user.ID)
 	if err != nil || len(profiles) != 1 {
 		t.Fatalf("GetProfile = %#v, %v", profiles, err)
 	}
-	projects, err := project.List(ctx, user.ID)
+	projects, err := s.Project.List(ctx, user.ID)
 	if err != nil || len(projects) != 1 {
 		t.Fatalf("List projects = %#v, %v", projects, err)
 	}
@@ -123,6 +153,152 @@ func TestServerCoreToolsUseUnifiedServices(t *testing.T) {
 	}
 	if !strings.Contains(extractToolText(t, resp), "# Demo") {
 		t.Fatalf("unexpected read_skill payload: %s", extractToolText(t, resp))
+	}
+}
+
+func TestServerCoreToolsImportSkillPreservesFiles(t *testing.T) {
+	ctx, store, user, s := setupSQLiteMCPServer(t)
+
+	resp := s.HandleJSONRPC(JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/call",
+		Params: mustMarshalParams(t, ToolCallParams{
+			Name: "import_skill",
+			Arguments: map[string]interface{}{
+				"name": "single-skill",
+				"files": map[string]interface{}{
+					"SKILL.md":         "# Single Skill\n",
+					"helper.py":        "print('hello')\n",
+					"prompts/guide.md": "Use the helper.\n",
+				},
+			},
+		}),
+	})
+	if resp.Error != nil {
+		t.Fatalf("import_skill error: %+v", resp.Error)
+	}
+	if !strings.Contains(extractToolText(t, resp), `imported 3 files for skill "single-skill"`) {
+		t.Fatalf("unexpected import_skill result: %s", extractToolText(t, resp))
+	}
+
+	entry, err := store.Read(ctx, user.ID, "/skills/single-skill/helper.py", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("Read helper.py: %v", err)
+	}
+	if !strings.Contains(entry.Content, "print('hello')") {
+		t.Fatalf("unexpected helper.py content: %q", entry.Content)
+	}
+	guide, err := store.Read(ctx, user.ID, "/skills/single-skill/prompts/guide.md", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("Read prompts/guide.md: %v", err)
+	}
+	if !strings.Contains(guide.Content, "Use the helper.") {
+		t.Fatalf("unexpected guide content: %q", guide.Content)
+	}
+}
+
+func TestServerCoreToolsImportSkillsArchivePreservesAssets(t *testing.T) {
+	ctx, _, user, s := setupSQLiteMCPServer(t)
+
+	archive := buildSkillArchive(t, map[string][]byte{
+		"archive-demo/SKILL.md":        []byte("# Archive Demo\n"),
+		"archive-demo/helper.py":       []byte("print('archive')\n"),
+		"archive-demo/assets/logo.png": {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0x00},
+	})
+	resp := s.HandleJSONRPC(JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/call",
+		Params: mustMarshalParams(t, ToolCallParams{
+			Name: "import_skills_archive",
+			Arguments: map[string]interface{}{
+				"archive_base64": base64.StdEncoding.EncodeToString(archive),
+				"archive_name":   "agenthub-skills.zip",
+				"platform":       "claude-web",
+			},
+		}),
+	})
+	if resp.Error != nil {
+		t.Fatalf("import_skills_archive error: %+v", resp.Error)
+	}
+	if !strings.Contains(extractToolText(t, resp), `"imported": 3`) {
+		t.Fatalf("unexpected import_skills_archive result: %s", extractToolText(t, resp))
+	}
+
+	textEntry, err := s.FileTree.Read(ctx, user.ID, "/skills/archive-demo/helper.py", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("Read helper.py: %v", err)
+	}
+	if !strings.Contains(textEntry.Content, "print('archive')") {
+		t.Fatalf("unexpected helper.py content: %q", textEntry.Content)
+	}
+
+	binaryData, binaryEntry, err := s.FileTree.ReadBinary(ctx, user.ID, "/skills/archive-demo/assets/logo.png", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("ReadBinary logo.png: %v", err)
+	}
+	if len(binaryData) == 0 {
+		t.Fatal("expected binary asset data")
+	}
+	if binaryEntry.Metadata["capture_mode"] != "archive" || binaryEntry.Metadata["source_platform"] != "claude-web" {
+		t.Fatalf("unexpected binary metadata: %+v", binaryEntry.Metadata)
+	}
+}
+
+func TestServerCoreToolsImportSkillsArchiveRejectsBadInputs(t *testing.T) {
+	_, _, _, s := setupSQLiteMCPServer(t)
+
+	tests := []struct {
+		name          string
+		archiveBase64 string
+		wantSubstring string
+	}{
+		{
+			name:          "invalid base64",
+			archiveBase64: "!!!not-base64!!!",
+			wantSubstring: "decode archive_base64",
+		},
+		{
+			name:          "bad zip",
+			archiveBase64: base64.StdEncoding.EncodeToString([]byte("not a zip")),
+			wantSubstring: "open skills archive",
+		},
+		{
+			name: "missing manifest",
+			archiveBase64: base64.StdEncoding.EncodeToString(buildSkillArchive(t, map[string][]byte{
+				"broken/helper.py": []byte("print('missing skill md')\n"),
+			})),
+			wantSubstring: "missing broken/SKILL.md",
+		},
+		{
+			name:          "too large",
+			archiveBase64: base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{'a'}, services.MaxSkillsArchiveBytes+1)),
+			wantSubstring: "archive exceeds 50 MB limit",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := s.HandleJSONRPC(JSONRPCRequest{
+				JSONRPC: "2.0",
+				ID:      1,
+				Method:  "tools/call",
+				Params: mustMarshalParams(t, ToolCallParams{
+					Name: "import_skills_archive",
+					Arguments: map[string]interface{}{
+						"archive_base64": tt.archiveBase64,
+					},
+				}),
+			})
+			if resp.Error != nil {
+				t.Fatalf("unexpected JSON-RPC error: %+v", resp.Error)
+			}
+			text := extractToolText(t, resp)
+			if !strings.Contains(text, tt.wantSubstring) {
+				t.Fatalf("expected %q in %q", tt.wantSubstring, text)
+			}
+		})
 	}
 }
 

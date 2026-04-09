@@ -157,6 +157,9 @@ func TestInitialize(t *testing.T) {
 	if !strings.Contains(instructions, "list_skills") {
 		t.Fatalf("expected list_skills hint in serverInfo, got %q", instructions)
 	}
+	if !strings.Contains(instructions, "import_skills_archive") {
+		t.Fatalf("expected archive import hint in serverInfo, got %q", instructions)
+	}
 
 	caps, ok := result["capabilities"].(map[string]interface{})
 	if !ok {
@@ -260,7 +263,7 @@ func TestToolsList(t *testing.T) {
 		"list_secrets", "read_secret",
 		"list_skills", "read_skill",
 		"get_stats",
-		"import_skill", "save_memory", "create_project",
+		"import_skill", "import_skills_archive", "save_memory", "create_project",
 		"create_sync_token", "create_skills_import_token",
 	}
 
@@ -330,6 +333,9 @@ func TestToolsListWithScopeFiltering(t *testing.T) {
 	}
 	if toolNames["create_skills_import_token"] {
 		t.Error("create_skills_import_token should not be available without admin scope")
+	}
+	if toolNames["import_skills_archive"] {
+		t.Error("import_skills_archive should not be available with only read:profile scope")
 	}
 }
 

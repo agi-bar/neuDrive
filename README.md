@@ -193,10 +193,12 @@ agenthub import claude --zip ./agenthub-skills.zip
 如果你是在 Claude 网页应用里导出 skills，优先做法是：
 
 1. 按 `portability/claude` 手册把 `/mnt/skills/user` 打成一个 zip
-2. 调用 Agent Hub MCP 工具 `create_skills_import_token`
-3. 用返回的 `upload_url` 把 zip 直接上传到 `/agent/import/skills`
+2. 优先直接调用 Agent Hub MCP 工具 `import_skills_archive`
+3. 如果 zip 过大，就按顶层 skill 目录拆成多个 zip，分批调用 `import_skills_archive`
 
 这样 Agent Hub 会在服务端自动解压，并把每个 skill 还原到 `/skills/<name>/...`。
+
+`create_skills_import_token` + `/agent/import/skills` 仍然保留，但更适合作为非 Claude Web 场景下的 fallback 上传通道。
 
 如果你是在远程 / 官方服务模式下使用，也仍然可以直接把各平台连到 `https://hub.example.com/mcp`。
 

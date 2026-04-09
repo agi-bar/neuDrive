@@ -2,18 +2,21 @@
 
 ## Import Prompt
 
-> Read `/skills/portability/claude/SKILL.md` first. If a Claude exported data zip exists, prioritize it. If the task is specifically to export Claude Web skills, package `/mnt/skills/user` into a single zip, call `create_skills_import_token`, and upload that zip into AgentHub so it expands into `/skills/<name>/...`. Then migrate Claude memory, projects, skills, and conversations into AgentHub. Preserve anything that does not map cleanly as archive.
+> Read `/skills/portability/claude/SKILL.md` first. Inventory the Claude-side categories as `profile preferences`, `styles`, `memory`, `standalone chats`, `project instructions`, `project knowledge`, `project chats`, `skills`, `connectors`, and `official exports`. Handle each category separately instead of merging them into one migration step. Use `update_profile` for durable account-wide rules, `save_memory` for smaller derived notes, `create_project` plus `write_file` for project reconstruction, `import_skill` for one skill, and `import_skills_archive` for `/mnt/skills/user` or other multi-skill archives. If the user already has the official Claude export zip, note that `/api/import/claude-data` is the preferred path and that there is no public MCP equivalent yet. Preserve unsupported material as archive notes instead of dropping it.
 
 ## Export Prompt
 
-> Read `/skills/portability/claude/SKILL.md` first. Generate Claude-compatible working instructions, project context prompts, and skill directory materials from AgentHub data. Mark all manual restore steps explicitly.
+> Read `/skills/portability/claude/SKILL.md` first. Inventory Agent Hub data by Claude category: `profile preferences`, `styles`, `memory`, `standalone chats`, `project instructions`, `project knowledge`, `project chats`, `skills`, and `connectors`. Rebuild each category into the nearest Claude-native surface. Rebuild one skill directly from `/skills/<name>/...`; for many skills or asset-heavy skills, prefer a full archive workflow rather than cherry-picking files. Mark every manual restore step and every missing parity item explicitly.
 
 ## Reporting Template
 
 End with:
 
 - Summary
-- Native imports completed
+- Category inventory
+- Imported items
 - Archived items
+- Blocked items
+- Interfaces used
 - Manual follow-ups
 - Unsupported or unknown parity

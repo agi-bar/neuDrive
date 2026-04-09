@@ -3,48 +3,191 @@
   "display_name": "Claude",
   "mappings": [
     {
-      "source_feature": "Claude memory",
+      "source_feature": "Profile preferences",
+      "agenthub_target": [
+        "/memory/profile/preferences"
+      ],
+      "preferred_interface": [
+        "MCP:update_profile",
+        "MCP:read_profile"
+      ],
+      "fallback_interface": [
+        "HTTP:/api/import/profile"
+      ],
+      "current_status": "public_mcp_available",
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Styles",
+      "agenthub_target": [
+        "/memory/profile/preferences",
+        "/memory/archive/claude-styles.md"
+      ],
+      "preferred_interface": [
+        "MCP:update_profile",
+        "MCP:write_file"
+      ],
+      "fallback_interface": [],
+      "current_status": "partial_manual_mapping_only",
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Claude memory summary or exported memory text",
       "agenthub_target": [
         "/memory/profile/*",
-        "/memory/scratch/*"
+        "/memory/scratch/*",
+        "/memory/claude/memory.md"
       ],
+      "preferred_interface": [
+        "HTTP:/api/import/claude-memory",
+        "MCP:update_profile",
+        "MCP:save_memory"
+      ],
+      "fallback_interface": [
+        "MCP:write_file"
+      ],
+      "current_status": "http_import_plus_manual_mcp_mapping",
       "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Standalone chats",
+      "agenthub_target": [
+        "/memory/conversations/*.md",
+        "/memory/archive/*"
+      ],
+      "preferred_interface": [
+        "HTTP:/api/import/claude-data"
+      ],
+      "fallback_interface": [
+        "MCP:write_file",
+        "MCP:save_memory"
+      ],
+      "current_status": "archive_or_full_export_only",
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "Project instructions",
+      "agenthub_target": [
+        "/projects/<name>/context.md"
+      ],
+      "preferred_interface": [
+        "MCP:create_project",
+        "MCP:write_file",
+        "MCP:get_project"
+      ],
+      "fallback_interface": [
+        "archive notes under /projects/<name>/..."
+      ],
+      "current_status": "manual_reconstruction_only",
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "Project knowledge and uploaded files",
+      "agenthub_target": [
+        "/projects/<name>/...",
+        "/skills/claude-<project>/..."
+      ],
+      "preferred_interface": [
+        "MCP:create_project",
+        "MCP:write_file",
+        "MCP:list_directory",
+        "MCP:read_file"
+      ],
+      "fallback_interface": [
+        "HTTP:/api/import/claude-data"
+      ],
+      "current_status": "manual_rebuild_or_partial_full_export_mapping",
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "Project chats and project memory summary",
+      "agenthub_target": [
+        "/memory/conversations/*.md",
+        "/projects/<name>/...",
+        "/memory/archive/*"
+      ],
+      "preferred_interface": [
+        "HTTP:/api/import/claude-data"
+      ],
+      "fallback_interface": [
+        "MCP:write_file",
+        "MCP:save_memory"
+      ],
+      "current_status": "archive_or_partial_export_only",
+      "restore_strategy": "manual_recreation"
+    },
+    {
+      "source_feature": "single skill directory / files",
+      "agenthub_target": [
+        "/skills/<name>/..."
+      ],
+      "preferred_interface": [
+        "MCP:import_skill"
+      ],
+      "fallback_interface": [
+        "HTTP:/agent/import/skill",
+        "MCP:write_file (repair only)"
+      ],
+      "current_status": "public_mcp_available",
+      "restore_strategy": "manual_prompt"
+    },
+    {
+      "source_feature": "Claude Web skills workspace zip",
+      "agenthub_target": [
+        "/skills/<name>/..."
+      ],
+      "preferred_interface": [
+        "MCP:import_skills_archive"
+      ],
+      "fallback_interface": [
+        "MCP:create_skills_import_token",
+        "HTTP:/agent/import/skills"
+      ],
+      "current_status": "public_mcp_available",
+      "restore_strategy": "zip_import_preferred"
+    },
+    {
+      "source_feature": "Connectors and external sources",
+      "agenthub_target": [
+        "/projects/<name>/...",
+        "/memory/archive/*"
+      ],
+      "preferred_interface": [
+        "MCP:write_file",
+        "MCP:log_action",
+        "MCP:search_memory"
+      ],
+      "fallback_interface": [
+        "manual recreation notes"
+      ],
+      "current_status": "manual_recreation_only",
+      "restore_strategy": "manual_recreation"
     },
     {
       "source_feature": "Claude exported data zip",
       "agenthub_target": [
-        "native_claude_data_import"
+        "/memory/claude/memory.md",
+        "/memory/conversations/*.md",
+        "/skills/claude-<project>/..."
       ],
+      "preferred_interface": [
+        "HTTP:/api/import/claude-data"
+      ],
+      "fallback_interface": [],
+      "current_status": "web_api_only_no_public_mcp_parity",
       "restore_strategy": "native_import"
     },
     {
-      "source_feature": "Projects",
+      "source_feature": "Account/user metadata from users.json",
       "agenthub_target": [
-        "/projects/<name>/context.md",
-        "/projects/<name>/log.jsonl"
+        "/memory/archive/claude-user-export.json"
       ],
-      "restore_strategy": "manual_recreation"
-    },
-    {
-      "source_feature": ".skill directories",
-      "agenthub_target": [
-        "/skills/<name>/..."
+      "preferred_interface": [
+        "MCP:write_file"
       ],
-      "restore_strategy": "manual_prompt"
-    },
-    {
-      "source_feature": "Claude Web skills zip",
-      "agenthub_target": [
-        "/skills/<name>/..."
-      ],
-      "restore_strategy": "zip_import_preferred"
-    },
-    {
-      "source_feature": "Conversations",
-      "agenthub_target": [
-        "conversation_archive"
-      ],
-      "restore_strategy": "manual_recreation"
+      "fallback_interface": [],
+      "current_status": "not_imported_by_current_full_export_importer",
+      "restore_strategy": "archive_only"
     }
   ]
 }

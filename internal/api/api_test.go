@@ -40,6 +40,26 @@ func TestHealthCheck(t *testing.T) {
 	}
 }
 
+func TestBodySizeLimitForPath(t *testing.T) {
+	t.Run("mcp gets raised limit", func(t *testing.T) {
+		if got := bodySizeLimitForPath("/mcp", 10<<20); got != maxMCPArchiveRequestBytes {
+			t.Fatalf("bodySizeLimitForPath(/mcp) = %d, want %d", got, maxMCPArchiveRequestBytes)
+		}
+	})
+
+	t.Run("skills import gets raised limit", func(t *testing.T) {
+		if got := bodySizeLimitForPath("/agent/import/skills", 10<<20); got != maxSkillsArchiveRequestBytes {
+			t.Fatalf("bodySizeLimitForPath(/agent/import/skills) = %d, want %d", got, maxSkillsArchiveRequestBytes)
+		}
+	})
+
+	t.Run("ordinary paths keep fallback", func(t *testing.T) {
+		if got := bodySizeLimitForPath("/api/tree/notes/demo.md", 10<<20); got != 10<<20 {
+			t.Fatalf("bodySizeLimitForPath ordinary path = %d, want %d", got, 10<<20)
+		}
+	})
+}
+
 // ---------------------------------------------------------------------------
 // 2. Auth flow
 // ---------------------------------------------------------------------------

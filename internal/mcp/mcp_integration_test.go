@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -164,8 +165,8 @@ func TestMCPInteg_ToolsList(t *testing.T) {
 	}
 	result := resp.Result.(map[string]interface{})
 	tools := result["tools"].([]MCPTool)
-	if len(tools) < 19 {
-		t.Errorf("expected >= 19 tools, got %d", len(tools))
+	if len(tools) < 20 {
+		t.Errorf("expected >= 20 tools, got %d", len(tools))
 	}
 
 	toolNames := make(map[string]bool, len(tools))
@@ -190,6 +191,7 @@ func TestMCPInteg_ToolsList(t *testing.T) {
 		"get_stats",
 		"save_memory",
 		"import_skill",
+		"import_skills_archive",
 		"create_sync_token",
 		"create_skills_import_token",
 	} {
@@ -453,6 +455,47 @@ func TestMCPInteg_ImportSkill(t *testing.T) {
 	text, isErr = mcpToolCall(t, s, "list_skills", map[string]interface{}{})
 	if isErr {
 		t.Fatalf("list_skills after import error: %s", text)
+	}
+}
+
+func TestMCPInteg_ImportSkillsArchive(t *testing.T) {
+	s := setupIntegrationMCP(t)
+
+	archive := buildSkillArchive(t, map[string][]byte{
+		"integ-archive/SKILL.md":        []byte("# Integ Archive\n"),
+		"integ-archive/helper.py":       []byte("print('integ')\n"),
+		"integ-archive/assets/logo.png": {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0x00},
+	})
+
+	text, isErr := mcpToolCall(t, s, "import_skills_archive", map[string]interface{}{
+		"archive_base64": base64.StdEncoding.EncodeToString(archive),
+		"archive_name":   "integ-skills.zip",
+		"platform":       "claude-web",
+	})
+	if isErr {
+		t.Fatalf("import_skills_archive error: %s", text)
+	}
+	if !strings.Contains(text, `"imported": 3`) {
+		t.Fatalf("unexpected import_skills_archive result: %s", text)
+	}
+
+	entry, err := s.FileTree.Read(context.Background(), s.UserID, "/skills/integ-archive/helper.py", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("Read helper.py: %v", err)
+	}
+	if !strings.Contains(entry.Content, "print('integ')") {
+		t.Fatalf("unexpected helper.py content: %q", entry.Content)
+	}
+
+	data, binaryEntry, err := s.FileTree.ReadBinary(context.Background(), s.UserID, "/skills/integ-archive/assets/logo.png", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("ReadBinary logo.png: %v", err)
+	}
+	if len(data) == 0 {
+		t.Fatal("expected binary logo data")
+	}
+	if binaryEntry.Metadata["capture_mode"] != "archive" || binaryEntry.Metadata["source_platform"] != "claude-web" {
+		t.Fatalf("unexpected binary metadata: %+v", binaryEntry.Metadata)
 	}
 }
 

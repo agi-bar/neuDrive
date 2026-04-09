@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -109,7 +110,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": "Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.",
+				"instructions": "Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. Use import_skill for one skill directory, import_skills_archive for full Claude Web /mnt/skills/user archives or multi-skill zips, and reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.",
 			},
 		}
 	case "notifications/initialized":
@@ -225,7 +226,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "write_file",
-			Description: "写入文件到文件树",
+			Description: "写入文件到文件树；适合单文件修补，不作为单个 skill 的正式导入主路径",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"path":    prop("string", "文件路径"),
 				"content": prop("string", "文件内容"),
@@ -269,11 +270,20 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "import_skill",
-			Description: "导入 .skill 目录",
+			Description: "导入单个 skill 目录（正式主路）；适合一个 skill 的完整文本文件集",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"name":  prop("string", "技能名称"),
 				"files": propObject("文件内容 map: {路径: 内容}"),
 			}, "name", "files"),
+		},
+		{
+			Name:        "import_skills_archive",
+			Description: "导入 skills zip archive（大 skill / 多 skill / 批量主路）；适合 Claude Web /mnt/skills/user 的完整打包结果",
+			InputSchema: jsonSchema(map[string]interface{}{
+				"archive_base64": prop("string", "zip archive 的 base64 内容"),
+				"archive_name":   prop("string", "归档文件名 (默认 skills.zip)"),
+				"platform":       prop("string", "来源平台 (默认 claude-web)"),
+			}, "archive_base64"),
 		},
 		{
 			Name:        "create_sync_token",
@@ -286,7 +296,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "create_skills_import_token",
-			Description: "生成短命 scoped token，用于上传 Claude Web skills zip 到 /agent/import/skills",
+			Description: "生成短命 scoped token，用于通过 /agent/import/skills 上传 skills zip；这是 Claude Web 的 fallback 路径",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"purpose":     prop("string", "用途说明"),
 				"platform":    prop("string", "来源平台 (默认 claude-web)"),
@@ -321,7 +331,7 @@ func (s *MCPServer) supportsTool(name string) bool {
 	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
 		"get_project", "log_action", "list_directory", "read_file", "write_file",
 		"list_secrets", "read_secret", "list_skills", "read_skill", "get_stats", "save_memory",
-		"import_skill", "create_sync_token", "create_skills_import_token", "import_claude_memory":
+		"import_skill", "import_skills_archive", "create_sync_token", "create_skills_import_token", "import_claude_memory":
 	default:
 		return false
 	}
@@ -336,7 +346,7 @@ func (s *MCPServer) supportsTool(name string) bool {
 		return s.Vault != nil
 	case "get_stats":
 		return s.Dashboard != nil
-	case "import_skill", "import_claude_memory":
+	case "import_skill", "import_skills_archive", "import_claude_memory":
 		return s.Import != nil
 	case "create_sync_token", "create_skills_import_token":
 		return s.Token != nil
@@ -347,23 +357,24 @@ func (s *MCPServer) supportsTool(name string) bool {
 
 func (s *MCPServer) toolAllowed(name string) bool {
 	scopeMap := map[string]string{
-		"read_profile":   models.ScopeReadProfile,
-		"update_profile": models.ScopeWriteProfile,
-		"search_memory":  models.ScopeReadMemory,
-		"list_projects":  models.ScopeReadProjects,
-		"create_project": models.ScopeWriteProjects,
-		"get_project":    models.ScopeReadProjects,
-		"log_action":     models.ScopeWriteProjects,
-		"list_directory": models.ScopeReadTree,
-		"read_file":      models.ScopeReadTree,
-		"write_file":     models.ScopeWriteTree,
-		"list_secrets":   models.ScopeReadVault,
-		"read_secret":    models.ScopeReadVault,
-		"list_skills":    models.ScopeReadSkills,
-		"read_skill":     models.ScopeReadSkills,
-		"get_stats":      models.ScopeReadProfile,
-		"save_memory":    models.ScopeWriteMemory,
-		"import_skill":   models.ScopeWriteSkills,
+		"read_profile":          models.ScopeReadProfile,
+		"update_profile":        models.ScopeWriteProfile,
+		"search_memory":         models.ScopeReadMemory,
+		"list_projects":         models.ScopeReadProjects,
+		"create_project":        models.ScopeWriteProjects,
+		"get_project":           models.ScopeReadProjects,
+		"log_action":            models.ScopeWriteProjects,
+		"list_directory":        models.ScopeReadTree,
+		"read_file":             models.ScopeReadTree,
+		"write_file":            models.ScopeWriteTree,
+		"list_secrets":          models.ScopeReadVault,
+		"read_secret":           models.ScopeReadVault,
+		"list_skills":           models.ScopeReadSkills,
+		"read_skill":            models.ScopeReadSkills,
+		"get_stats":             models.ScopeReadProfile,
+		"save_memory":           models.ScopeWriteMemory,
+		"import_skill":          models.ScopeWriteSkills,
+		"import_skills_archive": models.ScopeWriteSkills,
 	}
 	required, ok := scopeMap[name]
 	if !ok {
@@ -653,6 +664,42 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		}
 		return fmt.Sprintf("imported %d files for skill %q", count, name), false
 
+	case "import_skills_archive":
+		archiveBase64, _ := args["archive_base64"].(string)
+		archiveBase64 = strings.TrimSpace(archiveBase64)
+		if archiveBase64 == "" {
+			return "error: archive_base64 is required", true
+		}
+		if strings.HasPrefix(archiveBase64, "data:") {
+			if idx := strings.Index(archiveBase64, ","); idx >= 0 {
+				archiveBase64 = archiveBase64[idx+1:]
+			}
+		}
+
+		archiveData, err := base64.StdEncoding.DecodeString(archiveBase64)
+		if err != nil {
+			archiveData, err = base64.RawStdEncoding.DecodeString(archiveBase64)
+			if err != nil {
+				return fmt.Sprintf("error: decode archive_base64: %v", err), true
+			}
+		}
+
+		archiveName, _ := args["archive_name"].(string)
+		if strings.TrimSpace(archiveName) == "" {
+			archiveName = "skills.zip"
+		}
+		platform, _ := args["platform"].(string)
+		if strings.TrimSpace(platform) == "" {
+			platform = "claude-web"
+		}
+
+		result, err := s.Import.ImportSkillsArchive(ctx, s.UserID, archiveData, platform, archiveName)
+		if err != nil {
+			return fmt.Sprintf("error: %v", err), true
+		}
+		payload, _ := json.MarshalIndent(result, "", "  ")
+		return string(payload), false
+
 	case "create_sync_token":
 		if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) {
 			return "error: create_sync_token requires admin scope", true
@@ -778,7 +825,7 @@ func (s *MCPServer) isKnownTool(name string) bool {
 	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
 		"get_project", "log_action", "list_directory", "read_file", "write_file",
 		"list_secrets", "read_secret", "list_skills", "read_skill", "get_stats", "save_memory",
-		"import_skill", "create_sync_token", "create_skills_import_token", "import_claude_memory":
+		"import_skill", "import_skills_archive", "create_sync_token", "create_skills_import_token", "import_claude_memory":
 		return true
 	default:
 		return false

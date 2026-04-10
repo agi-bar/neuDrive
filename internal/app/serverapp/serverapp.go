@@ -88,8 +88,8 @@ func Run(ctx context.Context, opts Options) error {
 	httpServer := &http.Server{
 		Addr:         listenAddr,
 		Handler:      app.HTTPHandler,
-		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		ReadTimeout:  180 * time.Second,
+		WriteTimeout: 180 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 

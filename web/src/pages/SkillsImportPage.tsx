@@ -51,11 +51,20 @@ function extractResponsePayload(xhr: XMLHttpRequest) {
   if (xhr.response && typeof xhr.response === 'object') {
     return xhr.response
   }
-  if (!xhr.responseText) {
+  const text = (() => {
+    if (typeof xhr.response === 'string') {
+      return xhr.response
+    }
+    if (xhr.responseType === '' || xhr.responseType === 'text') {
+      return xhr.responseText
+    }
+    return ''
+  })()
+  if (!text) {
     return null
   }
   try {
-    return JSON.parse(xhr.responseText)
+    return JSON.parse(text)
   } catch {
     return null
   }
@@ -311,7 +320,9 @@ export default function SkillsImportPage() {
               <div className="skills-upload-progress-fill" style={{ width: `${progress}%` }} />
             </div>
             <div className="data-record-secondary">
-              {tx(`上传进度：${progress}%`, `Upload progress: ${progress}%`)}
+              {busy && progress >= 99
+                ? tx('文件已上传，正在导入 skills...', 'Upload finished. Importing skills...')
+                : tx(`上传进度：${progress}%`, `Upload progress: ${progress}%`)}
             </div>
           </div>
         )}

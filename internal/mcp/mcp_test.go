@@ -172,6 +172,9 @@ func TestInitialize(t *testing.T) {
 	if !strings.Contains(instructions, "connectivity_probe_url") || !strings.Contains(instructions, "Additional allowed domains") {
 		t.Fatalf("expected prepared upload probe guidance in serverInfo, got %q", instructions)
 	}
+	if !strings.Contains(instructions, "new conversation") {
+		t.Fatalf("expected current-conversation caveat in serverInfo, got %q", instructions)
+	}
 
 	caps, ok := result["capabilities"].(map[string]interface{})
 	if !ok {
@@ -309,6 +312,9 @@ func TestToolsList(t *testing.T) {
 		}
 		if tool.Name == "prepare_skills_upload" && !strings.Contains(tool.Description, "connectivity_probe_url") {
 			t.Errorf("expected prepare_skills_upload description to mention connectivity probe, got %q", tool.Description)
+		}
+		if tool.Name == "prepare_skills_upload" && !strings.Contains(tool.Description, "新开一个对话") {
+			t.Errorf("expected prepare_skills_upload description to mention new conversation fallback, got %q", tool.Description)
 		}
 		if tool.Name == "import_skill" {
 			if !strings.Contains(tool.Description, "all skills") {

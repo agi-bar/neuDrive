@@ -10,7 +10,9 @@
 - For Claude Web skills under `/mnt/skills/user` or any multi-skill / binary-heavy zip, package one full archive and check its zip size before reading contents.
 - If the Claude Web zip is larger than `64 KB` or the size cannot be checked safely, do not read or base64 it into MCP args; use `prepare_skills_upload` plus `/agent/import/skills` instead.
 - After `prepare_skills_upload`, first POST the returned `connectivity_probe_url`. If it returns `200`, upload directly from the Claude sandbox with the returned `curl_example`.
-- If that probe fails in Claude Web, tell the user to open `Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains`, add the Agent Hub host such as `agenthub.agi.bar`, and then retry the direct upload. If the user does not add it, fall back to the returned browser upload link or the returned curl command.
+- If that probe fails in Claude Web, tell the user to open `Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains`, add the Agent Hub host such as `agenthub.agi.bar`, and then retry the direct upload.
+- If the user already added it and the current Claude Web conversation still fails the probe, explain that the new setting may require a new conversation before it takes effect. Ask whether they want to start a new conversation and retry, or use the fallback now.
+- If the user does not add it, does not want to start a new conversation, or direct upload is still blocked, fall back to the returned browser upload link or the returned curl command.
 - Use `import_skills_archive` for Claude Web only when the zip is already known to be `<= 64 KB` and safe for one MCP tool call.
 - If the user still wants pure inline MCP transport, split by top-level skill directories only when each resulting zip is known to stay within the same `64 KB` limit.
 - All skill imports land under `/skills/<name>/...`; a fallback upload flow should target the `/skills` root by default.

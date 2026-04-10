@@ -198,7 +198,8 @@ agenthub import claude --zip ./agenthub-skills.zip
 4. 先测试 `POST https://agenthub.agi.bar/test/post`，或者使用工具返回的 `connectivity_probe_url`
 5. 如果探测返回 `200`，直接在 Claude 自己的 sandbox 里用返回的 `curl_example` 上传 zip
 6. 如果探测失败，通常是 Claude Web 的 outbound domain 限制；提示用户去 `Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains` 添加 `agenthub.agi.bar`，然后重试直传
-7. 如果用户不加这个域名，或者直传仍然失败，再回退到浏览器上传页或让用户自己执行 curl
+7. 如果用户已经添加了域名，但当前这个 Claude Web 对话里探测仍然失败，要告诉用户这个设置可能需要在新对话里才会生效；让用户选择新开一个对话再试，或者直接走 fallback
+8. 如果用户不加这个域名、不想新开对话，或者直传仍然失败，再回退到浏览器上传页或让用户自己执行 curl
 
 这样 Agent Hub 会在服务端自动解压，并把每个 skill 还原到 `/skills/<name>/...`。
 不要把 skill 简化成只上传 `SKILL.md`；应当保留每个 skill 目录下的全部文件，包括 `scripts/`、prompts、配置、schema 和其他依赖资产。

@@ -562,6 +562,9 @@ func TestMCPInteg_PrepareSkillsUpload(t *testing.T) {
 	if !strings.Contains(text, "Additional allowed domains") {
 		t.Fatalf("expected connectivity failure help in output, got %s", text)
 	}
+	if !strings.Contains(text, "new conversation") {
+		t.Fatalf("expected current-conversation caveat in output, got %s", text)
+	}
 	if !strings.Contains(text, "\"connectivity_probe_curl\"") {
 		t.Fatalf("expected connectivity_probe_curl in output, got %s", text)
 	}

@@ -24,11 +24,12 @@ Use this command when the user wants to export the current platform's data into 
 12. If the Claude Web zip is larger than `64 KB` or the size cannot be checked safely, do not read or base64 it into MCP args; use `prepare_skills_upload` plus `/agent/import/skills` instead.
 13. After `prepare_skills_upload`, first POST the returned `connectivity_probe_url`. If it returns `200`, use the returned `curl_example` to upload directly from the Claude sandbox.
 14. If the probe fails in Claude Web, tell the user to open `Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains`, add the Agent Hub host such as `agenthub.agi.bar`, and retry the direct upload.
-15. If the user does not add the domain, or direct upload is still blocked, use the returned browser upload link for ordinary users or the returned curl command for terminal-comfortable users.
-16. Use `import_skills_archive` for Claude Web only when the zip is already known to be `<= 64 KB` and safe for one MCP tool call.
-17. If the user still wants pure inline MCP transport, split by top-level skill directories only when each resulting zip is known to stay within the same `64 KB` limit.
-18. All skill imports land under `/skills/<name>/...` in Agent Hub; a fallback upload flow should target the `/skills` root by default.
-19. Write the result into Agent Hub through the chosen MCP or HTTP path, then report imported, archived, and blocked items explicitly.
+15. If the user already added the domain and the current Claude Web conversation still fails the probe, explain that the new setting may require a new conversation before it takes effect, and ask whether they want to start a new conversation and retry or use the fallback now.
+16. If the user does not add the domain, does not want to start a new conversation, or direct upload is still blocked, use the returned browser upload link for ordinary users or the returned curl command for terminal-comfortable users.
+17. Use `import_skills_archive` for Claude Web only when the zip is already known to be `<= 64 KB` and safe for one MCP tool call.
+18. If the user still wants pure inline MCP transport, split by top-level skill directories only when each resulting zip is known to stay within the same `64 KB` limit.
+19. All skill imports land under `/skills/<name>/...` in Agent Hub; a fallback upload flow should target the `/skills` root by default.
+20. Write the result into Agent Hub through the chosen MCP or HTTP path, then report imported, archived, and blocked items explicitly.
 
 ## Output Shape
 

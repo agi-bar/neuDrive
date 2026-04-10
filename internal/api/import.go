@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
 	"strings"
@@ -12,7 +13,6 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -130,11 +130,12 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 	contentType := r.Header.Get("Content-Type")
 
 	if strings.HasPrefix(contentType, "multipart/form-data") {
-		archiveData, platform, archiveName, err := extractSkillsArchive(r)
+		archiveFile, archiveSize, platform, archiveName, err := extractSkillsArchive(r)
 		if err != nil {
 			return nil, fmt.Errorf("failed to process zip: %w", err)
 		}
-		result, err := s.ImportService.ImportSkillsArchive(r.Context(), userID, archiveData, platform, archiveName)
+		defer archiveFile.Close()
+		result, err := s.ImportService.ImportSkillsArchiveReader(r.Context(), userID, archiveFile, archiveSize, platform, archiveName)
 		if err != nil {
 			return nil, err
 		}
@@ -197,20 +198,14 @@ func importedSkillNameFromPath(path string) string {
 	return strings.TrimSpace(parts[0])
 }
 
-func extractSkillsArchive(r *http.Request) ([]byte, string, string, error) {
-	if err := r.ParseMultipartForm(services.MaxSkillsArchiveBytes); err != nil {
-		return nil, "", "", fmt.Errorf("parse multipart: %w", err)
+func extractSkillsArchive(r *http.Request) (multipart.File, int64, string, string, error) {
+	if err := r.ParseMultipartForm(8 << 20); err != nil {
+		return nil, 0, "", "", fmt.Errorf("parse multipart: %w", err)
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		return nil, "", "", fmt.Errorf("read form file: %w", err)
-	}
-	defer file.Close()
-
-	buf, err := io.ReadAll(file)
-	if err != nil {
-		return nil, "", "", fmt.Errorf("read file data: %w", err)
+		return nil, 0, "", "", fmt.Errorf("read form file: %w", err)
 	}
 
 	platform := strings.TrimSpace(r.FormValue("platform"))
@@ -218,10 +213,24 @@ func extractSkillsArchive(r *http.Request) ([]byte, string, string, error) {
 		platform = strings.TrimSpace(r.URL.Query().Get("platform"))
 	}
 	archiveName := ""
+	archiveSize := int64(0)
 	if header != nil {
 		archiveName = header.Filename
+		archiveSize = header.Size
 	}
-	return buf, platform, archiveName, nil
+	if archiveSize <= 0 {
+		size, err := file.Seek(0, io.SeekEnd)
+		if err != nil {
+			file.Close()
+			return nil, 0, "", "", fmt.Errorf("seek file size: %w", err)
+		}
+		if _, err := file.Seek(0, io.SeekStart); err != nil {
+			file.Close()
+			return nil, 0, "", "", fmt.Errorf("rewind file: %w", err)
+		}
+		archiveSize = size
+	}
+	return file, archiveSize, platform, archiveName, nil
 }
 
 // ---------------------------------------------------------------------------

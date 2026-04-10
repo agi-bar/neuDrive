@@ -7,11 +7,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
+	"github.com/agi-bar/agenthub/internal/logger"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/skillsarchive"
 	"github.com/google/uuid"
@@ -100,30 +102,82 @@ type SkillsArchiveImportResult struct {
 // ImportSkillsArchive imports a zip archive that contains one or more skills.
 // It preserves both text files and binary assets under /skills/<name>/...
 func (s *ImportService) ImportSkillsArchive(ctx context.Context, userID uuid.UUID, archiveData []byte, platform, archiveName string) (*SkillsArchiveImportResult, error) {
+	return s.ImportSkillsArchiveReader(ctx, userID, bytes.NewReader(archiveData), int64(len(archiveData)), platform, archiveName)
+}
+
+func (s *ImportService) ImportSkillsArchiveReader(ctx context.Context, userID uuid.UUID, readerAt io.ReaderAt, archiveSize int64, platform, archiveName string) (*SkillsArchiveImportResult, error) {
+	log := logger.FromContext(ctx).With(
+		"archive_name", filepath.Base(strings.TrimSpace(archiveName)),
+		"archive_size_bytes", archiveSize,
+		"platform", strings.TrimSpace(platform),
+	)
 	if s.fileTree == nil {
-		return nil, fmt.Errorf("import.ImportSkillsArchive: file tree service not configured")
+		err := fmt.Errorf("import.ImportSkillsArchive: file tree service not configured")
+		log.Error("skills archive import failed", "error", err)
+		return nil, err
 	}
-	if len(archiveData) == 0 {
-		return nil, fmt.Errorf("import.ImportSkillsArchive: archive data is required")
+	if readerAt == nil || archiveSize <= 0 {
+		err := fmt.Errorf("import.ImportSkillsArchive: archive data is required")
+		log.Error("skills archive import failed", "error", err)
+		return nil, err
 	}
-	if len(archiveData) > MaxSkillsArchiveBytes {
-		return nil, fmt.Errorf("import.ImportSkillsArchive: archive exceeds 50 MB limit")
+	if archiveSize > MaxSkillsArchiveBytes {
+		err := fmt.Errorf("import.ImportSkillsArchive: archive exceeds 50 MB limit")
+		log.Error("skills archive import failed", "error", err)
+		return nil, err
 	}
 
-	entries, err := skillsarchive.ParseZipBytes(archiveData, archiveName)
+	startedAt := time.Now()
+	entries, err := skillsarchive.ParseZipReader(readerAt, archiveSize, archiveName)
 	if err != nil {
+		log.Error("skills archive import failed", "phase", "parse", "duration_ms", time.Since(startedAt).Milliseconds(), "error", err)
 		return nil, fmt.Errorf("import.ImportSkillsArchive: %w", err)
 	}
-	return s.ImportSkillsArchiveEntries(ctx, userID, entries, platform, archiveName)
+	parseDoneAt := time.Now()
+
+	result, optimized, err := s.importSkillsArchiveEntries(ctx, userID, entries, platform, archiveName)
+	if err != nil {
+		log.Error("skills archive import failed",
+			"phase", "write",
+			"entries", len(entries),
+			"parse_ms", parseDoneAt.Sub(startedAt).Milliseconds(),
+			"duration_ms", time.Since(parseDoneAt).Milliseconds(),
+			"optimized", optimized,
+			"error", err,
+		)
+		return nil, err
+	}
+
+	log.Info("skills archive import completed",
+		slog.Int("entries", len(entries)),
+		slog.Int("skills", len(result.Skills)),
+		slog.Int("imported", result.Imported),
+		slog.Int("errors", len(result.Errors)),
+		slog.Bool("optimized", optimized),
+		slog.Int64("parse_ms", parseDoneAt.Sub(startedAt).Milliseconds()),
+		slog.Int64("write_ms", time.Since(parseDoneAt).Milliseconds()),
+		slog.Int64("total_ms", time.Since(startedAt).Milliseconds()),
+	)
+	return result, nil
 }
 
 // ImportSkillsArchiveEntries writes parsed archive entries into /skills/<name>/...
 func (s *ImportService) ImportSkillsArchiveEntries(ctx context.Context, userID uuid.UUID, entries []skillsarchive.Entry, platform, archiveName string) (*SkillsArchiveImportResult, error) {
+	result, _, err := s.importSkillsArchiveEntries(ctx, userID, entries, platform, archiveName)
+	return result, err
+}
+
+func (s *ImportService) importSkillsArchiveEntries(ctx context.Context, userID uuid.UUID, entries []skillsarchive.Entry, platform, archiveName string) (*SkillsArchiveImportResult, bool, error) {
 	if s.fileTree == nil {
-		return nil, fmt.Errorf("import.ImportSkillsArchiveEntries: file tree service not configured")
+		return nil, false, fmt.Errorf("import.ImportSkillsArchiveEntries: file tree service not configured")
 	}
 	if len(entries) == 0 {
-		return nil, fmt.Errorf("import.ImportSkillsArchiveEntries: no archive entries provided")
+		return nil, false, fmt.Errorf("import.ImportSkillsArchiveEntries: no archive entries provided")
+	}
+
+	if s.fileTree.db != nil && s.fileTree.repo == nil {
+		result, err := s.importSkillsArchiveEntriesOptimized(ctx, userID, entries, platform, archiveName)
+		return result, true, err
 	}
 
 	if strings.TrimSpace(platform) == "" {
@@ -166,7 +220,7 @@ func (s *ImportService) ImportSkillsArchiveEntries(ctx context.Context, userID u
 		result.Skills = appendUniqueString(result.Skills, entry.SkillName)
 	}
 
-	return result, nil
+	return result, false, nil
 }
 
 func appendUniqueString(items []string, value string) []string {

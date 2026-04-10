@@ -205,7 +205,11 @@ func (s *FileTreeService) ReadBlobByEntryID(ctx context.Context, entryID uuid.UU
 }
 
 func (s *FileTreeService) upsertBlobTx(ctx context.Context, tx pgx.Tx, entryID, userID uuid.UUID, data []byte, now time.Time) error {
-	hash := sha256.Sum256(data)
+	_, hashHex := binaryMetadataWithHash(data)
+	return s.upsertBlobTxWithSHA(ctx, tx, entryID, userID, data, hashHex, now)
+}
+
+func (s *FileTreeService) upsertBlobTxWithSHA(ctx context.Context, tx pgx.Tx, entryID, userID uuid.UUID, data []byte, sha256Hex string, now time.Time) error {
 	_, err := tx.Exec(ctx,
 		`INSERT INTO file_blobs (entry_id, user_id, data, size_bytes, sha256, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, $5, $6, $6)
@@ -215,7 +219,7 @@ func (s *FileTreeService) upsertBlobTx(ctx context.Context, tx pgx.Tx, entryID, 
 		   size_bytes = EXCLUDED.size_bytes,
 		   sha256 = EXCLUDED.sha256,
 		   updated_at = EXCLUDED.updated_at`,
-		entryID, userID, data, len(data), hex.EncodeToString(hash[:]), now,
+		entryID, userID, data, len(data), sha256Hex, now,
 	)
 	if err != nil {
 		return fmt.Errorf("filetree.upsertBlobTx: %w", err)
@@ -232,11 +236,17 @@ func (s *FileTreeService) deleteBlobTx(ctx context.Context, tx pgx.Tx, entryID u
 }
 
 func binaryMetadata(data []byte) map[string]interface{} {
+	metadata, _ := binaryMetadataWithHash(data)
+	return metadata
+}
+
+func binaryMetadataWithHash(data []byte) (map[string]interface{}, string) {
 	hash := sha256.Sum256(data)
+	shaHex := hex.EncodeToString(hash[:])
 	return map[string]interface{}{
 		"binary":       true,
 		"blob_storage": "db",
 		"size_bytes":   len(data),
-		"sha256":       hex.EncodeToString(hash[:]),
-	}
+		"sha256":       shaHex,
+	}, shaHex
 }

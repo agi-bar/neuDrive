@@ -146,7 +146,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": fmt.Sprintf("Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. If no platform-specific manual exists, read agenthub://skills/portability/general/SKILL.md or call read_skill with name=portability/general. Use import_skill for one text/code skill directory. For Claude Web skills zips, stat the zip first: if it is over %s (%d bytes) or size is unknown, do not read or base64 it into MCP args, do not cat base64(zip), and do not emit long archive strings into the conversation; call prepare_skills_upload instead. After prepare_skills_upload, POST the returned connectivity_probe_url first. If it returns 200, use curl_example to upload directly from the sandbox. If the POST fails in Claude Web, ask the user to add the Agent Hub domain to Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains, then retry; otherwise fall back to browser_upload_url or manual curl. Use import_skills_archive only for archives already known to be small enough for one tool call. Reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.", claudeWebInlineArchiveMaxZipLabel, claudeWebInlineArchiveMaxZipBytes),
+				"instructions": fmt.Sprintf("Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, connector work, or any skills migration, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform> before choosing import_skill, import_skills_archive, or prepare_skills_upload. If no platform-specific manual exists, read agenthub://skills/portability/general/SKILL.md or call read_skill with name=portability/general. Use import_skill only for one complete text/code skill directory; do not use it for all-skills requests, workspace zips, multi-skill batches, or SKILL.md-only shortcuts. For Claude Web skills zips, stat the zip first: if it is over %s (%d bytes) or size is unknown, do not read or base64 it into MCP args, do not cat base64(zip), and do not emit long archive strings into the conversation; call prepare_skills_upload instead. After prepare_skills_upload, POST the returned connectivity_probe_url first. If it returns 200, use curl_example to upload directly from the sandbox. If the POST fails in Claude Web, ask the user to add the Agent Hub domain to Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains, then retry; otherwise fall back to browser_upload_url or manual curl. Use import_skills_archive only for archives already known to be small enough for one tool call. Reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.", claudeWebInlineArchiveMaxZipLabel, claudeWebInlineArchiveMaxZipBytes),
 			},
 		}
 	case "notifications/initialized":
@@ -282,12 +282,12 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "list_skills",
-			Description: "列出所有可用技能，包含系统级 portability 手册（如 portability/chatgpt）",
+			Description: "列出所有可用技能，包含系统级 portability 手册（如 portability/chatgpt）；当任务涉及平台迁移、all skills、或导入前选工具时，应先用它发现并读取对应手册",
 			InputSchema: jsonSchema(map[string]interface{}{}),
 		},
 		{
 			Name:        "read_skill",
-			Description: "读取技能的 SKILL.md；当用户提到平台迁移时，也可读取 portability/<platform>，未知平台可读取 portability/general",
+			Description: "读取技能的 SKILL.md；当用户提到平台迁移、skills 全量导入、或导入前选工具时，应先读取 portability/<platform>，未知平台读取 portability/general",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"name": prop("string", "技能名称"),
 			}, "name"),
@@ -306,7 +306,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "import_skill",
-			Description: "导入单个 skill 目录（正式主路）；适合一个 skill 的完整文本文件集",
+			Description: "导入单个完整 skill 目录（正式主路）；只适合一个 skill 的完整文本/代码文件集。不要用于 all skills、workspace zip、multi-skill 批量迁移，也不要只传 SKILL.md 而忽略 scripts、prompts、config、schemas 或其他依赖文件",
 			InputSchema: jsonSchema(map[string]interface{}{
 				"name":  prop("string", "技能名称"),
 				"files": propObject("文件内容 map: {路径: 内容}"),
@@ -314,7 +314,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "prepare_skills_upload",
-			Description: fmt.Sprintf("为 skills zip 上传准备 token、直传探测 URL、浏览器链接和 curl 命令。先检查 zip 大小；若 Claude Web zip 大于 %s 或大小未知，不要读取或 base64 化，直接调用此工具。调用后先 POST connectivity_probe_url；若返回 200，就直接用 curl_example 从 sandbox 上传。若 Claude Web 探测失败，提示用户在 Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains 添加 Agent Hub 域名，然后重试；否则回退到 browser_upload_url 或让用户手动执行 curl_example", claudeWebInlineArchiveMaxZipLabel),
+			Description: fmt.Sprintf("为 skills zip 上传准备 token、直传探测 URL、浏览器链接和 curl 命令。Claude Web 的 all skills、workspace zip、或任何大于 %s / 大小未知的 skills archive，都应优先考虑此工具而不是 import_skill。调用后先 POST connectivity_probe_url；若返回 200，就直接用 curl_example 从 sandbox 上传。若 Claude Web 探测失败，提示用户在 Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains 添加 Agent Hub 域名，然后重试；否则回退到 browser_upload_url 或让用户手动执行 curl_example", claudeWebInlineArchiveMaxZipLabel),
 			InputSchema: jsonSchema(map[string]interface{}{
 				"purpose":     prop("string", "用途说明"),
 				"platform":    prop("string", "来源平台 (默认 claude-web)"),
@@ -323,7 +323,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "import_skills_archive",
-			Description: fmt.Sprintf("导入已知足够小的 skills zip archive；仅适合已经确认能安全放进一次 MCP tool call 的 archive。Claude Web zip 大于 %s 或大小未知时，不要读取或 base64 化，改用 prepare_skills_upload", claudeWebInlineArchiveMaxZipLabel),
+			Description: fmt.Sprintf("导入已知足够小的 skills zip archive；仅适合已经确认能安全放进一次 MCP tool call 的 archive。不要把 all skills、workspace zip、或未知大小的 Claude Web archive 默认塞进这里；Claude Web zip 大于 %s 或大小未知时，不要读取或 base64 化，改用 prepare_skills_upload", claudeWebInlineArchiveMaxZipLabel),
 			InputSchema: jsonSchema(map[string]interface{}{
 				"archive_base64": prop("string", fmt.Sprintf("仅用于已经在内存中的小型 zip archive 的 base64 内容。Claude Web zip 大于 %s 或大小未知时，不要为了填这个字段而去读取、cat、或 base64 化大文件，也不要把超长 archive 字符串放进对话", claudeWebInlineArchiveMaxZipLabel)),
 				"archive_name":   prop("string", "归档文件名 (默认 skills.zip)"),

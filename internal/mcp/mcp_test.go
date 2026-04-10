@@ -166,6 +166,9 @@ func TestInitialize(t *testing.T) {
 	if !strings.Contains(instructions, "64 KB") || !strings.Contains(instructions, "do not read or base64") {
 		t.Fatalf("expected Claude Web size guardrails in serverInfo, got %q", instructions)
 	}
+	if !strings.Contains(instructions, "all-skills requests") || !strings.Contains(instructions, "SKILL.md-only shortcuts") {
+		t.Fatalf("expected single-skill guardrails in serverInfo, got %q", instructions)
+	}
 	if !strings.Contains(instructions, "connectivity_probe_url") || !strings.Contains(instructions, "Additional allowed domains") {
 		t.Fatalf("expected prepared upload probe guidance in serverInfo, got %q", instructions)
 	}
@@ -306,6 +309,14 @@ func TestToolsList(t *testing.T) {
 		}
 		if tool.Name == "prepare_skills_upload" && !strings.Contains(tool.Description, "connectivity_probe_url") {
 			t.Errorf("expected prepare_skills_upload description to mention connectivity probe, got %q", tool.Description)
+		}
+		if tool.Name == "import_skill" {
+			if !strings.Contains(tool.Description, "all skills") {
+				t.Errorf("expected import_skill description to block all-skills misuse, got %q", tool.Description)
+			}
+			if !strings.Contains(tool.Description, "只传 SKILL.md") {
+				t.Errorf("expected import_skill description to block SKILL.md-only uploads, got %q", tool.Description)
+			}
 		}
 	}
 	if toolNames["create_skills_import_token"] {

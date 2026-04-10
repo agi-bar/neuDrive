@@ -41,6 +41,7 @@ Codex portability often produces reusable prompt bundles, scripts, or helper pac
 - Use `import_skill(name, files)` for one text/code bundle whose full directory can be represented as `map[path]string`.
 - Nested paths like `scripts/run.py`, `prompts/review.txt`, `config/tool.yaml`, and `data/schema.xsd` are allowed.
 - Do not simplify a bundle to only `SKILL.md`; include the whole bundle directory and every text/code file it depends on.
+- If the user asks for all skills, a workspace export, or any multi-bundle batch, do not use `import_skill` as the primary transport.
 - Use `import_skills_archive` for multi-bundle imports, binary-heavy bundles, or any case where exact bytes matter.
 - Supported zip layouts are:
   - one skill at zip root: `SKILL.md`, `scripts/...`, `prompts/...`, `assets/...`
@@ -84,6 +85,6 @@ When exporting AgentHub data back into Codex:
 
 Use or adapt this prompt when another agent needs to execute Codex portability work:
 
-> Read `/skills/portability/codex/SKILL.md` first. Separate stable workspace conventions from project-specific context. Write stable rules into AgentHub profile, write true project context into AgentHub projects, use `write_file` for additional imported file-like data that should be preserved even when it does not fit a first-class Agent Hub domain, and preserve tool and MCP configuration as metadata plus automation intent as recreation notes. If reusable prompt or script bundles should live under Agent Hub `/skills`, use `import_skill` for one text/code directory with full contents, or `import_skills_archive` / `prepare_skills_upload` for multi-skill, binary-heavy, or transport-limited archives. Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation. When exporting back to Codex, produce manual-first setup instructions and clearly mark unsupported parity.
+> Read `/skills/portability/codex/SKILL.md` first. Separate stable workspace conventions from project-specific context. Write stable rules into AgentHub profile, write true project context into AgentHub projects, use `write_file` for additional imported file-like data that should be preserved even when it does not fit a first-class Agent Hub domain, and preserve tool and MCP configuration as metadata plus automation intent as recreation notes. If reusable prompt or script bundles should live under Agent Hub `/skills`, use `import_skill` for one text/code directory with full contents. If the user asks for all skills, a workspace export, or any multi-bundle batch, do not use `import_skill` as the primary transport; use `import_skills_archive` / `prepare_skills_upload` for multi-skill, binary-heavy, or transport-limited archives instead. Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation. When exporting back to Codex, produce manual-first setup instructions and clearly mark unsupported parity.
 
 {{CURRENT_USER_SNAPSHOT}}

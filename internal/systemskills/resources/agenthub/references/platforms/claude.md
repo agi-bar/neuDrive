@@ -9,10 +9,12 @@
 - For one text/code skill whose files can be represented as strings, use `import_skill`. Nested paths like `scripts/run.py` are allowed, but still include the whole skill directory rather than only `SKILL.md`.
 - For Claude Web skills under `/mnt/skills/user` or any multi-skill / binary-heavy zip, package one full archive and check its zip size before reading contents.
 - If the Claude Web zip is larger than `64 KB` or the size cannot be checked safely, do not read or base64 it into MCP args; use `prepare_skills_upload` plus `/agent/import/skills` instead.
+- After `prepare_skills_upload`, first POST the returned `connectivity_probe_url`. If it returns `200`, upload directly from the Claude sandbox with the returned `curl_example`.
+- If that probe fails in Claude Web, tell the user to open `Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains`, add the Agent Hub host such as `agenthub.agi.bar`, and then retry the direct upload. If the user does not add it, fall back to the returned browser upload link or the returned curl command.
 - Use `import_skills_archive` for Claude Web only when the zip is already known to be `<= 64 KB` and safe for one MCP tool call.
 - If the user still wants pure inline MCP transport, split by top-level skill directories only when each resulting zip is known to stay within the same `64 KB` limit.
 - All skill imports land under `/skills/<name>/...`; a fallback upload flow should target the `/skills` root by default.
-- In that fallback flow, have Claude package a full zip with every file in the skill directories, give the zip to the user for download, then present both the returned browser upload link and the curl command when available. Prefer the browser path for ordinary users and curl for terminal-comfortable users.
+- In that prepared upload flow, have Claude package a full zip with every file in the skill directories, try the direct probe-plus-curl path first, and only hand the zip to the user when direct upload is still blocked. Prefer the browser path for ordinary users and curl for terminal-comfortable users when a user-facing fallback is needed.
 - Use `import` to generate Claude-compatible materials from Agent Hub.
 - Use `list` to inspect supported domains and discovered sources.
 - Use `status` to verify MCP, command install, and daemon readiness.

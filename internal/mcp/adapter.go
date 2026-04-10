@@ -79,6 +79,28 @@ func prepareSkillsUploadWarning() string {
 	)
 }
 
+func prepareSkillsUploadProbeURL(baseURL string) string {
+	return strings.TrimRight(baseURL, "/") + "/test/post"
+}
+
+func prepareSkillsUploadAllowedDomain(baseURL string) string {
+	parsed, err := url.Parse(strings.TrimSpace(baseURL))
+	if err == nil && parsed.Host != "" {
+		return parsed.Hostname()
+	}
+	return "the Agent Hub host"
+}
+
+func prepareSkillsUploadConnectivityHelp(baseURL string) string {
+	domain := prepareSkillsUploadAllowedDomain(baseURL)
+	probeURL := prepareSkillsUploadProbeURL(baseURL)
+	return fmt.Sprintf(
+		"After prepare_skills_upload, first POST %s. If it returns 200, upload the zip directly from the sandbox with curl_example. If that POST fails in Claude Web, ask the user to open Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains and add %s, then retry. If the user does not add it or direct upload is still blocked, fall back to browser_upload_url or ask the user to run curl_example manually.",
+		probeURL,
+		domain,
+	)
+}
+
 func isHiddenMCPPath(rawPath string) bool {
 	publicPath := hubpath.NormalizePublic(rawPath)
 	for _, prefix := range []string{"/devices", "/roles", "/inbox"} {
@@ -124,7 +146,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": fmt.Sprintf("Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. If no platform-specific manual exists, read agenthub://skills/portability/general/SKILL.md or call read_skill with name=portability/general. Use import_skill for one text/code skill directory. For Claude Web skills zips, stat the zip first: if it is over %s (%d bytes) or size is unknown, do not read or base64 it into MCP args, do not cat base64(zip), and do not emit long archive strings into the conversation; call prepare_skills_upload instead. Use import_skills_archive only for archives already known to be small enough for one tool call. Reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.", claudeWebInlineArchiveMaxZipLabel, claudeWebInlineArchiveMaxZipBytes),
+				"instructions": fmt.Sprintf("Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. If no platform-specific manual exists, read agenthub://skills/portability/general/SKILL.md or call read_skill with name=portability/general. Use import_skill for one text/code skill directory. For Claude Web skills zips, stat the zip first: if it is over %s (%d bytes) or size is unknown, do not read or base64 it into MCP args, do not cat base64(zip), and do not emit long archive strings into the conversation; call prepare_skills_upload instead. After prepare_skills_upload, POST the returned connectivity_probe_url first. If it returns 200, use curl_example to upload directly from the sandbox. If the POST fails in Claude Web, ask the user to add the Agent Hub domain to Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains, then retry; otherwise fall back to browser_upload_url or manual curl. Use import_skills_archive only for archives already known to be small enough for one tool call. Reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.", claudeWebInlineArchiveMaxZipLabel, claudeWebInlineArchiveMaxZipBytes),
 			},
 		}
 	case "notifications/initialized":
@@ -292,7 +314,7 @@ func (s *MCPServer) getTools() []MCPTool {
 		},
 		{
 			Name:        "prepare_skills_upload",
-			Description: fmt.Sprintf("为 skills zip 上传准备浏览器链接 / curl token；Claude Web zip 的推荐交接路径。先检查 zip 大小；若大于 %s 或大小未知，不要读取或 base64 化，直接调用此工具", claudeWebInlineArchiveMaxZipLabel),
+			Description: fmt.Sprintf("为 skills zip 上传准备 token、直传探测 URL、浏览器链接和 curl 命令。先检查 zip 大小；若 Claude Web zip 大于 %s 或大小未知，不要读取或 base64 化，直接调用此工具。调用后先 POST connectivity_probe_url；若返回 200，就直接用 curl_example 从 sandbox 上传。若 Claude Web 探测失败，提示用户在 Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains 添加 Agent Hub 域名，然后重试；否则回退到 browser_upload_url 或让用户手动执行 curl_example", claudeWebInlineArchiveMaxZipLabel),
 			InputSchema: jsonSchema(map[string]interface{}{
 				"purpose":     prop("string", "用途说明"),
 				"platform":    prop("string", "来源平台 (默认 claude-web)"),
@@ -811,17 +833,22 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		uploadURL := strings.TrimRight(s.BaseURL, "/") + "/agent/import/skills?platform=" + platform
+		probeURL := prepareSkillsUploadProbeURL(s.BaseURL)
 		browserUploadURL := strings.TrimRight(s.BaseURL, "/") + "/import/skills?token=" + url.QueryEscape(resp.Token) + "&platform=" + url.QueryEscape(platform)
 		payload, _ := json.MarshalIndent(map[string]interface{}{
 			"token":                        resp.Token,
 			"expires_at":                   resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
 			"api_base":                     s.BaseURL,
 			"upload_url":                   uploadURL,
+			"connectivity_probe_url":       probeURL,
+			"connectivity_probe_method":    http.MethodPost,
 			"browser_upload_url":           browserUploadURL,
 			"scopes":                       resp.ScopedToken.Scopes,
-			"recommended_flow":             "browser_upload",
+			"recommended_flow":             "probe_then_agent_curl_upload",
 			"inline_archive_max_zip_bytes": claudeWebInlineArchiveMaxZipBytes,
 			"warning":                      prepareSkillsUploadWarning(),
+			"connectivity_failure_help":    prepareSkillsUploadConnectivityHelp(s.BaseURL),
+			"connectivity_probe_curl":      fmt.Sprintf(`curl -f -sS -o /dev/null -w "%%{http_code}" -X POST "%s"`, probeURL),
 			"curl_example":                 fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/agenthub-skills.zip" "%s"`, resp.Token, platform, uploadURL),
 		}, "", "  ")
 		return string(payload), false

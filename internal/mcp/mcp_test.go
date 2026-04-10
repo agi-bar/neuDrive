@@ -166,6 +166,9 @@ func TestInitialize(t *testing.T) {
 	if !strings.Contains(instructions, "64 KB") || !strings.Contains(instructions, "do not read or base64") {
 		t.Fatalf("expected Claude Web size guardrails in serverInfo, got %q", instructions)
 	}
+	if !strings.Contains(instructions, "connectivity_probe_url") || !strings.Contains(instructions, "Additional allowed domains") {
+		t.Fatalf("expected prepared upload probe guidance in serverInfo, got %q", instructions)
+	}
 
 	caps, ok := result["capabilities"].(map[string]interface{})
 	if !ok {
@@ -300,6 +303,9 @@ func TestToolsList(t *testing.T) {
 		}
 		if tool.Name == "import_skills_archive" && !strings.Contains(tool.Description, "64 KB") {
 			t.Errorf("expected import_skills_archive description to mention 64 KB limit, got %q", tool.Description)
+		}
+		if tool.Name == "prepare_skills_upload" && !strings.Contains(tool.Description, "connectivity_probe_url") {
+			t.Errorf("expected prepare_skills_upload description to mention connectivity probe, got %q", tool.Description)
 		}
 	}
 	if toolNames["create_skills_import_token"] {

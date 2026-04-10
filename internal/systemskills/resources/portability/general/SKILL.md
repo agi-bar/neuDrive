@@ -110,18 +110,19 @@ Do not ask the user to choose another destination path.
 
 Use `prepare_skills_upload` when a full archive is the right payload shape but one MCP tool call cannot carry the archive reliably, or when the archive size cannot be checked safely before base64 transport.
 
-This is the user-mediated fallback transport path:
+This is the prepared upload path when inline MCP transport is not reliable:
 
 1. Package one complete zip and keep the original directory structure.
 2. Do not omit helper files such as `scripts/`, prompts, config, schemas, fonts, or assets.
-3. Hand that zip to the user for download.
-4. Call `prepare_skills_upload`.
-5. If the response includes a browser upload link, present it to ordinary users.
-6. If the response includes a curl command, present it to terminal-comfortable users.
+3. Call `prepare_skills_upload`.
+4. If the response includes a `connectivity_probe_url`, POST it first from the platform sandbox.
+5. If that probe returns `200`, use the returned `curl_example` directly from the sandbox and finish the upload without involving the user.
+6. If direct upload is blocked or unavailable, hand the zip off through the platform's file handoff/download path and use either the returned browser upload link or the returned curl command.
 7. Mention both when both are available, then choose the recommended one based on user context.
 
-Browser upload is the normal-user path.
-Curl upload is the developer-friendly path.
+Direct sandbox curl upload is preferred when the platform allows outbound POST to the Agent Hub host.
+Browser upload is the normal-user fallback.
+Curl upload is the developer-friendly fallback.
 Both still import into the Agent Hub `/skills` root.
 
 ## Generic Import Checklist
@@ -149,6 +150,6 @@ Both still import into the Agent Hub `/skills` root.
 
 Use or adapt this prompt when another agent needs to execute portability work for an unsupported platform:
 
-> Read `/skills/portability/general/SKILL.md` first. Inventory the source platform into account-wide preferences, memory, projects/workspaces, conversations, knowledge files, reusable skills or bundles, tools/connectors, automations, and official exports. Map each category to the nearest Agent Hub domain instead of collapsing everything into one summary. Use `update_profile` for stable rules, `save_memory` for smaller derived notes, `create_project` for true project/workspace reconstruction, and `write_file` for any additional imported data that should be preserved as files even when it does not fit a first-class Agent Hub domain. The agent may design a sensible custom directory structure for those files. Use `import_skill` only for one text/code skill directory whose full contents can be represented as strings, and `import_skills_archive` only for archives already known to be small enough for one MCP tool call. If an archive is too large, if a platform-specific threshold says not to inline it, or if the archive size cannot be checked safely, switch to `prepare_skills_upload`, hand the zip to the user for download, and tell the user to use either the returned browser upload link or the returned curl command. All skill imports land under the Agent Hub `/skills` root. Preserve unsupported structures as archive notes, structured metadata, or custom file trees instead of dropping them, and finish with imported, archived, and blocked items plus the exact interface used for each category.
+> Read `/skills/portability/general/SKILL.md` first. Inventory the source platform into account-wide preferences, memory, projects/workspaces, conversations, knowledge files, reusable skills or bundles, tools/connectors, automations, and official exports. Map each category to the nearest Agent Hub domain instead of collapsing everything into one summary. Use `update_profile` for stable rules, `save_memory` for smaller derived notes, `create_project` for true project/workspace reconstruction, and `write_file` for any additional imported data that should be preserved as files even when it does not fit a first-class Agent Hub domain. The agent may design a sensible custom directory structure for those files. Use `import_skill` only for one text/code skill directory whose full contents can be represented as strings, and `import_skills_archive` only for archives already known to be small enough for one MCP tool call. If an archive is too large, if a platform-specific threshold says not to inline it, or if the archive size cannot be checked safely, switch to `prepare_skills_upload`, POST the returned `connectivity_probe_url` when available, and use the returned `curl_example` directly from the sandbox if that probe succeeds. If direct upload is blocked, hand the zip to the user for download and tell the user to use either the returned browser upload link or the returned curl command. All skill imports land under the Agent Hub `/skills` root. Preserve unsupported structures as archive notes, structured metadata, or custom file trees instead of dropping them, and finish with imported, archived, and blocked items plus the exact interface used for each category.
 
 {{CURRENT_USER_SNAPSHOT}}

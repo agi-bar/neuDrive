@@ -544,7 +544,13 @@ func TestMCPInteg_PrepareSkillsUpload(t *testing.T) {
 	if !strings.Contains(text, "/import/skills?token=") {
 		t.Fatalf("expected browser_upload_url in output, got %s", text)
 	}
-	if !strings.Contains(text, "\"recommended_flow\": \"browser_upload\"") {
+	if !strings.Contains(text, "\"connectivity_probe_url\": \"/test/post\"") {
+		t.Fatalf("expected connectivity_probe_url in output, got %s", text)
+	}
+	if !strings.Contains(text, "\"connectivity_probe_method\": \"POST\"") {
+		t.Fatalf("expected connectivity_probe_method in output, got %s", text)
+	}
+	if !strings.Contains(text, "\"recommended_flow\": \"probe_then_agent_curl_upload\"") {
 		t.Fatalf("expected recommended_flow in output, got %s", text)
 	}
 	if !strings.Contains(text, "\"inline_archive_max_zip_bytes\": 65536") {
@@ -552,6 +558,12 @@ func TestMCPInteg_PrepareSkillsUpload(t *testing.T) {
 	}
 	if !strings.Contains(text, "do not read or base64") {
 		t.Fatalf("expected warning in output, got %s", text)
+	}
+	if !strings.Contains(text, "Additional allowed domains") {
+		t.Fatalf("expected connectivity failure help in output, got %s", text)
+	}
+	if !strings.Contains(text, "\"connectivity_probe_curl\"") {
+		t.Fatalf("expected connectivity_probe_curl in output, got %s", text)
 	}
 }
 

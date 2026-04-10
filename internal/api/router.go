@@ -204,6 +204,7 @@ func (s *Server) setupRoutes() {
 	r.Get("/api/health", s.healthCheck)
 	r.Get("/api/config", s.handlePublicConfig)
 	r.Get("/gpt/openapi.json", s.handleGPTOpenAPISchema)
+	r.Post("/test/post", s.handleTestPost)
 
 	// Remote MCP endpoint — Streamable HTTP transport for Claude.ai Connectors
 	r.HandleFunc("/mcp", s.handleMCPEndpoint)

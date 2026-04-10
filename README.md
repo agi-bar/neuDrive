@@ -195,12 +195,15 @@ agenthub import claude --zip ./agenthub-skills.zip
 1. 按 `portability/claude` 手册把 `/mnt/skills/user` 打成一个 zip
 2. 先检查 zip 大小；如果 Claude Web skills zip 大于 `64 KB`，不要读取或 base64 它
 3. Claude Web 大 zip 直接调用 Agent Hub MCP 工具 `prepare_skills_upload`
+4. 先测试 `POST https://agenthub.agi.bar/test/post`，或者使用工具返回的 `connectivity_probe_url`
+5. 如果探测返回 `200`，直接在 Claude 自己的 sandbox 里用返回的 `curl_example` 上传 zip
+6. 如果探测失败，通常是 Claude Web 的 outbound domain 限制；提示用户去 `Settings -> Capabilities -> Code execution and file creation -> Additional allowed domains` 添加 `agenthub.agi.bar`，然后重试直传
+7. 如果用户不加这个域名，或者直传仍然失败，再回退到浏览器上传页或让用户自己执行 curl
 
 这样 Agent Hub 会在服务端自动解压，并把每个 skill 还原到 `/skills/<name>/...`。
 不要把 skill 简化成只上传 `SKILL.md`；应当保留每个 skill 目录下的全部文件，包括 `scripts/`、prompts、配置、schema 和其他依赖资产。
 
-如果一个完整 skill 或 skills zip 因为 base64 / tool call 限制无法稳定通过 MCP 传输，就改走 `prepare_skills_upload` + `/agent/import/skills`。这个 fallback 在 Claude Web 里也适用。
-当返回浏览器上传链接时，优先让普通用户下载 zip 后打开网页手动上传；当返回 curl 命令时，也可以给熟悉终端的用户直接走命令行上传。
+如果一个完整 skill 或 skills zip 因为 base64 / tool call 限制无法稳定通过 MCP 传输，就改走 `prepare_skills_upload` + `/agent/import/skills`。Claude Web 现在优先尝试 agent 自己 curl 直传，只有在域名限制未放行时才回退到浏览器上传或用户手动执行 curl。
 
 如果你是在远程 / 官方服务模式下使用，也仍然可以直接把各平台连到 `https://hub.example.com/mcp`。
 

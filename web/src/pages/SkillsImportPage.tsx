@@ -10,6 +10,12 @@ interface SkillsImportRequest {
   error: 'missing_token' | ''
 }
 
+interface AgentUploadAuthInfo {
+  auth_mode: string
+  trust_level: number
+  scopes?: string[]
+}
+
 function parseSkillsImportRequest(search: string): SkillsImportRequest {
   const params = new URLSearchParams(search)
   const token = (params.get('token') || '').trim()
@@ -116,6 +122,21 @@ function uploadSkillsArchive(
   })
 }
 
+async function validateUploadToken(token: string): Promise<AgentUploadAuthInfo> {
+  const res = await fetch('/agent/auth/whoami', {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  })
+
+  const payload = await res.json().catch(() => null)
+  if (!res.ok) {
+    throw new Error(payload?.message || payload?.error || res.statusText || 'token validation failed')
+  }
+  const data = payload && payload.ok === true && payload.data !== undefined ? payload.data : payload
+  return data as AgentUploadAuthInfo
+}
+
 export default function SkillsImportPage() {
   const { locale, tx } = useI18n()
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -123,6 +144,9 @@ export default function SkillsImportPage() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [tokenChecking, setTokenChecking] = useState(false)
+  const [tokenReady, setTokenReady] = useState(false)
+  const [tokenError, setTokenError] = useState('')
   const [progress, setProgress] = useState(0)
   const [error, setError] = useState('')
   const [result, setResult] = useState<ImportResult | null>(null)
@@ -137,6 +161,64 @@ export default function SkillsImportPage() {
     const nextSearch = params.toString()
     window.history.replaceState({}, '', `${window.location.pathname}${nextSearch ? `?${nextSearch}` : ''}`)
   }, [request.token])
+
+  useEffect(() => {
+    if (!request.token) {
+      setTokenReady(false)
+      setTokenError('')
+      return
+    }
+
+    let cancelled = false
+    setTokenChecking(true)
+    setTokenReady(false)
+    setTokenError('')
+
+    void validateUploadToken(request.token)
+      .then((info) => {
+        if (cancelled) return
+        if (info.auth_mode !== 'scoped_token') {
+          setTokenError(tx(
+            '这个链接里的 token 不是上传专用 token，请重新生成上传链接。',
+            'This link does not contain a scoped upload token. Please generate a fresh upload link.',
+          ))
+          return
+        }
+        if ((info.trust_level || 0) < 3) {
+          setTokenError(tx(
+            '这个上传 token 的信任级别不足，至少需要 L3 Work。',
+            'This upload token does not have enough trust. L3 Work is required.',
+          ))
+          return
+        }
+        if (!info.scopes?.includes('write:skills')) {
+          setTokenError(tx(
+            '这个 token 缺少 `write:skills` 权限，请重新生成上传链接。',
+            'This token is missing `write:skills`. Please generate a fresh upload link.',
+          ))
+          return
+        }
+        setTokenReady(true)
+      })
+      .catch((err: any) => {
+        if (cancelled) return
+        setTokenError(
+          err?.message || tx(
+            '上传 token 校验失败，请重新生成上传链接。',
+            'Upload token validation failed. Please generate a fresh upload link.',
+          ),
+        )
+      })
+      .finally(() => {
+        if (!cancelled) {
+          setTokenChecking(false)
+        }
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [request.token, tx])
 
   const requestError = useMemo(() => {
     if (request.error === 'missing_token') {
@@ -166,7 +248,7 @@ export default function SkillsImportPage() {
   }
 
   const handleUpload = async () => {
-    if (!request.token || !selectedFile || busy) return
+    if (!request.token || !tokenReady || !selectedFile || busy) return
 
     setBusy(true)
     setError('')
@@ -216,21 +298,21 @@ export default function SkillsImportPage() {
           </div>
         </div>
 
-        {(requestError || error) && (
+        {(requestError || tokenError || error) && (
           <div className="alert alert-error">
-            {requestError || error}
+            {requestError || tokenError || error}
           </div>
         )}
 
         <div
-          className={`skills-upload-dropzone${isDragging ? ' is-dragging' : ''}${requestError || busy ? ' is-disabled' : ''}`}
+          className={`skills-upload-dropzone${isDragging ? ' is-dragging' : ''}${requestError || tokenError || tokenChecking || busy ? ' is-disabled' : ''}`}
           onClick={() => {
-            if (!requestError && !busy) {
+            if (!requestError && !tokenError && !tokenChecking && !busy) {
               inputRef.current?.click()
             }
           }}
           onDragOver={(event) => {
-            if (requestError || busy) return
+            if (requestError || tokenError || tokenChecking || busy) return
             event.preventDefault()
             setIsDragging(true)
           }}
@@ -239,16 +321,16 @@ export default function SkillsImportPage() {
             setIsDragging(false)
           }}
           onDrop={(event) => {
-            if (requestError || busy) return
+            if (requestError || tokenError || tokenChecking || busy) return
             event.preventDefault()
             setIsDragging(false)
             const file = event.dataTransfer.files?.[0] || null
             selectFile(file)
           }}
           role="button"
-          tabIndex={requestError || busy ? -1 : 0}
+          tabIndex={requestError || tokenError || tokenChecking || busy ? -1 : 0}
           onKeyDown={(event) => {
-            if (requestError || busy) return
+            if (requestError || tokenError || tokenChecking || busy) return
             if (event.key === 'Enter' || event.key === ' ') {
               event.preventDefault()
               inputRef.current?.click()
@@ -291,10 +373,10 @@ export default function SkillsImportPage() {
           <div className="skills-upload-actions">
             <button
               className="btn btn-primary"
-              disabled={!selectedFile || !!requestError || busy}
+              disabled={!selectedFile || !!requestError || !!tokenError || tokenChecking || !tokenReady || busy}
               onClick={() => { void handleUpload() }}
             >
-              {busy ? tx('上传中...', 'Uploading...') : tx('开始上传', 'Start upload')}
+              {tokenChecking ? tx('校验 token...', 'Checking token...') : busy ? tx('上传中...', 'Uploading...') : tx('开始上传', 'Start upload')}
             </button>
             <button
               className="btn"

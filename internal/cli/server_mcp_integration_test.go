@@ -141,8 +141,8 @@ func TestAgenthubMCPStdio_SQLiteInitializeAndToolsList(t *testing.T) {
 	if !strings.Contains(string(payload), "create_sync_token") {
 		t.Fatalf("expected create_sync_token in tools/list result: %s", string(payload))
 	}
-	if !strings.Contains(string(payload), "create_skills_import_token") {
-		t.Fatalf("expected create_skills_import_token in tools/list result: %s", string(payload))
+	if !strings.Contains(string(payload), "prepare_skills_upload") {
+		t.Fatalf("expected prepare_skills_upload in tools/list result: %s", string(payload))
 	}
 }
 

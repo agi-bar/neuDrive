@@ -137,11 +137,11 @@
         "/skills/<name>/..."
       ],
       "preferred_interface": [
-        "MCP:import_skills_archive"
+        "MCP:prepare_skills_upload",
+        "HTTP:/agent/import/skills"
       ],
       "fallback_interface": [
-        "MCP:create_skills_import_token",
-        "HTTP:/agent/import/skills"
+        "MCP:import_skills_archive"
       ],
       "current_status": "public_mcp_available",
       "restore_strategy": "zip_import_preferred"

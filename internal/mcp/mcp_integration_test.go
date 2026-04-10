@@ -193,7 +193,7 @@ func TestMCPInteg_ToolsList(t *testing.T) {
 		"import_skill",
 		"import_skills_archive",
 		"create_sync_token",
-		"create_skills_import_token",
+		"prepare_skills_upload",
 	} {
 		if !toolNames[expected] {
 			t.Errorf("expected tool %q not found in tools/list", expected)
@@ -521,16 +521,16 @@ func TestMCPInteg_CreateSyncToken(t *testing.T) {
 	}
 }
 
-func TestMCPInteg_CreateSkillsImportToken(t *testing.T) {
+func TestMCPInteg_PrepareSkillsUpload(t *testing.T) {
 	s := setupIntegrationMCP(t)
 
-	text, isErr := mcpToolCall(t, s, "create_skills_import_token", map[string]interface{}{
+	text, isErr := mcpToolCall(t, s, "prepare_skills_upload", map[string]interface{}{
 		"purpose":     "claude-web-skills",
 		"platform":    "claude-web",
 		"ttl_minutes": 30,
 	})
 	if isErr {
-		t.Fatalf("create_skills_import_token error: %s", text)
+		t.Fatalf("prepare_skills_upload error: %s", text)
 	}
 	if !strings.Contains(text, "\"token\": \"aht_") {
 		t.Fatalf("expected scoped token output, got %s", text)
@@ -543,6 +543,15 @@ func TestMCPInteg_CreateSkillsImportToken(t *testing.T) {
 	}
 	if !strings.Contains(text, "/import/skills?token=") {
 		t.Fatalf("expected browser_upload_url in output, got %s", text)
+	}
+	if !strings.Contains(text, "\"recommended_flow\": \"browser_upload\"") {
+		t.Fatalf("expected recommended_flow in output, got %s", text)
+	}
+	if !strings.Contains(text, "\"inline_archive_max_zip_bytes\": 65536") {
+		t.Fatalf("expected inline_archive_max_zip_bytes in output, got %s", text)
+	}
+	if !strings.Contains(text, "do not read or base64") {
+		t.Fatalf("expected warning in output, got %s", text)
 	}
 }
 

@@ -87,9 +87,10 @@ This manual follows Claude's current public surfaces:
 - Use `write_file` for any imported file-like data that should be preserved in Agent Hub, not just for projects. If some Claude material does not fit profile, memory, project, or skill cleanly, it may still be imported under a sensible custom directory structure.
 - Use `import_skill` as the formal public MCP path for one skill whose files can be represented as a `map[path]string`. Nested relative paths are allowed, so text and code files such as `SKILL.md`, prompts, `.py`, `.js`, `.ts`, `.sh`, `.json`, `.yaml`, `.xml`, and `.xsd` can stay on this path.
 - Even on the `import_skill` path, import the whole skill directory, not just `SKILL.md`. Include every text/code file the skill needs, such as `scripts/`, `prompts/`, config files, schemas, and helper sources.
-- Use `import_skills_archive` as the formal public MCP path for multiple skills, binary-heavy skills, mixed text+asset skills, or any case where preserving the exact directory bundle is simpler than flattening files into a string map.
+- Use `import_skills_archive` only for archives already known to be small enough for one MCP tool call. For Claude Web, that means the zip must already be known to be `<= 64 KB`. Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation, because that can crash the conversation session.
 - The agent may use `write_file` to patch one file, archive unsupported exports, or preserve additional imported Claude data under custom paths when no first-class Agent Hub domain exists.
-- Use `create_skills_import_token` plus `/agent/import/skills` as the user-mediated fallback transport path when a full skills zip cannot be transferred reliably through one MCP tool call. This is valid inside Claude Web too, especially when base64 or tool-call size limits block `import_skills_archive`.
+- For Claude Web skills zips, check the zip size before reading contents. If the zip is larger than `64 KB`, or if the size cannot be checked safely, do not read or base64 it into MCP args. Do not `cat` base64(zip) or otherwise print long archive strings into the conversation.
+- Use `prepare_skills_upload` plus `/agent/import/skills` as the user-mediated upload handoff path for Claude Web zips larger than `64 KB`, zips whose size cannot be checked safely, or any archive that should not be inlined into one tool call.
 - All skill import paths land under `/skills/<name>/...` in Agent Hub. Do not ask the user for a separate destination directory.
 - Keep `Claude exported data zip` separate from skills archive flows. It currently uses `/api/import/claude-data` and does not have public MCP parity.
 - Keep `Claude memory export` separate from full account export. It currently uses `/api/import/claude-memory` and does not have public MCP parity.
@@ -105,8 +106,8 @@ This manual follows Claude's current public surfaces:
 | Project instructions | project-level guidance | `/projects/<name>/context.md` | `create_project`, `write_file`, `get_project` | archive note under `/projects/<name>/...` | Manual reconstruction path |
 | Project knowledge / uploaded files | project knowledge base, docs, code snippets, attached files | `/projects/<name>/...` when rebuilding manually; `/skills/claude-<project>/...` via current full export importer | `create_project`, `write_file`, `list_directory`, `read_file` | `/api/import/claude-data` | Current full export importer does not rebuild first-class Agent Hub projects |
 | Project chats and project memory summary | chats inside a project, project-specific memory | archive notes, `/memory/conversations/*.md`, project notes | `/api/import/claude-data` for exported conversations; otherwise manual archive with `write_file` | `save_memory` for distilled facts | No first-class public MCP importer for project chats or project memory |
-| Single text/code skill directory | one Claude skill whose files are all text-based and can be represented as strings, including nested paths like `scripts/run.py` | `/skills/<name>/...` | `import_skill(name, files)` | `import_skills_archive` | Good for `SKILL.md`, prompts, Python/source files, configs, and other text assets. Still send the whole skill directory, not just `SKILL.md`. |
-| Claude Web skills workspace zip | `/mnt/skills/user` full workspace zip, or any multi-skill / binary-heavy zip | `/skills/<name>/...` | `import_skills_archive` | `create_skills_import_token` + `/agent/import/skills` when one tool call cannot carry the archive reliably | Must preserve full directories, scripts, prompts, and assets |
+| Single text/code skill directory | one Claude skill whose files are all text-based and can be represented as strings, including nested paths like `scripts/run.py` | `/skills/<name>/...` | `import_skill(name, files)` | `import_skills_archive` for a small exact-byte archive, or `prepare_skills_upload` when the archive should not be inlined | Good for `SKILL.md`, prompts, Python/source files, configs, and other text assets. Still send the whole skill directory, not just `SKILL.md`. |
+| Claude Web skills workspace zip | `/mnt/skills/user` full workspace zip, or any multi-skill / binary-heavy zip | `/skills/<name>/...` | `prepare_skills_upload` + `/agent/import/skills` | `import_skills_archive` only when the zip is already known to be `<= 64 KB` | Must preserve full directories, scripts, prompts, and assets. Do not read or base64 a larger Claude Web zip into MCP args. |
 | Connectors / external sources | connected services, selected repos/files, imported external context | `/projects/<name>/...`, setup notes, archive manifests | `write_file`, `log_action`, `search_memory` | manual recreation notes | Usually preserve setup metadata, not third-party data ownership |
 | Official full data export zip | official Claude account export | `/memory/claude/memory.md`, `/memory/conversations/*.md`, `/skills/claude-<project>/...` | `/api/import/claude-data` | none on the public MCP surface | Current importer expects `users.json`, `memories.json`, `projects.json`, `conversations.json` |
 | Account/user metadata from export | `users.json` inside the full export zip | archive note only if manually preserved | `write_file` if manually archiving extracted metadata | none | Current full export importer does not map `users.json` into a first-class Agent Hub domain |
@@ -127,12 +128,12 @@ This manual follows Claude's current public surfaces:
     - one small or moderate skill, all files are text/code and can be represented as `map[path]string` -> `import_skill(name, files)`
     - text/code files can still include nested paths like `scripts/run.py`, `prompts/review.txt`, `data/schema.xsd`, or `bin/tool.sh`
     - do not simplify a skill to only `SKILL.md`; if `scripts/`, prompts, config, schemas, or helper files exist, include them too
-    - many skills, binary assets, or any archive where exact bytes matter -> `import_skills_archive`
-    - Claude Web archive too large for one MCP tool call, or direct archive transfer is blocked by tool-call/base64 limits -> `create_skills_import_token` and let the user upload the full zip through `/agent/import/skills`
+    - for Claude Web zips, check the zip size before reading contents; if the zip is larger than `64 KB` or the size cannot be checked safely -> `prepare_skills_upload`
+    - many skills, binary assets, or any archive where exact bytes matter -> `import_skills_archive` only when the archive is already known small enough for one MCP tool call
 11. All skill import flows land under `/skills/<skill-name>/...` in Agent Hub. A fallback upload page or upload command should target the `/skills` root by default and should not ask the user to pick another destination directory.
 12. Do not create or recommend markdown-only or `SKILL.md`-only skill exports. Preserve the entire skill directory and keep `SKILL.md`, scripts, prompts, config, schemas, and binary assets together.
-13. If a skills archive is too large, split it by top-level skill directories and import multiple full-skill batches. Do not split one skill directory into partial fragments unless a future chunked import flow exists.
-14. If `create_skills_import_token` is chosen, package one complete zip first, then hand off the upload step to the user instead of trying to inline a truncated archive through MCP.
+13. If the user still wants pure inline MCP transport, split a Claude Web archive by top-level skill directories only when each resulting zip is known to be `<= 64 KB`. Do not split one skill directory into partial fragments unless a future chunked import flow exists.
+14. If `prepare_skills_upload` is chosen, package one complete zip first, then hand off the upload step to the user instead of trying to inline a truncated archive through MCP.
 15. When a Claude export contains useful files or metadata that do not fit a first-class Agent Hub domain, preserve them with `write_file` under a clear custom directory structure instead of forcing them into a project.
 16. Preserve `connectors / external sources` as setup metadata, selected-file manifests, or project notes. Do not claim that third-party service data has been imported unless those files were actually captured.
 17. End with a report that lists `imported`, `archived`, and `blocked` items, with the exact interface used for each category.
@@ -150,19 +151,18 @@ Then choose the transport path that matches the payload:
 
 1. If this is really one text/code skill and the files can be represented as strings, skip the zip and call `import_skill`. The `files` map may include nested paths like `scripts/main.py`.
    - include the full skill directory contents, not just `SKILL.md`
-2. Otherwise, prefer the MCP-native archive path:
-   - read the zip bytes
-   - base64-encode the full archive
-   - call `import_skills_archive` with `platform="claude-web"` and the original archive name
-3. If the archive is too large for one tool call, or Claude Web cannot pass the full base64 reliably, create a short-lived upload token and hand the full zip to the user for the `/agent/import/skills` fallback upload flow.
-
-If an archive remains too large, split it into multiple zips by top-level skill directories and import multiple full-skill batches.
+2. Otherwise, stat the zip before reading contents.
+   - if the Claude Web zip is larger than `64 KB`, do not read the bytes
+   - if the Claude Web zip size cannot be checked safely, do not read the bytes
+3. If the Claude Web zip is larger than `64 KB`, or the size is unknown, call `prepare_skills_upload` and hand the full zip to the user for the `/agent/import/skills` upload flow.
+4. Only if the Claude Web zip is already known to be `<= 64 KB`, read the zip bytes, base64-encode the archive, and call `import_skills_archive` with `platform="claude-web"` and the original archive name.
+5. If the user insists on pure inline MCP transport, split the archive by top-level skill directories only when each resulting zip is known to stay within the same `64 KB` limit.
 
 All of these paths still import into the Agent Hub `/skills` root.
 
 ### User-mediated browser upload fallback
 
-When `create_skills_import_token` is used for Claude Web skill import, the agent should switch from "direct import" mode to "package + user handoff" mode.
+When `prepare_skills_upload` is used for Claude Web skill import, the agent should switch from "direct import" mode to "package + user handoff" mode.
 
 Preferred flow:
 
@@ -170,7 +170,7 @@ Preferred flow:
    - do not omit `scripts/`, prompts, config files, schemas, fonts, or other helper assets
    - do not replace a full skill with a `SKILL.md`-only shortcut
 2. Make that zip available to the user as a downloadable file through the platform's file handoff/download mechanism.
-3. Call `create_skills_import_token`.
+3. Call `prepare_skills_upload`.
 4. If the token response includes a browser upload link, present that link to the user as the normal-user path.
 5. Tell the user exactly what to do:
    - download the generated skills zip first
@@ -212,14 +212,15 @@ If the token response includes both a browser upload link and a curl example, me
 - The full Claude export importer currently lands memory under `/memory/claude/memory.md`, conversations under `/memory/conversations/*.md`, and project documents under `/skills/claude-<project>/...`; this is useful but not full first-class project parity.
 - The current full Claude export importer does not map `users.json` into a first-class Agent Hub domain.
 - There is no first-class public MCP importer for standalone chats, project chats, or project memory summaries.
-- `import_skill` is the right path for one text/code skill whose files can be represented as strings, including nested paths such as `scripts/*.py`. Even then, import the whole skill directory, not just `SKILL.md`. Use `import_skills_archive` when the skill is large, multi-skill, or includes binary assets.
-- `create_skills_import_token` plus `/agent/import/skills` is the user-mediated fallback transport path when one MCP tool call cannot carry the full archive reliably. This can be the right fallback inside Claude Web.
-- If one archive is too large, split it by whole skill directories and import multiple batches. True chunked import for one oversized skill does not exist yet.
+- `import_skill` is the right path for one text/code skill whose files can be represented as strings, including nested paths such as `scripts/*.py`. Even then, import the whole skill directory, not just `SKILL.md`.
+- For Claude Web, do not inline a skills zip into `import_skills_archive` unless it is already known to be `<= 64 KB`. If the size is unknown, default to `prepare_skills_upload`.
+- `prepare_skills_upload` plus `/agent/import/skills` is the user-mediated upload handoff path for Claude Web archives that should not be inlined into one tool call.
+- If the user still wants pure inline MCP transport, split by whole skill directories only when each resulting archive is known to stay within the same `64 KB` limit. True chunked import for one oversized skill does not exist yet.
 
 ## Prompt Template
 
 Use or adapt this prompt when another agent needs to execute Claude portability work:
 
-> Read `/skills/portability/claude/SKILL.md` first. Inventory the Claude-side categories as `profile preferences`, `styles`, `memory`, `standalone chats`, `project instructions`, `project knowledge`, `project chats`, `skills`, `connectors`, and `official exports`. Map each category to the nearest Agent Hub domain instead of mixing them together. Use `update_profile` for durable account-wide rules, `save_memory` for smaller derived notes, `create_project` for true Claude project reconstruction, and `write_file` for any additional imported Claude files or metadata that should be preserved even when they do not fit a first-class Agent Hub domain. The agent may design a sensible custom directory structure for those files. Use `import_skill` only for one text/code skill whose files can be represented as strings, and `import_skills_archive` for `/mnt/skills/user` or other multi-skill / binary-heavy archives. Never simplify a skill to `SKILL.md` only; include the whole skill directory and all needed `scripts/`, prompts, config, schemas, and assets. If one archive is too large for a single MCP tool call, switch to `create_skills_import_token` and the user-mediated `/agent/import/skills` upload flow instead of truncating base64. In that fallback flow, package one complete zip, hand the zip to the user for download, then tell the user to use either the returned browser upload link or the returned curl command, depending on whether the user is better served by a browser flow or a terminal flow. All skill imports land under `/skills/<name>/...` in Agent Hub, and the browser upload page targets the `/skills` root by default. Preserve unsupported structures as archive notes, structured metadata, or custom file trees instead of dropping them, and finish with `imported`, `archived`, and `blocked` items plus the exact interface used for each category.
+> Read `/skills/portability/claude/SKILL.md` first. Inventory the Claude-side categories as `profile preferences`, `styles`, `memory`, `standalone chats`, `project instructions`, `project knowledge`, `project chats`, `skills`, `connectors`, and `official exports`. Map each category to the nearest Agent Hub domain instead of mixing them together. Use `update_profile` for durable account-wide rules, `save_memory` for smaller derived notes, `create_project` for true Claude project reconstruction, and `write_file` for any additional imported Claude files or metadata that should be preserved even when they do not fit a first-class Agent Hub domain. The agent may design a sensible custom directory structure for those files. Use `import_skill` only for one text/code skill whose files can be represented as strings. Never simplify a skill to `SKILL.md` only; include the whole skill directory and all needed `scripts/`, prompts, config, schemas, and assets. For Claude Web skills zips, check zip size before reading contents. If the zip is larger than `64 KB`, or if the size cannot be checked safely, do not read or base64 it into MCP args; switch to `prepare_skills_upload` and the user-mediated `/agent/import/skills` upload flow instead. Only use `import_skills_archive` when the zip is already known to be `<= 64 KB`. In the upload handoff flow, package one complete zip, hand the zip to the user for download, then tell the user to use either the returned browser upload link or the returned curl command, depending on whether the user is better served by a browser flow or a terminal flow. All skill imports land under `/skills/<name>/...` in Agent Hub, and the browser upload page targets the `/skills` root by default. Preserve unsupported structures as archive notes, structured metadata, or custom file trees instead of dropping them, and finish with `imported`, `archived`, and `blocked` items plus the exact interface used for each category.
 
 {{CURRENT_USER_SNAPSHOT}}

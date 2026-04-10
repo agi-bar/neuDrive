@@ -53,7 +53,8 @@ If the migration still needs reusable prompt/code/tool bundles to land under Age
   - many skills as top-level directories: `skill-a/SKILL.md`, `skill-b/SKILL.md`, and related files below each directory
 - Every imported skill directory must contain `SKILL.md`.
 - All skill imports land under Agent Hub `/skills/<name>/...`.
-- If one archive is too large for a single MCP tool call, use `create_skills_import_token` and present both the browser upload link and the curl command when available. Prefer the browser path for ordinary users and curl for terminal-comfortable users.
+- Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation, because that can crash the conversation session.
+- If one archive is too large for a single MCP tool call, use `prepare_skills_upload` and present both the browser upload link and the curl command when available. Prefer the browser path for ordinary users and curl for terminal-comfortable users.
 
 ## Import Into AgentHub
 
@@ -90,6 +91,6 @@ When exporting AgentHub data back into ChatGPT:
 
 Use or adapt this prompt when another agent needs to execute ChatGPT portability work:
 
-> Help me migrate data between ChatGPT and AgentHub. First classify the data into profile, memory, projects, knowledge/files, tools/connections, automations, conversations, and any reusable bundles that should live under Agent Hub `/skills`. Then map each item to the nearest AgentHub canonical domain. Use `write_file` for additional imported file-like data that should be preserved even when it does not fit a first-class Agent Hub domain, and choose a sensible custom directory structure for those files. If one bundle is a text/code skill-like directory, use `import_skill` with the full directory contents, not just `SKILL.md`. If the bundle is multi-skill, binary-heavy, or too large for one tool call, use `import_skills_archive` or `create_skills_import_token` as appropriate. Preserve ChatGPT-specific structure as archive, shadow metadata, or custom file trees instead of dropping it. If exporting back to ChatGPT, generate the nearest ChatGPT-compatible outputs and clearly mark manual steps and unsupported parity.
+> Help me migrate data between ChatGPT and AgentHub. First classify the data into profile, memory, projects, knowledge/files, tools/connections, automations, conversations, and any reusable bundles that should live under Agent Hub `/skills`. Then map each item to the nearest AgentHub canonical domain. Use `write_file` for additional imported file-like data that should be preserved even when it does not fit a first-class Agent Hub domain, and choose a sensible custom directory structure for those files. If one bundle is a text/code skill-like directory, use `import_skill` with the full directory contents, not just `SKILL.md`. If the bundle is multi-skill, binary-heavy, or too large for one tool call, use `import_skills_archive` or `prepare_skills_upload` as appropriate. Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation. Preserve ChatGPT-specific structure as archive, shadow metadata, or custom file trees instead of dropping it. If exporting back to ChatGPT, generate the nearest ChatGPT-compatible outputs and clearly mark manual steps and unsupported parity.
 
 {{CURRENT_USER_SNAPSHOT}}

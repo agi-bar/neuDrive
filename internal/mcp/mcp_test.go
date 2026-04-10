@@ -160,6 +160,12 @@ func TestInitialize(t *testing.T) {
 	if !strings.Contains(instructions, "import_skills_archive") {
 		t.Fatalf("expected archive import hint in serverInfo, got %q", instructions)
 	}
+	if !strings.Contains(instructions, "prepare_skills_upload") {
+		t.Fatalf("expected prepare_skills_upload hint in serverInfo, got %q", instructions)
+	}
+	if !strings.Contains(instructions, "64 KB") || !strings.Contains(instructions, "do not read or base64") {
+		t.Fatalf("expected Claude Web size guardrails in serverInfo, got %q", instructions)
+	}
 
 	caps, ok := result["capabilities"].(map[string]interface{})
 	if !ok {
@@ -267,7 +273,7 @@ func TestToolsList(t *testing.T) {
 		"list_skills", "read_skill",
 		"get_stats",
 		"import_skill", "import_skills_archive", "save_memory", "create_project",
-		"create_sync_token", "create_skills_import_token",
+		"create_sync_token", "prepare_skills_upload",
 	}
 
 	toolNames := make(map[string]bool)
@@ -292,6 +298,12 @@ func TestToolsList(t *testing.T) {
 		if tool.InputSchema == nil {
 			t.Errorf("tool %q has nil inputSchema", tool.Name)
 		}
+		if tool.Name == "import_skills_archive" && !strings.Contains(tool.Description, "64 KB") {
+			t.Errorf("expected import_skills_archive description to mention 64 KB limit, got %q", tool.Description)
+		}
+	}
+	if toolNames["create_skills_import_token"] {
+		t.Error("create_skills_import_token should not be exposed after the rename")
 	}
 }
 
@@ -334,8 +346,8 @@ func TestToolsListWithScopeFiltering(t *testing.T) {
 	if toolNames["create_sync_token"] {
 		t.Error("create_sync_token should not be available without admin scope")
 	}
-	if toolNames["create_skills_import_token"] {
-		t.Error("create_skills_import_token should not be available without admin scope")
+	if toolNames["prepare_skills_upload"] {
+		t.Error("prepare_skills_upload should not be available without admin scope")
 	}
 	if toolNames["import_skills_archive"] {
 		t.Error("import_skills_archive should not be available with only read:profile scope")

@@ -66,6 +66,19 @@ type ContentBlock struct {
 	Text string `json:"text"`
 }
 
+const (
+	claudeWebInlineArchiveMaxZipBytes = 64 * 1024
+	claudeWebInlineArchiveMaxZipLabel = "64 KB"
+)
+
+func prepareSkillsUploadWarning() string {
+	return fmt.Sprintf(
+		"For Claude Web, if a skills zip is over %s (%d bytes) or its size is unknown, do not read or base64 it into import_skills_archive. Do not cat base64(zip) or emit long archive strings into the conversation, because that can crash the session. Call prepare_skills_upload instead.",
+		claudeWebInlineArchiveMaxZipLabel,
+		claudeWebInlineArchiveMaxZipBytes,
+	)
+}
+
 func isHiddenMCPPath(rawPath string) bool {
 	publicPath := hubpath.NormalizePublic(rawPath)
 	for _, prefix := range []string{"/devices", "/roles", "/inbox"} {
@@ -111,7 +124,7 @@ func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
 			"serverInfo": map[string]interface{}{
 				"name":         "agenthub",
 				"version":      "1.0.0",
-				"instructions": "Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. If no platform-specific manual exists, read agenthub://skills/portability/general/SKILL.md or call read_skill with name=portability/general. Use import_skill for one text/code skill directory, import_skills_archive for full Claude Web /mnt/skills/user archives or multi-skill zips, and reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.",
+				"instructions": fmt.Sprintf("Start by reading agenthub://skills/agenthub/SKILL.md or calling read_skill with name=agenthub. For import, export, restore, migration, or connector work, read agenthub://skills/portability/<platform>/SKILL.md first or call read_skill with name=portability/<platform>. If no platform-specific manual exists, read agenthub://skills/portability/general/SKILL.md or call read_skill with name=portability/general. Use import_skill for one text/code skill directory. For Claude Web skills zips, stat the zip first: if it is over %s (%d bytes) or size is unknown, do not read or base64 it into MCP args, do not cat base64(zip), and do not emit long archive strings into the conversation; call prepare_skills_upload instead. Use import_skills_archive only for archives already known to be small enough for one tool call. Reserve write_file for single-file patching. Use list_skills to discover available manuals, and use read_file on /skills/... if your client prefers virtual file paths. Current public agent surface focuses on profile, memory, projects, skills, tree, and sync.", claudeWebInlineArchiveMaxZipLabel, claudeWebInlineArchiveMaxZipBytes),
 			},
 		}
 	case "notifications/initialized":
@@ -278,10 +291,19 @@ func (s *MCPServer) getTools() []MCPTool {
 			}, "name", "files"),
 		},
 		{
-			Name:        "import_skills_archive",
-			Description: "导入 skills zip archive（大 skill / 多 skill / 批量主路）；适合 Claude Web /mnt/skills/user 的完整打包结果",
+			Name:        "prepare_skills_upload",
+			Description: fmt.Sprintf("为 skills zip 上传准备浏览器链接 / curl token；Claude Web zip 的推荐交接路径。先检查 zip 大小；若大于 %s 或大小未知，不要读取或 base64 化，直接调用此工具", claudeWebInlineArchiveMaxZipLabel),
 			InputSchema: jsonSchema(map[string]interface{}{
-				"archive_base64": prop("string", "zip archive 的 base64 内容"),
+				"purpose":     prop("string", "用途说明"),
+				"platform":    prop("string", "来源平台 (默认 claude-web)"),
+				"ttl_minutes": prop("integer", "有效期分钟数，范围 5-120，默认 30"),
+			}, "purpose"),
+		},
+		{
+			Name:        "import_skills_archive",
+			Description: fmt.Sprintf("导入已知足够小的 skills zip archive；仅适合已经确认能安全放进一次 MCP tool call 的 archive。Claude Web zip 大于 %s 或大小未知时，不要读取或 base64 化，改用 prepare_skills_upload", claudeWebInlineArchiveMaxZipLabel),
+			InputSchema: jsonSchema(map[string]interface{}{
+				"archive_base64": prop("string", fmt.Sprintf("仅用于已经在内存中的小型 zip archive 的 base64 内容。Claude Web zip 大于 %s 或大小未知时，不要为了填这个字段而去读取、cat、或 base64 化大文件，也不要把超长 archive 字符串放进对话", claudeWebInlineArchiveMaxZipLabel)),
 				"archive_name":   prop("string", "归档文件名 (默认 skills.zip)"),
 				"platform":       prop("string", "来源平台 (默认 claude-web)"),
 			}, "archive_base64"),
@@ -292,15 +314,6 @@ func (s *MCPServer) getTools() []MCPTool {
 			InputSchema: jsonSchema(map[string]interface{}{
 				"purpose":     prop("string", "用途说明"),
 				"access":      prop("string", "权限: push, pull, both (默认 push)"),
-				"ttl_minutes": prop("integer", "有效期分钟数，范围 5-120，默认 30"),
-			}, "purpose"),
-		},
-		{
-			Name:        "create_skills_import_token",
-			Description: "生成短命 scoped token，用于通过 /agent/import/skills 上传 skills zip；这是 Claude Web 的 fallback 路径",
-			InputSchema: jsonSchema(map[string]interface{}{
-				"purpose":     prop("string", "用途说明"),
-				"platform":    prop("string", "来源平台 (默认 claude-web)"),
 				"ttl_minutes": prop("integer", "有效期分钟数，范围 5-120，默认 30"),
 			}, "purpose"),
 		},
@@ -332,7 +345,7 @@ func (s *MCPServer) supportsTool(name string) bool {
 	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
 		"get_project", "log_action", "list_directory", "read_file", "write_file",
 		"list_secrets", "read_secret", "list_skills", "read_skill", "get_stats", "save_memory",
-		"import_skill", "import_skills_archive", "create_sync_token", "create_skills_import_token", "import_claude_memory":
+		"import_skill", "import_skills_archive", "create_sync_token", "prepare_skills_upload", "import_claude_memory":
 	default:
 		return false
 	}
@@ -349,7 +362,7 @@ func (s *MCPServer) supportsTool(name string) bool {
 		return s.Dashboard != nil
 	case "import_skill", "import_skills_archive", "import_claude_memory":
 		return s.Import != nil
-	case "create_sync_token", "create_skills_import_token":
+	case "create_sync_token", "prepare_skills_upload":
 		return s.Token != nil
 	default:
 		return false
@@ -760,9 +773,9 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		}, "", "  ")
 		return string(payload), false
 
-	case "create_skills_import_token":
+	case "prepare_skills_upload":
 		if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) {
-			return "error: create_skills_import_token requires admin scope", true
+			return "error: prepare_skills_upload requires admin scope", true
 		}
 		if s.Token == nil {
 			return "error: token service not configured", true
@@ -800,13 +813,16 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		uploadURL := strings.TrimRight(s.BaseURL, "/") + "/agent/import/skills?platform=" + platform
 		browserUploadURL := strings.TrimRight(s.BaseURL, "/") + "/import/skills?token=" + url.QueryEscape(resp.Token) + "&platform=" + url.QueryEscape(platform)
 		payload, _ := json.MarshalIndent(map[string]interface{}{
-			"token":              resp.Token,
-			"expires_at":         resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
-			"api_base":           s.BaseURL,
-			"upload_url":         uploadURL,
-			"browser_upload_url": browserUploadURL,
-			"scopes":             resp.ScopedToken.Scopes,
-			"curl_example":       fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/agenthub-skills.zip" "%s"`, resp.Token, platform, uploadURL),
+			"token":                        resp.Token,
+			"expires_at":                   resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
+			"api_base":                     s.BaseURL,
+			"upload_url":                   uploadURL,
+			"browser_upload_url":           browserUploadURL,
+			"scopes":                       resp.ScopedToken.Scopes,
+			"recommended_flow":             "browser_upload",
+			"inline_archive_max_zip_bytes": claudeWebInlineArchiveMaxZipBytes,
+			"warning":                      prepareSkillsUploadWarning(),
+			"curl_example":                 fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/agenthub-skills.zip" "%s"`, resp.Token, platform, uploadURL),
 		}, "", "  ")
 		return string(payload), false
 
@@ -828,7 +844,7 @@ func (s *MCPServer) isKnownTool(name string) bool {
 	case "read_profile", "update_profile", "search_memory", "list_projects", "create_project",
 		"get_project", "log_action", "list_directory", "read_file", "write_file",
 		"list_secrets", "read_secret", "list_skills", "read_skill", "get_stats", "save_memory",
-		"import_skill", "import_skills_archive", "create_sync_token", "create_skills_import_token", "import_claude_memory":
+		"import_skill", "import_skills_archive", "create_sync_token", "prepare_skills_upload", "import_claude_memory":
 		return true
 	default:
 		return false

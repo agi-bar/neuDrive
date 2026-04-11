@@ -157,33 +157,19 @@ export default function OAuthAuthorizePage() {
         <p className="oauth-subtitle">{tx('有应用正在请求访问你的账号', 'An application is requesting access to your account')}</p>
 
         {appInfo && (
-          <>
-            <div className="oauth-app-info">
-              <div className="oauth-app-logo">
-                {appInfo.app_logo ? (
-                  <img src={appInfo.app_logo} alt={appInfo.app_name} />
-                ) : (
-                  <span>&#x1f916;</span>
-                )}
-              </div>
-              <div>
-                <div className="oauth-app-name">{appInfo.app_name}</div>
-                <div className="oauth-app-sub">{tx('想要访问你的 Agent Hub 账号', 'wants to access your Agent Hub account')}</div>
-              </div>
+          <div className="oauth-app-info">
+            <div className="oauth-app-logo">
+              {appInfo.app_logo ? (
+                <img src={appInfo.app_logo} alt={appInfo.app_name} />
+              ) : (
+                <span>&#x1f916;</span>
+              )}
             </div>
-
-            {appInfo.scopes && appInfo.scopes.length > 0 && (
-              <div className="oauth-scopes">
-                <h3>{tx('该应用将可以：', 'This application will be able to:')}</h3>
-                {appInfo.scopes.map((s) => (
-                  <div key={s.scope} className="oauth-scope-item">
-                    <span className="oauth-scope-check">&#10003;</span>
-                    <span>{s.label}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
+            <div>
+              <div className="oauth-app-name">{appInfo.app_name}</div>
+              <div className="oauth-app-sub">{tx('想要访问你的 Agent Hub 账号', 'wants to access your Agent Hub account')}</div>
+            </div>
+          </div>
         )}
 
         {userName && (
@@ -200,6 +186,18 @@ export default function OAuthAuthorizePage() {
             {submitting ? tx('授权中...', 'Authorizing...') : tx('授权', 'Authorize')}
           </button>
         </div>
+
+        {appInfo?.scopes && appInfo.scopes.length > 0 && (
+          <div className="oauth-scopes">
+            <h3>{tx('该应用将可以：', 'This application will be able to:')}</h3>
+            {appInfo.scopes.map((s) => (
+              <div key={s.scope} className="oauth-scope-item">
+                <span className="oauth-scope-check">&#10003;</span>
+                <span>{s.label}</span>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   )

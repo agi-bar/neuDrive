@@ -107,6 +107,61 @@ test.describe('OAuth Consent Page (SPA)', () => {
     expect(finalURL).toContain('claude.ai')
   })
 
+  test('long scope list keeps authorize actions above the permissions list', async ({ page, request }) => {
+    const user = await registerUser(request)
+
+    await page.goto(CF_URL + '/login')
+    await page.waitForLoadState('networkidle')
+    await page.getByPlaceholder('your@email.com').fill(user.email)
+    await page.getByPlaceholder('输入密码').fill(user.password)
+    await page.locator('button[type="submit"]').click()
+    await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
+
+    const longScope = [
+      'read:profile',
+      'write:profile',
+      'read:memory',
+      'write:memory',
+      'read:skills',
+      'write:skills',
+      'read:vault',
+      'write:vault',
+      'read:devices',
+      'call:devices',
+      'read:inbox',
+      'write:inbox',
+      'read:projects',
+      'write:projects',
+      'read:tree',
+      'write:tree',
+      'search',
+      'admin',
+      'offline_access',
+    ].join(' ')
+
+    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=${encodeURIComponent(longScope)}&state=long-scope-layout`
+    await page.goto(authorizeURL)
+
+    await page.waitForSelector('.oauth-card', { timeout: 10000 })
+
+    const authorizeBtn = page.locator('.oauth-btn-approve')
+    const actions = page.locator('.oauth-actions')
+    const scopes = page.locator('.oauth-scopes')
+
+    await expect(authorizeBtn).toBeVisible()
+    await expect(authorizeBtn).toBeInViewport()
+    await expect(scopes).toBeVisible()
+
+    const actionsBox = await actions.boundingBox()
+    const scopesBox = await scopes.boundingBox()
+    expect(actionsBox).not.toBeNull()
+    expect(scopesBox).not.toBeNull()
+    if (!actionsBox || !scopesBox) {
+      throw new Error('OAuth actions or scopes box is missing')
+    }
+    expect(actionsBox.y).toBeLessThan(scopesBox.y)
+  })
+
   test('login flow: login → redirects back to OAuth → shows consent', async ({ page, request }) => {
     const user = await registerUser(request)
 

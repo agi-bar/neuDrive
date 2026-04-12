@@ -14,6 +14,7 @@ import (
 	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/config"
 	"github.com/agi-bar/agenthub/internal/database"
+	"github.com/agi-bar/agenthub/internal/localgitsync"
 	"github.com/agi-bar/agenthub/internal/mcp"
 	"github.com/agi-bar/agenthub/internal/runtimecfg"
 	"github.com/agi-bar/agenthub/internal/services"
@@ -26,6 +27,7 @@ import (
 
 type Options struct {
 	Storage            string
+	LocalMode          bool
 	SQLitePath         string
 	DatabaseURL        string
 	JWTSecret          string
@@ -99,7 +101,8 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
-	if _, err := store.EnsureOwner(ctx); err != nil {
+	owner, err := store.EnsureOwner(ctx)
+	if err != nil {
 		_ = store.Close()
 		return nil, err
 	}
@@ -123,6 +126,10 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
+	var localGitSyncSvc *localgitsync.Service
+	if opts.LocalMode {
+		localGitSyncSvc = localgitsync.NewWithDeps(store, fileTreeSvc, userSvc, connSvc, projectSvc, vaultSvc)
+	}
 	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
 		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
 	}
@@ -146,6 +153,7 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 	httpServer := api.NewServerWithDeps(api.ServerDeps{
 		Storage:            "sqlite",
 		Config:             cfg,
+		LocalOwnerID:       owner.ID,
 		UserService:        userSvc,
 		AuthService:        authSvc,
 		ConnectionService:  connSvc,
@@ -161,6 +169,7 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 		ImportService:      importSvc,
 		ExportService:      exportSvc,
 		SyncService:        syncSvc,
+		LocalGitSync:       localGitSyncSvc,
 		OAuthService:       oauthSvc,
 		Vault:              v,
 		JWTSecret:          cfg.JWTSecret,
@@ -181,22 +190,23 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 				return nil, fmt.Errorf("invalid token: %w", err)
 			}
 			return &mcp.MCPServer{
-				UserID:      scopedToken.UserID,
-				TrustLevel:  scopedToken.MaxTrustLevel,
-				Scopes:      scopedToken.Scopes,
-				BaseURL:     cfg.PublicBaseURL,
-				Connection:  connSvc,
-				OAuth:       oauthSvc,
-				FileTree:    fileTreeSvc,
-				Vault:       vaultSvc,
-				VaultCrypto: v,
-				Memory:      memorySvc,
-				Project:     projectSvc,
-				Inbox:       inboxSvc,
-				Device:      deviceSvc,
-				Dashboard:   dashboardSvc,
-				Import:      importSvc,
-				Token:       tokenSvc,
+				UserID:       scopedToken.UserID,
+				TrustLevel:   scopedToken.MaxTrustLevel,
+				Scopes:       scopedToken.Scopes,
+				BaseURL:      cfg.PublicBaseURL,
+				Connection:   connSvc,
+				OAuth:        oauthSvc,
+				FileTree:     fileTreeSvc,
+				Vault:        vaultSvc,
+				VaultCrypto:  v,
+				Memory:       memorySvc,
+				Project:      projectSvc,
+				Inbox:        inboxSvc,
+				Device:       deviceSvc,
+				Dashboard:    dashboardSvc,
+				Import:       importSvc,
+				Token:        tokenSvc,
+				LocalGitSync: localGitSyncSvc,
 			}, nil
 		},
 		Close: store.Close,
@@ -226,10 +236,31 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 		db.Close()
 		return nil, err
 	}
+	localOwnerID := uuid.Nil
+	if opts.LocalMode {
+		localOwnerID, err = ensureLocalPostgresOwner(ctx, db)
+		if err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
+
+	var localGitSyncSvc *localgitsync.Service
+	if opts.LocalMode {
+		localGitSyncSvc = localgitsync.NewWithDeps(
+			localgitsync.NewPostgresRepo(db),
+			deps.fileTreeSvc,
+			deps.userSvc,
+			deps.connSvc,
+			deps.projectSvc,
+			deps.vaultSvc,
+		)
+	}
 
 	httpServer := api.NewServerWithDeps(api.ServerDeps{
 		Storage:              "postgres",
 		Config:               cfg,
+		LocalOwnerID:         localOwnerID,
 		UserService:          deps.userSvc,
 		AuthService:          deps.authSvc,
 		ConnectionService:    deps.connSvc,
@@ -249,6 +280,7 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 		CollaborationService: deps.collabSvc,
 		WebhookService:       deps.webhookSvc,
 		OAuthService:         deps.oauthSvc,
+		LocalGitSync:         localGitSyncSvc,
 		Vault:                deps.vaultCrypto,
 		JWTSecret:            cfg.JWTSecret,
 		GitHubClientID:       cfg.GithubClientID,
@@ -269,22 +301,23 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 				return nil, fmt.Errorf("invalid token: %w", err)
 			}
 			return &mcp.MCPServer{
-				UserID:      scopedToken.UserID,
-				TrustLevel:  scopedToken.MaxTrustLevel,
-				Scopes:      scopedToken.Scopes,
-				BaseURL:     cfg.PublicBaseURL,
-				Connection:  deps.connSvc,
-				OAuth:       deps.oauthSvc,
-				FileTree:    deps.fileTreeSvc,
-				Vault:       deps.vaultSvc,
-				VaultCrypto: deps.vaultCrypto,
-				Memory:      deps.memorySvc,
-				Project:     deps.projectSvc,
-				Inbox:       deps.inboxSvc,
-				Device:      deps.deviceSvc,
-				Dashboard:   deps.dashboardSvc,
-				Import:      deps.importSvc,
-				Token:       deps.tokenSvc,
+				UserID:       scopedToken.UserID,
+				TrustLevel:   scopedToken.MaxTrustLevel,
+				Scopes:       scopedToken.Scopes,
+				BaseURL:      cfg.PublicBaseURL,
+				Connection:   deps.connSvc,
+				OAuth:        deps.oauthSvc,
+				FileTree:     deps.fileTreeSvc,
+				Vault:        deps.vaultSvc,
+				VaultCrypto:  deps.vaultCrypto,
+				Memory:       deps.memorySvc,
+				Project:      deps.projectSvc,
+				Inbox:        deps.inboxSvc,
+				Device:       deps.deviceSvc,
+				Dashboard:    deps.dashboardSvc,
+				Import:       deps.importSvc,
+				Token:        deps.tokenSvc,
+				LocalGitSync: localGitSyncSvc,
 			}, nil
 		},
 		Close: func() error {
@@ -390,6 +423,29 @@ func buildPostgresDeps(_ context.Context, db *pgxpool.Pool, cfg *config.Config) 
 		oauthSvc:     oauthSvc,
 		vaultCrypto:  v,
 	}, nil
+}
+
+func ensureLocalPostgresOwner(ctx context.Context, db *pgxpool.Pool) (uuid.UUID, error) {
+	var existing uuid.UUID
+	err := db.QueryRow(ctx, `SELECT id FROM users ORDER BY created_at ASC LIMIT 1`).Scan(&existing)
+	if err == nil {
+		return existing, nil
+	}
+	if err != pgx.ErrNoRows {
+		return uuid.Nil, err
+	}
+	now := time.Now().UTC()
+	ownerID := uuid.New()
+	_, err = db.Exec(ctx,
+		`INSERT INTO users (id, slug, display_name, email, avatar_url, bio, timezone, language, created_at, updated_at)
+		 VALUES ($1, 'local', 'Local Owner', '', '', '', 'UTC', 'en', $2, $2)`,
+		ownerID,
+		now,
+	)
+	if err != nil {
+		return uuid.Nil, err
+	}
+	return ownerID, nil
 }
 
 func loadConfig(opts Options) (*config.Config, error) {

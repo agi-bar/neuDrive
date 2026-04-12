@@ -318,6 +318,7 @@ func EnsureLocalDaemon(ctx context.Context, executable string, extraEnv map[stri
 
 	cmd := exec.Command(executable,
 		"server",
+		"--local-mode",
 		"--listen", listenAddr,
 		"--storage", cfg.Local.Storage,
 		"--sqlite-path", cfg.Local.SQLitePath,

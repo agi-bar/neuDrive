@@ -16,6 +16,7 @@ const DefaultTokenEnvVar = "AGENTHUB_TOKEN"
 
 type Options struct {
 	Storage        string
+	LocalMode      bool
 	SQLitePath     string
 	Token          string
 	TokenEnv       string
@@ -49,6 +50,7 @@ func RunStdio(ctx context.Context, opts Options) error {
 
 	app, err := appcore.Build(ctx, appcore.Options{
 		Storage:        storage,
+		LocalMode:      true,
 		SQLitePath:     opts.SQLitePath,
 		DatabaseURL:    opts.DatabaseURL,
 		JWTSecret:      opts.JWTSecret,

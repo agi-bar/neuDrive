@@ -124,7 +124,7 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 			respondInternalError(w, err)
 			return
 		}
-		respondOK(w, fileTreeEntryToNode(s.renderSystemSkillEntry(r.Context(), userID, trustLevelFromCtx(r.Context()), entry)))
+		respondOKWithLocalGitSync(w, fileTreeEntryToNode(s.renderSystemSkillEntry(r.Context(), userID, trustLevelFromCtx(r.Context()), entry)), s.syncLocalGitMirror(r.Context(), userID))
 		return
 	}
 
@@ -156,7 +156,7 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, fileTreeEntryToNode(s.renderSystemSkillEntry(r.Context(), userID, trustLevelFromCtx(r.Context()), entry)))
+	respondOKWithLocalGitSync(w, fileTreeEntryToNode(s.renderSystemSkillEntry(r.Context(), userID, trustLevelFromCtx(r.Context()), entry)), s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
@@ -189,7 +189,7 @@ func (s *Server) handleTreeDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "deleted", "path": hubpath.NormalizePublic(path)})
+	respondOKWithLocalGitSync(w, map[string]string{"status": "deleted", "path": hubpath.NormalizePublic(path)}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {

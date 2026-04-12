@@ -123,7 +123,7 @@ func (s *Server) HandleImportSkills(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*ImportResult, error) {
@@ -278,7 +278,7 @@ func (s *Server) HandleImportClaudeMemory(w http.ResponseWriter, r *http.Request
 		result.Imported++
 	}
 
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -324,7 +324,7 @@ func (s *Server) HandleImportProfile(w http.ResponseWriter, r *http.Request) {
 		result.Imported++
 	}
 
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -369,7 +369,7 @@ func (s *Server) HandleImportVault(w http.ResponseWriter, r *http.Request) {
 		result.Imported++
 	}
 
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -420,7 +420,7 @@ func (s *Server) HandleImportDevices(w http.ResponseWriter, r *http.Request) {
 		result.Imported++
 	}
 
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -534,7 +534,7 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -689,5 +689,5 @@ func (s *Server) HandleImportClaudeData(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }

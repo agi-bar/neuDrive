@@ -138,6 +138,17 @@ func (s *Store) init(ctx context.Context) error {
 			updated_at TEXT NOT NULL,
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
+		`CREATE TABLE IF NOT EXISTS local_git_mirrors (
+			user_id TEXT PRIMARY KEY,
+			root_path TEXT NOT NULL,
+			is_active INTEGER NOT NULL DEFAULT 1,
+			git_initialized_at TEXT,
+			last_synced_at TEXT,
+			last_error TEXT NOT NULL DEFAULT '',
+			created_at TEXT NOT NULL,
+			updated_at TEXT NOT NULL,
+			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
 		`CREATE TABLE IF NOT EXISTS vault_entries (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,

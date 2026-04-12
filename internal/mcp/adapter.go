@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
+	"github.com/agi-bar/agenthub/internal/localgitsync"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	"github.com/agi-bar/agenthub/internal/vault"
@@ -118,18 +119,33 @@ type MCPServer struct {
 	Scopes     []string
 	BaseURL    string
 
-	Connection  *services.ConnectionService
-	OAuth       *services.OAuthService
-	FileTree    *services.FileTreeService
-	Vault       *services.VaultService
-	VaultCrypto *vault.Vault
-	Memory      *services.MemoryService
-	Project     *services.ProjectService
-	Inbox       *services.InboxService
-	Device      *services.DeviceService
-	Dashboard   *services.DashboardService
-	Import      *services.ImportService
-	Token       *services.TokenService
+	Connection   *services.ConnectionService
+	OAuth        *services.OAuthService
+	FileTree     *services.FileTreeService
+	Vault        *services.VaultService
+	VaultCrypto  *vault.Vault
+	Memory       *services.MemoryService
+	Project      *services.ProjectService
+	Inbox        *services.InboxService
+	Device       *services.DeviceService
+	Dashboard    *services.DashboardService
+	Import       *services.ImportService
+	Token        *services.TokenService
+	LocalGitSync *localgitsync.Service
+}
+
+func (s *MCPServer) appendLocalGitSyncMessage(ctx context.Context, result string) string {
+	if s == nil || s.LocalGitSync == nil {
+		return result
+	}
+	info, _ := s.LocalGitSync.SyncActiveMirror(ctx, s.UserID)
+	if info == nil || !info.Enabled || strings.TrimSpace(info.Message) == "" {
+		return result
+	}
+	if strings.TrimSpace(result) == "" {
+		return info.Message
+	}
+	return result + "\n\n" + info.Message
 }
 
 func (s *MCPServer) HandleJSONRPC(req JSONRPCRequest) JSONRPCResponse {
@@ -460,7 +476,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err := s.Memory.UpsertProfile(ctx, s.UserID, category, content, "mcp"); err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
-		return "profile updated", false
+		return s.appendLocalGitSyncMessage(ctx, "profile updated"), false
 
 	case "search_memory":
 		query, _ := args["query"].(string)
@@ -529,7 +545,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		result, _ := json.MarshalIndent(project, "", "  ")
-		return string(result), false
+		return s.appendLocalGitSyncMessage(ctx, string(result)), false
 
 	case "get_project":
 		name, _ := args["name"].(string)
@@ -566,7 +582,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err := s.Project.AppendLog(ctx, project.ID, logEntry); err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
-		return "log entry added", false
+		return s.appendLocalGitSyncMessage(ctx, "log entry added"), false
 
 	case "list_directory":
 		path, _ := args["path"].(string)
@@ -612,7 +628,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if _, err := s.FileTree.Write(ctx, s.UserID, path, content, "text/markdown", s.TrustLevel); err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
-		return "file written", false
+		return s.appendLocalGitSyncMessage(ctx, "file written"), false
 
 	case "list_secrets":
 		scopes, err := s.Vault.ListScopes(ctx, s.UserID, s.TrustLevel)
@@ -685,7 +701,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if len(saved) == 0 {
 			return "error: no valid memory items to save", true
 		}
-		return fmt.Sprintf("saved %d memories: %s", len(saved), strings.Join(saved, ", ")), false
+		return s.appendLocalGitSyncMessage(ctx, fmt.Sprintf("saved %d memories: %s", len(saved), strings.Join(saved, ", "))), false
 
 	case "import_skill":
 		name, _ := args["name"].(string)
@@ -698,7 +714,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
-		return fmt.Sprintf("imported %d files for skill %q", count, name), false
+		return s.appendLocalGitSyncMessage(ctx, fmt.Sprintf("imported %d files for skill %q", count, name)), false
 
 	case "import_skills_archive":
 		archiveBase64, _ := args["archive_base64"].(string)
@@ -734,7 +750,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		payload, _ := json.MarshalIndent(result, "", "  ")
-		return string(payload), false
+		return s.appendLocalGitSyncMessage(ctx, string(payload)), false
 
 	case "create_sync_token":
 		if len(s.Scopes) > 0 && !models.HasScope(s.Scopes, models.ScopeAdmin) {
@@ -859,7 +875,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
-		return fmt.Sprintf("imported %d memory items", count), false
+		return s.appendLocalGitSyncMessage(ctx, fmt.Sprintf("imported %d memory items", count)), false
 
 	default:
 		return fmt.Sprintf("unknown tool: %s", params.Name), true

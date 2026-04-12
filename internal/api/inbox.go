@@ -87,7 +87,7 @@ func (s *Server) handleInboxSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondCreated(w, sent)
+	respondCreatedWithLocalGitSync(w, sent, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleInboxArchive(w http.ResponseWriter, r *http.Request) {
@@ -102,7 +102,8 @@ func (s *Server) handleInboxArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, ok := userIDFromCtx(r.Context()); !ok {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -112,7 +113,7 @@ func (s *Server) handleInboxArchive(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "archived", "id": idStr})
+	respondOKWithLocalGitSync(w, map[string]string{"status": "archived", "id": idStr}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleInboxSearch(w http.ResponseWriter, r *http.Request) {

@@ -72,6 +72,7 @@ agenthub platform ls
 agenthub connect codex
 agenthub ls codex
 agenthub import codex
+agenthub git init
 
 agenthub browse
 ```
@@ -83,6 +84,8 @@ agenthub browse
 - 本地 daemon 默认使用 SQLite，首次启动时会自动创建本地数据库
 - `agenthub browse` 会打开本地 dashboard，并自动附带本地 owner token
 - `agenthub files ls|cat` 可以快速检查 profile / memory / project context 是否已经导入
+- `agenthub git init [--output DIR]` 可以把当前本地 Hub 的非 secret 数据导出成一个已 `git init` 的本地目录
+- `agenthub git pull` 可以手动把当前 Hub 状态刷新到这个本地 Git 目录；同时之后新的 import / write 也会自动同步到这个目录
 
 也可以直接用：
 

@@ -279,7 +279,7 @@ func (a *claudeAdapter) init() *claudeAdapter {
 			"command",
 			claudeCommandEntrypoint,
 			[]string{"claude"},
-			[]string{"/agenthub export", "/agenthub import", "/agenthub list", "/agenthub status"},
+			[]string{"/agenthub export", "/agenthub import", "/agenthub list", "/agenthub status", "/agenthub git init", "/agenthub git pull"},
 			[]string{"connections", "skills", "projects", "prompts", "tools", "archives"},
 			[]Source{
 				{Domain: "connections", Label: "claude.json", Path: expandUser("~/.claude.json")},
@@ -322,7 +322,7 @@ func (a *claudeAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, 
 	connection.EntrypointType = "command"
 	connection.EntrypointPath = commandPath
 	connection.ManagedPaths = append(managedPaths, commandPath)
-	connection.ChatUsage = []string{"/agenthub export", "/agenthub import", "/agenthub list", "/agenthub status"}
+	connection.ChatUsage = []string{"/agenthub export", "/agenthub import", "/agenthub list", "/agenthub status", "/agenthub git init", "/agenthub git pull"}
 	_ = skillPath
 	return connection, nil
 }
@@ -345,7 +345,7 @@ func (a *codexAdapter) init() *codexAdapter {
 			"skill",
 			codexEntrypointDir,
 			nil,
-			[]string{"$agenthub export", "$agenthub import", "$agenthub list", "$agenthub status"},
+			[]string{"$agenthub export", "$agenthub import", "$agenthub list", "$agenthub status", "$agenthub git init", "$agenthub git pull"},
 			[]string{"connections", "skills", "profile", "memory", "projects", "automations", "archives"},
 			[]Source{
 				{Domain: "profile", Label: "config.toml", Path: expandUser("~/.codex/config.toml")},
@@ -397,7 +397,7 @@ func (a *codexAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, e
 	connection.EntrypointType = "skill"
 	connection.EntrypointPath = skillPath
 	connection.ManagedPaths = managedPaths
-	connection.ChatUsage = []string{"$agenthub export", "$agenthub import", "$agenthub list", "$agenthub status"}
+	connection.ChatUsage = []string{"$agenthub export", "$agenthub import", "$agenthub list", "$agenthub status", "$agenthub git init", "$agenthub git pull"}
 	return connection, nil
 }
 func (a *codexAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
@@ -681,7 +681,8 @@ func installManagedClaudeCommand(targetPath string) (string, error) {
 		"Use the installed `agenthub` skill at `~/.claude/skills/agenthub/SKILL.md`.",
 		"",
 		"Treat the first argument after `/agenthub` as the subcommand.",
-		"Supported subcommands: `export`, `import`, `list`, `status`, `help`.",
+		"Supported subcommands: `export`, `import`, `git`, `list`, `status`, `help`.",
+		"Use `/agenthub git init` to create the local Git mirror and `/agenthub git pull` to refresh it.",
 		"",
 		"1. Read `~/.claude/skills/agenthub/SKILL.md`.",
 		"2. Read the matching command document under `~/.claude/skills/agenthub/commands/`.",

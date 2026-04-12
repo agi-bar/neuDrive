@@ -139,7 +139,7 @@ func (s *Server) handleRegisterDevice(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondCreated(w, registered)
+	respondCreatedWithLocalGitSync(w, registered, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func respondDeviceCallError(w http.ResponseWriter, err error) {

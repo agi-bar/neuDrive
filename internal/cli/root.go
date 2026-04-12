@@ -22,9 +22,10 @@ import (
 	"github.com/agi-bar/agenthub/internal/app/appcore"
 	"github.com/agi-bar/agenthub/internal/app/mcpapp"
 	"github.com/agi-bar/agenthub/internal/app/serverapp"
+	"github.com/agi-bar/agenthub/internal/localgitsync"
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/platforms"
 	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/synccli"
 )
 
@@ -67,6 +68,8 @@ func Run(args []string) int {
 		return runImport(args[1:])
 	case "export":
 		return runExport(args[1:])
+	case "git":
+		return runGit(args[1:])
 	case "files":
 		return runFiles(args[1:])
 	case "daemon":
@@ -94,6 +97,8 @@ Usage:
   agenthub disconnect <platform>
   agenthub import <platform> [--mode agent|files|all] [--zip FILE]
   agenthub export <platform> [--output DIR]
+  agenthub git init [--output DIR]
+  agenthub git pull
   agenthub files ls [path]
   agenthub files cat <path>
   agenthub sync <subcommand>
@@ -114,6 +119,7 @@ func runServer(args []string) int {
 	jwtSecret := fs.String("jwt-secret", "", "JWT secret override")
 	vaultKey := fs.String("vault-master-key", "", "vault master key override")
 	publicBaseURL := fs.String("public-base-url", "", "public base URL override")
+	localMode := fs.Bool("local-mode", false, "run the server in local mode")
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -126,6 +132,7 @@ func runServer(args []string) int {
 	defer stop()
 	if err := serverapp.Run(ctx, serverapp.Options{
 		Storage:        selectedStorage,
+		LocalMode:      *localMode,
 		SQLitePath:     *sqlitePath,
 		ListenAddr:     *listen,
 		DatabaseURL:    *databaseURL,
@@ -167,6 +174,7 @@ func runMCP(args []string) int {
 	selectedStorage := chooseStorageBackend(appcore.DefaultLocalStorage, *storage, *sqlitePath, *databaseURL)
 	if err := mcpapp.RunStdio(context.Background(), mcpapp.Options{
 		Storage:        selectedStorage,
+		LocalMode:      true,
 		SQLitePath:     *sqlitePath,
 		Token:          *token,
 		TokenEnv:       *tokenEnv,
@@ -604,6 +612,11 @@ func runImport(args []string) int {
 			result.Mode,
 		)
 	}
+	if info, err := syncLocalGitMirrorIfConfigured(ctx, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "local git mirror sync: %v\n", err)
+	} else {
+		printLocalGitSyncMessage(info)
+	}
 	return 0
 }
 
@@ -661,6 +674,90 @@ func runExport(args []string) int {
 		return 1
 	}
 	fmt.Printf("Exported %d files (%d bytes) from /platforms/%s to %s.\n", result.Files, result.Bytes, result.Platform, result.OutputRoot)
+	return 0
+}
+
+func runGit(args []string) int {
+	if len(args) == 0 || isHelpArg(args[:1]) {
+		fmt.Println("usage: agenthub git init [--output DIR]\n       agenthub git pull")
+		return 0
+	}
+	switch args[0] {
+	case "init":
+		fs := flag.NewFlagSet("git init", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		output := fs.String("output", "", "output directory for the local Git mirror")
+		if err := fs.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return 0
+			}
+			return 2
+		}
+		if fs.NArg() != 0 {
+			fmt.Fprintln(os.Stderr, "usage: agenthub git init [--output DIR]")
+			return 2
+		}
+		return runGitInit(*output)
+	case "pull":
+		fs := flag.NewFlagSet("git pull", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		if err := fs.Parse(args[1:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return 0
+			}
+			return 2
+		}
+		if fs.NArg() != 0 {
+			fmt.Fprintln(os.Stderr, "usage: agenthub git pull")
+			return 2
+		}
+		return runGitPull()
+	default:
+		fmt.Fprintf(os.Stderr, "unknown git subcommand %q\n\n", args[0])
+		fmt.Println("usage: agenthub git init [--output DIR]\n       agenthub git pull")
+		return 2
+	}
+}
+
+func runGitInit(output string) int {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "prepare local git mirror: %v\n", err)
+		return 1
+	}
+	var info localgitsync.SyncInfo
+	if err := localAPIPostJSON(ctx, state.APIBase, token, "/agent/local-git-mirror/register", map[string]string{"output_root": output}, &info); err != nil {
+		fmt.Fprintf(os.Stderr, "git init: %v\n", err)
+		return 1
+	}
+
+	fmt.Printf("本地 Git 镜像目录: %s\n", info.Path)
+	fmt.Println("Secrets 未导出；vault 仅导出了 scope 元数据。")
+	printLocalGitSyncMessage(&info)
+	fmt.Println("如需继续同步到 GitHub，请在该目录执行 git add / git commit / git remote add origin / git push。")
+	return 0
+}
+
+func runGitPull() int {
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	info, err := syncLocalGitMirrorIfConfigured(ctx, nil)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "git pull: %v\n", err)
+		return 1
+	}
+	if info == nil || !info.Enabled || strings.TrimSpace(info.Path) == "" {
+		fmt.Fprintln(os.Stderr, "git pull: no local Git mirror is configured; run `agenthub git init [--output DIR]` first")
+		return 1
+	}
+
+	fmt.Printf("本地 Git 镜像目录: %s\n", info.Path)
+	printLocalGitSyncMessage(info)
+	fmt.Println("如需继续同步到 GitHub，请在该目录执行 git add / git commit / git remote add origin / git push。")
 	return 0
 }
 
@@ -1027,16 +1124,11 @@ func ensureLocalOwnerAccessForAPI(ctx context.Context) (*runtimecfg.CLIConfig, *
 	return cfg, state, cfg.Local.OwnerToken, nil
 }
 
-func ensureOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CLIConfig) error {
+func ensureOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CLIConfig, apiBase string) error {
 	if strings.TrimSpace(cfg.Local.OwnerToken) != "" {
 		return nil
 	}
-	hub, err := sqlite.OpenClient(ctx, cfg)
-	if err != nil {
-		return err
-	}
-	defer hub.Close()
-	tokenResp, err := hub.CreateOwnerToken(ctx)
+	tokenResp, err := bootstrapLocalOwnerToken(ctx, apiBase)
 	if err != nil {
 		return err
 	}
@@ -1049,7 +1141,7 @@ func ensureOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CL
 func ensureUsableOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CLIConfig, apiBase string) error {
 	const maxAttempts = 3
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		if err := ensureOwnerToken(ctx, configPath, cfg); err != nil {
+		if err := ensureOwnerToken(ctx, configPath, cfg, apiBase); err != nil {
 			return err
 		}
 		if err := validateOwnerToken(ctx, apiBase, cfg.Local.OwnerToken); err == nil {
@@ -1062,10 +1154,18 @@ func ensureUsableOwnerToken(ctx context.Context, configPath string, cfg *runtime
 			return err
 		}
 	}
-	if err := ensureOwnerToken(ctx, configPath, cfg); err != nil {
+	if err := ensureOwnerToken(ctx, configPath, cfg, apiBase); err != nil {
 		return err
 	}
 	return validateOwnerToken(ctx, apiBase, cfg.Local.OwnerToken)
+}
+
+func bootstrapLocalOwnerToken(ctx context.Context, apiBase string) (*models.CreateTokenResponse, error) {
+	var tokenResp models.CreateTokenResponse
+	if err := localAPIPostJSON(ctx, apiBase, "", "/api/local/owner-token", nil, &tokenResp); err != nil {
+		return nil, err
+	}
+	return &tokenResp, nil
 }
 
 func validateOwnerToken(ctx context.Context, apiBase, token string) error {
@@ -1096,6 +1196,29 @@ func ensureCurrentLocalDaemon(ctx context.Context, executable, configPath string
 		return nil, nil, err
 	}
 	return cfg, state, nil
+}
+
+func syncLocalGitMirrorIfConfigured(ctx context.Context, _ *runtimecfg.CLIConfig) (*localgitsync.SyncInfo, error) {
+	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var info localgitsync.SyncInfo
+	if err := localAPIPostJSON(ctx, state.APIBase, token, "/agent/local-git-mirror/sync", nil, &info); err != nil {
+		return nil, err
+	}
+	return &info, nil
+}
+
+func printLocalGitSyncMessage(info *localgitsync.SyncInfo) {
+	if info == nil || !info.Enabled || strings.TrimSpace(info.Message) == "" {
+		return
+	}
+	if info.Synced {
+		fmt.Println(info.Message)
+		return
+	}
+	fmt.Fprintln(os.Stderr, info.Message)
 }
 
 func isLocalDaemonCompatibilityError(err error) bool {
@@ -1161,27 +1284,48 @@ type localAPIEnvelope struct {
 }
 
 func localAPIGet(ctx context.Context, apiBase, token, apiPath string, out any) error {
+	return localAPIJSON(ctx, http.MethodGet, apiBase, token, apiPath, nil, out)
+}
+
+func localAPIPostJSON(ctx context.Context, apiBase, token, apiPath string, requestBody any, out any) error {
+	return localAPIJSON(ctx, http.MethodPost, apiBase, token, apiPath, requestBody, out)
+}
+
+func localAPIJSON(ctx context.Context, method, apiBase, token, apiPath string, requestBody any, out any) error {
 	fullURL, err := joinAPIURL(apiBase, apiPath)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fullURL, nil)
+	var reader io.Reader
+	if requestBody != nil {
+		payload, err := json.Marshal(requestBody)
+		if err != nil {
+			return err
+		}
+		reader = strings.NewReader(string(payload))
+	}
+	req, err := http.NewRequestWithContext(ctx, method, fullURL, reader)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Authorization", "Bearer "+token)
+	if strings.TrimSpace(token) != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	if requestBody != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
 	}
 	defer resp.Body.Close()
-	body, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return err
 	}
 	var envelope localAPIEnvelope
-	if err := json.Unmarshal(body, &envelope); err != nil {
-		snippet := strings.TrimSpace(string(body))
+	if err := json.Unmarshal(respBody, &envelope); err != nil {
+		snippet := strings.TrimSpace(string(respBody))
 		if len(snippet) > 200 {
 			snippet = snippet[:200] + "..."
 		}

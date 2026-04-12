@@ -13,6 +13,7 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/config"
+	"github.com/agi-bar/agenthub/internal/localgitsync"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	vaultpkg "github.com/agi-bar/agenthub/internal/vault"
@@ -56,6 +57,8 @@ type Server struct {
 	CollaborationService *services.CollaborationService
 	WebhookService       *services.WebhookService
 	OAuthService         *services.OAuthService
+	LocalGitSync         *localgitsync.Service
+	LocalOwnerID         uuid.UUID
 	Vault                *vaultpkg.Vault
 	AuthHandler          *auth.Handler
 	Config               *config.Config
@@ -86,6 +89,8 @@ type ServerDeps struct {
 	CollaborationService *services.CollaborationService
 	WebhookService       *services.WebhookService
 	OAuthService         *services.OAuthService
+	LocalGitSync         *localgitsync.Service
+	LocalOwnerID         uuid.UUID
 	Vault                *vaultpkg.Vault
 	JWTSecret            string
 	GitHubClientID       string
@@ -170,6 +175,8 @@ func NewServerWithDeps(deps ServerDeps) *Server {
 		CollaborationService: deps.CollaborationService,
 		WebhookService:       deps.WebhookService,
 		OAuthService:         deps.OAuthService,
+		LocalGitSync:         deps.LocalGitSync,
+		LocalOwnerID:         deps.LocalOwnerID,
 		ExportService:        deps.ExportService,
 		Vault:                deps.Vault,
 		JWTSecret:            deps.JWTSecret,
@@ -203,6 +210,7 @@ func (s *Server) setupRoutes() {
 	// Health + public config
 	r.Get("/api/health", s.healthCheck)
 	r.Get("/api/config", s.handlePublicConfig)
+	r.Post("/api/local/owner-token", s.handleBootstrapLocalOwnerToken)
 	r.Get("/gpt/openapi.json", s.handleGPTOpenAPISchema)
 	r.Post("/test/post", s.handleTestPost)
 
@@ -364,6 +372,8 @@ func (s *Server) setupRoutes() {
 		r.Post("/agent/projects/{name}/log", s.handleAgentAppendProjectLog)
 		r.Get("/agent/dashboard/stats", s.handleDashboardStats)
 		r.Get("/agent/memory/profile", s.handleAgentGetProfile)
+		r.Post("/agent/local-git-mirror/register", s.handleAgentRegisterLocalGitMirror)
+		r.Post("/agent/local-git-mirror/sync", s.handleAgentSyncLocalGitMirror)
 
 		// Agent cross-user shared access
 		r.Get("/agent/shared/{owner_slug}/tree/*", s.handleAgentSharedTree)
@@ -637,7 +647,7 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if s.Storage != "" {
 		payload["storage"] = s.Storage
-		payload["local_mode"] = s.Storage == "sqlite"
+		payload["local_mode"] = s.isLocalMode()
 	}
 	respondOK(w, payload)
 }
@@ -725,7 +735,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	respondCreated(w, project)
+	respondCreatedWithLocalGitSync(w, project, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
@@ -812,7 +822,7 @@ func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	respondCreated(w, map[string]string{"status": "appended", "project": name})
+	respondCreatedWithLocalGitSync(w, map[string]string{"status": "appended", "project": name}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
@@ -838,7 +848,7 @@ func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 
-	respondOK(w, map[string]string{"status": "archived", "name": name})
+	respondOKWithLocalGitSync(w, map[string]string{"status": "archived", "name": name}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) {
@@ -877,11 +887,11 @@ func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) 
 		})
 	}
 
-	respondOK(w, map[string]interface{}{
+	respondOKWithLocalGitSync(w, map[string]interface{}{
 		"status":     "summarized",
 		"name":       name,
 		"context_md": md,
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -1045,7 +1055,7 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, entry)
+	respondOKWithLocalGitSync(w, entry, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentTreeSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -1171,7 +1181,7 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	respondCreated(w, sent)
+	respondCreatedWithLocalGitSync(w, sent, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {

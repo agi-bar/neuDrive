@@ -72,6 +72,9 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	if !strings.Contains(stdout, filepath.Join(home, ".agents", "skills", "agenthub")) {
 		t.Fatalf("expected codex skill path in output: %s", stdout)
 	}
+	if !strings.Contains(stdout, "$agenthub git init") || !strings.Contains(stdout, "$agenthub git pull") {
+		t.Fatalf("expected codex git chat usage in output: %s", stdout)
+	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex")
 	if !strings.Contains(stdout, "Imported codex using mode=agent") {
@@ -114,6 +117,9 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	}
 	if !strings.Contains(stdout, filepath.Join(home, ".claude", "commands", "agenthub.md")) {
 		t.Fatalf("expected claude command path in output: %s", stdout)
+	}
+	if !strings.Contains(stdout, "/agenthub git init") || !strings.Contains(stdout, "/agenthub git pull") {
+		t.Fatalf("expected claude git chat usage in output: %s", stdout)
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude")
@@ -186,6 +192,61 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	}
 
 	mustRunAgenthub(t, binary, env, "daemon", "stop")
+}
+
+func TestAgenthubGitInitPullAndAutoSync(t *testing.T) {
+	binary := buildAgenthubBinary(t)
+	env, _, _, _, workDir := isolatedAgenthubEnv(t)
+	home := envValue(env, "HOME")
+	seedCLIPlatformFixtures(t, home)
+	env, _ = installCLIPlatformShims(t, env, "codex")
+
+	mustRunAgenthub(t, binary, env, "connect", "codex")
+	stdout, _ := mustRunAgenthub(t, binary, env, "import", "codex")
+	if !strings.Contains(stdout, "Imported codex using mode=agent") {
+		t.Fatalf("unexpected initial import output: %s", stdout)
+	}
+
+	mirrorDir := filepath.Join(workDir, "git-mirror")
+	stdout, _ = mustRunAgenthub(t, binary, env, "git", "init", "--output", mirrorDir)
+	if !strings.Contains(stdout, "本地 Git 镜像目录: "+mirrorDir) {
+		t.Fatalf("expected mirror path in output: %s", stdout)
+	}
+	if !strings.Contains(stdout, "已同步到本地 Git 目录: "+mirrorDir) {
+		t.Fatalf("expected sync message in output: %s", stdout)
+	}
+	for _, expected := range []string{
+		filepath.Join(mirrorDir, ".git"),
+		filepath.Join(mirrorDir, "README.md"),
+		filepath.Join(mirrorDir, "_agenthub", "metadata.json"),
+		filepath.Join(mirrorDir, "memory", "profile", "codex-agent.md"),
+	} {
+		if _, err := os.Stat(expected); err != nil {
+			t.Fatalf("expected mirror artifact %s: %v", expected, err)
+		}
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex", "--mode", "files")
+	if !strings.Contains(stdout, "已同步到本地 Git 目录: "+mirrorDir) {
+		t.Fatalf("expected auto-sync message after import: %s", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(mirrorDir, "platforms", "codex", "profile", "config.toml")); err != nil {
+		t.Fatalf("expected mirrored codex platform file: %v", err)
+	}
+
+	if err := os.Remove(filepath.Join(mirrorDir, "memory", "profile", "codex-agent.md")); err != nil {
+		t.Fatalf("remove mirrored file before git pull: %v", err)
+	}
+	stdout, _ = mustRunAgenthub(t, binary, env, "git", "pull")
+	if !strings.Contains(stdout, "本地 Git 镜像目录: "+mirrorDir) {
+		t.Fatalf("expected mirror path after git pull: %s", stdout)
+	}
+	if !strings.Contains(stdout, "已同步到本地 Git 目录: "+mirrorDir) {
+		t.Fatalf("expected sync message after git pull: %s", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(mirrorDir, "memory", "profile", "codex-agent.md")); err != nil {
+		t.Fatalf("expected git pull to restore mirrored file: %v", err)
+	}
 }
 
 func writeTestSkillZip(t *testing.T, target string, files map[string][]byte) {

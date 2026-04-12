@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -17,6 +18,7 @@ import (
 
 type Options struct {
 	Storage            string
+	LocalMode          bool
 	SQLitePath         string
 	ListenAddr         string
 	DatabaseURL        string
@@ -31,6 +33,9 @@ type Options struct {
 }
 
 func Run(ctx context.Context, opts Options) error {
+	if !opts.LocalMode && strings.TrimSpace(os.Getenv("AGENTHUB_LOCAL_MODE")) == "1" {
+		opts.LocalMode = true
+	}
 	storage := appcore.ResolveStorageBackend(opts.Storage, opts.SQLitePath, opts.DatabaseURL, appcore.DefaultServerStorage)
 	if storage == "sqlite" {
 		sqlitePath := strings.TrimSpace(opts.SQLitePath)
@@ -47,6 +52,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	app, err := appcore.Build(ctx, appcore.Options{
 		Storage:            storage,
+		LocalMode:          opts.LocalMode,
 		SQLitePath:         opts.SQLitePath,
 		DatabaseURL:        opts.DatabaseURL,
 		JWTSecret:          opts.JWTSecret,

@@ -101,13 +101,13 @@ func (s *Server) handleImportSkill(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, hubpath.NormalizePublic("/skills/"+req.Name+"/"+relPath))
 	}
 
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
 			Paths:         paths,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -164,13 +164,13 @@ func (s *Server) handleImportClaudeMemoryV2(w http.ResponseWriter, r *http.Reque
 		}
 	}
 
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
 			Paths:         paths,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -220,13 +220,13 @@ func (s *Server) handleImportProfileV2(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: len(profile),
 			Paths:         paths,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -272,13 +272,13 @@ func (s *Server) handleImportBulk(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, hubpath.NormalizePublic(p))
 	}
 
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
 			Paths:         paths,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 // ---------------------------------------------------------------------------
@@ -352,13 +352,13 @@ func (s *Server) handleAgentImportSkill(w http.ResponseWriter, r *http.Request) 
 		paths = append(paths, hubpath.NormalizePublic("/skills/"+req.Name+"/"+relPath))
 	}
 
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
 			Paths:         paths,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), *userID))
 }
 
 func (s *Server) handleAgentImportSkills(w http.ResponseWriter, r *http.Request) {
@@ -375,7 +375,7 @@ func (s *Server) handleAgentImportSkills(w http.ResponseWriter, r *http.Request)
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentImportClaudeMemory(w http.ResponseWriter, r *http.Request) {
@@ -406,12 +406,12 @@ func (s *Server) handleAgentImportClaudeMemory(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), *userID))
 }
 
 func (s *Server) handleAgentImportBulk(w http.ResponseWriter, r *http.Request) {
@@ -462,13 +462,13 @@ func (s *Server) handleAgentImportBulk(w http.ResponseWriter, r *http.Request) {
 		paths = append(paths, hubpath.NormalizePublic(p))
 	}
 
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: count,
 			Paths:         paths,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), *userID))
 }
 
 // ---------------------------------------------------------------------------

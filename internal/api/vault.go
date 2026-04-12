@@ -115,7 +115,7 @@ func (s *Server) HandleVaultWrite(w http.ResponseWriter, r *http.Request) {
 		Data:  req.Data,
 	}
 
-	respondOK(w, entry)
+	respondOKWithLocalGitSync(w, entry, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) HandleVaultDelete(w http.ResponseWriter, r *http.Request) {
@@ -136,5 +136,5 @@ func (s *Server) HandleVaultDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "deleted", "scope": scope})
+	respondOKWithLocalGitSync(w, map[string]string{"status": "deleted", "scope": scope}, s.syncLocalGitMirror(r.Context(), userID))
 }

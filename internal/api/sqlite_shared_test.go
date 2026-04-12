@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -16,6 +17,7 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/config"
+	"github.com/agi-bar/agenthub/internal/localgitsync"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
@@ -24,9 +26,10 @@ import (
 )
 
 type testEnvelope struct {
-	OK    bool            `json:"ok"`
-	Data  json.RawMessage `json:"data"`
-	Error struct {
+	OK           bool            `json:"ok"`
+	Data         json.RawMessage `json:"data"`
+	LocalGitSync json.RawMessage `json:"local_git_sync,omitempty"`
+	Error        struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
@@ -82,6 +85,7 @@ func newTestHTTPServer(t *testing.T) (*httptest.Server, *sqlitestorage.Store, st
 	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
+	localGitSyncSvc := localgitsync.New(store, v)
 	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
 		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
 	}
@@ -91,6 +95,7 @@ func newTestHTTPServer(t *testing.T) (*httptest.Server, *sqlitestorage.Store, st
 	s := NewServerWithDeps(ServerDeps{
 		Storage:            "sqlite",
 		Config:             cfg,
+		LocalOwnerID:       user.ID,
 		UserService:        userSvc,
 		AuthService:        authSvc,
 		ConnectionService:  connSvc,
@@ -107,6 +112,7 @@ func newTestHTTPServer(t *testing.T) (*httptest.Server, *sqlitestorage.Store, st
 		ExportService:      exportSvc,
 		SyncService:        syncSvc,
 		OAuthService:       oauthSvc,
+		LocalGitSync:       localGitSyncSvc,
 		Vault:              v,
 		JWTSecret:          cfg.JWTSecret,
 		GitHubClientID:     cfg.GithubClientID,
@@ -164,6 +170,36 @@ func TestSQLiteSharedServerHealthAndAuth(t *testing.T) {
 	}
 	if !strings.Contains(rootBody.String(), "<!doctype html>") && !strings.Contains(strings.ToLower(rootBody.String()), "<html") {
 		t.Fatalf("expected embedded frontend HTML, got %q", rootBody.String())
+	}
+}
+
+func TestPublicConfigUsesLocalModeInsteadOfStorageBackend(t *testing.T) {
+	s := NewServerWithDeps(ServerDeps{
+		Storage:      "postgres",
+		LocalOwnerID: uuid.New(),
+		Config: &config.Config{
+			CORSOrigins: []string{"http://localhost:3000"},
+			RateLimit:   100,
+			MaxBodySize: 10 * 1024 * 1024,
+		},
+	})
+	ts := httptest.NewServer(s.Router)
+	defer ts.Close()
+
+	resp, err := http.Get(ts.URL + "/api/config")
+	if err != nil {
+		t.Fatalf("GET /api/config: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var payload testEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode config: %v", err)
+	}
+	for _, expected := range []string{`"storage":"postgres"`, `"local_mode":true`} {
+		if !bytes.Contains(payload.Data, []byte(expected)) {
+			t.Fatalf("expected %q in config payload: %s", expected, string(payload.Data))
+		}
 	}
 }
 
@@ -379,6 +415,43 @@ func TestSQLiteSharedServerWebDashboardEndpoints(t *testing.T) {
 	status, conflicts := doJSON(t, http.MethodGet, ts.URL+"/api/memory/conflicts", adminToken, nil)
 	if status != http.StatusOK || !conflicts.OK || !bytes.Contains(conflicts.Data, []byte(`"conflicts":[]`)) {
 		t.Fatalf("unexpected conflicts payload: status=%d body=%+v", status, conflicts)
+	}
+}
+
+func TestSQLiteSharedServerWriteResponsesIncludeLocalGitSync(t *testing.T) {
+	ts, store, adminToken, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	v, err := vault.NewVault(strings.Repeat("0", 64))
+	if err != nil {
+		t.Fatalf("NewVault: %v", err)
+	}
+	mirrorDir := filepath.Join(t.TempDir(), "mirror")
+	mirrorSvc := localgitsync.New(store, v)
+	if _, err := mirrorSvc.RegisterMirrorAndSync(ctx, user.ID, mirrorDir); err != nil {
+		t.Fatalf("RegisterMirrorAndSync: %v", err)
+	}
+
+	status, body := doJSON(t, http.MethodPut, ts.URL+"/api/memory/profile", adminToken, []byte(`{"preferences":{"preferences":"Keep it concise."}}`))
+	if status != http.StatusOK || !body.OK {
+		t.Fatalf("profile update failed: status=%d body=%+v", status, body)
+	}
+	for _, expected := range []string{`"enabled":true`, `"synced":true`, `"path":"` + mirrorDir + `"`, `已同步到本地 Git 目录:`} {
+		if !bytes.Contains(body.LocalGitSync, []byte(expected)) {
+			t.Fatalf("expected %q in local_git_sync payload: %s", expected, string(body.LocalGitSync))
+		}
+	}
+
+	mirrored, err := os.ReadFile(filepath.Join(mirrorDir, "memory", "profile", "preferences.md"))
+	if err != nil {
+		t.Fatalf("read mirrored profile: %v", err)
+	}
+	if !bytes.Contains(mirrored, []byte("Keep it concise.")) {
+		t.Fatalf("unexpected mirrored profile content: %s", string(mirrored))
 	}
 }
 

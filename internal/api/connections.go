@@ -82,10 +82,10 @@ func (s *Server) handleConnectionsCreate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	respondCreated(w, map[string]interface{}{
+	respondCreatedWithLocalGitSync(w, map[string]interface{}{
 		"connection": conn,
 		"api_key":    rawKey,
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleConnectionsUpdate(w http.ResponseWriter, r *http.Request) {
@@ -100,7 +100,8 @@ func (s *Server) handleConnectionsUpdate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, ok := userIDFromCtx(r.Context()); !ok {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -117,7 +118,7 @@ func (s *Server) handleConnectionsUpdate(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	respondOK(w, conn)
+	respondOKWithLocalGitSync(w, conn, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleConnectionsDelete(w http.ResponseWriter, r *http.Request) {
@@ -132,7 +133,8 @@ func (s *Server) handleConnectionsDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	if _, ok := userIDFromCtx(r.Context()); !ok {
+	userID, ok := userIDFromCtx(r.Context())
+	if !ok {
 		respondUnauthorized(w)
 		return
 	}
@@ -142,5 +144,5 @@ func (s *Server) handleConnectionsDelete(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "deleted", "id": idStr})
+	respondOKWithLocalGitSync(w, map[string]string{"status": "deleted", "id": idStr}, s.syncLocalGitMirror(r.Context(), userID))
 }

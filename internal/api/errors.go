@@ -27,8 +27,9 @@ type APIError struct {
 
 // APISuccess is the standard success response envelope.
 type APISuccess struct {
-	OK   bool        `json:"ok"`
-	Data interface{} `json:"data"`
+	OK           bool        `json:"ok"`
+	Data         interface{} `json:"data"`
+	LocalGitSync interface{} `json:"local_git_sync,omitempty"`
 }
 
 // respondOK writes a 200 response with the data wrapped in an APISuccess envelope.

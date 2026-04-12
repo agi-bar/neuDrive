@@ -44,7 +44,7 @@ func (s *Server) handleAgentImportBundle(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	respondOK(w, result)
+	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentPreviewBundle(w http.ResponseWriter, r *http.Request) {

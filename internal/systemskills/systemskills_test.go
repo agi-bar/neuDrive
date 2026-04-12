@@ -210,6 +210,7 @@ func TestExportSkillFilesAgentHub(t *testing.T) {
 	for _, required := range []string{
 		"SKILL.md",
 		"commands/export.md",
+		"commands/git.md",
 		"commands/import.md",
 		"commands/list.md",
 		"commands/status.md",

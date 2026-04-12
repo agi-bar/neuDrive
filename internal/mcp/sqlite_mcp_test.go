@@ -6,10 +6,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/agi-bar/agenthub/internal/localgitsync"
 	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/services"
 	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
@@ -36,15 +38,16 @@ func setupSQLiteMCPServer(t *testing.T) (context.Context, *sqlitestorage.Store, 
 	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
 	importSvc := services.NewImportService(nil, fileTree, memory, nil)
 	s := &MCPServer{
-		FileTree:   fileTree,
-		Memory:     memory,
-		Project:    project,
-		Import:     importSvc,
-		Token:      tokenSvc,
-		UserID:     user.ID,
-		TrustLevel: models.TrustLevelFull,
-		Scopes:     []string{models.ScopeAdmin},
-		BaseURL:    "http://127.0.0.1:42690",
+		FileTree:     fileTree,
+		Memory:       memory,
+		Project:      project,
+		Import:       importSvc,
+		Token:        tokenSvc,
+		LocalGitSync: localgitsync.New(store, nil),
+		UserID:       user.ID,
+		TrustLevel:   models.TrustLevelFull,
+		Scopes:       []string{models.ScopeAdmin},
+		BaseURL:      "http://127.0.0.1:42690",
 	}
 	return ctx, store, user, s
 }
@@ -195,6 +198,37 @@ func TestServerCoreToolsImportSkillPreservesFiles(t *testing.T) {
 	}
 	if !strings.Contains(guide.Content, "Use the helper.") {
 		t.Fatalf("unexpected guide content: %q", guide.Content)
+	}
+}
+
+func TestServerCoreToolsAppendLocalGitSyncMessage(t *testing.T) {
+	ctx, _, user, s := setupSQLiteMCPServer(t)
+
+	mirrorDir := filepath.Join(t.TempDir(), "mirror")
+	if _, err := s.LocalGitSync.RegisterMirrorAndSync(ctx, user.ID, mirrorDir); err != nil {
+		t.Fatalf("RegisterMirrorAndSync: %v", err)
+	}
+
+	resp := s.HandleJSONRPC(JSONRPCRequest{
+		JSONRPC: "2.0",
+		ID:      1,
+		Method:  "tools/call",
+		Params:  mustMarshalParams(t, ToolCallParams{Name: "write_file", Arguments: map[string]interface{}{"path": "/notes/mirror.md", "content": "hello mirror"}}),
+	})
+	if resp.Error != nil {
+		t.Fatalf("write_file error: %+v", resp.Error)
+	}
+	out := extractToolText(t, resp)
+	if !strings.Contains(out, "file written") || !strings.Contains(out, "已同步到本地 Git 目录: "+mirrorDir) {
+		t.Fatalf("unexpected write_file output: %s", out)
+	}
+
+	data, err := os.ReadFile(filepath.Join(mirrorDir, "notes", "mirror.md"))
+	if err != nil {
+		t.Fatalf("read mirrored file: %v", err)
+	}
+	if string(data) != "hello mirror" {
+		t.Fatalf("unexpected mirrored file content: %q", string(data))
 	}
 }
 

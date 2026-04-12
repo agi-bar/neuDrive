@@ -93,7 +93,7 @@ func (s *Server) handleRolesCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondCreated(w, role)
+	respondCreatedWithLocalGitSync(w, role, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleRolesDelete(w http.ResponseWriter, r *http.Request) {
@@ -114,5 +114,5 @@ func (s *Server) handleRolesDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]string{"status": "deleted", "name": name})
+	respondOKWithLocalGitSync(w, map[string]string{"status": "deleted", "name": name}, s.syncLocalGitMirror(r.Context(), userID))
 }

@@ -24,6 +24,8 @@ Use this umbrella skill when the user wants to work with Agent Hub from inside a
 
 - `export`
   Read `/skills/agenthub/commands/export.md`
+- `git`
+  Read `/skills/agenthub/commands/git.md`
 - `import`
   Read `/skills/agenthub/commands/import.md`
 - `list`

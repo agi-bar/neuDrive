@@ -114,7 +114,7 @@ func (s *Server) handleMemoryProfileUpdate(w http.ResponseWriter, r *http.Reques
 		Preferences: req.Preferences,
 	}
 
-	respondOK(w, profile)
+	respondOKWithLocalGitSync(w, profile, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleWriteScratch(w http.ResponseWriter, r *http.Request) {
@@ -150,5 +150,5 @@ func (s *Server) handleWriteScratch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondCreated(w, map[string]string{"status": "written"})
+	respondCreatedWithLocalGitSync(w, map[string]string{"status": "written"}, s.syncLocalGitMirror(r.Context(), userID))
 }

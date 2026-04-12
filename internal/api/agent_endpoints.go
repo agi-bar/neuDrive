@@ -84,7 +84,7 @@ func (s *Server) handleAgentVaultWrite(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	respondOK(w, map[string]interface{}{"scope": scope, "data": req.Data})
+	respondOKWithLocalGitSync(w, map[string]interface{}{"scope": scope, "data": req.Data}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentUpdateProfile(w http.ResponseWriter, r *http.Request) {
@@ -134,7 +134,7 @@ func (s *Server) handleAgentUpdateProfile(w http.ResponseWriter, r *http.Request
 		respondInternalError(w, err)
 		return
 	}
-	respondOK(w, profile)
+	respondOKWithLocalGitSync(w, profile, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentListProjects(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +180,7 @@ func (s *Server) handleAgentCreateProject(w http.ResponseWriter, r *http.Request
 			"action":  "created",
 		})
 	}
-	respondCreated(w, project)
+	respondCreatedWithLocalGitSync(w, project, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentListSkills(w http.ResponseWriter, r *http.Request) {
@@ -265,7 +265,7 @@ func (s *Server) handleAgentAppendProjectLog(w http.ResponseWriter, r *http.Requ
 		})
 	}
 
-	respondCreated(w, map[string]string{"status": "appended", "project": name})
+	respondCreatedWithLocalGitSync(w, map[string]string{"status": "appended", "project": name}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentDevicesList(w http.ResponseWriter, r *http.Request) {
@@ -324,7 +324,7 @@ func (s *Server) handleAgentArchiveInbox(w http.ResponseWriter, r *http.Request)
 		respondNotFound(w, "message")
 		return
 	}
-	respondOK(w, map[string]string{"status": "archived", "id": msgID.String()})
+	respondOKWithLocalGitSync(w, map[string]string{"status": "archived", "id": msgID.String()}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentImportProfile(w http.ResponseWriter, r *http.Request) {
@@ -362,13 +362,13 @@ func (s *Server) handleAgentImportProfile(w http.ResponseWriter, r *http.Request
 		respondInternalError(w, err)
 		return
 	}
-	respondOK(w, ImportResponse{
+	respondOKWithLocalGitSync(w, ImportResponse{
 		OK: true,
 		Data: ImportResponseData{
 			ImportedCount: len(profile),
 			Paths:         paths,
 		},
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAgentExportAll(w http.ResponseWriter, r *http.Request) {

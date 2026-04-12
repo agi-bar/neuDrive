@@ -60,7 +60,7 @@ func (s *Server) handleAuthUpdateMe(w http.ResponseWriter, r *http.Request) {
 		respondInternalError(w, err)
 		return
 	}
-	respondOK(w, map[string]interface{}{
+	respondOKWithLocalGitSync(w, map[string]interface{}{
 		"id":           user.ID,
 		"slug":         user.Slug,
 		"display_name": user.DisplayName,
@@ -70,7 +70,7 @@ func (s *Server) handleAuthUpdateMe(w http.ResponseWriter, r *http.Request) {
 		"timezone":     user.Timezone,
 		"language":     user.Language,
 		"created_at":   user.CreatedAt,
-	})
+	}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
 func (s *Server) handleAuthChangePassword(w http.ResponseWriter, r *http.Request) {

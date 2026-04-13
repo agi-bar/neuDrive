@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"net/http/httptest"
+
 	"github.com/agi-bar/agenthub/internal/api"
 	"github.com/agi-bar/agenthub/internal/auth"
 	"github.com/agi-bar/agenthub/internal/config"
@@ -19,7 +21,6 @@ import (
 	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/vault"
 	"github.com/google/uuid"
-	"net/http/httptest"
 )
 
 const heavyPlatformIntegrationEnv = "AGENTHUB_RUN_PLATFORM_INTEGRATION"

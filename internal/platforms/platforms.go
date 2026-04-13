@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -103,12 +104,8 @@ func ImportIntoLocalHub(ctx context.Context, cfg *runtimecfg.CLIConfig, platform
 	if err != nil {
 		return nil, err
 	}
-	hub, err := sqlite.OpenClient(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	defer hub.Close()
-	return hub.ImportPlatformSources(ctx, adapter.ID(), adapter.DiscoverSources())
+	result, _, _, err := importPlatformData(ctx, cfg, adapter.ID(), adapter.DiscoverSources(), nil)
+	return result, err
 }
 
 func ExportFromLocalHub(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, outputRoot string) (*sqlite.ExportResult, error) {
@@ -116,12 +113,26 @@ func ExportFromLocalHub(ctx context.Context, cfg *runtimecfg.CLIConfig, platform
 	if err != nil {
 		return nil, err
 	}
-	hub, err := sqlite.OpenClient(ctx, cfg)
+	if strings.TrimSpace(outputRoot) == "" {
+		outputRoot, err = defaultExportRoot(adapter.ID())
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		outputRoot, err = resolveLocalPath(outputRoot)
+		if err != nil {
+			return nil, err
+		}
+	}
+	var result sqlite.ExportResult
+	_, err = localPlatformAPIPostJSON(ctx, cfg.Local.PublicBaseURL, cfg.Local.OwnerToken, "/agent/local/platform/export", map[string]string{
+		"platform":    adapter.ID(),
+		"output_root": outputRoot,
+	}, &result)
 	if err != nil {
 		return nil, err
 	}
-	defer hub.Close()
-	return hub.ExportPlatformSnapshot(ctx, adapter.ID(), outputRoot)
+	return &result, nil
 }
 
 func EnsureConnection(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, executable, daemonURL string) (runtimecfg.LocalConnection, error) {
@@ -135,12 +146,11 @@ func EnsureConnection(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, 
 
 	connection := cfg.Local.Connections[adapter.ID()]
 	if strings.TrimSpace(connection.Token) == "" {
-		hub, err := sqlite.OpenClient(ctx, cfg)
-		if err != nil {
-			return runtimecfg.LocalConnection{}, err
-		}
-		defer hub.Close()
-		tokenResp, err := hub.CreatePlatformToken(ctx, adapter.ID(), models.TrustLevelWork)
+		var tokenResp models.CreateTokenResponse
+		_, err := localPlatformAPIPostJSON(ctx, daemonURL, cfg.Local.OwnerToken, "/agent/local/platform-token", map[string]interface{}{
+			"platform":    adapter.ID(),
+			"trust_level": models.TrustLevelWork,
+		}, &tokenResp)
 		if err != nil {
 			return runtimecfg.LocalConnection{}, err
 		}
@@ -167,11 +177,7 @@ func Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string)
 	}
 	connection, ok := cfg.Local.Connections[adapter.ID()]
 	if ok && strings.TrimSpace(connection.TokenID) != "" {
-		hub, err := sqlite.OpenClient(ctx, cfg)
-		if err == nil {
-			_ = hub.RevokeToken(ctx, connection.TokenID)
-			hub.Close()
-		}
+		_, _ = localPlatformAPIDelete(ctx, cfg.Local.PublicBaseURL, cfg.Local.OwnerToken, "/agent/local/platform-token/"+url.PathEscape(connection.TokenID), nil)
 	}
 	if err := adapter.Disconnect(ctx, cfg); err != nil {
 		return err
@@ -279,7 +285,7 @@ func (a *claudeAdapter) init() *claudeAdapter {
 			"command",
 			claudeCommandEntrypoint,
 			[]string{"claude"},
-			[]string{"/agenthub export", "/agenthub import", "/agenthub list", "/agenthub status", "/agenthub git init", "/agenthub git pull"},
+			[]string{"/agenthub ls", "/agenthub read profile/preferences", "/agenthub write memory \"Remember this\"", "/agenthub create project demo", "/agenthub import platform claude", "/agenthub token create --kind sync --purpose backup", "/agenthub git init", "/agenthub git pull"},
 			[]string{"connections", "skills", "projects", "prompts", "tools", "archives"},
 			[]Source{
 				{Domain: "connections", Label: "claude.json", Path: expandUser("~/.claude.json")},
@@ -322,7 +328,7 @@ func (a *claudeAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, 
 	connection.EntrypointType = "command"
 	connection.EntrypointPath = commandPath
 	connection.ManagedPaths = append(managedPaths, commandPath)
-	connection.ChatUsage = []string{"/agenthub export", "/agenthub import", "/agenthub list", "/agenthub status", "/agenthub git init", "/agenthub git pull"}
+	connection.ChatUsage = []string{"/agenthub ls", "/agenthub read profile/preferences", "/agenthub write memory \"Remember this\"", "/agenthub create project demo", "/agenthub import platform claude", "/agenthub token create --kind sync --purpose backup", "/agenthub git init", "/agenthub git pull"}
 	_ = skillPath
 	return connection, nil
 }
@@ -345,7 +351,7 @@ func (a *codexAdapter) init() *codexAdapter {
 			"skill",
 			codexEntrypointDir,
 			nil,
-			[]string{"$agenthub export", "$agenthub import", "$agenthub list", "$agenthub status", "$agenthub git init", "$agenthub git pull"},
+			[]string{"$agenthub ls", "$agenthub read profile/preferences", "$agenthub write memory \"Remember this\"", "$agenthub create project demo", "$agenthub import platform codex", "$agenthub token create --kind sync --purpose backup", "$agenthub git init", "$agenthub git pull"},
 			[]string{"connections", "skills", "profile", "memory", "projects", "automations", "archives"},
 			[]Source{
 				{Domain: "profile", Label: "config.toml", Path: expandUser("~/.codex/config.toml")},
@@ -397,7 +403,7 @@ func (a *codexAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, e
 	connection.EntrypointType = "skill"
 	connection.EntrypointPath = skillPath
 	connection.ManagedPaths = managedPaths
-	connection.ChatUsage = []string{"$agenthub export", "$agenthub import", "$agenthub list", "$agenthub status", "$agenthub git init", "$agenthub git pull"}
+	connection.ChatUsage = []string{"$agenthub ls", "$agenthub read profile/preferences", "$agenthub write memory \"Remember this\"", "$agenthub create project demo", "$agenthub import platform codex", "$agenthub token create --kind sync --purpose backup", "$agenthub git init", "$agenthub git pull"}
 	return connection, nil
 }
 func (a *codexAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
@@ -681,7 +687,9 @@ func installManagedClaudeCommand(targetPath string) (string, error) {
 		"Use the installed `agenthub` skill at `~/.claude/skills/agenthub/SKILL.md`.",
 		"",
 		"Treat the first argument after `/agenthub` as the subcommand.",
-		"Supported subcommands: `export`, `import`, `git`, `list`, `status`, `help`.",
+		"Supported subcommands: `ls`, `read`, `write`, `search`, `create`, `log`, `import`, `token`, `stats`, `git`, `export`, `status`, `help`.",
+		"Examples: `/agenthub ls`, `/agenthub read profile/preferences`, `/agenthub git init`, `/agenthub git pull`.",
+		"Use `/agenthub help` or `/agenthub help import` when the user needs guidance on the command surface.",
 		"Use `/agenthub git init` to create the local Git mirror and `/agenthub git pull` to refresh it.",
 		"",
 		"1. Read `~/.claude/skills/agenthub/SKILL.md`.",

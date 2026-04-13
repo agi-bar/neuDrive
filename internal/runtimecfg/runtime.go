@@ -451,7 +451,11 @@ func choosePort(savedListenAddr string) (int, error) {
 			return port, nil
 		}
 	}
-	return 0, fmt.Errorf("no free local port in %d-%d", DefaultPortStart, DefaultPortEnd)
+	port, err := chooseEphemeralPort()
+	if err != nil {
+		return 0, fmt.Errorf("no free local port in %d-%d and ephemeral fallback failed: %w", DefaultPortStart, DefaultPortEnd, err)
+	}
+	return port, nil
 }
 
 func portAvailable(port int) bool {
@@ -461,6 +465,19 @@ func portAvailable(port int) bool {
 	}
 	_ = ln.Close()
 	return true
+}
+
+func chooseEphemeralPort() (int, error) {
+	ln, err := net.Listen("tcp", fmt.Sprintf("%s:0", DefaultLocalHost))
+	if err != nil {
+		return 0, err
+	}
+	defer ln.Close()
+	_, rawPort, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		return 0, err
+	}
+	return parsePort(rawPort)
 }
 
 func parsePort(raw string) (int, error) {

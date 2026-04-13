@@ -756,3 +756,38 @@ func doMultipartForm(t *testing.T, method, url, token, fieldName, filename strin
 	}
 	return resp.StatusCode, env
 }
+
+func TestAgentScratchAndEphemeralTokenEndpoints(t *testing.T) {
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+	defer ts.Close()
+
+	status, scratch := doJSON(t, http.MethodPost, ts.URL+"/agent/memory/scratch", adminToken, []byte(`{"content":"agent scratch note","title":"note"}`))
+	if status != http.StatusCreated || !scratch.OK {
+		t.Fatalf("POST /agent/memory/scratch failed: status=%d body=%+v", status, scratch)
+	}
+	for _, expected := range []string{`"imported_count":1`, `memory/scratch/`} {
+		if !bytes.Contains(scratch.Data, []byte(expected)) {
+			t.Fatalf("expected %q in scratch response: %s", expected, string(scratch.Data))
+		}
+	}
+
+	status, syncToken := doJSON(t, http.MethodPost, ts.URL+"/agent/tokens/ephemeral", adminToken, []byte(`{"kind":"sync","purpose":"backup","access":"both","ttl_minutes":30}`))
+	if status != http.StatusCreated || !syncToken.OK {
+		t.Fatalf("POST /agent/tokens/ephemeral sync failed: status=%d body=%+v", status, syncToken)
+	}
+	for _, expected := range []string{`"token":"`, `"read:bundle"`, `"write:bundle"`} {
+		if !bytes.Contains(syncToken.Data, []byte(expected)) {
+			t.Fatalf("expected %q in sync token response: %s", expected, string(syncToken.Data))
+		}
+	}
+
+	status, uploadToken := doJSON(t, http.MethodPost, ts.URL+"/agent/tokens/ephemeral", adminToken, []byte(`{"kind":"skills-upload","purpose":"skills","platform":"claude-web","ttl_minutes":30}`))
+	if status != http.StatusCreated || !uploadToken.OK {
+		t.Fatalf("POST /agent/tokens/ephemeral skills-upload failed: status=%d body=%+v", status, uploadToken)
+	}
+	for _, expected := range []string{`"upload_url":"`, `"browser_upload_url":"`, `"connectivity_probe_url":"`, `"write:skills"`} {
+		if !bytes.Contains(uploadToken.Data, []byte(expected)) {
+			t.Fatalf("expected %q in skills upload token response: %s", expected, string(uploadToken.Data))
+		}
+	}
+}

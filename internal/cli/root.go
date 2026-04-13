@@ -36,7 +36,9 @@ func Run(args []string) int {
 	}
 
 	switch args[0] {
-	case "help", "--help", "-h":
+	case "help":
+		return runHelp(args[1:])
+	case "--help", "-h":
 		printRootUsage()
 		return 0
 	case "server":
@@ -56,22 +58,31 @@ func Run(args []string) int {
 	case "platform":
 		return runPlatform(args[1:])
 	case "ls":
-		if len(args) == 1 {
-			return runPlatformLS(nil)
-		}
-		return runPlatformShow(args[1:])
+		return runHubLS(args[1:])
+	case "read":
+		return runHubRead(args[1:])
+	case "write":
+		return runHubWrite(args[1:])
+	case "search":
+		return runHubSearch(args[1:])
+	case "create":
+		return runHubCreate(args[1:])
+	case "log":
+		return runHubLog(args[1:])
 	case "connect":
 		return runConnect(args[1:])
 	case "disconnect":
 		return runDisconnect(args[1:])
 	case "import":
-		return runImport(args[1:])
+		return runHubImport(args[1:])
 	case "export":
 		return runExport(args[1:])
+	case "token":
+		return runHubToken(args[1:])
+	case "stats":
+		return runHubStats(args[1:])
 	case "git":
 		return runGit(args[1:])
-	case "files":
-		return runFiles(args[1:])
 	case "daemon":
 		return runDaemon(args[1:])
 	default:
@@ -81,35 +92,11 @@ func Run(args []string) int {
 	}
 }
 
-func printRootUsage() {
-	fmt.Print(`Agent Hub
-
-Local-first AI hub and platform sync tool.
-
-Usage:
-  agenthub browse [/route]
-  agenthub status
-  agenthub doctor
-  agenthub platform ls
-  agenthub platform show <platform>
-  agenthub ls [platform]
-  agenthub connect <platform>
-  agenthub disconnect <platform>
-  agenthub import <platform> [--mode agent|files|all] [--zip FILE]
-  agenthub export <platform> [--output DIR]
-  agenthub git init [--output DIR]
-  agenthub git pull
-  agenthub files ls [path]
-  agenthub files cat <path>
-  agenthub sync <subcommand>
-  agenthub remote <subcommand>
-  agenthub daemon status|stop|logs
-  agenthub server [flags]
-  agenthub mcp stdio [flags]
-`)
-}
-
 func runServer(args []string) int {
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("server")
+		return 0
+	}
 	fs := flag.NewFlagSet("server", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	listen := fs.String("listen", "127.0.0.1:42690", "listen address")
@@ -148,7 +135,7 @@ func runServer(args []string) int {
 
 func runMCP(args []string) int {
 	if len(args) == 0 || args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
-		fmt.Println("Usage: agenthub mcp stdio [--token TOKEN|--token-env ENV] [--storage sqlite|postgres] [--sqlite-path PATH] [--database-url URL] [--jwt-secret SECRET] [--vault-master-key KEY] [--public-base-url URL]")
+		printHelpTopic("mcp")
 		return 0
 	}
 	if args[0] != "stdio" {
@@ -194,8 +181,8 @@ func chooseStorageBackend(defaultStorage, explicitStorage, explicitSQLitePath, e
 }
 
 func runStatus(args []string) int {
-	if isHelpArg(args) {
-		fmt.Println("usage: agenthub status")
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("status")
 		return 0
 	}
 	if len(args) > 0 {
@@ -251,8 +238,8 @@ func runStatus(args []string) int {
 }
 
 func runDoctor(args []string) int {
-	if isHelpArg(args) {
-		fmt.Println("usage: agenthub doctor")
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("doctor")
 		return 0
 	}
 	if len(args) > 0 {
@@ -314,7 +301,7 @@ func runDoctor(args []string) int {
 
 func runPlatform(args []string) int {
 	if len(args) == 0 || isHelpArg(args) {
-		fmt.Println("Usage: agenthub platform ls | show <platform>")
+		printHelpTopic("platform")
 		return 0
 	}
 	switch args[0] {
@@ -329,8 +316,8 @@ func runPlatform(args []string) int {
 }
 
 func runPlatformLS(args []string) int {
-	if isHelpArg(args) {
-		fmt.Println("usage: agenthub platform ls")
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("platform ls")
 		return 0
 	}
 	if len(args) != 0 {
@@ -354,8 +341,8 @@ func runPlatformLS(args []string) int {
 }
 
 func runPlatformShow(args []string) int {
-	if isHelpArg(args) {
-		fmt.Println("usage: agenthub platform show <platform>")
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("platform show")
 		return 0
 	}
 	if len(args) != 1 {
@@ -422,8 +409,8 @@ func runPlatformShow(args []string) int {
 }
 
 func runConnect(args []string) int {
-	if isHelpArg(args) {
-		fmt.Println("usage: agenthub connect <platform>")
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("connect")
 		return 0
 	}
 	if len(args) != 1 {
@@ -451,7 +438,7 @@ func runConnect(args []string) int {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		return 1
 	}
-	cfg, state, err := runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
+	cfg, state, err := ensureCurrentLocalDaemon(ctx, executable, configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
@@ -482,8 +469,8 @@ func runConnect(args []string) int {
 }
 
 func runDisconnect(args []string) int {
-	if isHelpArg(args) {
-		fmt.Println("usage: agenthub disconnect <platform>")
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("disconnect")
 		return 0
 	}
 	if len(args) != 1 {
@@ -492,9 +479,27 @@ func runDisconnect(args []string) int {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve executable: %v\n", err)
+		return 1
+	}
 	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
+		return 1
+	}
+	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "prepare local defaults: %v\n", err)
+		return 1
+	}
+	if err := saveConfig(configPath, cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
+		return 1
+	}
+	cfg, _, err = ensureCurrentLocalDaemon(ctx, executable, configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
 	}
 	if err := platforms.Disconnect(ctx, cfg, args[0]); err != nil {
@@ -509,7 +514,7 @@ func runDisconnect(args []string) int {
 	return 0
 }
 
-func runImport(args []string) int {
+func runLegacyImport(args []string) int {
 	if isHelpArg(args) || len(args) == 0 {
 		fmt.Println("usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]")
 		return 0
@@ -557,7 +562,7 @@ func runImport(args []string) int {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		return 1
 	}
-	cfg, _, err = runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
+	cfg, _, err = ensureCurrentLocalDaemon(ctx, executable, configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
@@ -572,16 +577,14 @@ func runImport(args []string) int {
 		fmt.Fprintf(os.Stderr, "import %s: %v\n", platform, err)
 		return 1
 	}
-	if strings.TrimSpace(*zipPath) != "" && result.Files != nil {
+	switch {
+	case strings.TrimSpace(*zipPath) != "" && result.Files != nil:
 		fmt.Printf("Imported %d files (%d bytes) from %s into /skills using %s.\n",
 			result.Files.Files,
 			result.Files.Bytes,
 			*zipPath,
 			platform,
 		)
-		return 0
-	}
-	switch {
 	case result.Agent != nil && result.Files != nil:
 		fmt.Printf("Imported %s using mode=%s: %d profile categories, %d memory items, %d projects, %d agent artifacts, plus %d files (%d bytes) into /platforms/%s.\n",
 			platform,
@@ -612,15 +615,15 @@ func runImport(args []string) int {
 			result.Mode,
 		)
 	}
-	if info, err := syncLocalGitMirrorIfConfigured(ctx, cfg); err != nil {
-		fmt.Fprintf(os.Stderr, "local git mirror sync: %v\n", err)
-	} else {
-		printLocalGitSyncMessage(info)
-	}
+	printLocalGitSyncMessage(result.LocalGit)
 	return 0
 }
 
 func runExport(args []string) int {
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("export")
+		return 0
+	}
 	platform := ""
 	if len(args) > 0 && !strings.HasPrefix(args[0], "-") && !isHelpArg(args[:1]) {
 		platform = strings.TrimSpace(args[0])
@@ -663,7 +666,7 @@ func runExport(args []string) int {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		return 1
 	}
-	cfg, _, err = runtimecfg.EnsureLocalDaemon(ctx, executable, nil)
+	cfg, _, err = ensureCurrentLocalDaemon(ctx, executable, configPath)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "start local daemon: %v\n", err)
 		return 1
@@ -679,11 +682,15 @@ func runExport(args []string) int {
 
 func runGit(args []string) int {
 	if len(args) == 0 || isHelpArg(args[:1]) {
-		fmt.Println("usage: agenthub git init [--output DIR]\n       agenthub git pull")
+		printHelpTopic("git")
 		return 0
 	}
 	switch args[0] {
 	case "init":
+		if isExplicitHelpRequest(args[1:]) {
+			printHelpTopic("git")
+			return 0
+		}
 		fs := flag.NewFlagSet("git init", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		output := fs.String("output", "", "output directory for the local Git mirror")
@@ -699,6 +706,10 @@ func runGit(args []string) int {
 		}
 		return runGitInit(*output)
 	case "pull":
+		if isExplicitHelpRequest(args[1:]) {
+			printHelpTopic("git")
+			return 0
+		}
 		fs := flag.NewFlagSet("git pull", flag.ContinueOnError)
 		fs.SetOutput(os.Stderr)
 		if err := fs.Parse(args[1:]); err != nil {
@@ -762,6 +773,10 @@ func runGitPull() int {
 }
 
 func runBrowse(args []string) int {
+	if isExplicitHelpRequest(args) {
+		printHelpTopic("browse")
+		return 0
+	}
 	fs := flag.NewFlagSet("browse", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	printURL := fs.Bool("print-url", false, "print the dashboard URL instead of opening a browser")
@@ -908,7 +923,7 @@ func runFilesCat(args []string) int {
 
 func runDaemon(args []string) int {
 	if len(args) == 0 || isHelpArg(args) {
-		fmt.Println("Usage: agenthub daemon status|stop|logs")
+		printHelpTopic("daemon")
 		return 0
 	}
 	switch args[0] {
@@ -971,8 +986,8 @@ func runDaemon(args []string) int {
 }
 
 func runSync(args []string) int {
-	if len(args) == 0 {
-		fmt.Println("Usage: agenthub sync login|profiles|use|whoami|logout|export|preview|push|pull|resume|history|diff")
+	if len(args) == 0 || isHelpArg(args[:1]) {
+		printHelpTopic("sync")
 		return 0
 	}
 	envRestore := []func(){}
@@ -986,21 +1001,32 @@ func runSync(args []string) int {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		executable, err := os.Executable()
-		if err == nil {
-			configPath, cfg, loadErr := runtimecfg.LoadConfig("")
-			if loadErr == nil {
-				if err := runtimecfg.EnsureLocalDefaults(cfg); err == nil {
-					_ = saveConfig(configPath, cfg)
-					cfg, state, ensureErr := ensureCurrentLocalDaemon(ctx, executable, configPath)
-					if ensureErr == nil {
-						envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_API_BASE", state.APIBase))
-						envRestore = append(envRestore, setTempEnv("AGENTHUB_API_BASE", state.APIBase))
-						envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_TOKEN", cfg.Local.OwnerToken))
-						envRestore = append(envRestore, setTempEnv("AGENTHUB_TOKEN", cfg.Local.OwnerToken))
-					}
-				}
-			}
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "prepare local sync defaults: resolve executable: %v\n", err)
+			return 1
 		}
+		configPath, cfg, err := runtimecfg.LoadConfig("")
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "prepare local sync defaults: load config: %v\n", err)
+			return 1
+		}
+		if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "prepare local sync defaults: prepare local defaults: %v\n", err)
+			return 1
+		}
+		if err := saveConfig(configPath, cfg); err != nil {
+			fmt.Fprintf(os.Stderr, "prepare local sync defaults: save config: %v\n", err)
+			return 1
+		}
+		cfg, state, err := ensureCurrentLocalDaemon(ctx, executable, configPath)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "prepare local sync defaults: %v\n", err)
+			return 1
+		}
+		envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_API_BASE", state.APIBase))
+		envRestore = append(envRestore, setTempEnv("AGENTHUB_API_BASE", state.APIBase))
+		envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_TOKEN", cfg.Local.OwnerToken))
+		envRestore = append(envRestore, setTempEnv("AGENTHUB_TOKEN", cfg.Local.OwnerToken))
 	}
 
 	if err := synccli.Run(args); err != nil {
@@ -1016,7 +1042,7 @@ func runSync(args []string) int {
 
 func runRemote(args []string) int {
 	if len(args) == 0 || isHelpArg(args) {
-		fmt.Println("Usage: agenthub remote ls|login|use|logout|whoami")
+		printHelpTopic("remote")
 		return 0
 	}
 	switch args[0] {
@@ -1239,16 +1265,18 @@ func shouldUseLocalSyncDefaults(args []string) bool {
 	if args[0] == "help" || args[0] == "--help" || args[0] == "-h" {
 		return false
 	}
+	if containsFlag(args[1:], "--help", "-h") {
+		return false
+	}
 	switch args[0] {
 	case "login", "profiles", "use", "logout":
 		return false
 	case "whoami":
 		return !containsFlag(args[1:], "--profile")
-	default:
-		if containsFlag(args[1:], "--help", "-h") {
-			return false
-		}
+	case "export", "preview", "push", "pull", "resume", "history", "diff":
 		return !containsFlag(args[1:], "--profile") && !containsFlag(args[1:], "--token") && !containsFlag(args[1:], "--api-base")
+	default:
+		return false
 	}
 }
 
@@ -1276,37 +1304,50 @@ func normalizeRemoteArgs(args []string) []string {
 }
 
 type localAPIEnvelope struct {
-	OK    bool            `json:"ok"`
-	Data  json.RawMessage `json:"data"`
-	Error struct {
+	OK           bool                   `json:"ok"`
+	Data         json.RawMessage        `json:"data"`
+	LocalGitSync *localgitsync.SyncInfo `json:"local_git_sync,omitempty"`
+	Error        struct {
 		Message string `json:"message"`
 	} `json:"error"`
 }
 
 func localAPIGet(ctx context.Context, apiBase, token, apiPath string, out any) error {
-	return localAPIJSON(ctx, http.MethodGet, apiBase, token, apiPath, nil, out)
+	_, err := localAPIJSONWithSync(ctx, http.MethodGet, apiBase, token, apiPath, nil, out)
+	return err
 }
 
 func localAPIPostJSON(ctx context.Context, apiBase, token, apiPath string, requestBody any, out any) error {
-	return localAPIJSON(ctx, http.MethodPost, apiBase, token, apiPath, requestBody, out)
+	_, err := localAPIJSONWithSync(ctx, http.MethodPost, apiBase, token, apiPath, requestBody, out)
+	return err
+}
+
+func localAPIPutJSON(ctx context.Context, apiBase, token, apiPath string, requestBody any, out any) error {
+	_, err := localAPIJSONWithSync(ctx, http.MethodPut, apiBase, token, apiPath, requestBody, out)
+	return err
 }
 
 func localAPIJSON(ctx context.Context, method, apiBase, token, apiPath string, requestBody any, out any) error {
+	_, err := localAPIJSONWithSync(ctx, method, apiBase, token, apiPath, requestBody, out)
+	return err
+}
+
+func localAPIJSONWithSync(ctx context.Context, method, apiBase, token, apiPath string, requestBody any, out any) (*localgitsync.SyncInfo, error) {
 	fullURL, err := joinAPIURL(apiBase, apiPath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var reader io.Reader
 	if requestBody != nil {
 		payload, err := json.Marshal(requestBody)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		reader = strings.NewReader(string(payload))
 	}
 	req, err := http.NewRequestWithContext(ctx, method, fullURL, reader)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if strings.TrimSpace(token) != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
@@ -1316,12 +1357,12 @@ func localAPIJSON(ctx context.Context, method, apiBase, token, apiPath string, r
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var envelope localAPIEnvelope
 	if err := json.Unmarshal(respBody, &envelope); err != nil {
@@ -1332,18 +1373,18 @@ func localAPIJSON(ctx context.Context, method, apiBase, token, apiPath string, r
 		if snippet == "" {
 			snippet = resp.Status
 		}
-		return fmt.Errorf("unexpected API response (%s): %s", resp.Status, snippet)
+		return nil, fmt.Errorf("unexpected API response (%s): %s", resp.Status, snippet)
 	}
 	if !envelope.OK {
 		if envelope.Error.Message != "" {
-			return errors.New(envelope.Error.Message)
+			return envelope.LocalGitSync, errors.New(envelope.Error.Message)
 		}
-		return fmt.Errorf("unexpected API error (%s)", resp.Status)
+		return envelope.LocalGitSync, fmt.Errorf("unexpected API error (%s)", resp.Status)
 	}
 	if out == nil {
-		return nil
+		return envelope.LocalGitSync, nil
 	}
-	return json.Unmarshal(envelope.Data, out)
+	return envelope.LocalGitSync, json.Unmarshal(envelope.Data, out)
 }
 
 func joinAPIURL(apiBase, apiPath string) (string, error) {
@@ -1351,7 +1392,12 @@ func joinAPIURL(apiBase, apiPath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	base.Path = strings.TrimRight(base.Path, "/") + apiPath
+	parsedPath, err := url.Parse(apiPath)
+	if err != nil {
+		return "", err
+	}
+	base.Path = strings.TrimRight(base.Path, "/") + parsedPath.Path
+	base.RawQuery = parsedPath.RawQuery
 	return base.String(), nil
 }
 

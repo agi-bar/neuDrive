@@ -12,6 +12,15 @@ import (
 	"github.com/agi-bar/agenthub/internal/runtimecfg"
 )
 
+const heavyCLIIntegrationEnv = "AGENTHUB_RUN_CLI_INTEGRATION"
+
+func requireCLIIntegration(t *testing.T) {
+	t.Helper()
+	if strings.TrimSpace(os.Getenv(heavyCLIIntegrationEnv)) != "1" {
+		t.Skipf("skipping heavy CLI integration test; set %s=1 to run", heavyCLIIntegrationEnv)
+	}
+}
+
 func configureIsolatedCLIEnv(t *testing.T) string {
 	t.Helper()
 	root, err := os.MkdirTemp("", "agenthub-cli-env-*")

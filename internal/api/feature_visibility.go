@@ -35,14 +35,23 @@ func filterVisibleEntries(entries []models.FileTreeEntry) []models.FileTreeEntry
 }
 
 func publicSearchPrefixes(scope string) []string {
-	switch strings.ToLower(strings.TrimSpace(scope)) {
-	case "memory":
-		return []string{"/memory", "/identity"}
-	case "projects":
+	scope = strings.TrimSpace(scope)
+	switch strings.ToLower(scope) {
+	case "", "all":
+		return []string{"/memory", "/projects", "/skills", "/platforms"}
+	case "memory", "profile", "/memory", "/memory/":
+		return []string{"/memory"}
+	case "/memory/profile", "/memory/profile/":
+		return []string{"/memory/profile"}
+	case "projects", "project", "/projects", "/projects/":
 		return []string{"/projects"}
-	case "skills":
+	case "skills", "skill", "/skills", "/skills/":
 		return []string{"/skills"}
-	default:
-		return []string{"/memory", "/identity", "/projects", "/skills"}
+	case "platform", "platforms", "/platforms", "/platforms/":
+		return []string{"/platforms"}
 	}
+	if strings.HasPrefix(scope, "/") {
+		return []string{scope}
+	}
+	return []string{"/memory", "/projects", "/skills", "/platforms"}
 }

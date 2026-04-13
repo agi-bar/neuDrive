@@ -22,18 +22,37 @@ Use this umbrella skill when the user wants to work with Agent Hub from inside a
 
 ## Commands
 
-- `export`
-  Read `/skills/agenthub/commands/export.md`
-- `git`
-  Read `/skills/agenthub/commands/git.md`
+- `ls`
+  Read `/skills/agenthub/commands/ls.md`
+- `read`
+  Read `/skills/agenthub/commands/read.md`
+- `write`
+  Read `/skills/agenthub/commands/write.md`
+- `search`
+  Read `/skills/agenthub/commands/search.md`
+- `create`
+  Read `/skills/agenthub/commands/create.md`
+- `log`
+  Read `/skills/agenthub/commands/log.md`
 - `import`
   Read `/skills/agenthub/commands/import.md`
-- `list`
-  Read `/skills/agenthub/commands/list.md`
+- `token`
+  Read `/skills/agenthub/commands/token.md`
+- `stats`
+  Read `/skills/agenthub/commands/stats.md`
+- `git`
+  Read `/skills/agenthub/commands/git.md`
+- `export`
+  Read `/skills/agenthub/commands/export.md`
 - `status`
   Read `/skills/agenthub/commands/status.md`
 - `help`
   Read `/skills/agenthub/commands/help.md`
+
+## Quick Start
+
+- Codex examples: `$agenthub help`, `$agenthub ls`, `$agenthub read profile/preferences`, `$agenthub git init`
+- Claude examples: `/agenthub help`, `/agenthub ls`, `/agenthub read profile/preferences`, `/agenthub git init`
 
 ## Rules
 

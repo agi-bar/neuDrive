@@ -1,17 +1,39 @@
 package platforms
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/agi-bar/agenthub/internal/api"
+	"github.com/agi-bar/agenthub/internal/auth"
+	"github.com/agi-bar/agenthub/internal/config"
+	"github.com/agi-bar/agenthub/internal/localgitsync"
+	"github.com/agi-bar/agenthub/internal/models"
 	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/agenthub/internal/services"
+	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
+	"github.com/agi-bar/agenthub/internal/vault"
+	"github.com/google/uuid"
+	"net/http/httptest"
 )
+
+const heavyPlatformIntegrationEnv = "AGENTHUB_RUN_PLATFORM_INTEGRATION"
+
+func requirePlatformIntegration(t *testing.T) {
+	t.Helper()
+	if strings.TrimSpace(os.Getenv(heavyPlatformIntegrationEnv)) != "1" {
+		t.Skipf("skipping heavy platform integration test; set %s=1 to run", heavyPlatformIntegrationEnv)
+	}
+}
 
 func configurePlatformTestEnv(t *testing.T) (string, *runtimecfg.CLIConfig, string, string) {
 	t.Helper()
+	requirePlatformIntegration(t)
 	root := t.TempDir()
 	home := filepath.Join(root, "home")
 	if err := os.MkdirAll(home, 0o755); err != nil {
@@ -32,14 +54,18 @@ func configurePlatformTestEnv(t *testing.T) (string, *runtimecfg.CLIConfig, stri
 	}
 	seedPlatformFixtures(t, home)
 	logPath := installPlatformShims(t, "claude", "codex", "gemini", "cursor-agent")
+	serverURL, ownerToken, ownerTokenID := startPlatformTestServer(t, filepath.Join(root, "server.db"))
 	cfg := &runtimecfg.CLIConfig{
 		Version: 2,
 		Local: runtimecfg.LocalConfig{
-			Storage:        "sqlite",
-			SQLitePath:     filepath.Join(root, "local.db"),
+			Storage:        "postgres",
+			SQLitePath:     filepath.Join(root, "unused-client.db"),
+			DatabaseURL:    "postgres://local-mode.example/agenthub?sslmode=disable",
 			JWTSecret:      strings.Repeat("a", 64),
 			VaultMasterKey: strings.Repeat("b", 64),
-			PublicBaseURL:  "http://127.0.0.1:42690",
+			PublicBaseURL:  serverURL,
+			OwnerToken:     ownerToken,
+			OwnerTokenID:   ownerTokenID,
 			Connections:    map[string]runtimecfg.LocalConnection{},
 		},
 		Profiles: map[string]runtimecfg.SyncProfile{},
@@ -47,7 +73,90 @@ func configurePlatformTestEnv(t *testing.T) (string, *runtimecfg.CLIConfig, stri
 	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		t.Fatalf("EnsureLocalDefaults: %v", err)
 	}
-	return home, cfg, cfg.Local.PublicBaseURL, logPath
+	return home, cfg, serverURL, logPath
+}
+
+func startPlatformTestServer(t *testing.T, dbPath string) (string, string, string) {
+	t.Helper()
+	ctx := context.Background()
+	store, err := sqlitestorage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open test store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	admin, err := store.CreateToken(ctx, user.ID, "admin", []string{models.ScopeAdmin}, models.TrustLevelFull, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateToken admin: %v", err)
+	}
+
+	cfg := &config.Config{
+		JWTSecret:      strings.Repeat("a", 64),
+		VaultMasterKey: strings.Repeat("b", 64),
+		CORSOrigins:    []string{"http://localhost:3000"},
+		RateLimit:      100,
+		MaxBodySize:    10 * 1024 * 1024,
+		PublicBaseURL:  "http://127.0.0.1:0",
+	}
+	v, err := vault.NewVault(cfg.VaultMasterKey)
+	if err != nil {
+		t.Fatalf("NewVault: %v", err)
+	}
+	fileTreeSvc := services.NewFileTreeServiceWithRepo(sqlitestorage.NewFileTreeRepo(store))
+	memorySvc := services.NewMemoryServiceWithRepo(sqlitestorage.NewMemoryRepo(store), nil)
+	userSvc := services.NewUserServiceWithRepo(sqlitestorage.NewUserRepo(store))
+	connSvc := services.NewConnectionServiceWithRepo(sqlitestorage.NewConnectionRepo(store))
+	vaultSvc := services.NewVaultServiceWithRepo(sqlitestorage.NewVaultRepo(store), v)
+	roleSvc := services.NewRoleServiceWithRepo(sqlitestorage.NewRoleRepo(store), fileTreeSvc)
+	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
+	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
+	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
+	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
+	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
+	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
+	localGitSyncSvc := localgitsync.NewWithDeps(store, fileTreeSvc, userSvc, connSvc, projectSvc, vaultSvc)
+	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
+		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
+	}
+	authSvc := services.NewAuthServiceWithRepo(sqlitestorage.NewAuthRepo(store), tokenGen, nil)
+	oauthSvc := services.NewOAuthServiceWithRepo(sqlitestorage.NewOAuthRepo(store), cfg.JWTSecret)
+
+	server := api.NewServerWithDeps(api.ServerDeps{
+		Storage:            "sqlite",
+		Config:             cfg,
+		LocalOwnerID:       user.ID,
+		UserService:        userSvc,
+		AuthService:        authSvc,
+		ConnectionService:  connSvc,
+		FileTreeService:    fileTreeSvc,
+		VaultService:       vaultSvc,
+		MemoryService:      memorySvc,
+		ProjectService:     projectSvc,
+		RoleService:        roleSvc,
+		InboxService:       inboxSvc,
+		DeviceService:      deviceSvc,
+		DashboardService:   dashboardSvc,
+		TokenService:       tokenSvc,
+		ImportService:      importSvc,
+		ExportService:      exportSvc,
+		SyncService:        syncSvc,
+		OAuthService:       oauthSvc,
+		LocalGitSync:       localGitSyncSvc,
+		Vault:              v,
+		JWTSecret:          cfg.JWTSecret,
+		GitHubClientID:     cfg.GithubClientID,
+		GitHubClientSecret: cfg.GithubClientSecret,
+	})
+
+	ts := httptest.NewServer(server.Router)
+	t.Cleanup(ts.Close)
+	return ts.URL, admin.Token, admin.ScopedToken.ID.String()
 }
 
 func seedPlatformFixtures(t *testing.T, home string) {

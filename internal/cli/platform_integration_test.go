@@ -23,8 +23,10 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "ls")
-	if !strings.Contains(stdout, "codex\tinstalled=true") {
-		t.Fatalf("ls alias missing codex: %s", stdout)
+	for _, expected := range []string{"dir\tprofile/", "dir\tmemory/", "dir\tproject/", "dir\tskill/", "dir\tsecret/", "dir\tplatform/"} {
+		if !strings.Contains(stdout, expected) {
+			t.Fatalf("ls root missing %q: %s", expected, stdout)
+		}
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "platform", "show", "codex")
@@ -36,11 +38,6 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Entrypoint type: skill") || !strings.Contains(stdout, "Agent-mediated export: supported") {
 		t.Fatalf("expected codex entrypoint metadata in output: %s", stdout)
-	}
-
-	stdout, _ = mustRunAgenthub(t, binary, env, "ls", "codex")
-	if !strings.Contains(stdout, "Platform: Codex CLI") {
-		t.Fatalf("ls codex alias mismatch: %s", stdout)
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "platform", "show", "claude")
@@ -76,7 +73,7 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("expected codex git chat usage in output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex")
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "codex")
 	if !strings.Contains(stdout, "Imported codex using mode=agent") {
 		t.Fatalf("unexpected import output: %s", stdout)
 	}
@@ -86,22 +83,22 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("unexpected browse URL output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "files", "ls", "/memory/profile")
-	if !strings.Contains(stdout, "/memory/profile/codex-agent.md") {
-		t.Fatalf("expected imported profile file in files ls: %s", stdout)
+	stdout, _ = mustRunAgenthub(t, binary, env, "ls", "profile")
+	if !strings.Contains(stdout, "file\tprofile/codex-agent") {
+		t.Fatalf("expected imported profile file in ls profile: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "files", "cat", "/memory/profile/codex-agent.md")
+	stdout, _ = mustRunAgenthub(t, binary, env, "read", "profile/codex-agent")
 	if !strings.Contains(stdout, "Be concise and actionable.") {
-		t.Fatalf("unexpected files cat output: %s", stdout)
+		t.Fatalf("unexpected read output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex", "--mode", "files")
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "codex", "--mode", "files")
 	if !strings.Contains(stdout, "using mode=files") {
 		t.Fatalf("unexpected files import output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex", "--mode", "all")
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "codex", "--mode", "all")
 	if !strings.Contains(stdout, "using mode=all") {
 		t.Fatalf("unexpected all import output: %s", stdout)
 	}
@@ -122,7 +119,7 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("expected claude git chat usage in output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude")
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "claude")
 	if !strings.Contains(stdout, "Imported claude using mode=agent") {
 		t.Fatalf("unexpected claude import output: %s", stdout)
 	}
@@ -132,19 +129,19 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		"claude-web-skill/helper.py":       []byte("print('hello from claude web zip')\n"),
 		"claude-web-skill/assets/logo.png": []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0x00},
 	})
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude", "--zip", claudeSkillsZip)
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "claude", "--zip", claudeSkillsZip)
 	if !strings.Contains(stdout, "Imported 3 files") || !strings.Contains(stdout, "into /skills using claude") {
 		t.Fatalf("unexpected claude zip import output: %s", stdout)
 	}
-	stdout, _ = mustRunAgenthub(t, binary, env, "files", "ls", "/skills/claude-web-skill")
-	if !strings.Contains(stdout, "/skills/claude-web-skill/SKILL.md") || !strings.Contains(stdout, "/skills/claude-web-skill/helper.py") || !strings.Contains(stdout, "/skills/claude-web-skill/assets") {
+	stdout, _ = mustRunAgenthub(t, binary, env, "ls", "skill/claude-web-skill")
+	if !strings.Contains(stdout, "file\tskill/claude-web-skill/SKILL.md") || !strings.Contains(stdout, "file\tskill/claude-web-skill/helper.py") || !strings.Contains(stdout, "dir\tskill/claude-web-skill/assets") {
 		t.Fatalf("expected imported claude web skill files: %s", stdout)
 	}
-	stdout, _ = mustRunAgenthub(t, binary, env, "files", "ls", "/skills/claude-web-skill/assets")
-	if !strings.Contains(stdout, "/skills/claude-web-skill/assets/logo.png") {
+	stdout, _ = mustRunAgenthub(t, binary, env, "ls", "skill/claude-web-skill/assets")
+	if !strings.Contains(stdout, "file\tskill/claude-web-skill/assets/logo.png") {
 		t.Fatalf("expected imported claude web binary asset: %s", stdout)
 	}
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude", "--mode", "all")
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "claude", "--mode", "all")
 	if !strings.Contains(stdout, "Imported claude using mode=all") {
 		t.Fatalf("unexpected claude all import output: %s", stdout)
 	}
@@ -202,7 +199,7 @@ func TestAgenthubGitInitPullAndAutoSync(t *testing.T) {
 	env, _ = installCLIPlatformShims(t, env, "codex")
 
 	mustRunAgenthub(t, binary, env, "connect", "codex")
-	stdout, _ := mustRunAgenthub(t, binary, env, "import", "codex")
+	stdout, _ := mustRunAgenthub(t, binary, env, "import", "platform", "codex")
 	if !strings.Contains(stdout, "Imported codex using mode=agent") {
 		t.Fatalf("unexpected initial import output: %s", stdout)
 	}
@@ -226,7 +223,7 @@ func TestAgenthubGitInitPullAndAutoSync(t *testing.T) {
 		}
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex", "--mode", "files")
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "codex", "--mode", "files")
 	if !strings.Contains(stdout, "已同步到本地 Git 目录: "+mirrorDir) {
 		t.Fatalf("expected auto-sync message after import: %s", stdout)
 	}

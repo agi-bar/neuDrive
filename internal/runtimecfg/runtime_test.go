@@ -1,7 +1,8 @@
 package runtimecfg
 
 import (
-	"os"
+	"fmt"
+	"net"
 	"path/filepath"
 	"testing"
 )
@@ -34,18 +35,29 @@ func TestSaveAndLoadConfigRoundTrip(t *testing.T) {
 }
 
 func TestChoosePortReturnsSavedPortWhenAvailable(t *testing.T) {
-	ln, err := os.CreateTemp(t.TempDir(), "port-check")
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("CreateTemp: %v", err)
+		t.Fatalf("Listen: %v", err)
 	}
+	port := ln.Addr().(*net.TCPAddr).Port
 	_ = ln.Close()
 
-	port, err := choosePort("127.0.0.1:42695")
+	chosen, err := choosePort(fmt.Sprintf("127.0.0.1:%d", port))
 	if err != nil {
 		t.Fatalf("choosePort: %v", err)
 	}
-	if port < DefaultPortStart || port > DefaultPortEnd {
-		t.Fatalf("port out of range: %d", port)
+	if chosen != port {
+		t.Fatalf("expected saved port %d, got %d", port, chosen)
+	}
+}
+
+func TestChooseEphemeralPortReturnsUsablePort(t *testing.T) {
+	port, err := chooseEphemeralPort()
+	if err != nil {
+		t.Fatalf("chooseEphemeralPort: %v", err)
+	}
+	if port <= 0 {
+		t.Fatalf("expected positive port, got %d", port)
 	}
 }
 

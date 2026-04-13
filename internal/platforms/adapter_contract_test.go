@@ -74,7 +74,7 @@ func TestAdapterContracts(t *testing.T) {
 				if !strings.Contains(logText, "ARG=mcp ARG=add ARG=agenthub-local") {
 					t.Fatalf("expected codex add invocation in shim log: %s", logText)
 				}
-				for _, needle := range []string{"AGENTHUB_TOKEN=", "AGENTHUB_STORAGE=sqlite", "PUBLIC_BASE_URL=http://127.0.0.1:42690", "ARG=mcp ARG=stdio"} {
+				for _, needle := range []string{"AGENTHUB_TOKEN=", "AGENTHUB_STORAGE=postgres", "DATABASE_URL=postgres://local-mode.example/agenthub?sslmode=disable", "ARG=mcp ARG=stdio"} {
 					if !strings.Contains(logText, needle) {
 						t.Fatalf("expected %q in codex shim log: %s", needle, logText)
 					}

@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/agi-bar/agenthub/internal/localgitsync"
 	"github.com/agi-bar/agenthub/internal/runtimecfg"
 	"github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/systemskills"
@@ -28,6 +29,7 @@ type ImportSummary struct {
 	Mode     ImportMode                `json:"mode"`
 	Files    *sqlite.ImportResult      `json:"files,omitempty"`
 	Agent    *sqlite.AgentImportResult `json:"agent,omitempty"`
+	LocalGit *localgitsync.SyncInfo    `json:"local_git_sync,omitempty"`
 }
 
 func ParseImportMode(platform, raw string) (ImportMode, error) {
@@ -61,30 +63,51 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 	summary := &ImportSummary{Platform: adapter.ID(), Mode: mode}
 	switch mode {
 	case ImportModeFiles:
-		result, err := ImportIntoLocalHub(ctx, cfg, adapter.ID())
+		result, _, syncInfo, err := importPlatformData(ctx, cfg, adapter.ID(), adapter.DiscoverSources(), nil)
 		if err != nil {
 			return nil, err
 		}
 		summary.Files = result
+		summary.LocalGit = syncInfo
 	case ImportModeAgent:
-		result, err := importViaAgent(ctx, cfg, adapter.ID())
+		if err := ensureAgentImportReady(cfg, adapter.ID()); err != nil {
+			return nil, err
+		}
+		payload, err := runAgentExport(ctx, adapter.ID())
+		if err != nil {
+			return nil, err
+		}
+		_, result, syncInfo, err := importPlatformData(ctx, cfg, adapter.ID(), nil, &payload)
 		if err != nil {
 			return nil, err
 		}
 		summary.Agent = result
+		summary.LocalGit = syncInfo
 	case ImportModeAll:
-		agentResult, err := importViaAgent(ctx, cfg, adapter.ID())
+		if err := ensureAgentImportReady(cfg, adapter.ID()); err != nil {
+			return nil, err
+		}
+		payload, err := runAgentExport(ctx, adapter.ID())
 		if err != nil {
 			return nil, err
 		}
-		fileResult, err := ImportIntoLocalHub(ctx, cfg, adapter.ID())
+		fileResult, agentResult, syncInfo, err := importPlatformData(ctx, cfg, adapter.ID(), adapter.DiscoverSources(), &payload)
 		if err != nil {
 			return nil, err
 		}
 		summary.Agent = agentResult
 		summary.Files = fileResult
+		summary.LocalGit = syncInfo
 	}
 	return summary, nil
+}
+
+func ensureAgentImportReady(cfg *runtimecfg.CLIConfig, platform string) error {
+	connection, ok := cfg.Local.Connections[platform]
+	if !ok || strings.TrimSpace(connection.Token) == "" {
+		return fmt.Errorf("%s is not connected; run `agenthub connect %s` first", platformDisplayName(platform), preferredConnectName(platform))
+	}
+	return nil
 }
 
 func ImportSkillsZip(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, archivePath string) (*ImportSummary, error) {
@@ -95,40 +118,40 @@ func ImportSkillsZip(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, a
 	if adapter.ID() != "claude-code" {
 		return nil, fmt.Errorf("--zip is currently supported only for claude")
 	}
-	hub, err := sqlite.OpenClient(ctx, cfg)
+	archivePath, err = resolveLocalPath(archivePath)
 	if err != nil {
 		return nil, err
 	}
-	defer hub.Close()
-	result, err := hub.ImportSkillsArchive(ctx, "claude-web", archivePath)
+	var result sqlite.ImportResult
+	syncInfo, err := localPlatformAPIPostJSON(ctx, cfg.Local.PublicBaseURL, cfg.Local.OwnerToken, "/agent/local/platform/import-skills-zip", map[string]string{
+		"platform":     "claude-web",
+		"archive_path": archivePath,
+	}, &result)
 	if err != nil {
 		return nil, err
 	}
 	return &ImportSummary{
 		Platform: adapter.ID(),
 		Mode:     ImportModeFiles,
-		Files:    result,
+		Files:    &result,
+		LocalGit: syncInfo,
 	}, nil
 }
 
-func importViaAgent(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string) (*sqlite.AgentImportResult, error) {
-	if !supportsAgentMediatedImport(platform) {
-		return nil, fmt.Errorf("agent-mediated import is currently supported only for codex and claude")
+func importPlatformData(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string, sources []Source, payload *sqlite.AgentExportPayload) (*sqlite.ImportResult, *sqlite.AgentImportResult, *localgitsync.SyncInfo, error) {
+	var response struct {
+		Files *sqlite.ImportResult      `json:"files,omitempty"`
+		Agent *sqlite.AgentImportResult `json:"agent,omitempty"`
 	}
-	connection, ok := cfg.Local.Connections[platform]
-	if !ok || strings.TrimSpace(connection.Token) == "" {
-		return nil, fmt.Errorf("%s is not connected; run `agenthub connect %s` first", platformDisplayName(platform), preferredConnectName(platform))
-	}
-	payload, err := runAgentExport(ctx, platform)
+	syncInfo, err := localPlatformAPIPostJSON(ctx, cfg.Local.PublicBaseURL, cfg.Local.OwnerToken, "/agent/local/platform/import", map[string]interface{}{
+		"platform":      platform,
+		"sources":       sources,
+		"agent_payload": payload,
+	}, &response)
 	if err != nil {
-		return nil, err
+		return nil, nil, syncInfo, err
 	}
-	hub, err := sqlite.OpenClient(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	defer hub.Close()
-	return hub.ImportAgentExport(ctx, platform, payload)
+	return response.Files, response.Agent, syncInfo, nil
 }
 
 func runAgentExport(ctx context.Context, platform string) (sqlite.AgentExportPayload, error) {

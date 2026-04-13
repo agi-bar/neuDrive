@@ -11,26 +11,66 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
-		if !strings.Contains(stdout, "Usage:") {
+		if !strings.Contains(stdout, "Root-directory command surface for local and remote Agent Hub data.") {
 			t.Fatalf("expected root usage in stdout, got %q", stdout)
+		}
+		if !strings.Contains(stdout, "agenthub help [topic]") {
+			t.Fatalf("expected explicit help command in stdout, got %q", stdout)
+		}
+	})
+
+	t.Run("help command", func(t *testing.T) {
+		stdout, stderr, code := runRootForTest(t, "help", "write")
+		if code != 0 {
+			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+		}
+		for _, expected := range []string{
+			"agenthub write",
+			"Create or update Hub content from literal text, stdin, or a local file path.",
+			"Use `--literal` when an argument that looks like a path should stay plain text.",
+		} {
+			if !strings.Contains(stdout, expected) {
+				t.Fatalf("expected %q in stdout, got %q", expected, stdout)
+			}
+		}
+	})
+
+	t.Run("help root alias", func(t *testing.T) {
+		stdout, stderr, code := runRootForTest(t, "help", "project")
+		if code != 0 {
+			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+		}
+		for _, expected := range []string{
+			"Agent Hub Path Model",
+			"Public roots are `profile`, `memory`, `project`, `skill`, `secret`, and `platform`.",
+			"`project/<name>` is a summary view.",
+		} {
+			if !strings.Contains(stdout, expected) {
+				t.Fatalf("expected %q in stdout, got %q", expected, stdout)
+			}
 		}
 	})
 
 	cases := [][]string{
+		{"ls", "--help"},
+		{"read", "--help"},
+		{"write", "--help"},
+		{"search", "--help"},
+		{"create", "--help"},
+		{"log", "--help"},
 		{"browse", "--help"},
 		{"status", "--help"},
 		{"doctor", "--help"},
 		{"platform", "--help"},
 		{"platform", "ls", "--help"},
 		{"platform", "show", "--help"},
-		{"ls", "--help"},
 		{"connect", "--help"},
 		{"disconnect", "--help"},
 		{"import", "--help"},
+		{"token", "--help"},
+		{"token", "create", "--help"},
+		{"stats", "--help"},
 		{"export", "--help"},
-		{"files", "--help"},
-		{"files", "ls", "--help"},
-		{"files", "cat", "--help"},
 		{"daemon", "--help"},
 		{"server", "--help"},
 		{"mcp", "--help"},
@@ -67,6 +107,26 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("write --help is descriptive", func(t *testing.T) {
+		stdout, stderr, code := runRootForTest(t, "write", "--help")
+		if code != 0 {
+			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+		}
+		if !strings.Contains(stdout, "Create or update Hub content from literal text, stdin, or a local file path.") {
+			t.Fatalf("expected descriptive write help, got %q", stdout)
+		}
+	})
+
+	t.Run("git --help is descriptive", func(t *testing.T) {
+		stdout, stderr, code := runRootForTest(t, "git", "--help")
+		if code != 0 {
+			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+		}
+		if !strings.Contains(stdout, "Mirror local Agent Hub data into a local Git repository and keep it refreshed.") {
+			t.Fatalf("expected descriptive git help, got %q", stdout)
+		}
+	})
 }
 
 func TestRootCommandsUsageAndExitCodes(t *testing.T) {
@@ -80,19 +140,24 @@ func TestRootCommandsUsageAndExitCodes(t *testing.T) {
 		{name: "unknown root", args: []string{"wat"}, want: 2, substr: "unknown command", stream: "stderr"},
 		{name: "platform unknown", args: []string{"platform", "wat"}, want: 2, substr: "unknown platform subcommand", stream: "stderr"},
 		{name: "platform show missing", args: []string{"platform", "show"}, want: 2, substr: "usage: agenthub platform show <platform>", stream: "stderr"},
+		{name: "read missing", args: []string{"read"}, want: 2, substr: "usage: agenthub read <path>", stream: "stderr"},
+		{name: "write missing", args: []string{"write"}, want: 2, substr: "usage: agenthub write <path> <content-or-file>", stream: "stderr"},
+		{name: "search missing", args: []string{"search"}, want: 2, substr: "usage: agenthub search <query> [path]", stream: "stderr"},
+		{name: "create missing", args: []string{"create"}, want: 2, substr: "usage: agenthub create <category> <name>", stream: "stderr"},
+		{name: "log missing", args: []string{"log"}, want: 2, substr: "usage: agenthub log <path>", stream: "stderr"},
 		{name: "connect missing", args: []string{"connect"}, want: 2, substr: "usage: agenthub connect <platform>", stream: "stderr"},
 		{name: "disconnect missing", args: []string{"disconnect"}, want: 2, substr: "usage: agenthub disconnect <platform>", stream: "stderr"},
-		{name: "import missing", args: []string{"import"}, want: 0, substr: "usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]", stream: "stdout"},
-		{name: "import zip invalid mode", args: []string{"import", "claude", "--zip", "skills.zip", "--mode", "agent"}, want: 2, substr: "--zip can only be combined with --mode files", stream: "stderr"},
+		{name: "import missing", args: []string{"import"}, want: 0, substr: "Bring local files or platform exports into Agent Hub.", stream: "stdout"},
+		{name: "import zip invalid mode", args: []string{"import", "platform", "claude", "--zip", "skills.zip", "--mode", "agent"}, want: 2, substr: "--zip can only be combined with --mode files", stream: "stderr"},
+		{name: "token missing", args: []string{"token"}, want: 0, substr: "Create short-lived tokens for sync or prepared skills upload workflows.", stream: "stdout"},
 		{name: "export missing", args: []string{"export"}, want: 2, substr: "usage: agenthub export <platform> [--output DIR]", stream: "stderr"},
 		{name: "browse extra", args: []string{"browse", "/one", "/two"}, want: 2, substr: "usage: agenthub browse [--print-url] [/route]", stream: "stderr"},
-		{name: "files unknown", args: []string{"files", "wat"}, want: 2, substr: "unknown files subcommand", stream: "stderr"},
-		{name: "files cat missing", args: []string{"files", "cat"}, want: 2, substr: "usage: agenthub files cat <path>", stream: "stderr"},
 		{name: "daemon unknown", args: []string{"daemon", "wat"}, want: 2, substr: "unknown daemon subcommand", stream: "stderr"},
 		{name: "sync unknown", args: []string{"sync", "wat"}, want: 2, substr: "unknown sync subcommand", stream: "stderr"},
 		{name: "remote unknown", args: []string{"remote", "wat"}, want: 2, substr: "unknown remote subcommand", stream: "stderr"},
 		{name: "remote login missing", args: []string{"remote", "login"}, want: 2, substr: "usage: agenthub remote login <profile>", stream: "stderr"},
 		{name: "remote use missing", args: []string{"remote", "use"}, want: 2, substr: "usage: agenthub remote use <profile>", stream: "stderr"},
+		{name: "help unknown topic", args: []string{"help", "wat"}, want: 2, substr: "available topics:", stream: "stderr"},
 	}
 
 	for _, tc := range cases {

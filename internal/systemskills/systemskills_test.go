@@ -103,6 +103,9 @@ func TestReadEntryAgentHubSkill(t *testing.T) {
 	if got, _ := entry.Metadata["name"].(string); got != "agenthub" {
 		t.Fatalf("expected skill name metadata, got %q", got)
 	}
+	if !strings.Contains(entry.Content, "$agenthub help") {
+		t.Fatalf("expected help example in Agent Hub skill content")
+	}
 }
 
 func TestReadEntryChatGPTSkill(t *testing.T) {
@@ -209,11 +212,19 @@ func TestExportSkillFilesAgentHub(t *testing.T) {
 	}
 	for _, required := range []string{
 		"SKILL.md",
+		"commands/create.md",
 		"commands/export.md",
 		"commands/git.md",
+		"commands/log.md",
 		"commands/import.md",
+		"commands/ls.md",
 		"commands/list.md",
+		"commands/read.md",
+		"commands/search.md",
+		"commands/stats.md",
 		"commands/status.md",
+		"commands/token.md",
+		"commands/write.md",
 		"commands/help.md",
 		"references/platforms/codex.md",
 		"references/platforms/claude.md",

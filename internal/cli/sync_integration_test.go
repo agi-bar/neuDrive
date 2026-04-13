@@ -231,6 +231,7 @@ func TestAgenthubRemoteCommands_LocalSQLiteProfile(t *testing.T) {
 
 func buildAgenthubBinary(t *testing.T) string {
 	t.Helper()
+	requireCLIIntegration(t)
 	agenthubBinaryOnce.Do(func() {
 		root := repoRoot(t)
 		binDir, err := os.MkdirTemp("", "agenthub-cli-bin-")

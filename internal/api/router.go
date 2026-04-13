@@ -365,6 +365,7 @@ func (s *Server) setupRoutes() {
 		r.Get("/agent/vault/scopes", s.handleAgentVaultListScopes)
 		r.Get("/agent/vault/{scope}", s.handleAgentVaultRead)
 		r.Put("/agent/vault/{scope}", s.handleAgentVaultWrite)
+		r.Post("/agent/memory/scratch", s.handleAgentWriteScratch)
 		r.Put("/agent/memory/profile", s.handleAgentUpdateProfile)
 		r.Post("/agent/projects", s.handleAgentCreateProject)
 		r.Get("/agent/projects", s.handleAgentListProjects)
@@ -372,8 +373,14 @@ func (s *Server) setupRoutes() {
 		r.Post("/agent/projects/{name}/log", s.handleAgentAppendProjectLog)
 		r.Get("/agent/dashboard/stats", s.handleDashboardStats)
 		r.Get("/agent/memory/profile", s.handleAgentGetProfile)
+		r.Post("/agent/tokens/ephemeral", s.handleAgentCreateEphemeralToken)
 		r.Post("/agent/local-git-mirror/register", s.handleAgentRegisterLocalGitMirror)
 		r.Post("/agent/local-git-mirror/sync", s.handleAgentSyncLocalGitMirror)
+		r.Post("/agent/local/platform-token", s.handleAgentCreateLocalPlatformToken)
+		r.Delete("/agent/local/platform-token/{id}", s.handleAgentRevokeLocalPlatformToken)
+		r.Post("/agent/local/platform/import", s.handleAgentImportLocalPlatformData)
+		r.Post("/agent/local/platform/export", s.handleAgentExportLocalPlatformData)
+		r.Post("/agent/local/platform/import-skills-zip", s.handleAgentImportLocalSkillsArchive)
 
 		// Agent cross-user shared access
 		r.Get("/agent/shared/{owner_slug}/tree/*", s.handleAgentSharedTree)

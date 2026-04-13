@@ -384,12 +384,28 @@ func ensureGitRepo(ctx context.Context, rootPath string, existing *models.LocalG
 		return &now, nil
 	}
 	cmd := exec.CommandContext(ctx, "git", "-C", rootPath, "init")
+	cmd.Env = scrubGitEnv(os.Environ())
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git init failed: %w: %s", err, strings.TrimSpace(string(output)))
 	}
 	now := time.Now().UTC()
 	return &now, nil
+}
+
+func scrubGitEnv(env []string) []string {
+	clean := make([]string, 0, len(env))
+	for _, entry := range env {
+		key := entry
+		if idx := strings.IndexByte(entry, '='); idx >= 0 {
+			key = entry[:idx]
+		}
+		if strings.HasPrefix(strings.ToUpper(key), "GIT_") {
+			continue
+		}
+		clean = append(clean, entry)
+	}
+	return clean
 }
 
 func writeJSONFile(path string, value any) error {

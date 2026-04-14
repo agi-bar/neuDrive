@@ -3,6 +3,8 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 type UserProfile struct {
@@ -91,10 +93,11 @@ func (s *Server) handleMemoryProfileUpdate(w http.ResponseWriter, r *http.Reques
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "manual")
 
 	// Upsert each preference as a separate memory profile entry
 	for category, content := range req.Preferences {
-		if err := s.MemoryService.UpsertProfile(r.Context(), userID, category, content, "web"); err != nil {
+		if err := s.MemoryService.UpsertProfile(ctx, userID, category, content, services.SourceOrDefault(ctx, "manual")); err != nil {
 			respondInternalError(w, err)
 			return
 		}
@@ -102,7 +105,7 @@ func (s *Server) handleMemoryProfileUpdate(w http.ResponseWriter, r *http.Reques
 
 	// Update display name if provided
 	if req.DisplayName != "" {
-		if err := s.MemoryService.UpsertProfile(r.Context(), userID, "display_name", req.DisplayName, "web"); err != nil {
+		if err := s.MemoryService.UpsertProfile(ctx, userID, "display_name", req.DisplayName, services.SourceOrDefault(ctx, "manual")); err != nil {
 			respondInternalError(w, err)
 			return
 		}
@@ -141,11 +144,12 @@ func (s *Server) handleWriteScratch(w http.ResponseWriter, r *http.Request) {
 		respondValidationError(w, "content", "content is required")
 		return
 	}
+	ctx := s.requestSourceContext(r, "manual")
 	if req.Source == "" {
-		req.Source = "web"
+		req.Source = services.SourceOrDefault(ctx, "manual")
 	}
 
-	if err := s.MemoryService.WriteScratch(r.Context(), userID, req.Content, req.Source); err != nil {
+	if err := s.MemoryService.WriteScratch(ctx, userID, req.Content, req.Source); err != nil {
 		respondInternalError(w, err)
 		return
 	}

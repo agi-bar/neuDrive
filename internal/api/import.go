@@ -13,6 +13,7 @@ import (
 
 	"github.com/agi-bar/neudrive/internal/hubpath"
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -22,7 +23,9 @@ import (
 
 // ImportSkillsRequest represents a JSON payload for skill imports.
 type ImportSkillsRequest struct {
-	Skills []SkillFile `json:"skills"`
+	Source         string      `json:"source,omitempty"`
+	SourcePlatform string      `json:"source_platform,omitempty"`
+	Skills         []SkillFile `json:"skills"`
 }
 
 // SkillFile represents a single skill file to import.
@@ -34,7 +37,9 @@ type SkillFile struct {
 
 // ImportClaudeMemoryRequest represents a Claude memory export import.
 type ImportClaudeMemoryRequest struct {
-	Memories []ClaudeMemoryItem `json:"memories"`
+	Source         string             `json:"source,omitempty"`
+	SourcePlatform string             `json:"source_platform,omitempty"`
+	Memories       []ClaudeMemoryItem `json:"memories"`
 }
 
 // ClaudeMemoryItem represents a single memory entry from Claude.
@@ -46,14 +51,18 @@ type ClaudeMemoryItem struct {
 
 // ImportProfileRequest represents a bulk profile update.
 type ImportProfileRequest struct {
-	Preferences   string `json:"preferences,omitempty"`
-	Relationships string `json:"relationships,omitempty"`
-	Principles    string `json:"principles,omitempty"`
+	Source         string `json:"source,omitempty"`
+	SourcePlatform string `json:"source_platform,omitempty"`
+	Preferences    string `json:"preferences,omitempty"`
+	Relationships  string `json:"relationships,omitempty"`
+	Principles     string `json:"principles,omitempty"`
 }
 
 // ImportVaultRequest represents a bulk vault secrets import.
 type ImportVaultRequest struct {
-	Secrets []VaultSecretImport `json:"secrets"`
+	Source         string              `json:"source,omitempty"`
+	SourcePlatform string              `json:"source_platform,omitempty"`
+	Secrets        []VaultSecretImport `json:"secrets"`
 }
 
 // VaultSecretImport represents a single vault secret to import.
@@ -66,7 +75,9 @@ type VaultSecretImport struct {
 
 // ImportDevicesRequest represents a bulk device registration.
 type ImportDevicesRequest struct {
-	Devices []DeviceImport `json:"devices"`
+	Source         string         `json:"source,omitempty"`
+	SourcePlatform string         `json:"source_platform,omitempty"`
+	Devices        []DeviceImport `json:"devices"`
 }
 
 // DeviceImport represents a single device to register.
@@ -82,14 +93,16 @@ type DeviceImport struct {
 
 // FullHubExport represents a complete Hub data export for backup/restore.
 type FullHubExport struct {
-	Version     string            `json:"version"`
-	ExportedAt  string            `json:"exported_at"`
-	User        models.User       `json:"user"`
-	Profile     map[string]string `json:"profile"` // category -> content
-	Skills      []SkillFile       `json:"skills"`
-	Devices     []DeviceImport    `json:"devices"`
-	Projects    []ProjectExport   `json:"projects"`
-	VaultScopes []string          `json:"vault_scopes"` // scope names only, not values
+	Source         string            `json:"source,omitempty"`
+	SourcePlatform string            `json:"source_platform,omitempty"`
+	Version        string            `json:"version"`
+	ExportedAt     string            `json:"exported_at"`
+	User           models.User       `json:"user"`
+	Profile        map[string]string `json:"profile"` // category -> content
+	Skills         []SkillFile       `json:"skills"`
+	Devices        []DeviceImport    `json:"devices"`
+	Projects       []ProjectExport   `json:"projects"`
+	VaultScopes    []string          `json:"vault_scopes"` // scope names only, not values
 }
 
 // ProjectExport represents a project in an export.
@@ -128,6 +141,8 @@ func (s *Server) HandleImportSkills(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*ImportResult, error) {
 	contentType := r.Header.Get("Content-Type")
+	ctx := s.requestSourceContext(r, "import")
+	platform := strings.TrimSpace(r.URL.Query().Get("platform"))
 
 	if strings.HasPrefix(contentType, "multipart/form-data") {
 		archiveFile, archiveSize, platform, archiveName, err := extractSkillsArchive(r)
@@ -135,7 +150,12 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 			return nil, fmt.Errorf("failed to process zip: %w", err)
 		}
 		defer archiveFile.Close()
-		result, err := s.ImportService.ImportSkillsArchiveReader(r.Context(), userID, archiveFile, archiveSize, platform, archiveName)
+		if strings.TrimSpace(platform) == "" {
+			if inferred := services.SourceFromContext(ctx); !services.IsGenericSource(inferred) {
+				platform = inferred
+			}
+		}
+		result, err := s.ImportService.ImportSkillsArchiveReader(ctx, userID, archiveFile, archiveSize, platform, archiveName)
 		if err != nil {
 			return nil, err
 		}
@@ -150,6 +170,10 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 	var req ImportSkillsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return nil, fmt.Errorf("invalid JSON body")
+	}
+	ctx, _ = applyExplicitSourceHints(ctx, nil, req.Source, req.SourcePlatform)
+	if strings.TrimSpace(platform) == "" {
+		platform = services.NormalizeSource(req.SourcePlatform)
 	}
 
 	if s.FileTreeService == nil {
@@ -173,7 +197,14 @@ func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*Import
 			path = "/skills/" + strings.TrimPrefix(path, "/")
 		}
 		path = hubpath.NormalizeStorage(path)
-		if _, err := s.FileTreeService.Write(r.Context(), userID, path, skill.Content, ct, models.TrustLevelGuest); err != nil {
+		metadata := services.WithSourcePlatformMetadata(nil, platform)
+		if services.EntrySourceFromMetadata(metadata) == "" {
+			metadata = services.WithSourceMetadata(metadata, "import")
+		}
+		if _, err := s.FileTreeService.WriteEntry(ctx, userID, path, skill.Content, ct, models.FileTreeWriteOptions{
+			Metadata:      metadata,
+			MinTrustLevel: models.TrustLevelGuest,
+		}); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("skill %s: %v", skill.Path, err))
 			continue
 		}
@@ -250,6 +281,8 @@ func (s *Server) HandleImportClaudeMemory(w http.ResponseWriter, r *http.Request
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "claude")
+	ctx, _ = applyExplicitSourceHints(ctx, nil, req.Source, req.SourcePlatform)
 
 	if s.MemoryService == nil {
 		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "memory service not configured")
@@ -265,13 +298,13 @@ func (s *Server) HandleImportClaudeMemory(w http.ResponseWriter, r *http.Request
 
 		source := mem.Source
 		if source == "" {
-			source = "claude"
+			source = services.SourceOrDefault(ctx, "claude")
 		}
 
 		// Store each memory as a profile entry under "claude-import-N" category,
 		// or aggregate them under a single "claude-import" category.
 		category := fmt.Sprintf("claude-import-%d", i)
-		if err := s.MemoryService.UpsertProfile(r.Context(), userID, category, mem.Content, source); err != nil {
+		if err := s.MemoryService.UpsertProfile(ctx, userID, category, mem.Content, source); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("memory %d: %v", i, err))
 			continue
 		}
@@ -298,6 +331,8 @@ func (s *Server) HandleImportProfile(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "import")
+	ctx, _ = applyExplicitSourceHints(ctx, nil, req.Source, req.SourcePlatform)
 
 	if s.MemoryService == nil {
 		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "memory service not configured")
@@ -317,7 +352,7 @@ func (s *Server) HandleImportProfile(w http.ResponseWriter, r *http.Request) {
 			result.Skipped++
 			continue
 		}
-		if err := s.MemoryService.UpsertProfile(r.Context(), userID, category, content, "import"); err != nil {
+		if err := s.MemoryService.UpsertProfile(ctx, userID, category, content, "import"); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("profile %s: %v", category, err))
 			continue
 		}
@@ -344,6 +379,8 @@ func (s *Server) HandleImportVault(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "import")
+	ctx, _ = applyExplicitSourceHints(ctx, nil, req.Source, req.SourcePlatform)
 
 	if s.VaultService == nil {
 		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "vault service not configured")
@@ -362,7 +399,7 @@ func (s *Server) HandleImportVault(w http.ResponseWriter, r *http.Request) {
 			minTrust = models.TrustLevelFull
 		}
 
-		if err := s.VaultService.Write(r.Context(), userID, secret.Scope, secret.Value, secret.Description, minTrust); err != nil {
+		if err := s.VaultService.Write(ctx, userID, secret.Scope, secret.Value, secret.Description, minTrust); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("vault %s: %v", secret.Scope, err))
 			continue
 		}
@@ -389,6 +426,8 @@ func (s *Server) HandleImportDevices(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "import")
+	ctx, _ = applyExplicitSourceHints(ctx, nil, req.Source, req.SourcePlatform)
 
 	if s.DeviceService == nil {
 		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "device service not configured")
@@ -412,7 +451,7 @@ func (s *Server) HandleImportDevices(w http.ResponseWriter, r *http.Request) {
 			Config:     dev.Config,
 		}
 
-		_, err := s.DeviceService.Register(r.Context(), userID, device)
+		_, err := s.DeviceService.Register(ctx, userID, device)
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("device %s: %v", dev.Name, err))
 			continue
@@ -440,6 +479,8 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "full-import")
+	ctx, _ = applyExplicitSourceHints(ctx, nil, export.Source, export.SourcePlatform)
 
 	result := ImportResult{}
 
@@ -450,7 +491,7 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 				result.Skipped++
 				continue
 			}
-			if err := s.MemoryService.UpsertProfile(r.Context(), userID, category, content, "full-import"); err != nil {
+			if err := s.MemoryService.UpsertProfile(ctx, userID, category, content, "full-import"); err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("profile %s: %v", category, err))
 				continue
 			}
@@ -476,9 +517,13 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 			path = hubpath.NormalizeStorage(path)
 			dir := filepath.Dir(path)
 			if dir != "." && dir != "" {
-				_ = s.FileTreeService.EnsureDirectory(r.Context(), userID, dir)
+				_ = s.FileTreeService.EnsureDirectory(ctx, userID, dir)
 			}
-			_, err := s.FileTreeService.Write(r.Context(), userID, path, skill.Content, ct, models.TrustLevelGuest)
+			metadata := services.WithSourceMetadata(nil, "import")
+			_, err := s.FileTreeService.WriteEntry(ctx, userID, path, skill.Content, ct, models.FileTreeWriteOptions{
+				Metadata:      metadata,
+				MinTrustLevel: models.TrustLevelGuest,
+			})
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("skill %s: %v", skill.Path, err))
 				continue
@@ -503,7 +548,7 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 				SkillMD:    dev.SkillMD,
 				Config:     dev.Config,
 			}
-			_, err := s.DeviceService.Register(r.Context(), userID, device)
+			_, err := s.DeviceService.Register(ctx, userID, device)
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("device %s: %v", dev.Name, err))
 				continue
@@ -514,21 +559,22 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 
 	// Import projects.
 	if s.ProjectService != nil {
+		importCtx := ctx
 		for _, proj := range export.Projects {
 			if proj.Name == "" {
 				result.Skipped++
 				continue
 			}
-			created, err := s.ProjectService.Create(r.Context(), userID, proj.Name)
+			created, err := s.ProjectService.Create(importCtx, userID, proj.Name)
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("project %s: %v", proj.Name, err))
 				continue
 			}
 			if proj.ContextMD != "" {
-				_ = s.ProjectService.UpdateContext(r.Context(), userID, created.Name, proj.ContextMD)
+				_ = s.ProjectService.UpdateContext(importCtx, userID, created.Name, proj.ContextMD)
 			}
 			if proj.Status == "archived" {
-				_ = s.ProjectService.Archive(r.Context(), userID, created.Name)
+				_ = s.ProjectService.Archive(importCtx, userID, created.Name)
 			}
 			result.Imported++
 		}

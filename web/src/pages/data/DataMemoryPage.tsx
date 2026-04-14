@@ -3,8 +3,21 @@ import { useNavigate } from 'react-router-dom'
 import { api, type FileNode } from '../../api'
 import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
+import SourceFilterBar from '../../components/SourceFilterBar'
 import { useI18n } from '../../i18n'
-import { getMaterialsSortOptions, buildFileTileModel, dataFileEditorRoute, isMemoryEntry, type MaterialsSortDir, type MaterialsSortKey, sortMaterialsItems } from './DataShared'
+import {
+  getMaterialsSortOptions,
+  buildFileTileModel,
+  buildSourceFilterOptions,
+  dataFileEditorRoute,
+  fileNodeSource,
+  isMemoryEntry,
+  matchesSourceFilter,
+  sourceLabel,
+  type MaterialsSortDir,
+  type MaterialsSortKey,
+  sortMaterialsItems,
+} from './DataShared'
 
 function ensureMemoryFilename(value: string) {
   const trimmed = value.trim().replace(/^\/+/, '')
@@ -26,6 +39,7 @@ export default function DataMemoryPage() {
   const [creating, setCreating] = useState(false)
   const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
   const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -54,6 +68,14 @@ export default function DataMemoryPage() {
       }),
     [entries, sortDir, sortKey],
   )
+  const filteredEntries = useMemo(
+    () => sortedEntries.filter((entry) => matchesSourceFilter(fileNodeSource(entry), sourceFilter)),
+    [sortedEntries, sourceFilter],
+  )
+  const sourceOptions = useMemo(
+    () => buildSourceFilterOptions(entries, fileNodeSource, locale),
+    [entries, locale],
+  )
 
   const handleCreateMemory = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -68,6 +90,7 @@ export default function DataMemoryPage() {
       await api.writeTree(path, {
         content: `# ${title}\n\n`,
         mimeType: 'text/markdown',
+        metadata: { source: 'manual' },
       })
       setShowNewForm(false)
       setNewEntryName('memory-note.md')
@@ -139,7 +162,7 @@ export default function DataMemoryPage() {
             <p className="materials-section-copy">{tx('统一按时间或名称整理可见的 memory 条目。', 'Sort visible memory entries by time or name.')}</p>
           </div>
           <MaterialsSectionToolbar
-            count={entries.length}
+            count={filteredEntries.length}
             sortKey={sortKey}
             sortOptions={sortOptions}
             sortDir={sortDir}
@@ -152,14 +175,18 @@ export default function DataMemoryPage() {
           </MaterialsSectionToolbar>
         </div>
 
-        {entries.length === 0 ? (
+        {(sourceOptions.length > 1 || sourceFilter !== 'all') && (
+          <SourceFilterBar options={sourceOptions} value={sourceFilter} onChange={setSourceFilter} />
+        )}
+
+        {filteredEntries.length === 0 ? (
           <div className="empty-state">
             <p>{tx('还没有 Memory 内容', 'No memory entries yet')}</p>
             <p className="empty-hint">{tx('Agent 写入记忆后，会在这里看到对应条目。', 'Memory entries will appear here after agents write them.')}</p>
           </div>
         ) : (
           <div className="materials-grid materials-grid-wide">
-          {sortedEntries.map((entry) => (
+          {filteredEntries.map((entry) => (
             (() => {
               const tile = buildFileTileModel({ node: entry, variant: 'memory', locale })
               return (
@@ -169,6 +196,7 @@ export default function DataMemoryPage() {
                   subtitle={tile.subtitle}
                   description={tile.description}
                   path={tile.path}
+                  extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
                   footerStart={tile.footerStart}
                   footerEnd={tile.footerEnd}
                   onOpen={() => navigate(dataFileEditorRoute(entry.path))}

@@ -302,10 +302,11 @@ func (s *Server) importLocalPlatformSources(ctx context.Context, userID uuid.UUI
 
 		hubPath := filepath.ToSlash(filepath.Join("/platforms", platform, source.Domain, source.Label))
 		bytesWritten, err := s.writeLocalPlatformFile(ctx, userID, hubPath, source.Path, map[string]interface{}{
-			"platform":      platform,
-			"domain":        source.Domain,
-			"source_label":  source.Label,
-			"original_path": source.Path,
+			"platform":        platform,
+			"source_platform": platform,
+			"domain":          source.Domain,
+			"source_label":    source.Label,
+			"original_path":   source.Path,
 		})
 		if err != nil {
 			return nil, err

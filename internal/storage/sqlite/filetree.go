@@ -236,12 +236,13 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	current, _ := s.readCurrentEntry(ctx, userID, storagePath)
 	now := time.Now().UTC()
 	metadata := mergeMetadata(nil, opts.Metadata)
-	metadata = services.SkillMetadataForPath(storagePath, content, metadata)
 	kind := strings.TrimSpace(opts.Kind)
 	if kind == "" {
 		kind = classifyEntryKind(storagePath, false)
 	}
 	if current == nil {
+		metadata = services.WithSourceContextMetadata(metadata, ctx)
+		metadata = services.SkillMetadataForPath(storagePath, content, metadata)
 		entry := &models.FileTreeEntry{
 			ID:            uuid.New(),
 			UserID:        userID,
@@ -285,6 +286,9 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	if opts.ExpectedChecksum != "" && current.Checksum != opts.ExpectedChecksum {
 		return nil, services.ErrOptimisticLockConflict
 	}
+	metadata = mergeMetadata(current.Metadata, opts.Metadata)
+	metadata = services.WithSourceContextMetadata(metadata, ctx)
+	metadata = services.SkillMetadataForPath(storagePath, content, metadata)
 	current.Kind = kind
 	current.IsDirectory = false
 	current.Content = content
@@ -329,12 +333,14 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 	}
 	current, _ := s.readCurrentEntry(ctx, userID, storagePath)
 	now := time.Now().UTC()
-	metadata := mergeMetadata(opts.Metadata, binaryMetadata(data))
+	metadata := mergeMetadata(nil, opts.Metadata)
 	kind := strings.TrimSpace(opts.Kind)
 	if kind == "" {
 		kind = classifyEntryKind(storagePath, false)
 	}
 	if current == nil {
+		metadata = services.WithSourceContextMetadata(metadata, ctx)
+		metadata = mergeMetadata(metadata, binaryMetadata(data))
 		current = &models.FileTreeEntry{
 			ID:            uuid.New(),
 			UserID:        userID,
@@ -377,6 +383,9 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 		if opts.ExpectedChecksum != "" && current.Checksum != opts.ExpectedChecksum {
 			return nil, services.ErrOptimisticLockConflict
 		}
+		metadata = mergeMetadata(current.Metadata, opts.Metadata)
+		metadata = services.WithSourceContextMetadata(metadata, ctx)
+		metadata = mergeMetadata(metadata, binaryMetadata(data))
 		current.Kind = kind
 		current.Content = ""
 		current.ContentType = contentType
@@ -521,7 +530,7 @@ func (s *Store) ListSkillSummaries(ctx context.Context, userID uuid.UUID, trustL
 			summaries = append(summaries, models.SkillSummary{
 				Name:          name,
 				Path:          hubpath.NormalizePublic(entry.Path),
-				Source:        strings.Trim(strings.Split(root, "/")[1], "/"),
+				Source:        services.EntrySourceFromMetadata(resolved),
 				Description:   description,
 				WhenToUse:     whenToUse,
 				MinTrustLevel: entry.MinTrustLevel,

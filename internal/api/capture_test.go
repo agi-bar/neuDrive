@@ -117,6 +117,84 @@ func TestInferCaptureSourceFromCapturedFixtures(t *testing.T) {
 	}
 }
 
+func TestInferCaptureSourceFromSyntheticSignals(t *testing.T) {
+	cases := []struct {
+		name        string
+		userAgent   string
+		contentType string
+		body        string
+		headers     map[string]string
+		expected    string
+	}{
+		{
+			name:        "explicit platform header wins",
+			contentType: "application/json",
+			body:        `{"params":{"clientInfo":{"name":"codex-mcp-client"}}}`,
+			headers:     map[string]string{"X-NeuDrive-Platform": "perplexity"},
+			expected:    "perplexity",
+		},
+		{
+			name:        "copilot client name",
+			contentType: "application/json",
+			body:        `{"client_name":"GitHub Copilot MCP Client"}`,
+			expected:    "copilot",
+		},
+		{
+			name:        "kimi redirect uri",
+			contentType: "application/json",
+			body:        `{"redirect_uri":"https://kimi.moonshot.cn/oauth/callback"}`,
+			expected:    "kimi",
+		},
+		{
+			name:        "deepseek origin",
+			contentType: "application/json",
+			body:        `{"client_name":"Remote MCP App"}`,
+			headers:     map[string]string{"Origin": "https://chat.deepseek.com"},
+			expected:    "deepseek",
+		},
+		{
+			name:        "qwen host",
+			contentType: "application/json",
+			body:        `{"client_id":"https://tongyi.aliyun.com/mcp/client"}`,
+			expected:    "qwen",
+		},
+		{
+			name:        "zhipu host",
+			contentType: "application/json",
+			body:        `{"client_id":"https://open.bigmodel.cn/oauth/client"}`,
+			expected:    "zhipu",
+		},
+		{
+			name:        "feishu app name",
+			contentType: "application/json",
+			body:        `{"client_name":"Feishu Bot Adapter"}`,
+			expected:    "feishu",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, "https://example.test/mcp", strings.NewReader(tc.body))
+			if tc.userAgent != "" {
+				req.Header.Set("User-Agent", tc.userAgent)
+			}
+			if tc.contentType != "" {
+				req.Header.Set("Content-Type", tc.contentType)
+			}
+			for key, value := range tc.headers {
+				req.Header.Set(key, value)
+			}
+			body, _, err := readCaptureBody(req)
+			if err != nil {
+				t.Fatalf("readCaptureBody: %v", err)
+			}
+			if got := inferCaptureSource(req, body); got != tc.expected {
+				t.Fatalf("expected source %q, got %q", tc.expected, got)
+			}
+		})
+	}
+}
+
 func TestCaptureOAuthMiddlewareWritesDetailedRequestFile(t *testing.T) {
 	logger.Init("debug", "text")
 

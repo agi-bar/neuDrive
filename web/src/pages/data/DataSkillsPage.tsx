@@ -5,15 +5,21 @@ import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
 import ResourceActionMenu from '../../components/ResourceActionMenu'
 import ResourceConfirmDialog from '../../components/ResourceConfirmDialog'
+import SourceFilterBar from '../../components/SourceFilterBar'
 import useResourceCardMenu from '../../hooks/useResourceCardMenu'
 import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
 import { useI18n } from '../../i18n'
 import {
   getMaterialsSortOptions,
   buildFileTileModel,
+  buildSourceFilterOptions,
   buildSkillBundleTileModel,
   dataFileBrowseRoute,
   dataFileEditorRoute,
+  fileNodeSource,
+  matchesSourceFilter,
+  skillSource,
+  sourceLabel,
   type MaterialsSortDir,
   type MaterialsSortKey,
   skillBundlePathFromSkillPath,
@@ -90,6 +96,7 @@ export default function DataSkillsPage() {
   const [creating, setCreating] = useState(false)
   const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
   const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const { activeMenuId, closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
 
   const load = useCallback(async () => {
@@ -167,6 +174,14 @@ export default function DataSkillsPage() {
       }),
     [skills, sortDir, sortKey],
   )
+  const filteredSkills = useMemo(
+    () => sortedSkills.filter((skill) => matchesSourceFilter(skillSource(skill), sourceFilter)),
+    [sortedSkills, sourceFilter],
+  )
+  const skillSourceOptions = useMemo(
+    () => buildSourceFilterOptions(skills, skillSource, locale),
+    [locale, skills],
+  )
 
   const sortedBundleEntries = useMemo(
     () =>
@@ -184,6 +199,14 @@ export default function DataSkillsPage() {
         },
       }),
     [bundleEntries, sortDir, sortKey],
+  )
+  const filteredBundleEntries = useMemo(
+    () => sortedBundleEntries.filter((entry) => matchesSourceFilter(fileNodeSource(entry), sourceFilter)),
+    [sortedBundleEntries, sourceFilter],
+  )
+  const bundleSourceOptions = useMemo(
+    () => buildSourceFilterOptions(bundleEntries, fileNodeSource, locale),
+    [bundleEntries, locale],
   )
 
   const openBundleDetail = (bundleId: string) => {
@@ -213,6 +236,7 @@ export default function DataSkillsPage() {
       await api.writeTree(path, {
         content: skillStarterMarkdown(bundleName),
         mimeType: 'text/markdown',
+        metadata: { source: 'manual' },
       })
       setShowNewForm(false)
       setNewBundleName('new-skill')
@@ -293,7 +317,7 @@ export default function DataSkillsPage() {
                 <p className="materials-section-copy">{tx('这个 bundle 里的文件和文件夹按同一套文件卡片规则展示。', 'Files and folders in this bundle are displayed with the same file card rules.')}</p>
               </div>
               <MaterialsSectionToolbar
-                count={bundleEntries.length}
+                count={filteredBundleEntries.length}
                 sortKey={sortKey}
                 sortOptions={sortOptions}
                 sortDir={sortDir}
@@ -312,11 +336,15 @@ export default function DataSkillsPage() {
               </MaterialsSectionToolbar>
             </div>
 
-            {bundleEntries.length === 0 ? (
+            {(bundleSourceOptions.length > 1 || sourceFilter !== 'all') && (
+              <SourceFilterBar options={bundleSourceOptions} value={sourceFilter} onChange={setSourceFilter} />
+            )}
+
+            {filteredBundleEntries.length === 0 ? (
               <p className="dashboard-empty-copy">{tx('这个 bundle 目录目前还是空的。', 'This bundle is currently empty.')}</p>
             ) : (
               <div className="materials-grid">
-                {sortedBundleEntries.map((entry) => {
+                {filteredBundleEntries.map((entry) => {
                   const tile = buildFileTileModel({
                     node: entry,
                     variant: 'skill-bundle-entry',
@@ -329,6 +357,7 @@ export default function DataSkillsPage() {
                       node={tile.node}
                       subtitle={tile.subtitle}
                       description={tile.description}
+                      extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
                       path={tile.path}
                       footerStart={tile.footerStart}
                       footerEnd={tile.footerEnd}
@@ -440,7 +469,7 @@ export default function DataSkillsPage() {
             <p className="materials-section-copy">{tx('统一按时间或名称浏览 skill bundle 卡片。', 'Browse skill bundle cards by time or name.')}</p>
           </div>
           <MaterialsSectionToolbar
-            count={skills.length}
+            count={filteredSkills.length}
             sortKey={sortKey}
             sortOptions={sortOptions}
             sortDir={sortDir}
@@ -462,14 +491,18 @@ export default function DataSkillsPage() {
           </MaterialsSectionToolbar>
         </div>
 
-        {skills.length === 0 ? (
+        {(skillSourceOptions.length > 1 || sourceFilter !== 'all') && (
+          <SourceFilterBar options={skillSourceOptions} value={sourceFilter} onChange={setSourceFilter} />
+        )}
+
+        {filteredSkills.length === 0 ? (
           <div className="empty-state">
             <p>{tx('还没有技能内容', 'No skills yet')}</p>
             <p className="empty-hint">{tx('导入或创建 skill bundle 后，会在这里看到对应文件夹。', 'Imported or newly created skill bundles will appear here.')}</p>
           </div>
         ) : (
           <div className="materials-grid">
-            {sortedSkills.map((skill) => {
+            {filteredSkills.map((skill) => {
               const tile = buildSkillBundleTileModel(skill, locale)
               return (
                 <FileMaterialsTile
@@ -477,6 +510,7 @@ export default function DataSkillsPage() {
                   node={tile.node}
                   subtitle={tile.subtitle}
                   description={tile.description}
+                  extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
                   path={tile.path}
                   footerStart={tile.footerStart}
                   footerEnd={tile.footerEnd}

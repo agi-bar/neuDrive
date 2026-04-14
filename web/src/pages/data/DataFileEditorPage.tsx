@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode } from '../../api'
 import { useI18n } from '../../i18n'
-import { displayNameFromPath, fileNamespaceLabel, formatDateTime } from './DataShared'
+import { displayNameFromPath, fileNamespaceLabel, formatDateTime, sourceLabel } from './DataShared'
 import MDEditor from '@uiw/react-md-editor'
 import '@uiw/react-md-editor/markdown-editor.css'
 import '@uiw/react-markdown-preview/markdown.css'
@@ -57,6 +57,7 @@ export default function DataFileEditorPage() {
         content,
         mimeType: node.mime_type || (path.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain'),
         isDir: false,
+        metadata: node.metadata,
         expectedVersion: node.version,
         expectedChecksum: node.checksum,
       })
@@ -92,6 +93,7 @@ export default function DataFileEditorPage() {
         content,
         mimeType: node.mime_type || (nextPath.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain'),
         isDir: false,
+        metadata: node.metadata,
       })
       await api.deleteTree(path)
       navigate(`/data/files/edit/${encodeURIComponent(nextPath.replace(/^\/+/, ''))}`, { replace: true })
@@ -159,6 +161,7 @@ export default function DataFileEditorPage() {
           <p className="page-subtitle">
             <span className="dashboard-inline-chip">{fileNamespaceLabel(node.path, locale)}</span>
             {node.kind && <span className="dashboard-inline-chip" style={{ marginLeft: 8 }}>{node.kind}</span>}
+            <span className="dashboard-inline-chip" style={{ marginLeft: 8 }}>{sourceLabel(node.source, locale)}</span>
             <span className="data-record-meta" style={{ marginLeft: 8 }}>{tx('最近更新：', 'Updated: ')}{formatDateTime(node.updated_at || node.created_at, locale)}</span>
           </p>
           <div className="data-record-path">{node.path}</div>

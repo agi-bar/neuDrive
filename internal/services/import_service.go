@@ -82,7 +82,10 @@ func (s *ImportService) ImportSkill(ctx context.Context, userID uuid.UUID, skill
 		// Determine content type from extension.
 		ct := contentTypeFromExt(relPath)
 
-		_, err := s.fileTree.Write(ctx, userID, fullPath, content, ct, models.TrustLevelGuest)
+		_, err := s.fileTree.WriteEntry(ctx, userID, fullPath, content, ct, models.FileTreeWriteOptions{
+			Metadata:      WithSourceMetadata(nil, "import"),
+			MinTrustLevel: models.TrustLevelGuest,
+		})
 		if err != nil {
 			return imported, fmt.Errorf("import.ImportSkill: write %s: %w", relPath, err)
 		}
@@ -180,6 +183,11 @@ func (s *ImportService) importSkillsArchiveEntries(ctx context.Context, userID u
 		return result, true, err
 	}
 
+	if strings.TrimSpace(platform) == "" {
+		if inferred := SourceFromContext(ctx); !IsGenericSource(inferred) {
+			platform = inferred
+		}
+	}
 	if strings.TrimSpace(platform) == "" {
 		platform = "skills-archive"
 	}
@@ -368,6 +376,7 @@ func (s *ImportService) ImportBulkFiles(ctx context.Context, userID uuid.UUID, f
 		normalizedPath := hubpath.NormalizeStorage(rawPath)
 		ct := contentTypeFromExt(normalizedPath)
 		if _, err := s.fileTree.WriteEntry(ctx, userID, normalizedPath, content, ct, models.FileTreeWriteOptions{
+			Metadata:      WithSourceMetadata(nil, "import"),
 			MinTrustLevel: minTrustLevel,
 		}); err != nil {
 			return 0, fmt.Errorf("import.ImportBulkFiles: write %s: %w", normalizedPath, err)
@@ -462,7 +471,10 @@ func (s *ImportService) ImportClaudeData(ctx context.Context, userID uuid.UUID, 
 			content := memories[0].ConversationsMemory
 			if content != "" {
 				path := "/memory/claude/memory.md"
-				if _, err := s.fileTree.Write(ctx, userID, path, content, "text/markdown", models.TrustLevelFull); err == nil {
+				if _, err := s.fileTree.WriteEntry(ctx, userID, path, content, "text/markdown", models.FileTreeWriteOptions{
+					Metadata:      WithSourceMetadata(nil, "claude-web"),
+					MinTrustLevel: models.TrustLevelFull,
+				}); err == nil {
 					result.MemoriesImported = 1
 					result.FilesWritten++
 				}
@@ -520,7 +532,10 @@ func (s *ImportService) ImportClaudeData(ctx context.Context, userID uuid.UUID, 
 				}
 				path := fmt.Sprintf("/memory/conversations/%s-%s.md", date, safeName)
 
-				if _, err := s.fileTree.Write(ctx, userID, path, sb.String(), "text/markdown", models.TrustLevelFull); err == nil {
+				if _, err := s.fileTree.WriteEntry(ctx, userID, path, sb.String(), "text/markdown", models.FileTreeWriteOptions{
+					Metadata:      WithSourceMetadata(nil, "claude-web"),
+					MinTrustLevel: models.TrustLevelFull,
+				}); err == nil {
 					result.ConversationsImported++
 					result.FilesWritten++
 				}
@@ -551,7 +566,10 @@ func (s *ImportService) ImportClaudeData(ctx context.Context, userID uuid.UUID, 
 				// Import docs as skills
 				for _, doc := range p.Docs {
 					path := fmt.Sprintf("/skills/claude-%s/%s", safeName, doc.Filename)
-					if _, err := s.fileTree.Write(ctx, userID, path, doc.Content, contentTypeFromExt(doc.Filename), models.TrustLevelWork); err == nil {
+					if _, err := s.fileTree.WriteEntry(ctx, userID, path, doc.Content, contentTypeFromExt(doc.Filename), models.FileTreeWriteOptions{
+						Metadata:      WithSourceMetadata(nil, "claude-web"),
+						MinTrustLevel: models.TrustLevelWork,
+					}); err == nil {
 						result.FilesWritten++
 					}
 				}

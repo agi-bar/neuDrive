@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/agi-bar/neudrive/internal/auth"
@@ -65,6 +66,7 @@ type Server struct {
 	JWTSecret            string
 	GitHubClientID       string
 	GitHubClientSecret   string
+	mcpSessionSources    sync.Map
 }
 
 type ServerDeps struct {
@@ -477,6 +479,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 				ctx := context.WithValue(r.Context(), ctxKeyUserID, conn.UserID)
 				ctx = context.WithValue(ctx, ctxKeyConnection, conn)
 				ctx = context.WithValue(ctx, ctxKeyTrustLevel, conn.TrustLevel)
+				ctx = s.withAuthenticatedSource(ctx, conn, nil)
 				// Fire-and-forget last_used_at update.
 				go func() {
 					if err := s.ConnectionService.UpdateLastUsed(context.Background(), conn.ID); err != nil {
@@ -533,6 +536,7 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ctxKeyUserID, conn.UserID)
 		ctx = context.WithValue(ctx, ctxKeyConnection, conn)
 		ctx = context.WithValue(ctx, ctxKeyTrustLevel, conn.TrustLevel)
+		ctx = s.withAuthenticatedSource(ctx, conn, nil)
 
 		// Fire-and-forget last_used_at update.
 		go func() {
@@ -564,6 +568,7 @@ func (s *Server) handleScopedTokenAuth(w http.ResponseWriter, r *http.Request, n
 	ctx = context.WithValue(ctx, ctxKeyScopedToken, token)
 	ctx = context.WithValue(ctx, ctxKeyTrustLevel, token.MaxTrustLevel)
 	ctx = context.WithValue(ctx, ctxKeyScopes, token.Scopes)
+	ctx = s.withAuthenticatedSource(ctx, nil, token)
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 
@@ -730,7 +735,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project, err := s.ProjectService.Create(r.Context(), userID, req.Name)
+	project, err := s.ProjectService.Create(s.requestSourceContext(r, "manual"), userID, req.Name)
 	if err != nil {
 		respondInternalError(w, err)
 		return
@@ -809,15 +814,20 @@ func (s *Server) handleAppendProjectLog(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
+	ctx := s.requestSourceContext(r, "manual")
+	source := strings.TrimSpace(req.Source)
+	if source == "" {
+		source = services.SourceOrDefault(ctx, "manual")
+	}
 	logEntry := models.ProjectLog{
 		ProjectID: project.ID,
-		Source:    req.Source,
+		Source:    source,
 		Action:    req.Action,
 		Summary:   req.Summary,
 		Tags:      req.Tags,
 	}
 
-	if err := s.ProjectService.AppendLog(r.Context(), project.ID, logEntry); err != nil {
+	if err := s.ProjectService.AppendLog(ctx, project.ID, logEntry); err != nil {
 		respondInternalError(w, err)
 		return
 	}
@@ -844,7 +854,7 @@ func (s *Server) handleArchiveProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.ProjectService.Archive(r.Context(), userID, name); err != nil {
+	if err := s.ProjectService.Archive(s.requestSourceContext(r, "manual"), userID, name); err != nil {
 		respondNotFound(w, "project")
 		return
 	}
@@ -883,7 +893,7 @@ func (s *Server) handleSummarizeProject(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	if err := s.ProjectService.UpdateContext(r.Context(), userID, name, md); err != nil {
+	if err := s.ProjectService.UpdateContext(s.requestSourceContext(r, "manual"), userID, name, md); err != nil {
 		respondInternalError(w, err)
 		return
 	}
@@ -1028,6 +1038,8 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Content          string                 `json:"content"`
 		ContentType      string                 `json:"content_type,omitempty"`
+		Source           string                 `json:"source,omitempty"`
+		SourcePlatform   string                 `json:"source_platform,omitempty"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
 		MinTrustLevel    int                    `json:"min_trust_level,omitempty"`
 		ExpectedVersion  *int64                 `json:"expected_version,omitempty"`
@@ -1047,7 +1059,9 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 	if minTrustLevel <= 0 {
 		minTrustLevel = models.TrustLevelFull
 	}
-	entry, err := s.FileTreeService.WriteEntry(r.Context(), userID, path, req.Content, contentType, models.FileTreeWriteOptions{
+	ctx := s.requestSourceContext(r, "agent")
+	ctx, req.Metadata = applyExplicitSourceHints(ctx, req.Metadata, req.Source, req.SourcePlatform)
+	entry, err := s.FileTreeService.WriteEntry(ctx, userID, path, req.Content, contentType, models.FileTreeWriteOptions{
 		Metadata:         req.Metadata,
 		MinTrustLevel:    minTrustLevel,
 		ExpectedVersion:  req.ExpectedVersion,

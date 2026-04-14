@@ -19,6 +19,7 @@ type FileNode struct {
 	Path      string      `json:"path"`
 	Name      string      `json:"name"`
 	IsDir     bool        `json:"is_dir"`
+	Source    string      `json:"source,omitempty"`
 	Kind      string      `json:"kind,omitempty"`
 	Content   string      `json:"content,omitempty"`
 	MimeType  string      `json:"mime_type,omitempty"`
@@ -36,6 +37,8 @@ type WriteFileRequest struct {
 	Content          string                 `json:"content"`
 	MimeType         string                 `json:"mime_type,omitempty"`
 	IsDir            bool                   `json:"is_dir"`
+	Source           string                 `json:"source,omitempty"`
+	SourcePlatform   string                 `json:"source_platform,omitempty"`
 	Metadata         map[string]interface{} `json:"metadata,omitempty"`
 	MinTrustLevel    int                    `json:"min_trust_level,omitempty"`
 	ExpectedVersion  *int64                 `json:"expected_version,omitempty"`
@@ -113,9 +116,11 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "manual")
+	ctx, req.Metadata = applyExplicitSourceHints(ctx, req.Metadata, req.Source, req.SourcePlatform)
 
 	if req.IsDir {
-		entry, err := s.FileTreeService.EnsureDirectoryWithMetadata(r.Context(), userID, path, req.Metadata, req.MinTrustLevel)
+		entry, err := s.FileTreeService.EnsureDirectoryWithMetadata(ctx, userID, path, req.Metadata, req.MinTrustLevel)
 		if err != nil {
 			if errors.Is(err, services.ErrReadOnlyPath) {
 				respondForbidden(w, err.Error())
@@ -137,8 +142,14 @@ func (s *Server) handleTreeWrite(w http.ResponseWriter, r *http.Request) {
 	if minTrustLevel <= 0 {
 		minTrustLevel = models.TrustLevelFull
 	}
-	entry, err := s.FileTreeService.WriteEntry(r.Context(), userID, path, req.Content, mimeType, models.FileTreeWriteOptions{
-		Metadata:         req.Metadata,
+	writeMetadata := req.Metadata
+	if services.EntrySourceFromMetadata(writeMetadata) == "" {
+		if _, readErr := s.FileTreeService.Read(r.Context(), userID, path, trustLevelFromCtx(r.Context())); errors.Is(readErr, services.ErrEntryNotFound) {
+			writeMetadata = services.WithSourceMetadata(writeMetadata, services.SourceOrDefault(ctx, "manual"))
+		}
+	}
+	entry, err := s.FileTreeService.WriteEntry(ctx, userID, path, req.Content, mimeType, models.FileTreeWriteOptions{
+		Metadata:         writeMetadata,
 		MinTrustLevel:    minTrustLevel,
 		ExpectedVersion:  req.ExpectedVersion,
 		ExpectedChecksum: req.ExpectedChecksum,
@@ -244,6 +255,7 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 		Path:      publicPath,
 		Name:      hubpath.BaseName(publicPath),
 		IsDir:     e.IsDirectory,
+		Source:    services.EntrySource(e),
 		Kind:      e.Kind,
 		Content:   e.Content,
 		MimeType:  e.ContentType,

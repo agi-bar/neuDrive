@@ -151,6 +151,127 @@ func TestFileAndBlobRoundTrip(t *testing.T) {
 	}
 }
 
+func TestWriteEntryPreservesSourceMetadataOnUpdate(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+
+	entry, err := store.WriteEntry(ctx, userID, "/notes/source-demo.md", "first version", "text/markdown", models.FileTreeWriteOptions{
+		Metadata: map[string]interface{}{
+			"source_platform": "claude-web",
+			"capture_mode":    "archive",
+		},
+		MinTrustLevel: models.TrustLevelGuest,
+	})
+	if err != nil {
+		t.Fatalf("initial WriteEntry: %v", err)
+	}
+
+	updated, err := store.WriteEntry(ctx, userID, "/notes/source-demo.md", "second version", "text/markdown", models.FileTreeWriteOptions{
+		ExpectedVersion: &entry.Version,
+		MinTrustLevel:   models.TrustLevelGuest,
+	})
+	if err != nil {
+		t.Fatalf("update WriteEntry: %v", err)
+	}
+
+	if updated.Metadata["source_platform"] != "claude-web" {
+		t.Fatalf("expected source_platform to be preserved, got %+v", updated.Metadata)
+	}
+	if updated.Metadata["capture_mode"] != "archive" {
+		t.Fatalf("expected capture_mode to be preserved, got %+v", updated.Metadata)
+	}
+}
+
+func TestImportSkillDefaultsSourceMetadata(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+	fixture := newTestServiceFixture(store)
+
+	imported, err := fixture.importSvc.ImportSkill(ctx, userID, "imported-skill", map[string]string{
+		"SKILL.md": "# Imported Skill\n",
+	})
+	if err != nil {
+		t.Fatalf("ImportSkill: %v", err)
+	}
+	if imported != 1 {
+		t.Fatalf("ImportSkill imported = %d, want 1", imported)
+	}
+
+	entry, err := store.Read(ctx, userID, "/skills/imported-skill/SKILL.md", models.TrustLevelGuest)
+	if err != nil {
+		t.Fatalf("Read imported skill: %v", err)
+	}
+	if services.EntrySourceFromMetadata(entry.Metadata) != "import" {
+		t.Fatalf("expected import source, got %+v", entry.Metadata)
+	}
+}
+
+func TestImportBundleCopiesBundleSourceToSkillFiles(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+	fixture := newTestServiceFixture(store)
+
+	_, err := fixture.importSvc.ImportBundle(ctx, userID, models.Bundle{
+		Version: models.BundleVersionV1,
+		Source:  "chatgpt",
+		Mode:    "merge",
+		Skills: map[string]models.BundleSkill{
+			"bundle-skill": {
+				Files: map[string]string{
+					"SKILL.md": "# Bundle Skill\n",
+				},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ImportBundle: %v", err)
+	}
+
+	entry, err := store.Read(ctx, userID, "/skills/bundle-skill/SKILL.md", models.TrustLevelGuest)
+	if err != nil {
+		t.Fatalf("Read bundle skill: %v", err)
+	}
+	if services.EntrySourceFromMetadata(entry.Metadata) != "chatgpt" {
+		t.Fatalf("expected chatgpt source, got %+v", entry.Metadata)
+	}
+}
+
+func TestWriteEntryUsesSourceFromContextWhenMetadataIsMissing(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+	ctx = services.ContextWithSource(ctx, "mcp")
+
+	entry, err := store.WriteEntry(ctx, userID, "/notes/mcp-context.md", "hello", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	})
+	if err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+	if services.EntrySourceFromMetadata(entry.Metadata) != "mcp" {
+		t.Fatalf("expected mcp source, got %+v", entry.Metadata)
+	}
+}
+
+func TestWriteEntryAddsSourcePlatformFromContextWhenMetadataHasGenericSource(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+	ctx = services.ContextWithSource(ctx, "codex")
+
+	entry, err := store.WriteEntry(ctx, userID, "/skills/context-skill/SKILL.md", "# Skill\n", "text/markdown", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+		Metadata: map[string]interface{}{
+			"source": "import",
+		},
+	})
+	if err != nil {
+		t.Fatalf("WriteEntry: %v", err)
+	}
+	if got := entry.Metadata["source"]; got != "import" {
+		t.Fatalf("expected source=import, got %+v", entry.Metadata)
+	}
+	if got := entry.Metadata["source_platform"]; got != "codex" {
+		t.Fatalf("expected source_platform=codex, got %+v", entry.Metadata)
+	}
+	if services.EntrySourceFromMetadata(entry.Metadata) != "codex" {
+		t.Fatalf("expected effective source codex, got %+v", entry.Metadata)
+	}
+}
+
 func TestDeleteDirectoryRecursively(t *testing.T) {
 	ctx, store, userID := openTestStore(t)
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { api, MemoryConflict } from '../api'
 import { useI18n } from '../i18n'
+import { sourceLabel } from './data/DataShared'
 
 interface ProfileEntry {
   id?: string
@@ -22,7 +23,7 @@ interface InfoPageProps {
 }
 
 export default function InfoPage({ title }: InfoPageProps) {
-  const { tx } = useI18n()
+  const { locale, tx } = useI18n()
   const [profiles, setProfiles] = useState<ProfileEntry[]>([])
   const [vaultScopes, setVaultScopes] = useState<VaultScope[]>([])
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
@@ -54,8 +55,9 @@ export default function InfoPage({ title }: InfoPageProps) {
 
   const loadData = async () => {
     try {
-      const [profileData, vaultData, conflictData] = await Promise.allSettled([
+      const [profileData, profileSnapshotData, vaultData, conflictData] = await Promise.allSettled([
         api.getProfile(),
+        api.getTreeSnapshot('/memory/profile'),
         api.getVaultScopes(),
         api.getConflicts(),
       ])
@@ -65,10 +67,18 @@ export default function InfoPage({ title }: InfoPageProps) {
         // API returns {user_id, display_name, preferences: {key: value}}
         // Transform preferences map into ProfileEntry[] for display
         const prefs = raw.preferences || {}
+        const sourceLookup = new Map<string, string>()
+        if (profileSnapshotData.status === 'fulfilled') {
+          profileSnapshotData.value.entries.forEach((entry) => {
+            const name = entry.path.split('/').pop()?.replace(/\.md$/i, '') || ''
+            if (name) sourceLookup.set(name, entry.source || '')
+          })
+        }
         const entries: ProfileEntry[] = Object.entries(prefs).map(([key, value]) => ({
           category: key,
           key: key,
           value: String(value),
+          source: sourceLookup.get(key) || '',
         }))
         setProfiles(entries)
         // Initialize edit values from preferences
@@ -118,6 +128,7 @@ export default function InfoPage({ title }: InfoPageProps) {
       await api.upsertProfile({
         preferences: { [category]: text },
       })
+      await loadData()
       setSuccessMsg(tx(`${profileCategories.find((c) => c.key === category)?.label || category} 已保存`, `${profileCategories.find((c) => c.key === category)?.label || category} saved`))
       setTimeout(() => setSuccessMsg(''), 2000)
     } catch (err: any) {
@@ -137,6 +148,7 @@ export default function InfoPage({ title }: InfoPageProps) {
         prefs[cat.key] = editValues[cat.key] || ''
       }
       await api.upsertProfile({ preferences: prefs })
+      await loadData()
       setSuccessMsg(tx('所有配置已保存', 'All settings saved'))
       setTimeout(() => setSuccessMsg(''), 2000)
     } catch (err: any) {
@@ -237,6 +249,9 @@ export default function InfoPage({ title }: InfoPageProps) {
             <div key={cat.key} className="card">
               <div className="card-header">
                 <h4 className="card-title">{cat.label}</h4>
+                <span className="dashboard-inline-chip">
+                  {sourceLabel(profiles.find((entry) => entry.key === cat.key)?.source, locale)}
+                </span>
               </div>
               <textarea
                 className="profile-textarea"

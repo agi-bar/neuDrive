@@ -65,6 +65,7 @@ export interface FileNode {
   path: string
   name: string
   is_dir: boolean
+  source?: string
   kind?: string
   content?: string
   mime_type?: string
@@ -378,11 +379,12 @@ export const api = {
   getTreeSnapshot: (path = '/'): Promise<TreeSnapshotResponse> =>
     request<TreeSnapshotResponse>(`/tree/snapshot?path=${encodeURIComponent(path)}`),
 
-  search: (q: string): Promise<{ path: string; name: string; kind?: string; content?: string; updated_at?: string }[]> =>
+  search: (q: string): Promise<{ path: string; name: string; source?: string; kind?: string; content?: string; updated_at?: string }[]> =>
     request<{ query: string; results: any[] }>(`/search?q=${encodeURIComponent(q)}`)
       .then(r => (r.results || []).map((x: any) => ({
         path: x.path,
         name: x.name || x.path.split('/').pop() || x.path,
+        source: x.source,
         kind: x.kind,
         content: x.content,
         updated_at: x.updated_at,

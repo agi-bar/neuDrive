@@ -151,7 +151,7 @@ func (s *SummaryService) AutoUpdateContext(ctx context.Context, projectID uuid.U
 		return fmt.Errorf("summary.AutoUpdateContext: generate: %w", err)
 	}
 
-	return s.Project.UpdateContext(ctx, p.UserID, p.Name, md)
+	return s.Project.UpdateContext(ContextWithSource(ctx, SourceOrDefault(ctx, "summary")), p.UserID, p.Name, md)
 }
 
 // SummarizeAllStaleProjects finds projects with stale contexts and updates them.
@@ -181,7 +181,7 @@ func (s *SummaryService) SummarizeAllStaleProjects(ctx context.Context, userID u
 			continue
 		}
 
-		if err := s.Project.UpdateContext(ctx, p.UserID, p.Name, md); err != nil {
+		if err := s.Project.UpdateContext(ContextWithSource(ctx, SourceOrDefault(ctx, "summary")), p.UserID, p.Name, md); err != nil {
 			continue
 		}
 		updated++

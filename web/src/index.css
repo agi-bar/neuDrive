@@ -1402,6 +1402,11 @@ a:hover {
   font-weight: 600;
 }
 
+.materials-source-pill {
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
+}
+
 .materials-tile-actions {
   display: flex;
   flex-wrap: wrap;
@@ -1498,6 +1503,49 @@ a:hover {
 .materials-compact-toolbar select.materials-toolbar-control,
 .files-browser-inline-toolbar select.files-browser-toolbar-control {
   padding-right: 28px !important;
+}
+
+.source-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.source-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 30px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(78, 92, 148, 0.08);
+  color: #56628f;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.source-filter-chip:hover {
+  background: rgba(78, 92, 148, 0.14);
+}
+
+.source-filter-chip.is-active {
+  background: rgba(15, 118, 110, 0.12);
+  color: #0f766e;
+}
+
+.source-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.72);
+  font-size: 11px;
 }
 
 .materials-toggle-group {

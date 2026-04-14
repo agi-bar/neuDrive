@@ -7,11 +7,13 @@ import (
 
 	"github.com/agi-bar/neudrive/internal/hubpath"
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 	"github.com/google/uuid"
 )
 
 type SearchHit struct {
 	Path    string  `json:"path"`
+	Source  string  `json:"source,omitempty"`
 	Type    string  `json:"type"`
 	Snippet string  `json:"snippet"`
 	Score   float64 `json:"score"`
@@ -77,6 +79,7 @@ func (s *Server) searchHub(ctx context.Context, userID uuid.UUID, trustLevel int
 			}
 			results = append(results, SearchHit{
 				Path:    publicPath,
+				Source:  services.EntrySource(&entry),
 				Type:    entry.Kind,
 				Snippet: snippet,
 				Score:   1,

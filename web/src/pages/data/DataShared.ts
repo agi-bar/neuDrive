@@ -16,9 +16,54 @@ const PROFILE_LABELS: Record<string, string> = {
   principles: '行为准则',
 }
 
+const SYSTEM_CONTAINER_PATHS = new Set([
+  '/devices',
+  '/inbox',
+  '/memory',
+  '/memory/profile',
+  '/projects',
+  '/roles',
+  '/skills',
+])
+
 function text(locale: AppLocale, zh: string, en: string) {
   return locale === 'zh-CN' ? zh : en
 }
+
+const SOURCE_PRIORITY = [
+  'manual',
+  'upload',
+  'claude-code',
+  'claude-web',
+  'claude-desktop',
+  'codex',
+  'chatgpt',
+  'claude',
+  'cursor',
+  'windsurf',
+  'gemini-cli',
+  'gemini',
+  'copilot',
+  'perplexity',
+  'kimi',
+  'deepseek',
+  'qwen',
+  'zhipu',
+  'minimax',
+  'feishu',
+  'open-webui',
+  'openai',
+  'mcp',
+  'summary',
+  'scheduler',
+  'system',
+  'import',
+  'agent',
+  'neudrive',
+  'devices',
+  'roles',
+  'unknown',
+] as const
 
 function hasVisibleContent(node: FileNode) {
   return !node.is_dir && !node.deleted_at
@@ -31,6 +76,228 @@ function stripMarkdownSuffix(value: string) {
 function topLevelSegment(path: string) {
   const normalized = path.replace(/^\/+/, '')
   return normalized.split('/')[0] || ''
+}
+
+function metadataValue(metadata: Record<string, any> | undefined, key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function normalizeSource(value?: string) {
+  const normalized = (value || '').trim().toLowerCase().replace(/_/g, '-').replace(/\s+/g, '-').replace(/--+/g, '-')
+  if (!normalized) return ''
+  if (normalized.startsWith('agent:')) return normalizeSource(normalized.slice('agent:'.length))
+  if (normalized.startsWith('platform:')) return normalizeSource(normalized.slice('platform:'.length))
+
+  switch (normalized) {
+    case 'browser':
+    case 'dashboard':
+    case 'manual':
+    case 'manually':
+    case 'user':
+    case 'web':
+      return 'manual'
+    case 'upload':
+    case 'uploaded':
+    case 'browser-upload':
+    case 'file-upload':
+      return 'upload'
+    case 'gpt':
+    case 'chatgpt-apps':
+    case 'chatgpt-actions':
+    case 'chatgpt.com':
+    case 'chat-openai-com':
+    case 'openai-chatgpt':
+      return 'chatgpt'
+    case 'codex-cli':
+    case 'codex-mcp-client':
+    case 'openai-codex':
+      return 'codex'
+    case 'cursor-vscode':
+    case 'cursor-desktop':
+    case 'cursor-agent':
+      return 'cursor'
+    case 'gemini-cli-mcp-client':
+      return 'gemini-cli'
+    case 'github-copilot':
+    case 'copilot-chat':
+      return 'copilot'
+    case 'tongyi':
+      return 'qwen'
+    case 'chatglm':
+    case 'glm':
+    case 'bigmodel':
+      return 'zhipu'
+    case 'lark':
+      return 'feishu'
+    case 'openwebui':
+      return 'open-webui'
+    case 'bundle-import':
+    case 'full-import':
+      return 'import'
+    case 'claude-import':
+      return 'claude'
+    case 'claudecode':
+      return 'claude-code'
+    case 'claude-connectors':
+    case 'claude-connector':
+    case 'claudeweb':
+    case 'claude.ai':
+      return 'claude-web'
+    default:
+      return normalized
+  }
+}
+
+export function sourceLabel(source: string | undefined, locale: AppLocale = 'zh-CN') {
+  switch (normalizeSource(source) || 'unknown') {
+    case 'manual':
+      return text(locale, '手工填写', 'Manual')
+    case 'upload':
+      return text(locale, '上传导入', 'Upload')
+    case 'claude-code':
+      return 'Claude Code'
+    case 'claude-web':
+      return 'Claude Web'
+    case 'claude-desktop':
+      return 'Claude Desktop'
+    case 'codex':
+      return 'Codex'
+    case 'chatgpt':
+      return 'ChatGPT'
+    case 'claude':
+      return 'Claude'
+    case 'cursor':
+      return 'Cursor'
+    case 'windsurf':
+      return 'Windsurf'
+    case 'gemini-cli':
+      return 'Gemini CLI'
+    case 'gemini':
+      return 'Gemini'
+    case 'copilot':
+      return 'GitHub Copilot'
+    case 'perplexity':
+      return 'Perplexity'
+    case 'kimi':
+      return 'Kimi'
+    case 'deepseek':
+      return 'DeepSeek'
+    case 'qwen':
+      return 'Qwen'
+    case 'zhipu':
+      return 'Zhipu GLM'
+    case 'minimax':
+      return 'MiniMax'
+    case 'feishu':
+      return locale === 'zh-CN' ? '飞书' : 'Feishu'
+    case 'open-webui':
+      return 'Open WebUI'
+    case 'openai':
+      return 'OpenAI'
+    case 'mcp':
+      return 'MCP'
+    case 'summary':
+      return text(locale, '摘要生成', 'Summary')
+    case 'scheduler':
+      return text(locale, '定时任务', 'Scheduler')
+    case 'system':
+      return text(locale, '系统', 'System')
+    case 'import':
+      return text(locale, '导入', 'Import')
+    case 'agent':
+      return 'Agent'
+    case 'neudrive':
+      return 'neuDrive'
+    case 'devices':
+      return text(locale, '设备', 'Devices')
+    case 'roles':
+      return 'Roles'
+    case 'unknown':
+      return text(locale, '未标注', 'Unknown')
+    default: {
+      const value = normalizeSource(source)
+      return value
+        .split('-')
+        .filter(Boolean)
+        .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+        .join(' ')
+    }
+  }
+}
+
+export function sourceFilterLabel(source: string, locale: AppLocale = 'zh-CN') {
+  return source === 'all' ? text(locale, '全部来源', 'All sources') : sourceLabel(source, locale)
+}
+
+function sourceSortValue(source: string) {
+  const normalized = normalizeSource(source) || 'unknown'
+  const index = SOURCE_PRIORITY.indexOf(normalized as (typeof SOURCE_PRIORITY)[number])
+  return index === -1 ? SOURCE_PRIORITY.length + 1 : index
+}
+
+export function fileNodeSource(node: Pick<FileNode, 'source' | 'metadata' | 'path' | 'is_dir'>) {
+  const metadata = node.metadata
+  const platform = normalizeSource(metadataValue(metadata, 'source_platform'))
+  if (platform) return platform
+  const direct = normalizeSource(node.source)
+  if (direct) return direct
+  const explicit = normalizeSource(metadataValue(metadata, 'source'))
+  if (explicit) return explicit
+  if (metadataValue(metadata, 'capture_mode') === 'archive') return 'upload'
+  if (node.is_dir && SYSTEM_CONTAINER_PATHS.has(normalizeHubPath(node.path))) return 'system'
+  return ''
+}
+
+export function skillSource(skill?: Pick<SkillSummary, 'source'> | null) {
+  return normalizeSource(skill?.source)
+}
+
+export function projectSource(project: { metadata?: Record<string, any> }) {
+  const platform = normalizeSource(metadataValue(project.metadata, 'source_platform'))
+  if (platform) return platform
+  const explicit = normalizeSource(metadataValue(project.metadata, 'source'))
+  if (explicit) return explicit
+  if (metadataValue(project.metadata, 'capture_mode') === 'archive') return 'upload'
+  return ''
+}
+
+export type SourceFilterOption = {
+  value: string
+  label: string
+  count: number
+}
+
+export function buildSourceFilterOptions<T>(
+  items: T[],
+  getSource: (item: T) => string,
+  locale: AppLocale = 'zh-CN',
+): SourceFilterOption[] {
+  const counts = new Map<string, number>()
+  items.forEach((item) => {
+    const value = getSource(item) || 'unknown'
+    counts.set(value, (counts.get(value) || 0) + 1)
+  })
+
+  return Array.from(counts.entries())
+    .map(([value, count]) => ({
+      value,
+      count,
+      label: sourceFilterLabel(value, locale),
+    }))
+    .sort((left, right) => {
+      const priorityDiff = sourceSortValue(left.value) - sourceSortValue(right.value)
+      if (priorityDiff !== 0) return priorityDiff
+      return left.label.localeCompare(right.label)
+    })
+}
+
+export function matchesSourceFilter(source: string, filter: string) {
+  const normalizedFilter = normalizeSource(filter) || filter
+  if (!normalizedFilter || normalizedFilter === 'all') return true
+  const normalizedSource = normalizeSource(source)
+  if (normalizedFilter === 'unknown') return !normalizedSource
+  return normalizedSource === normalizedFilter
 }
 
 export function normalizeHubPath(path: string) {
@@ -147,6 +414,7 @@ export type FileTileModel = {
   subtitle?: string
   description?: string
   path?: string
+  source?: string
   footerStart?: string
   footerEnd?: string
 }
@@ -198,12 +466,14 @@ export function buildFileTileModel({
 }: BuildFileTileModelOptions): FileTileModel {
   const skillSummary = skillSummaryForPath(node.path, skillLookup)
   const skillBundleCard = variant === 'browser' && node.is_dir && Boolean(skillSummary)
+  const resolvedSource = skillBundleCard ? skillSource(skillSummary) : fileNodeSource(node)
 
   switch (variant) {
     case 'recent':
       return {
         node,
         path: node.path,
+        source: resolvedSource,
         footerStart: fileNamespaceLabel(node.path, locale),
         footerEnd: fileTileFooterEnd(node, locale),
       }
@@ -213,6 +483,7 @@ export function buildFileTileModel({
           ...node,
           name: fileTileName(node, variant),
         },
+        source: resolvedSource,
         subtitle: fileTileFooterEnd(node, locale),
         description: summarizeNodeContent(node, 220, locale),
         path: node.path,
@@ -223,12 +494,14 @@ export function buildFileTileModel({
       return {
         node,
         path: node.path,
+        source: resolvedSource,
         footerStart: fileNamespaceLabel(node.path, locale),
         footerEnd: fileTileFooterEnd(node, locale),
       }
     case 'skill-bundle-entry':
       return {
         node,
+        source: resolvedSource,
         description: fileTileDescription(node, skillLookup) || undefined,
         footerStart: bundleLabel || 'Bundle',
         footerEnd: fileTileFooterEnd(node, locale),
@@ -237,6 +510,7 @@ export function buildFileTileModel({
     default:
       return {
         node,
+        source: resolvedSource,
         description: fileTileDescription(node, skillLookup) || undefined,
         footerStart: skillBundleCard ? text(locale, '技能', 'Skills') : (currentLabel || text(locale, '根目录', 'Root')),
         footerEnd: skillBundleCard
@@ -253,6 +527,7 @@ export function buildSkillBundleTileModel(skill: SkillSummary, locale: AppLocale
       name: skill.name,
       is_dir: true,
     },
+    source: skillSource(skill),
     description: skillSummaryDescription(skill) || text(locale, '这个 bundle 还没有写描述。', 'This bundle does not have a description yet.'),
     footerStart: text(locale, '技能', 'Skills'),
     footerEnd: skill.read_only ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable'),

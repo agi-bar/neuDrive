@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -104,26 +105,27 @@ func (s *Server) handleAgentUpdateProfile(w http.ResponseWriter, r *http.Request
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
 		return
 	}
+	ctx := s.requestSourceContext(r, "agent")
 
 	source := strings.TrimSpace(req.Source)
 	if source == "" {
-		source = "agent"
+		source = services.SourceOrDefault(ctx, "agent")
 	}
 
 	if req.Category != "" {
-		if err := s.MemoryService.UpsertProfile(r.Context(), userID, req.Category, req.Content, source); err != nil {
+		if err := s.MemoryService.UpsertProfile(ctx, userID, req.Category, req.Content, source); err != nil {
 			respondInternalError(w, err)
 			return
 		}
 	}
 	for category, content := range req.Preferences {
-		if err := s.MemoryService.UpsertProfile(r.Context(), userID, category, content, source); err != nil {
+		if err := s.MemoryService.UpsertProfile(ctx, userID, category, content, source); err != nil {
 			respondInternalError(w, err)
 			return
 		}
 	}
 	if strings.TrimSpace(req.DisplayName) != "" {
-		if err := s.MemoryService.UpsertProfile(r.Context(), userID, "display_name", req.DisplayName, source); err != nil {
+		if err := s.MemoryService.UpsertProfile(ctx, userID, "display_name", req.DisplayName, source); err != nil {
 			respondInternalError(w, err)
 			return
 		}
@@ -169,7 +171,7 @@ func (s *Server) handleAgentCreateProject(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	project, err := s.ProjectService.Create(r.Context(), userID, req.Name)
+	project, err := s.ProjectService.Create(s.requestSourceContext(r, "agent"), userID, req.Name)
 	if err != nil {
 		respondInternalError(w, err)
 		return
@@ -246,14 +248,19 @@ func (s *Server) handleAgentAppendProjectLog(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	ctx := s.requestSourceContext(r, "agent")
+	source := strings.TrimSpace(req.Source)
+	if source == "" {
+		source = services.SourceOrDefault(ctx, "agent")
+	}
 	logEntry := models.ProjectLog{
 		ProjectID: project.ID,
-		Source:    req.Source,
+		Source:    source,
 		Action:    req.Action,
 		Summary:   req.Summary,
 		Tags:      req.Tags,
 	}
-	if err := s.ProjectService.AppendLog(r.Context(), project.ID, logEntry); err != nil {
+	if err := s.ProjectService.AppendLog(ctx, project.ID, logEntry); err != nil {
 		respondInternalError(w, err)
 		return
 	}

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 const (
@@ -39,11 +40,12 @@ func (s *Server) handleAgentWriteScratch(w http.ResponseWriter, r *http.Request)
 		respondValidationError(w, "content", "content is required")
 		return
 	}
+	ctx := s.requestSourceContext(r, "agent")
 	if strings.TrimSpace(req.Source) == "" {
-		req.Source = "agent"
+		req.Source = services.SourceOrDefault(ctx, "agent")
 	}
 
-	entry, err := s.MemoryService.WriteScratchWithTitle(r.Context(), userID, req.Content, req.Source, req.Title)
+	entry, err := s.MemoryService.WriteScratchWithTitle(ctx, userID, req.Content, req.Source, req.Title)
 	if err != nil {
 		respondInternalError(w, err)
 		return

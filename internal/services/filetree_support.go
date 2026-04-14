@@ -1,10 +1,12 @@
 package services
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"path"
 	"sort"
 	"strconv"
@@ -62,6 +64,191 @@ func mergeMetadata(base map[string]interface{}, overlay map[string]interface{}) 
 		out[k] = v
 	}
 	return out
+}
+
+func metadataString(metadata map[string]interface{}, key string) string {
+	if metadata == nil {
+		return ""
+	}
+	value, ok := metadata[key]
+	if !ok || value == nil {
+		return ""
+	}
+	switch typed := value.(type) {
+	case string:
+		return strings.TrimSpace(typed)
+	case fmt.Stringer:
+		return strings.TrimSpace(typed.String())
+	default:
+		return strings.TrimSpace(fmt.Sprint(typed))
+	}
+}
+
+type sourceContextKey struct{}
+
+func NormalizeSource(raw string) string {
+	value := strings.ToLower(strings.TrimSpace(raw))
+	value = strings.ReplaceAll(value, "_", "-")
+	value = strings.ReplaceAll(value, " ", "-")
+	for strings.Contains(value, "--") {
+		value = strings.ReplaceAll(value, "--", "-")
+	}
+	if strings.HasPrefix(value, "agent:") {
+		value = strings.TrimPrefix(value, "agent:")
+	}
+	if strings.HasPrefix(value, "platform:") {
+		value = strings.TrimPrefix(value, "platform:")
+	}
+
+	switch value {
+	case "":
+		return ""
+	case "browser", "dashboard", "manual", "manually", "user", "web":
+		return "manual"
+	case "upload", "uploaded", "file-upload", "browser-upload":
+		return "upload"
+	case "gpt", "chatgpt", "chatgpt-apps", "chatgpt-actions", "chatgpt.com", "chat-openai-com", "openai-chatgpt":
+		return "chatgpt"
+	case "codex", "codex-cli", "codex-mcp-client", "openai-codex":
+		return "codex"
+	case "cursor-vscode", "cursor-desktop", "cursor-agent":
+		return "cursor"
+	case "gemini-cli", "gemini-cli-mcp-client":
+		return "gemini-cli"
+	case "github-copilot", "copilot-chat":
+		return "copilot"
+	case "tongyi":
+		return "qwen"
+	case "chatglm", "glm", "bigmodel":
+		return "zhipu"
+	case "lark":
+		return "feishu"
+	case "openwebui":
+		return "open-webui"
+	case "bundle-import", "full-import":
+		return "import"
+	case "claude-import":
+		return "claude"
+	case "claude-code", "claudecode":
+		return "claude-code"
+	case "claude-connectors", "claude-connector":
+		return "claude-web"
+	case "claude-web", "claudeweb", "claude.ai":
+		return "claude-web"
+	case "claude":
+		return "claude"
+	default:
+		return value
+	}
+}
+
+func InferSourceFromTokenName(name string) string {
+	value := strings.ToLower(strings.TrimSpace(name))
+	switch {
+	case strings.HasPrefix(value, "local platform "):
+		return NormalizeSource(strings.TrimSpace(strings.TrimPrefix(value, "local platform ")))
+	case strings.HasPrefix(value, "platform "):
+		return NormalizeSource(strings.TrimSpace(strings.TrimPrefix(value, "platform ")))
+	default:
+		return ""
+	}
+}
+
+func IsGenericSource(source string) bool {
+	switch NormalizeSource(source) {
+	case "", "manual", "upload", "import", "mcp", "agent", "summary", "scheduler", "system", "neudrive", "devices", "roles", "inbox":
+		return true
+	default:
+		return false
+	}
+}
+
+func ContextWithSource(ctx context.Context, source string) context.Context {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	normalized := NormalizeSource(source)
+	if normalized == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, sourceContextKey{}, normalized)
+}
+
+func SourceFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	value, _ := ctx.Value(sourceContextKey{}).(string)
+	return NormalizeSource(value)
+}
+
+func SourceOrDefault(ctx context.Context, fallback string) string {
+	if source := SourceFromContext(ctx); source != "" {
+		return source
+	}
+	return NormalizeSource(fallback)
+}
+
+func EntrySourceFromMetadata(metadata map[string]interface{}) string {
+	if platform := NormalizeSource(metadataString(metadata, "source_platform")); platform != "" {
+		return platform
+	}
+	if source := NormalizeSource(metadataString(metadata, "source")); source != "" {
+		return source
+	}
+	if metadataString(metadata, "capture_mode") == "archive" {
+		return "upload"
+	}
+	return ""
+}
+
+func EntrySource(entry *models.FileTreeEntry) string {
+	if entry == nil {
+		return ""
+	}
+	return EntrySourceFromMetadata(entry.Metadata)
+}
+
+func WithSourceMetadata(metadata map[string]interface{}, source string) map[string]interface{} {
+	merged := mergeMetadata(nil, metadata)
+	if EntrySourceFromMetadata(merged) != "" {
+		return merged
+	}
+	if normalized := NormalizeSource(source); normalized != "" {
+		merged["source"] = normalized
+	}
+	return merged
+}
+
+func WithSourceContextMetadata(metadata map[string]interface{}, ctx context.Context) map[string]interface{} {
+	merged := mergeMetadata(nil, metadata)
+	source := SourceFromContext(ctx)
+	if source == "" {
+		return merged
+	}
+	if metadataString(merged, "source_platform") == "" {
+		existingSource := NormalizeSource(metadataString(merged, "source"))
+		if existingSource != "" && existingSource != source {
+			merged["source_platform"] = source
+			return merged
+		}
+	}
+	if EntrySourceFromMetadata(merged) != "" {
+		return merged
+	}
+	merged["source"] = source
+	return merged
+}
+
+func WithSourcePlatformMetadata(metadata map[string]interface{}, platform string) map[string]interface{} {
+	merged := mergeMetadata(nil, metadata)
+	if metadataString(merged, "source_platform") != "" {
+		return merged
+	}
+	if normalized := NormalizeSource(platform); normalized != "" {
+		merged["source_platform"] = normalized
+	}
+	return merged
 }
 
 func classifyEntryKind(rawPath string, isDirectory bool) string {

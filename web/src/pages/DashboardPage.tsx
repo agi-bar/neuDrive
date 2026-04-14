@@ -8,6 +8,7 @@ import {
   isVisibleFileEntry,
   isProfilePreviewEntry,
   profileLabelFromPath,
+  sourceLabel,
   sortNodesByRecent,
   summarizeNodeContent,
 } from './data/DataShared'
@@ -184,7 +185,10 @@ export default function DashboardPage() {
                 <div key={entry.path} className="dashboard-profile-item">
                   <div className="dashboard-profile-label">{profileLabelFromPath(entry.path, locale)}</div>
                   <div className="dashboard-profile-value">{summarizeNodeContent(entry, 120, locale)}</div>
-                  <div className="dashboard-profile-item-meta">{formatDateTime(entry.updated_at || entry.created_at, locale)}</div>
+                  <div className="dashboard-profile-item-meta">
+                    <span className="dashboard-inline-chip">{sourceLabel(entry.source, locale)}</span>
+                    <span style={{ marginLeft: 8 }}>{formatDateTime(entry.updated_at || entry.created_at, locale)}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -208,7 +212,10 @@ export default function DashboardPage() {
               {recentFiles.map((entry) => (
                 <div key={entry.path} className="dashboard-file-item">
                   <div className="dashboard-file-path">{entry.path}</div>
-                  <div className="dashboard-file-meta">{formatDateTime(entry.updated_at || entry.created_at, locale)}</div>
+                  <div className="dashboard-file-meta">
+                    <span className="dashboard-inline-chip">{sourceLabel(entry.source, locale)}</span>
+                    <span style={{ marginLeft: 8 }}>{formatDateTime(entry.updated_at || entry.created_at, locale)}</span>
+                  </div>
                 </div>
               ))}
             </div>

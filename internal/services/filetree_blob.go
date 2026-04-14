@@ -62,7 +62,6 @@ func (s *FileTreeService) WriteBinaryEntry(
 	}
 
 	metadata := mergeMetadata(nil, opts.Metadata)
-	metadata = mergeMetadata(metadata, binaryMetadata(data))
 	minTrust := opts.MinTrustLevel
 	if minTrust <= 0 {
 		minTrust = models.TrustLevelGuest
@@ -71,7 +70,6 @@ func (s *FileTreeService) WriteBinaryEntry(
 	if kind == "" {
 		kind = classifyEntryKind(storagePath, false)
 	}
-	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", contentType, metadata)
 
 	if current != nil {
 		if opts.ExpectedVersion != nil && current.Version != *opts.ExpectedVersion {
@@ -80,6 +78,10 @@ func (s *FileTreeService) WriteBinaryEntry(
 		if opts.ExpectedChecksum != "" && current.Checksum != opts.ExpectedChecksum {
 			return nil, ErrOptimisticLockConflict
 		}
+		metadata = mergeMetadata(current.Metadata, opts.Metadata)
+		metadata = WithSourceContextMetadata(metadata, ctx)
+		metadata = mergeMetadata(metadata, binaryMetadata(data))
+		checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", contentType, metadata)
 
 		var updated models.FileTreeEntry
 		err = tx.QueryRow(ctx,
@@ -127,6 +129,10 @@ func (s *FileTreeService) WriteBinaryEntry(
 		}
 		return &updated, nil
 	}
+
+	metadata = WithSourceContextMetadata(metadata, ctx)
+	metadata = mergeMetadata(metadata, binaryMetadata(data))
+	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", contentType, metadata)
 
 	entry := &models.FileTreeEntry{
 		ID:            uuid.New(),

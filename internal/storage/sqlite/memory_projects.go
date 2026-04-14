@@ -49,6 +49,9 @@ func (s *Store) UpsertProfile(ctx context.Context, userID uuid.UUID, category, c
 		return fmt.Errorf("profile category is required")
 	}
 	if strings.TrimSpace(source) == "" {
+		source = services.SourceFromContext(ctx)
+	}
+	if strings.TrimSpace(source) == "" {
 		source = "neudrive"
 	}
 	_, err := s.WriteEntry(ctx, userID, hubpath.ProfilePath(category), content, "text/markdown", models.FileTreeWriteOptions{
@@ -76,6 +79,9 @@ func (s *Store) ImportScratch(ctx context.Context, userID uuid.UUID, content, so
 }
 
 func (s *Store) writeScratchEntry(ctx context.Context, userID uuid.UUID, content, source, title string, createdAt time.Time, expiresAt *time.Time, id uuid.UUID) (*models.FileTreeEntry, error) {
+	if strings.TrimSpace(source) == "" {
+		source = services.SourceFromContext(ctx)
+	}
 	if strings.TrimSpace(source) == "" {
 		source = "neudrive"
 	}
@@ -205,12 +211,14 @@ func (s *Store) CreateProject(ctx context.Context, userID uuid.UUID, name string
 	if name == "" {
 		return nil, fmt.Errorf("project name is required")
 	}
+	source := services.SourceOrDefault(ctx, "manual")
 	now := time.Now().UTC()
 	entry, err := s.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), "", "text/markdown", models.FileTreeWriteOptions{
 		Kind:          "project_context",
 		MinTrustLevel: models.TrustLevelCollaborate,
 		Metadata: map[string]interface{}{
 			"status": "active",
+			"source": source,
 		},
 	})
 	if err != nil {
@@ -219,6 +227,10 @@ func (s *Store) CreateProject(ctx context.Context, userID uuid.UUID, name string
 	_, err = s.WriteEntry(ctx, userID, hubpath.ProjectLogPath(name), "", "application/x-ndjson", models.FileTreeWriteOptions{
 		Kind:          "project_log",
 		MinTrustLevel: models.TrustLevelCollaborate,
+		Metadata: map[string]interface{}{
+			"project": name,
+			"source":  source,
+		},
 	})
 	if err != nil {
 		return nil, err
@@ -231,6 +243,7 @@ func (s *Store) CreateProject(ctx context.Context, userID uuid.UUID, name string
 		ContextMD: "",
 		Metadata: map[string]interface{}{
 			"status": "active",
+			"source": source,
 		},
 		CreatedAt: entry.CreatedAt,
 		UpdatedAt: now,
@@ -319,6 +332,9 @@ func (s *Store) AppendProjectLog(ctx context.Context, userID uuid.UUID, name str
 	}
 	if logEntry.CreatedAt.IsZero() {
 		logEntry.CreatedAt = time.Now().UTC()
+	}
+	if strings.TrimSpace(logEntry.Source) == "" {
+		logEntry.Source = services.SourceOrDefault(ctx, "neudrive")
 	}
 	line, err := json.Marshal(logEntry)
 	if err != nil {

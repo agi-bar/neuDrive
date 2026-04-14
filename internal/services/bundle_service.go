@@ -181,11 +181,16 @@ func (s *ImportService) ImportBundle(ctx context.Context, userID uuid.UUID, bund
 
 	for _, skillName := range skillNames {
 		skill := validatedSkills[skillName]
+		skillMetadata := WithSourceMetadata(nil, bundle.Source)
+		if EntrySourceFromMetadata(skillMetadata) == "" {
+			skillMetadata = WithSourceMetadata(skillMetadata, "import")
+		}
 		declared := make(map[string]struct{}, len(skill.textFiles)+len(skill.binaryFiles))
 
 		for relPath, content := range skill.textFiles {
 			fullPath := path.Join("/skills", skillName, relPath)
 			if _, err := s.fileTree.WriteEntry(ctx, userID, fullPath, content, contentTypeFromExt(relPath), models.FileTreeWriteOptions{
+				Metadata:      skillMetadata,
 				MinTrustLevel: models.TrustLevelGuest,
 			}); err != nil {
 				return nil, err
@@ -197,6 +202,7 @@ func (s *ImportService) ImportBundle(ctx context.Context, userID uuid.UUID, bund
 		for relPath, blob := range skill.binaryFiles {
 			fullPath := path.Join("/skills", skillName, relPath)
 			if _, err := s.fileTree.WriteBinaryEntry(ctx, userID, fullPath, blob.data, blob.contentType, models.FileTreeWriteOptions{
+				Metadata:      skillMetadata,
 				MinTrustLevel: models.TrustLevelGuest,
 			}); err != nil {
 				return nil, err

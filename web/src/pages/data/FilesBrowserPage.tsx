@@ -5,10 +5,22 @@ import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
 import ResourceActionMenu from '../../components/ResourceActionMenu'
 import ResourceConfirmDialog from '../../components/ResourceConfirmDialog'
+import SourceFilterBar from '../../components/SourceFilterBar'
 import useResourceCardMenu from '../../hooks/useResourceCardMenu'
 import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
 import { useI18n } from '../../i18n'
-import { buildFileTileModel, buildSkillBundleTileModel, buildSkillSummaryLookup, dataFileEditorRoute, skillSummaryForPath } from './DataShared'
+import {
+  buildFileTileModel,
+  buildSkillBundleTileModel,
+  buildSkillSummaryLookup,
+  buildSourceFilterOptions,
+  dataFileEditorRoute,
+  fileNodeSource,
+  matchesSourceFilter,
+  skillSource,
+  skillSummaryForPath,
+  sourceLabel,
+} from './DataShared'
 
 type SortKey = 'name' | 'updated_at'
 type SortDir = 'asc' | 'desc'
@@ -79,6 +91,7 @@ export default function FilesBrowserPage() {
 
   const sortKey = (query.get('sort') as SortKey) || 'updated_at'
   const sortDir = (query.get('dir') as SortDir) || 'desc'
+  const sourceFilter = query.get('source') || 'all'
   const searchMode = Boolean(appliedSearch.trim())
 
   const refresh = useCallback(async () => {
@@ -90,6 +103,7 @@ export default function FilesBrowserPage() {
         const mapped: FileNode[] = results.map((result) => ({
           path: result.path,
           name: result.name,
+          source: result.source,
           is_dir: false,
           kind: result.kind,
           content: result.content,
@@ -152,9 +166,19 @@ export default function FilesBrowserPage() {
     updateSort(key, sortDir)
   }
 
+  const changeSourceFilter = (value: string) => {
+    const params = new URLSearchParams(location.search)
+    if (!value || value === 'all') params.delete('source')
+    else params.set('source', value)
+    navigate({ search: params.toString() })
+  }
+
   const onNavigatePath = (pathValue: string) => {
     const normalized = pathValue.replace(/^\/+/, '')
-    navigate(normalized ? `/data/files/${encodeURIComponent(normalized)}` : '/data/files')
+    navigate({
+      pathname: normalized ? `/data/files/${encodeURIComponent(normalized)}` : '/data/files',
+      search: location.search,
+    })
   }
 
   const clearSearch = () => {
@@ -191,7 +215,7 @@ export default function FilesBrowserPage() {
     if (!newDirName.trim()) return
     const target = `${currentPath.endsWith('/') ? currentPath.slice(0, -1) : currentPath}/${newDirName.trim()}`
     try {
-      await api.writeTree(target, { content: '', isDir: true })
+      await api.writeTree(target, { content: '', isDir: true, metadata: { source: 'manual' } })
       setCreatingDir(false)
       setNewDirName(tx('新建文件夹', 'New folder'))
       await refresh()
@@ -207,6 +231,7 @@ export default function FilesBrowserPage() {
       await api.writeTree(target, {
         content: `# ${tx('新文档', 'New document')}\n`,
         mimeType: target.toLowerCase().endsWith('.md') ? 'text/markdown' : 'text/plain',
+        metadata: { source: 'manual' },
       })
       setCreatingFile(false)
       setNewFileName(tx('新建文档.md', 'new-document.md'))
@@ -227,6 +252,7 @@ export default function FilesBrowserPage() {
       await api.writeTree(target, {
         content: text,
         mimeType: /\.md$/i.test(file.name) ? 'text/markdown' : 'text/plain',
+        metadata: { source: 'upload' },
       })
       await refresh()
     } catch (err: any) {
@@ -254,6 +280,30 @@ export default function FilesBrowserPage() {
 
   const isSelected = (pathValue: string) => selected.has(pathValue)
   const currentLabel = currentPath === '/' ? tx('根目录', 'Root') : currentPath.split('/').filter(Boolean).slice(-1)[0] || tx('根目录', 'Root')
+  const filteredItems = useMemo(
+    () => items.filter((item) => {
+      if (searchMode) return matchesSourceFilter(fileNodeSource(item), sourceFilter)
+      if (currentPath === '/skills' && item.is_dir) {
+        const skillSummary = skillSummaryForPath(item.path, skillLookup)
+        return matchesSourceFilter(skillSource(skillSummary), sourceFilter)
+      }
+      return matchesSourceFilter(fileNodeSource(item), sourceFilter)
+    }),
+    [currentPath, items, searchMode, skillLookup, sourceFilter],
+  )
+  const sourceOptions = useMemo(
+    () => buildSourceFilterOptions(
+      items,
+      (item) => {
+        if (!searchMode && currentPath === '/skills' && item.is_dir) {
+          return skillSource(skillSummaryForPath(item.path, skillLookup))
+        }
+        return fileNodeSource(item)
+      },
+      locale,
+    ),
+    [currentPath, items, locale, searchMode, skillLookup],
+  )
 
   if (loading) return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
 
@@ -352,7 +402,7 @@ export default function FilesBrowserPage() {
             </p>
           </div>
           <MaterialsSectionToolbar
-            count={items.length}
+            count={filteredItems.length}
             sortKey={sortKey}
             sortOptions={[
               { value: 'updated_at', label: tx('按时间', 'By time') },
@@ -373,11 +423,15 @@ export default function FilesBrowserPage() {
           </MaterialsSectionToolbar>
         </div>
 
-        {items.length === 0 ? (
+        {(sourceOptions.length > 1 || sourceFilter !== 'all') && (
+          <SourceFilterBar options={sourceOptions} value={sourceFilter} onChange={changeSourceFilter} />
+        )}
+
+        {filteredItems.length === 0 ? (
           <div className="materials-panel files-empty">{searchMode ? tx('无搜索结果', 'No search results') : tx('该目录暂无内容', 'This directory is empty')}</div>
         ) : (
           <div className="materials-grid">
-            {items.map((item) => {
+            {filteredItems.map((item) => {
               const skillSummary = skillSummaryForPath(item.path, skillLookup)
               const tile = searchMode
                 ? buildFileTileModel({
@@ -410,6 +464,7 @@ export default function FilesBrowserPage() {
                   subtitle={tile.subtitle}
                   description={tile.description}
                   path={tile.path}
+                  extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
                   footerStart={tile.footerStart}
                   footerEnd={tile.footerEnd}
                   selected={isSelected(item.path)}

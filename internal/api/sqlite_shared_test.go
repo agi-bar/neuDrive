@@ -687,6 +687,240 @@ func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
 	}
 }
 
+func TestSQLiteSharedServerTreeExposesSource(t *testing.T) {
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	writeBody := []byte(`{"content":"manual note","mime_type":"text/markdown","metadata":{"source":"manual"}}`)
+	status, wrote := doJSON(t, http.MethodPut, ts.URL+"/api/tree/notes/source-demo.md", adminToken, writeBody)
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("write file failed: status=%d body=%+v", status, wrote)
+	}
+
+	status, read := doJSON(t, http.MethodGet, ts.URL+"/api/tree/notes/source-demo.md", adminToken, nil)
+	if status != http.StatusOK || !read.OK {
+		t.Fatalf("read file failed: status=%d body=%+v", status, read)
+	}
+	if !bytes.Contains(read.Data, []byte(`"source":"manual"`)) {
+		t.Fatalf("expected source in tree payload: %s", string(read.Data))
+	}
+}
+
+func TestSQLiteSharedServerTreeDefaultsNewFileSourceToManual(t *testing.T) {
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	status, wrote := doJSON(t, http.MethodPut, ts.URL+"/api/tree/notes/default-source.md", adminToken, []byte(`{"content":"manual note","mime_type":"text/markdown"}`))
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("write file failed: status=%d body=%+v", status, wrote)
+	}
+
+	status, read := doJSON(t, http.MethodGet, ts.URL+"/api/tree/notes/default-source.md", adminToken, nil)
+	if status != http.StatusOK || !read.OK {
+		t.Fatalf("read file failed: status=%d body=%+v", status, read)
+	}
+	if !bytes.Contains(read.Data, []byte(`"source":"manual"`)) {
+		t.Fatalf("expected default manual source in tree payload: %s", string(read.Data))
+	}
+}
+
+func TestSQLiteSharedServerTreeAllowsExplicitPlatformHeader(t *testing.T) {
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	req, err := http.NewRequest(http.MethodPut, ts.URL+"/api/tree/notes/platform-header.md", bytes.NewReader([]byte(`{"content":"header sourced","mime_type":"text/markdown"}`)))
+	if err != nil {
+		t.Fatalf("NewRequest: %v", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+adminToken)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-NeuDrive-Platform", "kimi")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("Do: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		t.Fatalf("write file failed: status=%d body=%s", resp.StatusCode, string(body))
+	}
+
+	status, read := doJSON(t, http.MethodGet, ts.URL+"/api/tree/notes/platform-header.md", adminToken, nil)
+	if status != http.StatusOK || !read.OK {
+		t.Fatalf("read file failed: status=%d body=%+v", status, read)
+	}
+	if !bytes.Contains(read.Data, []byte(`"source":"kimi"`)) {
+		t.Fatalf("expected kimi source in tree payload: %s", string(read.Data))
+	}
+}
+
+func TestSQLiteSharedServerImportSkillsJSONTracksPlatformSource(t *testing.T) {
+	ts, store, adminToken, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+
+	body := []byte(`{"skills":[{"path":"platform-demo/SKILL.md","content":"# Platform Demo\n","content_type":"text/markdown"}]}`)
+	status, env := doJSON(t, http.MethodPost, ts.URL+"/api/import/skills?platform=claude-web", adminToken, body)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("import skills json failed: status=%d body=%+v", status, env)
+	}
+
+	entry, err := store.Read(ctx, user.ID, "/skills/platform-demo/SKILL.md", models.TrustLevelWork)
+	if err != nil {
+		t.Fatalf("Read SKILL.md: %v", err)
+	}
+	if entry.Metadata["source_platform"] != "claude-web" {
+		t.Fatalf("expected source_platform=claude-web, got %+v", entry.Metadata)
+	}
+}
+
+func TestSQLiteSharedServerImportSkillsJSONAllowsExplicitSourcePlatform(t *testing.T) {
+	ts, store, adminToken, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+
+	body := []byte(`{"source_platform":"perplexity","skills":[{"path":"explicit-platform/SKILL.md","content":"# Explicit Platform\n","content_type":"text/markdown"}]}`)
+	status, env := doJSON(t, http.MethodPost, ts.URL+"/api/import/skills", adminToken, body)
+	if status != http.StatusOK || !env.OK {
+		t.Fatalf("import skills json failed: status=%d body=%+v", status, env)
+	}
+
+	entry, err := store.Read(ctx, user.ID, "/skills/explicit-platform/SKILL.md", models.TrustLevelWork)
+	if err != nil {
+		t.Fatalf("Read SKILL.md: %v", err)
+	}
+	if entry.Metadata["source_platform"] != "perplexity" {
+		t.Fatalf("expected source_platform=perplexity, got %+v", entry.Metadata)
+	}
+}
+
+func TestSQLiteSharedServerAgentTreeDefaultsSourceToAgent(t *testing.T) {
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	status, wrote := doJSON(t, http.MethodPut, ts.URL+"/agent/tree/notes/agent-source.md", adminToken, []byte(`{"content":"agent note","content_type":"text/markdown"}`))
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("agent tree write failed: status=%d body=%+v", status, wrote)
+	}
+
+	status, read := doJSON(t, http.MethodGet, ts.URL+"/api/tree/notes/agent-source.md", adminToken, nil)
+	if status != http.StatusOK || !read.OK {
+		t.Fatalf("read file failed: status=%d body=%+v", status, read)
+	}
+	if !bytes.Contains(read.Data, []byte(`"source":"agent"`)) {
+		t.Fatalf("expected agent source in tree payload: %s", string(read.Data))
+	}
+}
+
+func TestSQLiteSharedServerAgentTreePrefersPlatformTokenSource(t *testing.T) {
+	ts, store, _, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	codexToken, err := store.CreateToken(ctx, user.ID, "local platform codex", []string{models.ScopeReadTree, models.ScopeWriteTree}, models.TrustLevelWork, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateToken codex: %v", err)
+	}
+
+	status, wrote := doJSON(t, http.MethodPut, ts.URL+"/agent/tree/notes/agent-platform-source.md", codexToken.Token, []byte(`{"content":"agent note","content_type":"text/markdown"}`))
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("agent tree write failed: status=%d body=%+v", status, wrote)
+	}
+
+	entry, err := store.Read(ctx, user.ID, "/notes/agent-platform-source.md", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("Read agent-platform-source.md: %v", err)
+	}
+	if services.EntrySourceFromMetadata(entry.Metadata) != "codex" {
+		t.Fatalf("expected codex source, got %+v", entry.Metadata)
+	}
+}
+
+func TestSQLiteSharedServerAgentCreateProjectUsesAgentSource(t *testing.T) {
+	ts, store, adminToken, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+
+	status, env := doJSON(t, http.MethodPost, ts.URL+"/agent/projects", adminToken, []byte(`{"name":"agent-created"}`))
+	if status != http.StatusCreated || !env.OK {
+		t.Fatalf("agent create project failed: status=%d body=%+v", status, env)
+	}
+
+	entry, err := store.Read(ctx, user.ID, "/projects/agent-created/context.md", models.TrustLevelWork)
+	if err != nil {
+		t.Fatalf("Read project context: %v", err)
+	}
+	if services.EntrySourceFromMetadata(entry.Metadata) != "agent" {
+		t.Fatalf("expected agent source, got %+v", entry.Metadata)
+	}
+}
+
+func TestSQLiteSharedServerMCPSessionTracksPlatformSource(t *testing.T) {
+	ts, store, _, _, _ := newTestHTTPServer(t)
+	ctx := context.Background()
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	token, err := store.CreateToken(ctx, user.ID, "mcp-test", []string{models.ScopeAdmin}, models.TrustLevelFull, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateToken mcp-test: %v", err)
+	}
+
+	initReq, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"codex-mcp-client","title":"Codex","version":"0.118.0"}}}`))
+	if err != nil {
+		t.Fatalf("NewRequest initialize: %v", err)
+	}
+	initReq.Header.Set("Authorization", "Bearer "+token.Token)
+	initReq.Header.Set("Content-Type", "application/json")
+	initResp, err := http.DefaultClient.Do(initReq)
+	if err != nil {
+		t.Fatalf("initialize request failed: %v", err)
+	}
+	defer initResp.Body.Close()
+	if initResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(initResp.Body)
+		t.Fatalf("initialize status=%d body=%s", initResp.StatusCode, string(body))
+	}
+	sessionID := initResp.Header.Get("Mcp-Session-Id")
+	if strings.TrimSpace(sessionID) == "" {
+		t.Fatalf("expected Mcp-Session-Id header")
+	}
+
+	writeReq, err := http.NewRequest(http.MethodPost, ts.URL+"/mcp", strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"write_file","arguments":{"path":"/notes/mcp-session-source.md","content":"hello from mcp"}}}`))
+	if err != nil {
+		t.Fatalf("NewRequest write_file: %v", err)
+	}
+	writeReq.Header.Set("Authorization", "Bearer "+token.Token)
+	writeReq.Header.Set("Content-Type", "application/json")
+	writeReq.Header.Set("Mcp-Session-Id", sessionID)
+	writeResp, err := http.DefaultClient.Do(writeReq)
+	if err != nil {
+		t.Fatalf("write_file request failed: %v", err)
+	}
+	defer writeResp.Body.Close()
+	if writeResp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(writeResp.Body)
+		t.Fatalf("write_file status=%d body=%s", writeResp.StatusCode, string(body))
+	}
+
+	status, read := doJSON(t, http.MethodGet, ts.URL+"/api/tree/notes/mcp-session-source.md", token.Token, nil)
+	if status != http.StatusOK || !read.OK {
+		t.Fatalf("read file failed: status=%d body=%+v", status, read)
+	}
+	if !bytes.Contains(read.Data, []byte(`"source":"codex"`)) {
+		t.Fatalf("expected codex source in tree payload: %s", string(read.Data))
+	}
+}
+
 func doJSON(t *testing.T, method, url, token string, body []byte) (int, testEnvelope) {
 	t.Helper()
 	var reader *bytes.Reader

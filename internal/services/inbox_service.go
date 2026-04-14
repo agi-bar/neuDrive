@@ -327,11 +327,19 @@ func (s *InboxService) writeCanonicalMessage(ctx context.Context, userID uuid.UU
 	if err != nil {
 		return fmt.Errorf("inbox.writeCanonicalMessage: marshal: %w", err)
 	}
+	source := strings.TrimSpace(msg.FromAddress)
+	if source == "" {
+		source = strings.TrimSpace(msg.Domain)
+	}
+	if source == "" {
+		source = SourceOrDefault(ctx, "inbox")
+	}
 	_, err = s.fileTree.WriteEntry(ctx, userID, hubpath.InboxMessagePath(msg.ToAddress, msg.Status, msg.ID.String()), string(body), "application/json", models.FileTreeWriteOptions{
 		Kind:          "inbox_message",
 		MinTrustLevel: models.TrustLevelCollaborate,
 		Metadata: map[string]interface{}{
 			"message_id": msg.ID.String(),
+			"source":     source,
 			"role":       msg.ToAddress,
 			"status":     msg.Status,
 			"domain":     msg.Domain,

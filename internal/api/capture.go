@@ -16,6 +16,7 @@ import (
 
 	"github.com/agi-bar/neudrive/internal/config"
 	"github.com/agi-bar/neudrive/internal/logger"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 const captureBodyLimit = 128 * 1024
@@ -211,83 +212,153 @@ func captureScheme(r *http.Request) string {
 	return "http"
 }
 
+type sourcePattern struct {
+	source       string
+	textContains []string
+	hostContains []string
+}
+
+var requestSourcePatterns = []sourcePattern{
+	{source: "claude-code", textContains: []string{"claude-code", "claude code"}},
+	{source: "claude-web", textContains: []string{"claude-user", "anthropic/toolbox", "mcp-oauth-client-metadata", "claude.ai/api/mcp/auth_callback"}, hostContains: []string{"claude.ai", "claude.com"}},
+	{source: "codex", textContains: []string{"codex-mcp-client", "codex cli", "codex"}},
+	{source: "chatgpt", textContains: []string{"openai-mcp (chatgpt)", "chatgpt", "chat.openai.com"}, hostContains: []string{"chatgpt.com", "chat.openai.com"}},
+	{source: "gemini-cli", textContains: []string{"gemini-cli-mcp-client", "gemini cli mcp client", "gemini cli"}},
+	{source: "cursor", textContains: []string{"cursor-vscode", "anysphere.cursor-mcp", "cursor agent", "cursor"}, hostContains: []string{"cursor.com"}},
+	{source: "windsurf", textContains: []string{"windsurf"}, hostContains: []string{"windsurf.com", "codeium.com"}},
+	{source: "copilot", textContains: []string{"github copilot", "copilot"}},
+	{source: "perplexity", textContains: []string{"perplexity"}, hostContains: []string{"perplexity.ai"}},
+	{source: "kimi", textContains: []string{"kimi"}, hostContains: []string{"kimi.com", "moonshot.cn"}},
+	{source: "deepseek", textContains: []string{"deepseek"}, hostContains: []string{"deepseek.com"}},
+	{source: "qwen", textContains: []string{"qwen", "tongyi"}, hostContains: []string{"tongyi.aliyun.com", "dashscope.aliyuncs.com"}},
+	{source: "zhipu", textContains: []string{"zhipu", "bigmodel", "chatglm"}, hostContains: []string{"bigmodel.cn", "z.ai"}},
+	{source: "minimax", textContains: []string{"minimax"}, hostContains: []string{"minimax.chat", "minimax.io"}},
+	{source: "feishu", textContains: []string{"feishu", "lark"}, hostContains: []string{"feishu.cn", "larksuite.com"}},
+	{source: "open-webui", textContains: []string{"open webui", "openwebui"}},
+	{source: "openai", textContains: []string{"openai"}, hostContains: []string{"openai.com"}},
+	{source: "gemini", textContains: []string{"gemini"}, hostContains: []string{"gemini.google.com"}},
+	{source: "claude", textContains: []string{"claude"}, hostContains: []string{"claude.ai", "claude.com"}},
+}
+
 func inferCaptureSource(r *http.Request, body []byte) string {
-	userAgent := strings.ToLower(r.UserAgent())
-	switch {
-	case strings.Contains(userAgent, "claude-code"):
-		return "claude-code"
-	case strings.Contains(userAgent, "claude-user"):
-		return "claude-web"
-	case strings.Contains(userAgent, "cursor/"):
-		return "cursor"
-	case strings.Contains(userAgent, "gemini"):
-		return "gemini-cli"
-	case strings.Contains(userAgent, "chatgpt"):
-		return "chatgpt"
-	case strings.Contains(userAgent, "openai"):
-		return "openai"
-	case strings.Contains(userAgent, "codex"):
-		return "codex"
+	if r == nil {
+		return "unknown"
+	}
+	if explicit := services.NormalizeSource(r.Header.Get("X-NeuDrive-Platform")); explicit != "" {
+		return explicit
+	}
+	if explicit := services.NormalizeSource(r.Header.Get("X-NeuDrive-Source")); explicit != "" {
+		return explicit
 	}
 
-	candidates := []string{
-		r.URL.Query().Get("client_id"),
-		r.URL.Query().Get("redirect_uri"),
+	textSignals := collectRequestTextSignals(r, body)
+	hostSignals := collectRequestHostSignals(r, textSignals)
+	joined := strings.ToLower(strings.Join(textSignals, " "))
+	for _, pattern := range requestSourcePatterns {
+		if containsAny(joined, pattern.textContains) || hostContainsAny(hostSignals, pattern.hostContains) {
+			return pattern.source
+		}
 	}
+	return "unknown"
+}
 
+func collectRequestTextSignals(r *http.Request, body []byte) []string {
+	signals := []string{strings.ToLower(r.UserAgent())}
+	for _, key := range []string{"Origin", "Referer"} {
+		if value := strings.TrimSpace(r.Header.Get(key)); value != "" {
+			signals = append(signals, strings.ToLower(value))
+		}
+	}
+	for key, values := range r.URL.Query() {
+		signals = append(signals, strings.ToLower(key))
+		for _, value := range values {
+			signals = append(signals, strings.ToLower(value))
+		}
+	}
 	contentType := r.Header.Get("Content-Type")
 	if strings.Contains(contentType, "application/x-www-form-urlencoded") {
 		if values, err := url.ParseQuery(string(body)); err == nil {
-			candidates = append(candidates, values.Get("client_id"), values.Get("redirect_uri"))
+			for key, items := range values {
+				signals = append(signals, strings.ToLower(key))
+				for _, value := range items {
+					signals = append(signals, strings.ToLower(value))
+				}
+			}
 		}
 	} else if strings.Contains(contentType, "application/json") {
-		var payload map[string]any
+		var payload any
 		if err := json.Unmarshal(body, &payload); err == nil {
-			for _, key := range []string{"client_id", "redirect_uri"} {
-				if value, ok := payload[key].(string); ok {
-					candidates = append(candidates, value)
-				}
-			}
-			if value, ok := payload["client_name"].(string); ok {
-				candidates = append(candidates, value)
-			}
-			if params, ok := payload["params"].(map[string]any); ok {
-				if clientInfo, ok := params["clientInfo"].(map[string]any); ok {
-					if value, ok := clientInfo["name"].(string); ok {
-						candidates = append(candidates, value)
-					}
-				}
+			signals = appendJSONSignals(signals, payload)
+		}
+	}
+	return signals
+}
+
+func appendJSONSignals(dst []string, value any) []string {
+	switch typed := value.(type) {
+	case map[string]any:
+		keys := make([]string, 0, len(typed))
+		for key := range typed {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			dst = append(dst, strings.ToLower(key))
+			dst = appendJSONSignals(dst, typed[key])
+		}
+	case []any:
+		for _, item := range typed {
+			dst = appendJSONSignals(dst, item)
+		}
+	case string:
+		dst = append(dst, strings.ToLower(typed))
+	}
+	return dst
+}
+
+func collectRequestHostSignals(r *http.Request, values []string) []string {
+	hosts := []string{}
+	appendHost := func(raw string) {
+		raw = strings.TrimSpace(raw)
+		if raw == "" {
+			return
+		}
+		if parsed, err := url.Parse(raw); err == nil && parsed.Host != "" {
+			hosts = append(hosts, strings.ToLower(parsed.Hostname()))
+			return
+		}
+		if strings.Contains(raw, ".") && !strings.Contains(raw, " ") {
+			hosts = append(hosts, strings.Trim(strings.ToLower(raw), `/`))
+		}
+	}
+	for _, key := range []string{"Origin", "Referer"} {
+		appendHost(r.Header.Get(key))
+	}
+	for _, value := range values {
+		appendHost(value)
+	}
+	sort.Strings(hosts)
+	return hosts
+}
+
+func containsAny(haystack string, needles []string) bool {
+	for _, needle := range needles {
+		if strings.Contains(haystack, needle) {
+			return true
+		}
+	}
+	return false
+}
+
+func hostContainsAny(hosts []string, needles []string) bool {
+	for _, host := range hosts {
+		for _, needle := range needles {
+			if strings.Contains(host, needle) {
+				return true
 			}
 		}
 	}
-
-	joined := strings.ToLower(strings.Join(candidates, " "))
-	switch {
-	case strings.Contains(joined, "codex"):
-		return "codex"
-	case strings.Contains(joined, "cursor-vscode") || strings.Contains(joined, "cursor://anysphere.cursor-mcp") || strings.Contains(joined, "\"cursor\""):
-		return "cursor"
-	case strings.Contains(joined, "gemini"):
-		return "gemini-cli"
-	case strings.Contains(joined, "claude-code"):
-		return "claude-code"
-	case strings.Contains(joined, "mcp-oauth-client-metadata") || strings.Contains(joined, "claude.ai/api/mcp/auth_callback") || strings.Contains(joined, "anthropic/toolbox"):
-		return "claude-web"
-	case strings.Contains(joined, "chatgpt") || strings.Contains(joined, "chat.openai.com") || strings.Contains(joined, "chatgpt.com"):
-		return "chatgpt"
-	case strings.Contains(joined, "claude.ai") || strings.Contains(joined, "claude.com"):
-		return "claude"
-	case strings.Contains(joined, "openai.com") || strings.Contains(joined, "openai-mcp"):
-		return "chatgpt"
-	case strings.Contains(joined, "cursor.com"):
-		return "cursor"
-	case strings.Contains(joined, "copilot"):
-		return "copilot"
-	case strings.Contains(joined, "windsurf"):
-		return "windsurf"
-	default:
-		return "unknown"
-	}
+	return false
 }
 
 func writeCaptureRecord(dir string, record captureRecord) error {

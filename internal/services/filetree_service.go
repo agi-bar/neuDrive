@@ -200,7 +200,6 @@ func (s *FileTreeService) WriteEntry(
 	}
 
 	metadata := mergeMetadata(nil, opts.Metadata)
-	metadata = skillMetadataForPath(storagePath, content, metadata)
 	minTrust := opts.MinTrustLevel
 	if minTrust <= 0 {
 		minTrust = models.TrustLevelGuest
@@ -209,7 +208,6 @@ func (s *FileTreeService) WriteEntry(
 	if kind == "" {
 		kind = classifyEntryKind(storagePath, false)
 	}
-	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), content, contentType, metadata)
 
 	if current != nil {
 		if opts.ExpectedVersion != nil && current.Version != *opts.ExpectedVersion {
@@ -218,6 +216,10 @@ func (s *FileTreeService) WriteEntry(
 		if opts.ExpectedChecksum != "" && current.Checksum != opts.ExpectedChecksum {
 			return nil, ErrOptimisticLockConflict
 		}
+		metadata = mergeMetadata(current.Metadata, opts.Metadata)
+		metadata = WithSourceContextMetadata(metadata, ctx)
+		metadata = skillMetadataForPath(storagePath, content, metadata)
+		checksum := entryChecksum(hubpath.NormalizePublic(storagePath), content, contentType, metadata)
 
 		var updated models.FileTreeEntry
 		err = tx.QueryRow(ctx,
@@ -266,6 +268,10 @@ func (s *FileTreeService) WriteEntry(
 		}
 		return &updated, nil
 	}
+
+	metadata = WithSourceContextMetadata(metadata, ctx)
+	metadata = skillMetadataForPath(storagePath, content, metadata)
+	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), content, contentType, metadata)
 
 	entryID := uuid.New()
 	entry := &models.FileTreeEntry{
@@ -523,7 +529,7 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 		minTrust = models.TrustLevelGuest
 	}
 	meta := mergeMetadata(nil, metadata)
-	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", meta)
+	meta = WithSourceContextMetadata(meta, ctx)
 
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -537,6 +543,8 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 	}
 
 	if current != nil {
+		mergedMeta := mergeMetadata(current.Metadata, meta)
+		checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", mergedMeta)
 		var updated models.FileTreeEntry
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`UPDATE file_tree
@@ -552,7 +560,7 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 			     updated_at = $6
 			 WHERE user_id = $1 AND path = $2
 			 RETURNING %s`, fileTreeSelectColumns),
-			userID, current.Path, mergeMetadata(current.Metadata, meta), checksum, minTrust, now,
+			userID, current.Path, mergedMeta, checksum, minTrust, now,
 		).Scan(
 			&updated.ID,
 			&updated.UserID,
@@ -587,6 +595,8 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 		}
 		return &updated, nil
 	}
+
+	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", meta)
 
 	entry := &models.FileTreeEntry{
 		ID:            uuid.New(),
@@ -1058,10 +1068,14 @@ func deletableEntriesForDeletion(targetPath string, entries []models.FileTreeEnt
 }
 
 func entryToSkillSummary(entry models.FileTreeEntry, source string) models.SkillSummary {
+	resolvedSource := EntrySource(&entry)
+	if resolvedSource == "" {
+		resolvedSource = NormalizeSource(source)
+	}
 	summary := models.SkillSummary{
 		Name:          hubpath.BaseName(pathpkg.Dir(hubpath.NormalizePublic(entry.Path))),
 		Path:          hubpath.StorageToPublic(entry.Path),
-		Source:        source,
+		Source:        resolvedSource,
 		Description:   firstMarkdownParagraph(entry.Content),
 		MinTrustLevel: entry.MinTrustLevel,
 	}

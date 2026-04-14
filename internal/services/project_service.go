@@ -119,10 +119,12 @@ func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name stri
 		return nil, fmt.Errorf("project.Create: commit: %w", err)
 	}
 
+	source := SourceOrDefault(ctx, "manual")
 	if s.fileTree != nil {
 		if _, err := s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, projectPath, map[string]interface{}{
 			"project": name,
 			"status":  "active",
+			"source":  source,
 		}, models.TrustLevelWork); err != nil {
 			return nil, err
 		}
@@ -132,6 +134,7 @@ func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name stri
 			Metadata: map[string]interface{}{
 				"project": name,
 				"status":  "active",
+				"source":  source,
 			},
 		}); err != nil {
 			return nil, err
@@ -139,7 +142,10 @@ func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name stri
 		if _, err := s.fileTree.WriteEntry(ctx, userID, hubpath.ProjectLogPath(name), "", "application/x-ndjson", models.FileTreeWriteOptions{
 			Kind:          "project_log",
 			MinTrustLevel: models.TrustLevelWork,
-			Metadata:      map[string]interface{}{"project": name},
+			Metadata: map[string]interface{}{
+				"project": name,
+				"source":  source,
+			},
 		}); err != nil {
 			return nil, err
 		}
@@ -151,7 +157,9 @@ func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name stri
 		Name:      name,
 		Status:    "active",
 		ContextMD: "",
-		Metadata:  map[string]interface{}{},
+		Metadata: map[string]interface{}{
+			"source": source,
+		},
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -216,6 +224,9 @@ func (s *ProjectService) AppendLog(ctx context.Context, projectID uuid.UUID, log
 	}
 	log.ProjectID = projectID
 	log.CreatedAt = now
+	if strings.TrimSpace(log.Source) == "" {
+		log.Source = SourceOrDefault(ctx, "neudrive")
+	}
 
 	if s.fileTree != nil {
 		path := hubpath.ProjectLogPath(projectName)

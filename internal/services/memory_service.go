@@ -76,6 +76,9 @@ func (s *MemoryService) UpsertProfile(ctx context.Context, userID uuid.UUID, cat
 		return fmt.Errorf("memory.UpsertProfile: invalid category: %w", err)
 	}
 	if source == "" {
+		source = SourceFromContext(ctx)
+	}
+	if source == "" {
 		source = "neudrive"
 	}
 
@@ -222,6 +225,9 @@ func importedScratchLegacyID(source, title string, createdAt time.Time) uuid.UUI
 func (s *MemoryService) writeScratchEntry(ctx context.Context, userID uuid.UUID, content, source, title string, createdAt time.Time, expiresAt *time.Time, legacyID uuid.UUID, upsert bool) (*models.FileTreeEntry, error) {
 	if err := validateContentLength(content, maxContentBytes); err != nil {
 		return nil, fmt.Errorf("memory.WriteScratchWithTitle: %w", err)
+	}
+	if source == "" {
+		source = SourceFromContext(ctx)
 	}
 	if source == "" {
 		source = "neudrive"

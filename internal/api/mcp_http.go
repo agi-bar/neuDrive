@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -23,7 +24,7 @@ func (s *Server) handleMCPEndpoint(w http.ResponseWriter, r *http.Request) {
 	origin := r.Header.Get("Origin")
 	if origin != "" {
 		w.Header().Set("Access-Control-Allow-Origin", origin)
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version")
+		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version, X-NeuDrive-Source, X-NeuDrive-Platform")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Expose-Headers", "Mcp-Session-Id")
 	}
@@ -87,6 +88,7 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		userID = st.UserID
 		trustLevel = st.MaxTrustLevel
 		scopes = st.Scopes
+		r = r.WithContext(s.withAuthenticatedSource(r.Context(), nil, st))
 	} else {
 		// OAuth JWT (from Claude.ai Custom Connector)
 		claims, err := auth.ValidateToken(tokenStr, s.JWTSecret)
@@ -100,8 +102,8 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 3. Decode JSON-RPC request
-	var req mcp.JSONRPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
 		json.NewEncoder(w).Encode(mcp.JSONRPCResponse{
@@ -110,6 +112,17 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	var req mcp.JSONRPCRequest
+	if err := json.Unmarshal(body, &req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(mcp.JSONRPCResponse{
+			JSONRPC: "2.0",
+			Error:   &mcp.RPCError{Code: -32700, Message: "parse error"},
+		})
+		return
+	}
+	source := s.inferredRequestSource(r, body, "mcp")
 
 	// 4. Handle notifications (no response)
 	if strings.HasPrefix(req.Method, "notifications/") {
@@ -135,13 +148,16 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		Dashboard:   s.DashboardService,
 		Import:      s.ImportService,
 		Token:       s.TokenService,
+		Source:      source,
 	}
 
 	resp := mcpServer.HandleJSONRPC(req)
 
 	// 6. Session ID on initialize
 	if req.Method == "initialize" {
-		w.Header().Set("Mcp-Session-Id", generateMCPSessionID())
+		sessionID := generateMCPSessionID()
+		s.rememberMCPSessionSource(sessionID, source)
+		w.Header().Set("Mcp-Session-Id", sessionID)
 	}
 
 	// 7. Return response

@@ -118,6 +118,7 @@ type MCPServer struct {
 	TrustLevel int
 	Scopes     []string
 	BaseURL    string
+	Source     string
 
 	Connection   *services.ConnectionService
 	OAuth        *services.OAuthService
@@ -132,6 +133,30 @@ type MCPServer struct {
 	Import       *services.ImportService
 	Token        *services.TokenService
 	LocalGitSync *localgitsync.Service
+}
+
+func (s *MCPServer) writeSource() string {
+	source := services.NormalizeSource(s.Source)
+	if source != "" {
+		return source
+	}
+	return "mcp"
+}
+
+func (s *MCPServer) writeContext() context.Context {
+	return services.ContextWithSource(context.Background(), s.writeSource())
+}
+
+func (s *MCPServer) writeHints(args map[string]interface{}) (context.Context, string, string) {
+	source, _ := args["source"].(string)
+	platform, _ := args["source_platform"].(string)
+	effective := s.writeSource()
+	if normalized := services.NormalizeSource(platform); normalized != "" {
+		effective = normalized
+	} else if normalized := services.NormalizeSource(source); normalized != "" {
+		effective = normalized
+	}
+	return services.ContextWithSource(context.Background(), effective), services.NormalizeSource(source), services.NormalizeSource(platform)
 }
 
 func (s *MCPServer) appendLocalGitSyncMessage(ctx context.Context, result string) string {
@@ -220,8 +245,10 @@ func (s *MCPServer) getTools() []MCPTool {
 			Name:        "update_profile",
 			Description: "更新用户的长期稳定偏好（极少变化的信息，如写作风格、沟通习惯、做事原则）。注意：日常交互中产生的信息应使用 save_memory 而非此工具",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"category": prop("string", "分类: preferences, relationships, principles"),
-				"content":  prop("string", "内容"),
+				"category":        prop("string", "分类: preferences, relationships, principles"),
+				"content":         prop("string", "内容"),
+				"source":          prop("string", "来源（可选，建议直接传平台名，如 codex / cursor / chatgpt）"),
+				"source_platform": prop("string", "更具体的平台来源（可选，优先级高于 source）"),
 			}, "category", "content"),
 		},
 		{
@@ -241,7 +268,9 @@ func (s *MCPServer) getTools() []MCPTool {
 			Name:        "create_project",
 			Description: "创建新项目",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"name": prop("string", "项目名称 (只允许字母、数字、横杠、下划线)"),
+				"name":            prop("string", "项目名称 (只允许字母、数字、横杠、下划线)"),
+				"source":          prop("string", "来源（可选，建议直接传平台名，如 codex / cursor / chatgpt）"),
+				"source_platform": prop("string", "更具体的平台来源（可选，优先级高于 source）"),
 			}, "name"),
 		},
 		{
@@ -255,11 +284,12 @@ func (s *MCPServer) getTools() []MCPTool {
 			Name:        "log_action",
 			Description: "向项目日志追加一条记录",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"project": prop("string", "项目名称"),
-				"action":  prop("string", "动作类型"),
-				"summary": prop("string", "摘要"),
-				"source":  prop("string", "来源平台 (claude, gpt, etc)"),
-				"tags":    propArray("string", "标签"),
+				"project":         prop("string", "项目名称"),
+				"action":          prop("string", "动作类型"),
+				"summary":         prop("string", "摘要"),
+				"source":          prop("string", "来源（可选，建议直接传平台名，如 codex / cursor / chatgpt）"),
+				"source_platform": prop("string", "更具体的平台来源（可选，优先级高于 source）"),
+				"tags":            propArray("string", "标签"),
 			}, "project", "action", "summary"),
 		},
 		{
@@ -280,8 +310,10 @@ func (s *MCPServer) getTools() []MCPTool {
 			Name:        "write_file",
 			Description: "写入文件到文件树；适合单文件修补，不作为单个 skill 的正式导入主路径",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"path":    prop("string", "文件路径"),
-				"content": prop("string", "文件内容"),
+				"path":            prop("string", "文件路径"),
+				"content":         prop("string", "文件内容"),
+				"source":          prop("string", "来源（可选，建议直接传平台名，如 codex / cursor / chatgpt）"),
+				"source_platform": prop("string", "更具体的平台来源（可选，优先级高于 source）"),
 			}, "path", "content"),
 		},
 		{
@@ -317,7 +349,7 @@ func (s *MCPServer) getTools() []MCPTool {
 			Name:        "save_memory",
 			Description: "记住信息。当用户说「记住」「记一下」「别忘了」或需要保存任何信息供将来使用时，使用此工具。支持单条或多条批量保存。内容自动按日期归档到记忆库，可通过 search_memory 检索",
 			InputSchema: jsonSchema(map[string]interface{}{
-				"memories": propArray("object", "要记住的条目数组 [{content: '内容', title: '标题(可选)'}]，也可只传一条"),
+				"memories": propArray("object", "要记住的条目数组 [{content: '内容', title: '标题(可选)', source?: '来源', source_platform?: '更具体平台'}]，也可只传一条"),
 			}, "memories"),
 		},
 		{
@@ -471,9 +503,13 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return result, false
 
 	case "update_profile":
+		writeCtx, source, _ := s.writeHints(args)
 		category, _ := args["category"].(string)
 		content, _ := args["content"].(string)
-		if err := s.Memory.UpsertProfile(ctx, s.UserID, category, content, "mcp"); err != nil {
+		if source == "" {
+			source = s.writeSource()
+		}
+		if err := s.Memory.UpsertProfile(writeCtx, s.UserID, category, content, source); err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		return s.appendLocalGitSyncMessage(ctx, "profile updated"), false
@@ -536,11 +572,12 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return string(result), false
 
 	case "create_project":
+		writeCtx, _, _ := s.writeHints(args)
 		name, _ := args["name"].(string)
 		if name == "" {
 			return "error: project name is required", true
 		}
-		project, err := s.Project.Create(ctx, s.UserID, name)
+		project, err := s.Project.Create(writeCtx, s.UserID, name)
 		if err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
@@ -559,6 +596,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return string(result), false
 
 	case "log_action":
+		writeCtx, source, _ := s.writeHints(args)
 		projectName, _ := args["project"].(string)
 		project, err := s.Project.Get(ctx, s.UserID, projectName)
 		if err != nil {
@@ -566,9 +604,8 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		}
 		action, _ := args["action"].(string)
 		summary, _ := args["summary"].(string)
-		source, _ := args["source"].(string)
 		if source == "" {
-			source = "mcp"
+			source = s.writeSource()
 		}
 		tags := toStringSlice(args["tags"])
 		logEntry := models.ProjectLog{
@@ -579,7 +616,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			Summary:   summary,
 			Tags:      tags,
 		}
-		if err := s.Project.AppendLog(ctx, project.ID, logEntry); err != nil {
+		if err := s.Project.AppendLog(writeCtx, project.ID, logEntry); err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		return s.appendLocalGitSyncMessage(ctx, "log entry added"), false
@@ -620,12 +657,18 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return entry.Content, false
 
 	case "write_file":
+		writeCtx, source, sourcePlatform := s.writeHints(args)
 		path, _ := args["path"].(string)
 		if isHiddenMCPPath(path) {
 			return fmt.Sprintf("error: path %q is not available on the public MCP surface", path), true
 		}
 		content, _ := args["content"].(string)
-		if _, err := s.FileTree.Write(ctx, s.UserID, path, content, "text/markdown", s.TrustLevel); err != nil {
+		metadata := services.WithSourceMetadata(nil, source)
+		metadata = services.WithSourcePlatformMetadata(metadata, sourcePlatform)
+		if _, err := s.FileTree.WriteEntry(writeCtx, s.UserID, path, content, "text/markdown", models.FileTreeWriteOptions{
+			Metadata:      metadata,
+			MinTrustLevel: s.TrustLevel,
+		}); err != nil {
 			return fmt.Sprintf("error: %v", err), true
 		}
 		return s.appendLocalGitSyncMessage(ctx, "file written"), false
@@ -673,6 +716,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 		return string(result), false
 
 	case "save_memory":
+		writeCtx, _, _ := s.writeHints(args)
 		memoriesRaw, ok := args["memories"].([]interface{})
 		if !ok || len(memoriesRaw) == 0 {
 			return "error: memories array is required (at least one {content, title?} object)", true
@@ -689,7 +733,15 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 				continue
 			}
 			title, _ := m["title"].(string)
-			entry, err := s.Memory.WriteScratchWithTitle(ctx, s.UserID, content, "mcp", title)
+			source, _ := m["source"].(string)
+			if source == "" {
+				source = s.writeSource()
+			}
+			itemCtx := writeCtx
+			if platform, _ := m["source_platform"].(string); strings.TrimSpace(platform) != "" {
+				itemCtx = services.ContextWithSource(context.Background(), platform)
+			}
+			entry, err := s.Memory.WriteScratchWithTitle(itemCtx, s.UserID, content, source, title)
 			if err != nil {
 				return fmt.Sprintf("error saving memory: %v", err), true
 			}

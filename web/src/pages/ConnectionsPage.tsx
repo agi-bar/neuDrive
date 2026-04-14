@@ -129,8 +129,25 @@ export default function ConnectionsPage() {
 
   const platformLabels: Record<string, string> = {
     claude: 'Claude',
+    'claude-web': 'Claude Web',
+    'claude-code': 'Claude Code',
+    'claude-desktop': 'Claude Desktop',
+    codex: 'Codex',
+    chatgpt: 'ChatGPT',
     gpt: 'GPT',
+    gemini: 'Gemini',
+    'gemini-cli': 'Gemini CLI',
+    cursor: 'Cursor',
+    windsurf: 'Windsurf',
+    copilot: 'GitHub Copilot',
+    perplexity: 'Perplexity',
+    kimi: 'Kimi',
+    deepseek: 'DeepSeek',
+    qwen: 'Qwen',
+    zhipu: 'Zhipu GLM',
+    minimax: 'MiniMax',
     feishu: tx('飞书', 'Feishu'),
+    'open-webui': 'Open WebUI',
     other: tx('其他', 'Other'),
   }
 
@@ -216,19 +233,32 @@ export default function ConnectionsPage() {
     const redirectHosts = redirectURIs.map(parseHost).filter(Boolean)
     const knownHosts = [clientHost, ...redirectHosts]
     const primaryHost = knownHosts[0]
+    const haystack = [clientID, appName, ...redirectURIs, ...knownHosts].join(' ').toLowerCase()
+    const matches = (...terms: string[]) => terms.some((term) => haystack.includes(term))
 
-    if (knownHosts.some((host) => host === 'claude.ai' || host === 'claude.com')) {
-      return {
-        platform: 'Claude',
-        name: 'Claude Connector',
-        detail: primaryHost || clientID,
-      }
-    }
+    const detected = (() => {
+      if (matches('claude.ai', 'claude.com', 'anthropic')) return { platform: 'claude', name: 'Claude Connector' }
+      if (matches('chatgpt.com', 'chat.openai.com', 'openai')) return { platform: 'chatgpt', name: 'ChatGPT Connector' }
+      if (matches('codex')) return { platform: 'codex', name: 'Codex MCP' }
+      if (matches('gemini', 'googleusercontent.com')) return { platform: 'gemini', name: 'Gemini Connector' }
+      if (matches('cursor', 'anysphere')) return { platform: 'cursor', name: 'Cursor Connector' }
+      if (matches('windsurf', 'codeium')) return { platform: 'windsurf', name: 'Windsurf Connector' }
+      if (matches('copilot', 'github')) return { platform: 'copilot', name: 'GitHub Copilot' }
+      if (matches('perplexity')) return { platform: 'perplexity', name: 'Perplexity Connector' }
+      if (matches('kimi', 'moonshot')) return { platform: 'kimi', name: 'Kimi Connector' }
+      if (matches('deepseek')) return { platform: 'deepseek', name: 'DeepSeek Connector' }
+      if (matches('qwen', 'tongyi', 'dashscope')) return { platform: 'qwen', name: 'Qwen Connector' }
+      if (matches('zhipu', 'chatglm', 'bigmodel', 'z.ai')) return { platform: 'zhipu', name: 'Zhipu GLM Connector' }
+      if (matches('minimax')) return { platform: 'minimax', name: 'MiniMax Connector' }
+      if (matches('feishu', 'lark')) return { platform: 'feishu', name: 'Feishu Connector' }
+      if (matches('open webui', 'openwebui')) return { platform: 'open-webui', name: 'Open WebUI Connector' }
+      return null
+    })()
 
-    if (knownHosts.some((host) => host.includes('openai.com') || host.includes('chatgpt.com'))) {
+    if (detected) {
       return {
-        platform: 'GPT',
-        name: appName || 'ChatGPT Connector',
+        platform: getPlatformLabel(detected.platform),
+        name: appName || detected.name,
         detail: primaryHost || clientID,
       }
     }
@@ -245,13 +275,13 @@ export default function ConnectionsPage() {
       id: conn.id,
       kind: 'manual' as const,
       name: conn.name,
-        platform: getPlatformLabel(conn.platform),
-        trustLevel: conn.trust_level,
-        activityAt: conn.last_used_at || conn.created_at,
-        activityLabel: conn.last_used_at ? tx('最后使用', 'Last used') : tx('创建于', 'Created'),
-        badgeDetail: 'API Key',
-        apiKeyPrefix: conn.api_key_prefix,
-        secondaryDetail: conn.api_key_prefix ? `${conn.api_key_prefix}...` : undefined,
+      platform: getPlatformLabel(conn.platform),
+      trustLevel: conn.trust_level,
+      activityAt: conn.last_used_at || conn.created_at,
+      activityLabel: conn.last_used_at ? tx('最后使用', 'Last used') : tx('创建于', 'Created'),
+      badgeDetail: 'API Key',
+      apiKeyPrefix: conn.api_key_prefix,
+      secondaryDetail: conn.api_key_prefix ? `${conn.api_key_prefix}...` : undefined,
     })),
     ...oauthGrants.map((grant) => {
       const inferred = inferOAuthPlatform(grant)

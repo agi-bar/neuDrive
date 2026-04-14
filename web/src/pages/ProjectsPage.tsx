@@ -5,9 +5,20 @@ import MaterialsSectionToolbar from '../components/MaterialsSectionToolbar'
 import MaterialsTile from '../components/MaterialsTile'
 import ResourceActionMenu from '../components/ResourceActionMenu'
 import ResourceConfirmDialog from '../components/ResourceConfirmDialog'
+import SourceFilterBar from '../components/SourceFilterBar'
 import useResourceCardMenu from '../hooks/useResourceCardMenu'
 import { useI18n } from '../i18n'
-import { getMaterialsSortOptions, type MaterialsSortDir, type MaterialsSortKey, dataFileEditorRoute, sortMaterialsItems } from './data/DataShared'
+import {
+  buildSourceFilterOptions,
+  getMaterialsSortOptions,
+  matchesSourceFilter,
+  projectSource,
+  sourceLabel,
+  type MaterialsSortDir,
+  type MaterialsSortKey,
+  dataFileEditorRoute,
+  sortMaterialsItems,
+} from './data/DataShared'
 
 interface Project {
   name: string
@@ -16,6 +27,7 @@ interface Project {
   last_activity?: string
   updated_at?: string
   context_md?: string
+  metadata?: Record<string, any>
   logs?: LogEntry[]
 }
 
@@ -42,6 +54,7 @@ export default function ProjectsPage() {
   const [creating, setCreating] = useState(false)
   const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
   const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
+  const [sourceFilter, setSourceFilter] = useState('all')
   const [archiveTarget, setArchiveTarget] = useState<Project | null>(null)
   const [archiveSubmitting, setArchiveSubmitting] = useState(false)
   const { activeMenuId, closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
@@ -169,6 +182,14 @@ export default function ProjectsPage() {
       }),
     [projects, sortDir, sortKey],
   )
+  const filteredProjects = useMemo(
+    () => sortedProjects.filter((project) => matchesSourceFilter(projectSource(project), sourceFilter)),
+    [sortedProjects, sourceFilter],
+  )
+  const sourceOptions = useMemo(
+    () => buildSourceFilterOptions(projects, projectSource, locale),
+    [locale, projects],
+  )
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -251,7 +272,7 @@ export default function ProjectsPage() {
             <p className="materials-section-copy">{tx('统一浏览项目卡片，选中后在下方查看 context 和日志。', 'Browse project cards here, then inspect context and logs below.')}</p>
           </div>
           <MaterialsSectionToolbar
-            count={projects.length}
+            count={filteredProjects.length}
             sortKey={sortKey}
             sortOptions={sortOptions}
             sortDir={sortDir}
@@ -273,20 +294,24 @@ export default function ProjectsPage() {
           </MaterialsSectionToolbar>
         </div>
 
-        {projects.length === 0 ? (
+        {(sourceOptions.length > 1 || sourceFilter !== 'all') && (
+          <SourceFilterBar options={sourceOptions} value={sourceFilter} onChange={setSourceFilter} />
+        )}
+
+        {filteredProjects.length === 0 ? (
           <div className="empty-state">
             <p>{tx('暂无项目', 'No projects yet')}</p>
             <p className="empty-hint">{tx('项目帮助 Agent 组织不同任务的上下文和进度。', 'Projects help agents organize context and progress across different tasks.')}</p>
           </div>
         ) : (
           <div className="materials-grid materials-grid-wide">
-            {sortedProjects.map((project) => (
+            {filteredProjects.map((project) => (
                 <MaterialsTile
                   key={project.name}
                   iconClassName="icon-folder"
                   title={project.name}
                   titleActionAriaLabel={tx(`打开项目 ${project.name} 的 context.md`, `Open ${project.name} context.md`)}
-                  subtitle={getStatusLabel(project.status)}
+                  subtitle={`${getStatusLabel(project.status)} · ${sourceLabel(projectSource(project), locale)}`}
                   description={project.description || tx('这个项目还没有补充描述。', 'This project does not have a description yet.')}
                   path={projectContextPath(project.name)}
                   footerStart={tx('最后活动', 'Last activity')}

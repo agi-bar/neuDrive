@@ -89,7 +89,7 @@ const consentHTML = `<!DOCTYPE html>
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Authorize Application - Agent Hub</title>
+    <title>Authorize Application - neuDrive</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -225,7 +225,7 @@ const consentHTML = `<!DOCTYPE html>
 <body>
     <div class="consent-card" id="consent-card" style="display:none;">
         <div class="header">
-            <h1>Agent Hub</h1>
+            <h1>neuDrive</h1>
             <p>An application is requesting access to your account</p>
         </div>
 
@@ -240,7 +240,7 @@ const consentHTML = `<!DOCTYPE html>
             </div>
             <div>
                 <div class="app-name">{{.AppName}}</div>
-                <div class="app-subtitle">wants to access your Agent Hub account</div>
+                <div class="app-subtitle">wants to access your neuDrive account</div>
             </div>
         </div>
 

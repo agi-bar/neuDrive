@@ -20,7 +20,7 @@ test.describe('Auth — Registration', () => {
     await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
 
     // Should be on dashboard
-    await expect(page.locator('.sidebar-brand h1')).toHaveText('Agent Hub')
+    await expect(page.locator('.sidebar-brand h1')).toHaveText('neuDrive')
   })
 })
 
@@ -28,7 +28,7 @@ test.describe('Auth — Login', () => {
   test('login with valid credentials', async ({ page, request }) => {
     const user = await registerUser(request)
     await loginViaUI(page, user.email, user.password)
-    await expect(page.locator('.sidebar-brand h1')).toHaveText('Agent Hub')
+    await expect(page.locator('.sidebar-brand h1')).toHaveText('neuDrive')
   })
 
   test('login with wrong password shows error', async ({ page, request }) => {

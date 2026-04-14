@@ -4,22 +4,22 @@ set -euo pipefail
 
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 APP_HOME="${APP_HOME:-$(cd "$REPO_ROOT/.." && pwd)}"
-AGENTHUB_ENV_FILE="${AGENTHUB_ENV_FILE:-}"
-NAMESPACE="${NAMESPACE:-agenthub}"
-APP_HOST="${APP_HOST:-agenthub.agi.bar}"
+NEUDRIVE_ENV_FILE="${NEUDRIVE_ENV_FILE:-}"
+NAMESPACE="${NAMESPACE:-neudrive}"
+APP_HOST="${APP_HOST:-neudrive.ai}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-}"
 
 detect_env_file() {
   local candidate
   local candidates=()
 
-  if [[ -n "$AGENTHUB_ENV_FILE" ]]; then
-    candidates+=("$AGENTHUB_ENV_FILE")
+  if [[ -n "$NEUDRIVE_ENV_FILE" ]]; then
+    candidates+=("$NEUDRIVE_ENV_FILE")
   fi
 
   candidates+=(
-    "$APP_HOME/config/agenthub.env"
-    "$REPO_ROOT/agenthub.env"
+    "$APP_HOME/config/neudrive.env"
+    "$REPO_ROOT/neudrive.env"
     "$REPO_ROOT/.env"
   )
 
@@ -56,7 +56,7 @@ fi
 echo
 kubectl -n "$NAMESPACE" get deploy,po,svc,ingress -o wide
 echo
-kubectl -n "$NAMESPACE" describe deployment agenthub-server | sed -n '1,140p'
+kubectl -n "$NAMESPACE" describe deployment neudrive-server | sed -n '1,140p'
 echo
 curl -fsS "$HEALTHCHECK_URL"
 echo

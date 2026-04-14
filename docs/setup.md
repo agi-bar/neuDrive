@@ -1,12 +1,12 @@
-# Agent Hub Setup Guide
+# neuDrive Setup Guide
 
-这份文档对应管理后台“连接设置”页面里的各类入口，适合在你已经部署好 Agent Hub 之后，用来选择具体接法。
+这份文档对应管理后台“连接设置”页面里的各类入口，适合在你已经部署好 neuDrive 之后，用来选择具体接法。
 
 下面的示例统一使用：
 
 - Hub 地址：`https://hub.example.com`
 - MCP 地址：`https://hub.example.com/mcp`
-- scoped token 环境变量：`AGENTHUB_TOKEN`
+- scoped token 环境变量：`NEUDRIVE_TOKEN`
 
 如果你当前跑在本地开发地址（例如 `http://localhost:8080`），那么只有“本地模式”适合直接使用；Web / Desktop Apps 和 CLI Apps 通常需要一个可公开访问的 HTTPS 地址。
 
@@ -20,14 +20,14 @@
 2. 点击 `Add custom connector`。
 3. 把 `Remote MCP Server URL` 填成 `https://hub.example.com/mcp`。
 4. 保存后点击 `Connect`。
-5. 浏览器会跳转到 Agent Hub 的登录与授权页；完成后回到 Claude。
+5. 浏览器会跳转到 neuDrive 的登录与授权页；完成后回到 Claude。
 
 ### ChatGPT Apps
 
 1. 登录 ChatGPT，进入 `Settings -> Apps`。
 2. 在 `Advanced settings` 里点击 `Create app`。
 3. 把 `MCP Server URL` 填成 `https://hub.example.com/mcp`。
-4. 按提示完成 Agent Hub 登录和授权。
+4. 按提示完成 neuDrive 登录和授权。
 
 如果你的账号里暂时看不到 `Apps` 入口，通常意味着当前计划或灰度范围还没有开放这一功能。
 
@@ -38,7 +38,7 @@
 ```json
 {
   "mcpServers": {
-    "agenthub": {
+    "neudrive": {
       "url": "https://hub.example.com/mcp"
     }
   }
@@ -50,7 +50,7 @@
 1. 打开 `Settings -> Tools & MCPs -> Add Custom MCP`。
 2. 把 `Remote MCP Server URL` 设为 `https://hub.example.com/mcp`。
 3. 点击 `Connect` 或 `Authenticate`。
-4. 浏览器会打开 Agent Hub 登录与授权页；完成后回到 Cursor。
+4. 浏览器会打开 neuDrive 登录与授权页；完成后回到 Cursor。
 
 ### Windsurf Desktop
 
@@ -59,7 +59,7 @@ Windsurf 当前主要通过配置文件接入远程 MCP：
 ```json
 {
   "mcpServers": {
-    "agenthub": {
+    "neudrive": {
       "serverUrl": "https://hub.example.com/mcp"
     }
   }
@@ -71,17 +71,17 @@ Windsurf 当前主要通过配置文件接入远程 MCP：
 1. 打开 `Windsurf Settings -> Cascade`。
 2. 在 `MCP Servers` 区域点击 `Open MCP Marketplace`。
 3. 点击 config 图标，打开 `~/.codeium/windsurf/mcp_config.json`。
-4. 写入上面的 `agenthub` 配置并保存。
-5. 点击 `Open`，完成 Agent Hub 登录和授权。
+4. 写入上面的 `neudrive` 配置并保存。
+5. 点击 `Open`，完成 neuDrive 登录和授权。
 
 ## CLI Apps
 
-这一类适合日常在终端里工作的用户。它们通过远程 HTTP MCP + OAuth 接入 Agent Hub。
+这一类适合日常在终端里工作的用户。它们通过远程 HTTP MCP + OAuth 接入 neuDrive。
 
 ### Claude Code
 
 ```bash
-claude mcp add -s user --transport http agenthub https://hub.example.com/mcp
+claude mcp add -s user --transport http neudrive https://hub.example.com/mcp
 ```
 
 然后在 Claude Code 中执行：
@@ -95,21 +95,21 @@ claude mcp add -s user --transport http agenthub https://hub.example.com/mcp
 ### Codex CLI
 
 ```bash
-codex mcp add agenthub --url https://hub.example.com/mcp
-codex mcp login agenthub
+codex mcp add neudrive --url https://hub.example.com/mcp
+codex mcp login neudrive
 codex mcp list
 ```
 
 ### Gemini CLI
 
 ```bash
-gemini mcp add --transport http agenthub https://hub.example.com/mcp
+gemini mcp add --transport http neudrive https://hub.example.com/mcp
 ```
 
 然后在 Gemini 中执行：
 
 ```text
-/mcp auth agenthub
+/mcp auth neudrive
 ```
 
 注意：`gemini mcp add` 必须带 `--transport http`，否则 Gemini 可能会把 URL 当成本地 command，而不是远程 MCP server。
@@ -121,7 +121,7 @@ gemini mcp add --transport http agenthub https://hub.example.com/mcp
 ```json
 {
   "mcpServers": {
-    "agenthub": {
+    "neudrive": {
       "url": "https://hub.example.com/mcp"
     }
   }
@@ -131,30 +131,30 @@ gemini mcp add --transport http agenthub https://hub.example.com/mcp
 然后执行：
 
 ```bash
-cursor-agent mcp login agenthub
+cursor-agent mcp login neudrive
 cursor-agent mcp list
 ```
 
 ## Local Mode
 
-本地模式适合本地开发、内网环境，或者当前还没有公网 HTTPS 地址的情况。它通过本地 `agenthub-mcp` binary 和 scoped token 接入。
+本地模式适合本地开发、内网环境，或者当前还没有公网 HTTPS 地址的情况。它通过本地 `neudrive-mcp` binary 和 scoped token 接入。
 
 先准备 token：
 
 ```bash
-export AGENTHUB_TOKEN=aht_xxxxx
+export NEUDRIVE_TOKEN=ndt_xxxxx
 ```
 
 ### Claude Code
 
 ```bash
-claude mcp add -s user agenthub -- agenthub-mcp --token-env AGENTHUB_TOKEN
+claude mcp add -s user neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 ```
 
 ### Codex CLI
 
 ```bash
-codex mcp add agenthub -- agenthub-mcp --token-env AGENTHUB_TOKEN
+codex mcp add neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 ```
 
 如果你只是想查看接法而不想立刻生成 token，建议直接打开管理后台“连接设置 -> 本地模式”，在那里可以创建和复制当前模式专用 token。
@@ -164,20 +164,20 @@ codex mcp add agenthub -- agenthub-mcp --token-env AGENTHUB_TOKEN
 高级模式面向支持 HTTP MCP 的通用客户端。推荐优先使用环境变量，只有客户端不支持 env 方式时，再回退到静态 Bearer header。
 
 ```bash
-export AGENTHUB_TOKEN=aht_xxxxx
+export NEUDRIVE_TOKEN=ndt_xxxxx
 ```
 
 Codex CLI 可直接引用环境变量，不把 secret 写进配置：
 
 ```bash
-codex mcp add agenthub --url https://hub.example.com/mcp --bearer-token-env-var AGENTHUB_TOKEN
+codex mcp add neudrive --url https://hub.example.com/mcp --bearer-token-env-var NEUDRIVE_TOKEN
 ```
 
 对于其他客户端，如果暂不支持 env 方式，再使用静态 Bearer 配置。
 
 ## ChatGPT GPT Actions
 
-如果你想在自定义 GPT 中接入 Agent Hub，可以用 GPT Actions：
+如果你想在自定义 GPT 中接入 neuDrive，可以用 GPT Actions：
 
 1. 打开 ChatGPT，创建一个 GPT。
 2. 进入 `Configure -> Actions`。

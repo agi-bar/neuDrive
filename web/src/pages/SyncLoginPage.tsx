@@ -32,8 +32,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? '这个页面需要由 `agenthub sync login` 自动打开。'
-        : 'This page must be opened automatically by `agenthub sync login`.',
+        ? '这个页面需要由 `neudrive sync login` 自动打开。'
+        : 'This page must be opened automatically by `neudrive sync login`.',
     }
   }
 
@@ -47,8 +47,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? '缺少必要的 CLI 登录参数，请回到终端重新执行 `agenthub sync login`。'
-        : 'Missing required CLI login parameters. Please rerun `agenthub sync login` in the terminal.',
+        ? '缺少必要的 CLI 登录参数，请回到终端重新执行 `neudrive sync login`。'
+        : 'Missing required CLI login parameters. Please rerun `neudrive sync login` in the terminal.',
     }
   }
 
@@ -56,8 +56,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? '无效的访问范围参数，请回到终端重新执行 `agenthub sync login`。'
-        : 'Invalid access scope parameter. Please rerun `agenthub sync login` in the terminal.',
+        ? '无效的访问范围参数，请回到终端重新执行 `neudrive sync login`。'
+        : 'Invalid access scope parameter. Please rerun `neudrive sync login` in the terminal.',
     }
   }
 
@@ -75,8 +75,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? 'CLI 回调地址无效，请回到终端重新执行 `agenthub sync login`。'
-        : 'The CLI callback URL is invalid. Please rerun `agenthub sync login` in the terminal.',
+        ? 'CLI 回调地址无效，请回到终端重新执行 `neudrive sync login`。'
+        : 'The CLI callback URL is invalid. Please rerun `neudrive sync login` in the terminal.',
     }
   }
 
@@ -130,8 +130,8 @@ export default function SyncLoginPage() {
 
       if (!callbackRes.ok) {
         throw new Error(tx(
-          'Sync Token 已生成，但回填本地 CLI 失败。请确认终端还在等待登录，或改用手工 `agenthub sync login --token ...`。',
-          'The Sync token was created, but sending it back to the local CLI failed. Make sure the terminal is still waiting, or use `agenthub sync login --token ...` manually.',
+          'Sync Token 已生成，但回填本地 CLI 失败。请确认终端还在等待登录，或改用手工 `neudrive sync login --token ...`。',
+          'The Sync token was created, but sending it back to the local CLI failed. Make sure the terminal is still waiting, or use `neudrive sync login --token ...` manually.',
         ))
       }
 
@@ -152,7 +152,7 @@ export default function SyncLoginPage() {
         <div className="login-card-header">
           <LanguageToggle />
         </div>
-        <div className="sync-login-eyebrow">Agent Hub CLI</div>
+        <div className="sync-login-eyebrow">neuDrive CLI</div>
         <h1 className="login-title">{tx('授权本次 Sync 登录', 'Authorize this Sync sign-in')}</h1>
         <p className="login-desc">
           {tx(
@@ -186,8 +186,8 @@ export default function SyncLoginPage() {
 
             <div className="sync-login-note">
               {tx(
-                '点击下面的按钮后，Agent Hub 会生成一个短效 Sync Token，并自动发送回正在等待的本地 CLI。',
-                'When you continue, Agent Hub will create a short-lived Sync token and automatically send it back to the waiting local CLI.',
+                '点击下面的按钮后，neuDrive 会生成一个短效 Sync Token，并自动发送回正在等待的本地 CLI。',
+                'When you continue, neuDrive will create a short-lived Sync token and automatically send it back to the waiting local CLI.',
               )}
             </div>
 
@@ -212,7 +212,7 @@ export default function SyncLoginPage() {
             <div className="data-record-meta">{tx('过期时间：', 'Expires at: ')}{formatDateTime(syncToken.expires_at, locale)}</div>
             <div className="data-record-secondary">
               {tx('如果终端还在等待，也可以手工执行：', 'If the terminal is still waiting, you can also run:')}
-              <code> agenthub sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code>
+              <code> neudrive sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code>
             </div>
           </div>
         )}

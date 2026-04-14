@@ -156,7 +156,7 @@ function App() {
     <div className="app-layout">
       <aside className="sidebar">
         <div className="sidebar-brand">
-          <h1>Agent Hub</h1>
+          <h1>neuDrive</h1>
           <span className="sidebar-version">v0.0.1</span>
         </div>
 

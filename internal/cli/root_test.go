@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/app/appcore"
+	"github.com/agi-bar/neudrive/internal/app/appcore"
 )
 
 func TestShouldUseLocalSyncDefaults(t *testing.T) {
@@ -13,7 +13,7 @@ func TestShouldUseLocalSyncDefaults(t *testing.T) {
 	if shouldUseLocalSyncDefaults([]string{"login"}) {
 		t.Fatal("login should not default to local sync env injection")
 	}
-	if !shouldUseLocalSyncDefaults([]string{"push", "--bundle", "backup.ahubz"}) {
+	if !shouldUseLocalSyncDefaults([]string{"push", "--bundle", "backup.ndrvz"}) {
 		t.Fatal("push should default to local sync env injection")
 	}
 	if shouldUseLocalSyncDefaults([]string{"push", "--profile", "official"}) {
@@ -36,7 +36,7 @@ func TestChooseStorageBackend(t *testing.T) {
 	})
 
 	t.Run("explicit sqlite path selects sqlite", func(t *testing.T) {
-		if got := chooseStorageBackend(appcore.DefaultServerStorage, "", "/tmp/agenthub.db", ""); got != "sqlite" {
+		if got := chooseStorageBackend(appcore.DefaultServerStorage, "", "/tmp/neudrive.db", ""); got != "sqlite" {
 			t.Fatalf("got %q want sqlite", got)
 		}
 	})

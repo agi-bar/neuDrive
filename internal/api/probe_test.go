@@ -6,7 +6,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/config"
+	"github.com/agi-bar/neudrive/internal/config"
 )
 
 func TestTestPostEndpointRespondsOK(t *testing.T) {

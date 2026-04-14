@@ -14,10 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
-	"github.com/agi-bar/agenthub/internal/systemskills"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neudrive/internal/systemskills"
 	"github.com/google/uuid"
 )
 

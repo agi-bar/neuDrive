@@ -29,7 +29,7 @@ linters-settings:
   govet:
     enable-all: true
   goimports:
-    local-prefixes: github.com/agenthub
+    local-prefixes: github.com/neudrive
   gosec:
     excludes:
       - G101  # hard-coded credentials (flags test constants)

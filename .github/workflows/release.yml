@@ -16,8 +16,8 @@ jobs:
         with:
           go-version: '1.25'
       - run: |
-          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o agenthub-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/agenthub/
+          GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} go build -o neudrive-${{ matrix.goos }}-${{ matrix.goarch }} ./cmd/neudrive/
       - uses: actions/upload-artifact@v4
         with:
-          name: agenthub-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: agenthub-*
+          name: neudrive-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: neudrive-*

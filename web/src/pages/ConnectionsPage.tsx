@@ -101,7 +101,7 @@ export default function ConnectionsPage() {
   }
 
   const handleRevokeGrant = async (id: string, name: string) => {
-    if (!window.confirm(tx(`确认撤销 "${name}" 的授权？连接器将无法继续访问 Agent Hub。`, `Revoke access for "${name}"? The connector will no longer be able to access Agent Hub.`))) return
+    if (!window.confirm(tx(`确认撤销 "${name}" 的授权？连接器将无法继续访问 neuDrive。`, `Revoke access for "${name}"? The connector will no longer be able to access neuDrive.`))) return
 
     try {
       await api.revokeOAuthGrant(id)
@@ -139,7 +139,7 @@ export default function ConnectionsPage() {
       key: 'web-apps',
       title: 'Web / Desktop Apps',
       subtitle: tx('网页应用', 'Web apps'),
-      description: tx('在 Claude、ChatGPT、Cursor、Windsurf 等图形界面里，把 Agent Hub 添加成远程 MCP Server。', 'Add Agent Hub as a remote MCP server in Claude, ChatGPT, Cursor, Windsurf, and other graphical apps.'),
+      description: tx('在 Claude、ChatGPT、Cursor、Windsurf 等图形界面里，把 neuDrive 添加成远程 MCP Server。', 'Add neuDrive as a remote MCP server in Claude, ChatGPT, Cursor, Windsurf, and other graphical apps.'),
       route: '/setup/web-apps',
       iconClassName: 'icon-device',
     },
@@ -171,7 +171,7 @@ export default function ConnectionsPage() {
       key: 'gpt-actions',
       title: 'ChatGPT GPT Actions',
       subtitle: 'GPT Actions',
-      description: tx('在自定义 GPT 中通过 OpenAPI 和 Bearer Token 连接 Agent Hub。', 'Connect Agent Hub to a custom GPT with OpenAPI and a Bearer token.'),
+      description: tx('在自定义 GPT 中通过 OpenAPI 和 Bearer Token 连接 neuDrive。', 'Connect neuDrive to a custom GPT with OpenAPI and a Bearer token.'),
       route: '/setup/gpt-actions',
       iconClassName: 'icon-mail',
     },

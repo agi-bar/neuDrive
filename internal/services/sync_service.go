@@ -16,9 +16,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/systemskills"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/systemskills"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -310,7 +310,7 @@ func (s *SyncService) ExportBundleJSON(ctx context.Context, userID uuid.UUID, fi
 		Direction: models.SyncJobDirectionExport,
 		Transport: models.SyncJobTransportJSON,
 		Status:    models.SyncJobStatusSucceeded,
-		Source:    "agenthub",
+		Source:    "neudrive",
 		Mode:      bundleModeMerge,
 		Filters:   filters,
 		Summary:   syncSummaryFromBundleStats(bundle.Stats),
@@ -344,7 +344,7 @@ func (s *SyncService) ExportArchive(ctx context.Context, userID uuid.UUID, filte
 		Direction: models.SyncJobDirectionExport,
 		Transport: models.SyncJobTransportArchive,
 		Status:    models.SyncJobStatusSucceeded,
-		Source:    "agenthub",
+		Source:    "neudrive",
 		Mode:      manifest.Mode,
 		Filters:   filters,
 		Summary:   syncSummaryFromBundleStats(bundle.Stats),

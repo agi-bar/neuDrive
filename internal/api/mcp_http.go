@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/agi-bar/agenthub/internal/auth"
-	"github.com/agi-bar/agenthub/internal/mcp"
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/auth"
+	"github.com/agi-bar/neudrive/internal/mcp"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 )
 
@@ -71,7 +71,7 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 	var trustLevel int
 	var scopes []string
 
-	if strings.HasPrefix(tokenStr, "aht_") {
+	if strings.HasPrefix(tokenStr, "ndt_") {
 		// Scoped token (from Hub dashboard)
 		st, err := s.TokenService.ValidateToken(r.Context(), tokenStr)
 		if err != nil {

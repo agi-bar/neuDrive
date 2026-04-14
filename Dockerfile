@@ -14,13 +14,13 @@ RUN go mod download
 COPY . .
 # Copy the built frontend into the embed directory
 COPY --from=frontend /app/web/dist/ ./internal/web/dist/
-RUN CGO_ENABLED=0 GOOS=linux go build -o /agenthub ./cmd/agenthub
+RUN CGO_ENABLED=0 GOOS=linux go build -o /neudrive ./cmd/neudrive
 
 # ---- Final image: just the binary + migrations ----
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
-COPY --from=builder /agenthub .
+COPY --from=builder /neudrive .
 COPY migrations/ ./migrations/
 EXPOSE 8080
-CMD ["./agenthub", "server", "--listen", ":8080"]
+CMD ["./neudrive", "server", "--listen", ":8080"]

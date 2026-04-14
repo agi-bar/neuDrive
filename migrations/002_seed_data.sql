@@ -135,7 +135,7 @@ INSERT INTO file_tree (user_id, path, is_directory, content, content_type, min_t
     ('a0000000-0000-0000-0000-000000000001', '/memory/SKILL.md', false,
      '# 记忆系统
 
-Agent Hub 的记忆分三层：
+neuDrive 的记忆分三层：
 
 ## Profile 层（稳定画像）
 路径：`/memory/profile/`
@@ -199,15 +199,15 @@ ON CONFLICT (user_id, scope) DO NOTHING;
 -- Roles
 INSERT INTO roles (user_id, name, role_type, allowed_paths, allowed_vault_scopes, lifecycle) VALUES
     ('a0000000-0000-0000-0000-000000000001', 'assistant', 'assistant', ARRAY['/**'], ARRAY['**'], 'permanent'),
-    ('a0000000-0000-0000-0000-000000000001', 'worker-agenthub', 'worker', ARRAY['/memory/projects/agenthub/**', '/skills/**'], ARRAY['auth.*'], 'project'),
+    ('a0000000-0000-0000-0000-000000000001', 'worker-neudrive', 'worker', ARRAY['/memory/projects/neudrive/**', '/skills/**'], ARRAY['auth.*'], 'project'),
     ('a0000000-0000-0000-0000-000000000001', 'worker-cyberzen', 'worker', ARRAY['/memory/projects/cyberzen/**', '/skills/cyberzen-*/**'], ARRAY['auth.feishu'], 'project'),
     ('a0000000-0000-0000-0000-000000000001', 'delegate-friend-a', 'delegate', ARRAY['/memory/projects/shared-research/**'], ARRAY[]::TEXT[], 'permanent')
 ON CONFLICT (user_id, name) DO NOTHING;
 
 -- Projects
 INSERT INTO projects (id, user_id, name, status, context_md) VALUES
-    ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'agenthub', 'active',
-     '# Agent Hub 项目
+    ('b0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000001', 'neudrive', 'active',
+     '# neuDrive 项目
 
 ## 概述
 AI 时代的身份与信任基础设施。让用户的 AI Agent 跨平台共享身份、记忆、能力和通信。
@@ -236,7 +236,7 @@ ON CONFLICT (user_id, name) DO NOTHING;
 
 -- Project logs
 INSERT INTO project_logs (project_id, source, role, action, summary, tags) VALUES
-    ('b0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'created_project', '创建了 Agent Hub 项目，完成了设计文档 v0.2', ARRAY['init', 'design']),
+    ('b0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'created_project', '创建了 neuDrive 项目，完成了设计文档 v0.2', ARRAY['init', 'design']),
     ('b0000000-0000-0000-0000-000000000001', 'claude', 'assistant', 'started_development', '开始 Phase 1 核心系统开发：Go 后端 + PostgreSQL + React 前端', ARRAY['development', 'phase1']),
     ('b0000000-0000-0000-0000-000000000002', 'claude', 'assistant', 'wrote_article', '写了一篇关于海淀算力券的分析文章', ARRAY['writing', 'policy'])
 ON CONFLICT DO NOTHING;
@@ -273,7 +273,7 @@ ON CONFLICT DO NOTHING;
 INSERT INTO activity_log (user_id, connection_id, action, path) VALUES
     ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'read', '/memory/profile/preferences.md'),
     ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'read', '/skills/cyberzen-write/SKILL.md'),
-    ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'write', '/memory/projects/agenthub/context.md'),
+    ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000001', 'write', '/memory/projects/neudrive/context.md'),
     ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000002', 'read', '/identity/profile.json'),
     ('a0000000-0000-0000-0000-000000000001', 'c0000000-0000-0000-0000-000000000003', 'read', '/skills/cyberzen-write/SKILL.md')
 ON CONFLICT DO NOTHING;

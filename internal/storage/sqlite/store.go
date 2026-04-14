@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 	_ "modernc.org/sqlite"
 )
@@ -515,6 +515,34 @@ func (s *Store) FirstUserID(ctx context.Context) (uuid.UUID, error) {
 		return uuid.Nil, err
 	}
 	return user.ID, nil
+}
+
+func (s *Store) ListUserIDs(ctx context.Context) ([]uuid.UUID, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT id FROM users ORDER BY created_at ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	ids := make([]uuid.UUID, 0)
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		id, err := uuid.Parse(raw)
+		if err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	if len(ids) == 0 {
+		return nil, fmt.Errorf("no users found")
+	}
+	return ids, nil
 }
 
 func (s *Store) firstUser(ctx context.Context) (*models.User, error) {

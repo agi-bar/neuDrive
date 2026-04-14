@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agi-bar/agenthub/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
 )
 
 type localAPIEnvelope struct {
@@ -116,5 +116,5 @@ func resolveLocalPath(pathValue string) (string, error) {
 }
 
 func defaultExportRoot(platform string) (string, error) {
-	return filepath.Abs(filepath.Join(".", "agenthub-export", platform))
+	return filepath.Abs(filepath.Join(".", "neudrive-export", platform))
 }

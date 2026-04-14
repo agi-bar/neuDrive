@@ -24,7 +24,7 @@ func (s *Server) handleExportZip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Generate a filename with a timestamp.
-	filename := fmt.Sprintf("agenthub-export-%s.zip", time.Now().UTC().Format("2006-01-02"))
+	filename := fmt.Sprintf("neudrive-export-%s.zip", time.Now().UTC().Format("2006-01-02"))
 
 	// Set headers for zip download. We stream directly, so no Content-Length.
 	w.Header().Set("Content-Type", "application/zip")

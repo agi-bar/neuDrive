@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 func TestRespondDeviceCallError(t *testing.T) {

@@ -12,7 +12,7 @@ import (
 // Full feature integration tests — covers all untested functionality.
 //
 // Run with:
-//   AGENTHUB_TEST_URL=http://localhost:8080 go test ./internal/api/ -run TestFeature -v -count=1
+//   NEUDRIVE_TEST_URL=http://localhost:8080 go test ./internal/api/ -run TestFeature -v -count=1
 //
 // Requires: docker compose up (server + database running)
 // ---------------------------------------------------------------------------

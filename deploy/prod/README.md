@@ -3,19 +3,19 @@
 Recommended server layout:
 
 ```text
-~/apps/agenthub/
+~/apps/neudrive/
   bin/
     deploy-main
     status
   config/
-    agenthub.env
+    neudrive.env
   k8s/
   logs/
   repo/
 ```
 
-`repo/` is a clean git checkout of `git@github.com:agi-bar/agenthub.git`.
-`config/agenthub.env` is copied from `agenthub.env.example` and holds the real
+`repo/` is a clean git checkout of `git@github.com:agi-bar/neudrive.git`.
+`config/neudrive.env` is copied from `neudrive.env.example` and holds the real
 deployment settings and secrets.
 
 `bin/deploy-main` is a thin wrapper that:
@@ -27,17 +27,17 @@ deployment settings and secrets.
 
 `deploy/prod/deploy.sh` builds the Docker image directly inside the minikube
 Docker daemon, syncs the tracked manifests into `k8s/`, creates or updates the
-runtime secrets/config from `config/agenthub.env`, applies the Kubernetes
+runtime secrets/config from `config/neudrive.env`, applies the Kubernetes
 manifests, updates the deployment image, waits for rollout, and verifies the
 public healthcheck.
 
 Useful commands from the server:
 
 ```bash
-cp ~/apps/agenthub/repo/agenthub.env.example ~/apps/agenthub/config/agenthub.env
-vim ~/apps/agenthub/config/agenthub.env
-~/apps/agenthub/bin/deploy-main
-~/apps/agenthub/bin/status
+cp ~/apps/neudrive/repo/neudrive.env.example ~/apps/neudrive/config/neudrive.env
+vim ~/apps/neudrive/config/neudrive.env
+~/apps/neudrive/bin/deploy-main
+~/apps/neudrive/bin/status
 ```
 
 ## Bundle Sync Prod-like 验收
@@ -49,7 +49,7 @@ vim ~/apps/agenthub/config/agenthub.env
 1. 部署最新 `origin/main`
 2. 在管理后台生成一个 `both` Sync Token
 3. 用匿名 fixture 跑 `export -> preview -> push -> pull -> diff`
-4. 再用一套真实 `.ahubz` 跑同样流程
+4. 再用一套真实 `.ndrvz` 跑同样流程
 5. 单独验证一次 archive `resume`
 6. 单独验证一次 `mirror` 删除边界
 

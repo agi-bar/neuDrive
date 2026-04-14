@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
 )
 
 func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
@@ -60,7 +60,7 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("read shim log: %v", err)
 	}
 	logText := string(logData)
-	if !strings.Contains(logText, "ARG=add") || !strings.Contains(logText, "AGENTHUB_TOKEN=") {
+	if !strings.Contains(logText, "ARG=add") || !strings.Contains(logText, "NEUDRIVE_TOKEN=") {
 		t.Fatalf("unexpected shim log after connect: %s", logText)
 	}
 
@@ -68,10 +68,10 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	if !strings.Contains(stdout, "Connected: true") || !strings.Contains(stdout, "Entrypoint installed: true") {
 		t.Fatalf("expected connected codex status: %s", stdout)
 	}
-	if !strings.Contains(stdout, filepath.Join(home, ".agents", "skills", "agenthub")) {
+	if !strings.Contains(stdout, filepath.Join(home, ".agents", "skills", "neudrive")) {
 		t.Fatalf("expected codex skill path in output: %s", stdout)
 	}
-	if !strings.Contains(stdout, "$agenthub git init") || !strings.Contains(stdout, "$agenthub git pull") {
+	if !strings.Contains(stdout, "$neudrive git init") || !strings.Contains(stdout, "$neudrive git pull") {
 		t.Fatalf("expected codex git chat usage in output: %s", stdout)
 	}
 
@@ -114,10 +114,10 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	if !strings.Contains(stdout, "Connected: true") || !strings.Contains(stdout, "Entrypoint type: command") {
 		t.Fatalf("expected connected claude status: %s", stdout)
 	}
-	if !strings.Contains(stdout, filepath.Join(home, ".claude", "commands", "agenthub.md")) {
+	if !strings.Contains(stdout, filepath.Join(home, ".claude", "commands", "neudrive.md")) {
 		t.Fatalf("expected claude command path in output: %s", stdout)
 	}
-	if !strings.Contains(stdout, "/agenthub git init") || !strings.Contains(stdout, "/agenthub git pull") {
+	if !strings.Contains(stdout, "/neudrive git init") || !strings.Contains(stdout, "/neudrive git pull") {
 		t.Fatalf("expected claude git chat usage in output: %s", stdout)
 	}
 
@@ -167,7 +167,7 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	if _, ok := cfg.Local.Connections["codex"]; ok {
 		t.Fatal("expected codex connection removed after disconnect")
 	}
-	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "agenthub")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".agents", "skills", "neudrive")); !os.IsNotExist(err) {
 		t.Fatal("expected codex managed skill removed after disconnect")
 	}
 	logData, err = os.ReadFile(shimLog)
@@ -183,10 +183,10 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	if _, ok := cfg.Local.Connections["claude-code"]; ok {
 		t.Fatal("expected claude connection removed after disconnect")
 	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "agenthub")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".claude", "skills", "neudrive")); !os.IsNotExist(err) {
 		t.Fatal("expected claude managed skill removed after disconnect")
 	}
-	if _, err := os.Stat(filepath.Join(home, ".claude", "commands", "agenthub.md")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(home, ".claude", "commands", "neudrive.md")); !os.IsNotExist(err) {
 		t.Fatal("expected claude managed command removed after disconnect")
 	}
 
@@ -217,7 +217,7 @@ func TestAgenthubGitInitPullAndAutoSync(t *testing.T) {
 	for _, expected := range []string{
 		filepath.Join(mirrorDir, ".git"),
 		filepath.Join(mirrorDir, "README.md"),
-		filepath.Join(mirrorDir, "_agenthub", "metadata.json"),
+		filepath.Join(mirrorDir, "_neudrive", "metadata.json"),
 		filepath.Join(mirrorDir, "memory", "profile", "codex-agent.md"),
 	} {
 		if _, err := os.Stat(expected); err != nil {
@@ -304,7 +304,7 @@ func TestAgenthubGitInitWritesDefaultMirrorPathToConfig(t *testing.T) {
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "git", "init")
-	expectedMirrorDir := filepath.Join(workDir, "agenthub-export", "git-mirror")
+	expectedMirrorDir := filepath.Join(workDir, "neudrive-export", "git-mirror")
 	if !strings.Contains(stdout, "本地 Git 镜像目录: "+expectedMirrorDir) {
 		t.Fatalf("expected default mirror path in output: %s", stdout)
 	}

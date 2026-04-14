@@ -1,134 +1,67 @@
 import { test, expect } from '@playwright/test'
-import { setupUser } from './helpers'
+import { registerOAuthApp, setupUser } from './helpers'
 
 test.describe('Connections Page', () => {
-  test('create connection and see API key', async ({ page, request }) => {
+  test('shows setup entry cards and empty state for a new account', async ({ page, request }) => {
     await setupUser(page, request)
     await page.goto('/connections')
 
-    await page.getByRole('button', { name: '添加连接' }).click()
-    await page.waitForTimeout(300)
-    await page.getByPlaceholder('例如：我的 Telegram Bot').fill('My Claude')
-    await page.locator('select').nth(0).selectOption('claude')
-    await page.locator('select').nth(1).selectOption('4')
-    await page.getByRole('button', { name: '创建' }).click()
-
-    // API key should appear
-    await expect(page.getByText('ahk_').first()).toBeVisible({ timeout: 5000 }).catch(() => {})
-    // Delete button means a connection was created
-    await expect(page.getByRole('button', { name: /删除/ }).first()).toBeVisible({ timeout: 5000 })
+    await expect(page.getByRole('heading', { name: '连接管理' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '打开 Web / Desktop Apps', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '打开 CLI Apps', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '打开 Local Mode', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '打开 Advanced', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: '打开 ChatGPT GPT Actions', exact: true })).toBeVisible()
+    await expect(page.getByText('还没有连接')).toBeVisible()
   })
 
-  test('connection persists after refresh', async ({ page, request }) => {
-    await setupUser(page, request)
+  test('API-created manual connection appears and can be deleted from the UI', async ({ page, request }) => {
+    const user = await setupUser(page, request)
+
+    await request.post('/api/connections', {
+      headers: { Authorization: `Bearer ${user.token}` },
+      data: { name: 'My Claude', type: 'claude', trust_level: 4 },
+    })
+
     await page.goto('/connections')
-
-    // Create
-    await page.getByRole('button', { name: '添加连接' }).click()
-    await page.waitForTimeout(300)
-    await page.getByPlaceholder('例如：我的 Telegram Bot').fill('Persist Test')
-    await page.locator('select').nth(0).selectOption('gpt')
-    await page.locator('select').nth(1).selectOption('3')
-    await page.getByRole('button', { name: '创建' }).click()
-    await page.waitForTimeout(1000)
-
-    // Close key dialog if visible
-    const closeBtn = page.getByRole('button', { name: /已保存|关闭/ })
-    if (await closeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await closeBtn.click()
-    }
-
-    // Refresh
-    await page.reload()
     await page.waitForLoadState('networkidle')
 
-    // Connection should still be there
-    await expect(page.getByText('Persist Test')).toBeVisible({ timeout: 5000 })
-    await expect(page.getByText('gpt')).toBeVisible()
-  })
+    const row = page.getByRole('row', { name: /My Claude/ })
+    await expect(row).toBeVisible()
+    await expect(row.getByText(/API Key · ahk_/)).toBeVisible()
+    await expect(row.getByRole('button', { name: '删除' })).toBeVisible()
 
-  test('delete connection', async ({ page, request }) => {
-    await setupUser(page, request)
-    await page.goto('/connections')
-
-    // Create first
-    await page.getByRole('button', { name: '添加连接' }).click()
-    await page.waitForTimeout(300)
-    await page.getByPlaceholder('例如：我的 Telegram Bot').fill('To Delete')
-    await page.locator('select').nth(0).selectOption('claude')
-    await page.getByRole('button', { name: '创建' }).click()
-    await page.waitForTimeout(1000)
-
-    const closeBtn = page.getByRole('button', { name: /已保存|关闭/ })
-    if (await closeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await closeBtn.click()
-    }
-
-    // Refresh to get proper data
-    await page.reload()
-    await page.waitForLoadState('networkidle')
-
-    // Delete
-    page.on('dialog', d => d.accept())
-    await page.getByRole('button', { name: /删除/ }).first().click()
-    await page.waitForTimeout(1000)
-
+    page.on('dialog', dialog => dialog.accept())
+    await row.getByRole('button', { name: '删除' }).click()
     await expect(page.getByText('还没有连接')).toBeVisible({ timeout: 5000 })
   })
 
-  test('create multiple connections', async ({ page, request }) => {
-    await setupUser(page, request)
+  test('manual connection persists after refresh', async ({ page, request }) => {
+    const user = await setupUser(page, request)
+
+    await request.post('/api/connections', {
+      headers: { Authorization: `Bearer ${user.token}` },
+      data: { name: 'Persist Test', type: 'gpt', trust_level: 3 },
+    })
+
     await page.goto('/connections')
-
-    // Create first
-    await page.getByRole('button', { name: '添加连接' }).click()
-    await page.waitForTimeout(300)
-    await page.getByPlaceholder('例如：我的 Telegram Bot').fill('Claude Main')
-    await page.locator('select').nth(0).selectOption('claude')
-    await page.getByRole('button', { name: '创建' }).click()
-    await page.waitForTimeout(1000)
-
-    const closeBtn = page.getByRole('button', { name: /已保存|关闭/ })
-    if (await closeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await closeBtn.click()
-    }
-
-    // Create second
-    await page.getByRole('button', { name: '添加连接' }).click()
-    await page.waitForTimeout(300)
-    await page.getByPlaceholder('例如：我的 Telegram Bot').fill('GPT Secondary')
-    await page.locator('select').nth(0).selectOption('gpt')
-    await page.getByRole('button', { name: '创建' }).click()
-    await page.waitForTimeout(1000)
-
-    if (await closeBtn.isVisible({ timeout: 2000 }).catch(() => false)) {
-      await closeBtn.click()
-    }
-
-    // Refresh and verify both
+    await page.waitForLoadState('networkidle')
     await page.reload()
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('Claude Main')).toBeVisible()
-    await expect(page.getByText('GPT Secondary')).toBeVisible()
+    const row = page.getByRole('row', { name: /Persist Test/ })
+    await expect(row).toBeVisible({ timeout: 5000 })
+    await expect(row.getByText('GPT', { exact: true })).toBeVisible()
   })
 
   test('shows Claude Connector OAuth grant in connection management', async ({ page, request }) => {
     const user = await setupUser(page, request)
-
-    const clientID = 'https://claude.ai/oauth/mcp/client-metadata.json'
-    const redirectURI = 'https://claude.ai/api/mcp/auth_callback'
+    const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
+      name: 'Claude Connector',
+    })
     const scope = 'admin'
 
-    const infoRes = await request.get('/api/oauth/authorize-info', {
-      params: {
-        client_id: clientID,
-        redirect_uri: redirectURI,
-        scope,
-        response_type: 'code',
-      },
-    })
-    expect(infoRes.ok()).toBeTruthy()
+    expect(response.ok()).toBeTruthy()
 
     const authRes = await request.post('/oauth/authorize', {
       form: {
@@ -147,8 +80,9 @@ test.describe('Connections Page', () => {
     await page.goto('/connections')
     await page.waitForLoadState('networkidle')
 
-    await expect(page.getByText('Claude Connector')).toBeVisible()
-    await expect(page.getByText('OAuth / MCP')).toBeVisible()
-    await expect(page.getByRole('button', { name: '撤销授权' })).toBeVisible()
+    const row = page.getByRole('row', { name: /Claude Connector/ })
+    await expect(row).toBeVisible()
+    await expect(row.getByText(/OAuth \/ MCP/)).toBeVisible()
+    await expect(row.getByRole('button', { name: '撤销授权' })).toBeVisible()
   })
 })

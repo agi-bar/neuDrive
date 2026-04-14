@@ -45,8 +45,8 @@ func Handler() http.Handler {
 	})
 }
 
-// DevProxy returns true if the AGENTHUB_DEV environment variable is set,
+// DevProxy returns true if the NEUDRIVE_DEV environment variable is set,
 // indicating the frontend dev server should be used instead of embedded assets.
 func DevProxy() bool {
-	return os.Getenv("AGENTHUB_DEV") != ""
+	return os.Getenv("NEUDRIVE_DEV") != ""
 }

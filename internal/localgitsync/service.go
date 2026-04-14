@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/services"
-	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
-	"github.com/agi-bar/agenthub/internal/systemskills"
-	"github.com/agi-bar/agenthub/internal/vault"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/services"
+	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/systemskills"
+	"github.com/agi-bar/neudrive/internal/vault"
 	"github.com/google/uuid"
 )
 
@@ -301,12 +301,12 @@ func (s *Service) writeSidecars(ctx context.Context, userID uuid.UUID, rootPath 
 			sort.Slice(exported, func(i, j int) bool {
 				return fmt.Sprint(exported[i]["name"]) < fmt.Sprint(exported[j]["name"])
 			})
-			if err := writeJSONFile(filepath.Join(rootPath, "_agenthub", "projects.json"), exported); err != nil {
+			if err := writeJSONFile(filepath.Join(rootPath, "_neudrive", "projects.json"), exported); err != nil {
 				return err
 			}
 		}
 	}
-	if err := writeJSONFile(filepath.Join(rootPath, "_agenthub", "metadata.json"), map[string]any{
+	if err := writeJSONFile(filepath.Join(rootPath, "_neudrive", "metadata.json"), map[string]any{
 		"version":        "1.0",
 		"exported_at":    syncedAt.UTC().Format(time.RFC3339),
 		"last_synced_at": syncedAt.UTC().Format(time.RFC3339),
@@ -430,19 +430,19 @@ func writeBytes(path string, data []byte) error {
 
 func buildREADME(rootPath string) string {
 	lines := []string{
-		"# AgentHub Local Git Mirror",
+		"# NeuDrive Local Git Mirror",
 		"",
-		"This directory is a local Git mirror of your AgentHub data.",
+		"This directory is a local Git mirror of your NeuDrive data.",
 		"",
 		"- Secrets are not exported.",
 		"- Vault scope metadata is available in `vault/scopes.json`.",
-		"- Mirror metadata is available in `_agenthub/metadata.json`.",
+		"- Mirror metadata is available in `_neudrive/metadata.json`.",
 		"",
 		"To sync this mirror to GitHub, run these commands in this directory:",
 		"",
 		"```bash",
 		"git add .",
-		"git commit -m \"Update AgentHub mirror\"",
+		"git commit -m \"Update NeuDrive mirror\"",
 		"git remote add origin <your-repo-url>",
 		"git push -u origin main",
 		"```",

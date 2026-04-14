@@ -3,16 +3,16 @@ package mcp
 import "testing"
 
 func TestGenerateStdioEnvConfig(t *testing.T) {
-	cfg := GenerateStdioEnvConfig("agenthub-mcp", "")
+	cfg := GenerateStdioEnvConfig("neudrive-mcp", "")
 
 	mcpServers, ok := cfg["mcpServers"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected mcpServers map, got %T", cfg["mcpServers"])
 	}
 
-	server, ok := mcpServers["agenthub"].(map[string]interface{})
+	server, ok := mcpServers["neudrive"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("expected agenthub server map, got %T", mcpServers["agenthub"])
+		t.Fatalf("expected neudrive server map, got %T", mcpServers["neudrive"])
 	}
 
 	args, ok := server["args"].([]string)
@@ -32,9 +32,9 @@ func TestGenerateHTTPOAuthConfig(t *testing.T) {
 		t.Fatalf("expected mcpServers map, got %T", cfg["mcpServers"])
 	}
 
-	server, ok := mcpServers["agenthub"].(map[string]interface{})
+	server, ok := mcpServers["neudrive"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("expected agenthub server map, got %T", mcpServers["agenthub"])
+		t.Fatalf("expected neudrive server map, got %T", mcpServers["neudrive"])
 	}
 
 	if server["type"] != "http" {
@@ -49,16 +49,16 @@ func TestGenerateHTTPOAuthConfig(t *testing.T) {
 }
 
 func TestGenerateHTTPBearerConfig(t *testing.T) {
-	cfg := GenerateHTTPBearerConfig("https://hub.example.com", "aht_test")
+	cfg := GenerateHTTPBearerConfig("https://hub.example.com", "ndt_test")
 
 	mcpServers, ok := cfg["mcpServers"].(map[string]interface{})
 	if !ok {
 		t.Fatalf("expected mcpServers map, got %T", cfg["mcpServers"])
 	}
 
-	server, ok := mcpServers["agenthub"].(map[string]interface{})
+	server, ok := mcpServers["neudrive"].(map[string]interface{})
 	if !ok {
-		t.Fatalf("expected agenthub server map, got %T", mcpServers["agenthub"])
+		t.Fatalf("expected neudrive server map, got %T", mcpServers["neudrive"])
 	}
 
 	headers, ok := server["headers"].(map[string]string)
@@ -66,19 +66,19 @@ func TestGenerateHTTPBearerConfig(t *testing.T) {
 		t.Fatalf("expected headers map, got %T", server["headers"])
 	}
 
-	if headers["Authorization"] != "Bearer aht_test" {
+	if headers["Authorization"] != "Bearer ndt_test" {
 		t.Fatalf("unexpected authorization header: %v", headers["Authorization"])
 	}
 }
 
 func TestGenerateHTTPConfigAlias(t *testing.T) {
-	cfg := GenerateHTTPConfig("https://hub.example.com", "aht_alias")
+	cfg := GenerateHTTPConfig("https://hub.example.com", "ndt_alias")
 
 	mcpServers := cfg["mcpServers"].(map[string]interface{})
-	server := mcpServers["agenthub"].(map[string]interface{})
+	server := mcpServers["neudrive"].(map[string]interface{})
 	headers := server["headers"].(map[string]string)
 
-	if headers["Authorization"] != "Bearer aht_alias" {
+	if headers["Authorization"] != "Bearer ndt_alias" {
 		t.Fatalf("unexpected authorization header: %v", headers["Authorization"])
 	}
 }

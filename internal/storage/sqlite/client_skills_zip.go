@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/skillsarchive"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/skillsarchive"
 )
 
 func (c *Client) ImportSkillsArchive(ctx context.Context, platform, archivePath string) (*ImportResult, error) {

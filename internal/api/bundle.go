@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 )
 
@@ -98,7 +98,7 @@ func (s *Server) handleAgentExportBundle(w http.ResponseWriter, r *http.Request)
 			respondInternalError(w, err)
 			return
 		}
-		filename := fmt.Sprintf("agenthub-sync-%s.ahubz", time.Now().UTC().Format("2006-01-02"))
+		filename := fmt.Sprintf("neudrive-sync-%s.ndrvz", time.Now().UTC().Format("2006-01-02"))
 		w.Header().Set("Content-Type", "application/zip")
 		w.Header().Set("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
 		http.ServeContent(w, r, filename, time.Now().UTC(), bytes.NewReader(archive))

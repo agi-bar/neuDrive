@@ -183,7 +183,7 @@ export default function DataSyncPage() {
     setImportError('')
     setImportMessage('')
     try {
-      if (importFile.name.endsWith('.ahubz')) {
+      if (importFile.name.endsWith('.ndrvz')) {
         const { manifest } = await readArchiveManifest(importFile)
         manifest.mode = importMode
         const nextPreview = await api.previewBundle(syncToken.token, { manifest })
@@ -207,10 +207,10 @@ export default function DataSyncPage() {
     setImportError('')
     setImportMessage('')
     try {
-      if (resumeSessionId && !importFile.name.endsWith('.ahubz')) {
-        throw new Error(tx('继续未完成 session 时，请重新选择原始 .ahubz 文件。', 'To continue an unfinished session, reselect the original .ahubz file.'))
+      if (resumeSessionId && !importFile.name.endsWith('.ndrvz')) {
+        throw new Error(tx('继续未完成 session 时，请重新选择原始 .ndrvz 文件。', 'To continue an unfinished session, reselect the original .ndrvz file.'))
       }
-      if (importFile.name.endsWith('.ahubz')) {
+      if (importFile.name.endsWith('.ndrvz')) {
         const { bytes, manifest } = await readArchiveManifest(importFile)
         manifest.mode = importMode
         let sessionId = resumeSessionId
@@ -261,9 +261,9 @@ export default function DataSyncPage() {
       const exported = await api.exportBundle(syncToken.token, exportFormat, exportFilters)
       const date = new Date().toISOString().slice(0, 10)
       if (exportFormat === 'archive') {
-        triggerDownload(exported as Blob, `agenthub-sync-${date}.ahubz`)
+        triggerDownload(exported as Blob, `neudrive-sync-${date}.ndrvz`)
       } else {
-        triggerDownload(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }), `agenthub-sync-${date}.ahub`)
+        triggerDownload(new Blob([JSON.stringify(exported, null, 2)], { type: 'application/json' }), `neudrive-sync-${date}.ndrv`)
       }
       await loadJobs(syncToken.token)
     } catch (err: any) {
@@ -277,7 +277,7 @@ export default function DataSyncPage() {
     <div className="page materials-page">
       <section className="materials-hero">
         <div className="materials-hero-copy">
-          <div className="materials-kicker">Agent Hub Data</div>
+          <div className="materials-kicker">neuDrive Data</div>
           <h2 className="materials-title">Sync</h2>
           <p className="materials-subtitle">{tx('把同步也收进同一套卡片语言里。这里集中处理 token、bundle 导入导出，以及最近的同步历史。', 'Bring sync into the same card-based language. This page handles tokens, bundle import/export, and recent sync history.')}</p>
         </div>
@@ -292,10 +292,10 @@ export default function DataSyncPage() {
           <div className="data-record-title">{tx('推荐 CLI 流程', 'Recommended CLI flow')}</div>
           <p className="data-record-secondary">{tx('先登录一次保存默认 profile。CLI 会自动打开独立的网页登录页，不再跳进完整管理后台。', 'Sign in once to save the default profile. The CLI opens a dedicated login page instead of the full dashboard.')}</p>
           <div className="data-sync-cli-steps">
-            <code>agenthub sync login --api-base {window.location.origin}</code>
-            <code>agenthub sync push --bundle backup.ahubz</code>
+            <code>neudrive sync login --api-base {window.location.origin}</code>
+            <code>neudrive sync push --bundle backup.ndrvz</code>
           </div>
-          <div className="data-record-secondary">{tx('如果你已经生成了当前 token，也可以手工执行：', 'If you already generated the current token, you can also run:')}<code>agenthub sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code></div>
+          <div className="data-record-secondary">{tx('如果你已经生成了当前 token，也可以手工执行：', 'If you already generated the current token, you can also run:')}<code>neudrive sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code></div>
         </div>
         <div className="data-sync-row">
           <select aria-label="Sync token TTL" value={ttlMinutes} onChange={(e) => setTTLMinutes(Number(e.target.value))}>
@@ -323,12 +323,12 @@ export default function DataSyncPage() {
         <div className="card-header">
           <h3 className="card-title">{tx('导入上传', 'Import')}</h3>
         </div>
-        <p className="data-record-secondary">{tx('上传 `.ahub` 或 `.ahubz` 文件。JSON bundle 支持先 preview 再导入；archive bundle 会走 resumable session 上传。', 'Upload `.ahub` or `.ahubz` files. JSON bundles can be previewed before import, while archive bundles use resumable session uploads.')}</p>
+        <p className="data-record-secondary">{tx('上传 `.ndrv` 或 `.ndrvz` 文件。JSON bundle 支持先 preview 再导入；archive bundle 会走 resumable session 上传。', 'Upload `.ndrv` or `.ndrvz` files. JSON bundles can be previewed before import, while archive bundles use resumable session uploads.')}</p>
         <div className="data-sync-row">
           <input
             type="file"
             aria-label="Bundle file"
-            accept=".ahub,.ahubz,application/json,application/zip"
+            accept=".ndrv,.ndrvz,application/json,application/zip"
             onChange={(e) => {
               setImportFile(e.target.files?.[0] || null)
               setPreview(null)
@@ -353,7 +353,7 @@ export default function DataSyncPage() {
         )}
         {resumeSessionId && (
           <div className="alert alert-warn">
-            {tx('已选择继续未完成 session：', 'Selected unfinished session: ')}{resumeSessionId}{tx('。请重新选择原始 `.ahubz` 文件，再点击“开始导入”。', '. Reselect the original `.ahubz` file, then click "Start import".')}
+            {tx('已选择继续未完成 session：', 'Selected unfinished session: ')}{resumeSessionId}{tx('。请重新选择原始 `.ndrvz` 文件，再点击“开始导入”。', '. Reselect the original `.ndrvz` file, then click "Start import".')}
           </div>
         )}
         {preview && (
@@ -453,8 +453,8 @@ export default function DataSyncPage() {
         </div>
         <div className="data-sync-row">
           <select aria-label="Export format" value={exportFormat} onChange={(e) => setExportFormat(e.target.value as 'json' | 'archive')}>
-            <option value="json">JSON (.ahub)</option>
-            <option value="archive">Archive (.ahubz)</option>
+            <option value="json">JSON (.ndrv)</option>
+            <option value="archive">Archive (.ndrvz)</option>
           </select>
           <button className="btn btn-primary" onClick={() => { void handleExport() }} disabled={!syncToken?.token || exportBusy}>
             {exportBusy ? tx('导出中...', 'Exporting...') : tx('下载 Bundle', 'Download bundle')}
@@ -477,7 +477,7 @@ export default function DataSyncPage() {
                 <div className="data-record-head">
                   <div>
                     <div className="data-record-title">{job.direction} / {job.transport}</div>
-                    <div className="data-record-secondary">{job.source || 'agenthub'} · {job.mode || 'merge'}</div>
+                    <div className="data-record-secondary">{job.source || 'neudrive'} · {job.mode || 'merge'}</div>
                   </div>
                   <div className="data-record-meta">{formatDateTime(job.created_at, locale)}</div>
                 </div>
@@ -490,7 +490,7 @@ export default function DataSyncPage() {
                 {job.session_id && job.status !== 'succeeded' && (
                   <>
                     <div className="data-record-secondary" style={{ marginTop: 12 }}>
-                      {tx('重新选择原始 `.ahubz` 文件后，可以继续这个未完成的 session。', 'After reselecting the original `.ahubz` file, you can continue this unfinished session.')}
+                      {tx('重新选择原始 `.ndrvz` 文件后，可以继续这个未完成的 session。', 'After reselecting the original `.ndrvz` file, you can continue this unfinished session.')}
                     </div>
                     <button
                       className="btn"

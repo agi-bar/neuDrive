@@ -7,18 +7,18 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/agi-bar/agenthub/internal/app/mcpapp"
+	"github.com/agi-bar/neudrive/internal/app/mcpapp"
 )
 
 func main() {
-	token := flag.String("token", "", "Scoped access token (aht_...)")
+	token := flag.String("token", "", "Scoped access token (ndt_...)")
 	tokenEnv := flag.String("token-env", mcpapp.DefaultTokenEnvVar, "Environment variable name containing the scoped access token")
 	flag.Parse()
 
 	if _, err := mcpapp.ResolveToken(*token, *tokenEnv); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		fmt.Fprintf(os.Stderr, "usage: agenthub-mcp --token aht_xxxxx\n")
-		fmt.Fprintf(os.Stderr, "   or: export %s=aht_xxxxx && agenthub-mcp --token-env %s\n", mcpapp.DefaultTokenEnvVar, mcpapp.DefaultTokenEnvVar)
+		fmt.Fprintf(os.Stderr, "usage: neudrive-mcp --token ndt_xxxxx\n")
+		fmt.Fprintf(os.Stderr, "   or: export %s=ndt_xxxxx && neudrive-mcp --token-env %s\n", mcpapp.DefaultTokenEnvVar, mcpapp.DefaultTokenEnvVar)
 		os.Exit(1)
 	}
 

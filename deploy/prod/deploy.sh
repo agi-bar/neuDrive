@@ -5,14 +5,14 @@ set -euo pipefail
 REPO_ROOT="${REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 SOURCE_K8S_DIR="${SOURCE_K8S_DIR:-$REPO_ROOT/deploy/k8s}"
 K8S_DIR="${K8S_DIR:-$SOURCE_K8S_DIR}"
-NAMESPACE="${NAMESPACE:-agenthub}"
+NAMESPACE="${NAMESPACE:-neudrive}"
 MINIKUBE_PROFILE="${MINIKUBE_PROFILE:-minikube}"
-IMAGE_REPO="${IMAGE_REPO:-agenthub}"
+IMAGE_REPO="${IMAGE_REPO:-neudrive}"
 FULL_SHA="$(git -C "$REPO_ROOT" rev-parse HEAD)"
 SHORT_SHA="${FULL_SHA:0:12}"
 IMAGE_TAG="${IMAGE_TAG:-$SHORT_SHA}"
 APP_HOME="${APP_HOME:-$(cd "$REPO_ROOT/.." && pwd)}"
-AGENTHUB_ENV_FILE="${AGENTHUB_ENV_FILE:-}"
+NEUDRIVE_ENV_FILE="${NEUDRIVE_ENV_FILE:-}"
 APP_HOST="${APP_HOST:-}"
 HEALTHCHECK_URL="${HEALTHCHECK_URL:-}"
 
@@ -35,13 +35,13 @@ detect_env_file() {
   local candidate
   local candidates=()
 
-  if [[ -n "$AGENTHUB_ENV_FILE" ]]; then
-    candidates+=("$AGENTHUB_ENV_FILE")
+  if [[ -n "$NEUDRIVE_ENV_FILE" ]]; then
+    candidates+=("$NEUDRIVE_ENV_FILE")
   fi
 
   candidates+=(
-    "$APP_HOME/config/agenthub.env"
-    "$REPO_ROOT/agenthub.env"
+    "$APP_HOME/config/neudrive.env"
+    "$REPO_ROOT/neudrive.env"
     "$REPO_ROOT/.env"
   )
 
@@ -65,7 +65,7 @@ require_env() {
 load_config() {
   local env_file
 
-  env_file="$(detect_env_file)" || die "missing config file; expected one of: $APP_HOME/config/agenthub.env, $REPO_ROOT/agenthub.env, $REPO_ROOT/.env"
+  env_file="$(detect_env_file)" || die "missing config file; expected one of: $APP_HOME/config/neudrive.env, $REPO_ROOT/neudrive.env, $REPO_ROOT/.env"
   log "Loading config from $env_file"
 
   set -a
@@ -73,8 +73,8 @@ load_config() {
   source "$env_file"
   set +a
 
-  POSTGRES_DB="${POSTGRES_DB:-agenthub}"
-  POSTGRES_USER="${POSTGRES_USER:-agenthub}"
+  POSTGRES_DB="${POSTGRES_DB:-neudrive}"
+  POSTGRES_USER="${POSTGRES_USER:-neudrive}"
   POSTGRES_PORT="${POSTGRES_PORT:-5432}"
   PORT="${PORT:-8080}"
 
@@ -83,14 +83,14 @@ load_config() {
   require_env VAULT_MASTER_KEY
 
   if [[ -z "${PUBLIC_BASE_URL:-}" ]]; then
-    PUBLIC_BASE_URL="https://agenthub.agi.bar"
+    PUBLIC_BASE_URL="https://neudrive.ai"
   fi
   if [[ "$PUBLIC_BASE_URL" != http://* && "$PUBLIC_BASE_URL" != https://* ]]; then
     die "PUBLIC_BASE_URL must start with http:// or https://"
   fi
 
   CORS_ORIGINS="${CORS_ORIGINS:-$PUBLIC_BASE_URL,http://localhost:3000,http://localhost:5173}"
-  DATABASE_URL="${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@agenthub-postgres.${NAMESPACE}.svc.cluster.local:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable}"
+  DATABASE_URL="${DATABASE_URL:-postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@neudrive-postgres.${NAMESPACE}.svc.cluster.local:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable}"
 
   if [[ -z "$APP_HOST" ]]; then
     APP_HOST="$(printf '%s' "$PUBLIC_BASE_URL" | sed -E 's#^https?://([^/]+)/?.*$#\1#')"
@@ -113,7 +113,7 @@ sync_manifest_files() {
 }
 
 sync_config_map() {
-  kubectl -n "$NAMESPACE" create configmap agenthub-config \
+  kubectl -n "$NAMESPACE" create configmap neudrive-config \
     --from-literal=PORT="$PORT" \
     --from-literal=CORS_ORIGINS="$CORS_ORIGINS" \
     --from-literal=PUBLIC_BASE_URL="$PUBLIC_BASE_URL" \
@@ -129,12 +129,12 @@ sync_secret() {
 }
 
 sync_runtime_secrets() {
-  sync_secret agenthub-postgres \
+  sync_secret neudrive-postgres \
     --from-literal=POSTGRES_DB="$POSTGRES_DB" \
     --from-literal=POSTGRES_USER="$POSTGRES_USER" \
     --from-literal=POSTGRES_PASSWORD="$POSTGRES_PASSWORD"
 
-  sync_secret agenthub-app \
+  sync_secret neudrive-app \
     --from-literal=DATABASE_URL="$DATABASE_URL" \
     --from-literal=JWT_SECRET="$JWT_SECRET" \
     --from-literal=VAULT_MASTER_KEY="$VAULT_MASTER_KEY" \
@@ -142,7 +142,7 @@ sync_runtime_secrets() {
     --from-literal=GITHUB_CLIENT_SECRET="${GITHUB_CLIENT_SECRET:-}"
 
   if [[ -n "${CLOUDFLARED_TUNNEL_TOKEN:-}" ]]; then
-    sync_secret agenthub-cloudflared-token \
+    sync_secret neudrive-cloudflared-token \
       --from-literal=TUNNEL_TOKEN="$CLOUDFLARED_TUNNEL_TOKEN"
   fi
 }
@@ -186,15 +186,15 @@ kubectl apply -f "$K8S_DIR/app.yaml"
 kubectl apply -f "$K8S_DIR/ingress.yaml"
 
 log "Updating deployment image to $IMAGE_REPO:$IMAGE_TAG"
-kubectl -n "$NAMESPACE" set image deployment/agenthub-server \
-  agenthub-server="$IMAGE_REPO:$IMAGE_TAG"
-kubectl -n "$NAMESPACE" annotate deployment/agenthub-server \
-  agenthub.agi.bar/deployed-git-sha="$FULL_SHA" \
-  agenthub.agi.bar/deployed-at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
+kubectl -n "$NAMESPACE" set image deployment/neudrive-server \
+  neudrive-server="$IMAGE_REPO:$IMAGE_TAG"
+kubectl -n "$NAMESPACE" annotate deployment/neudrive-server \
+  neudrive.ai/deployed-git-sha="$FULL_SHA" \
+  neudrive.ai/deployed-at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')" \
   --overwrite
 
 log "Waiting for rollout"
-kubectl -n "$NAMESPACE" rollout status deployment/agenthub-server --timeout=10m
+kubectl -n "$NAMESPACE" rollout status deployment/neudrive-server --timeout=10m
 
 log "Waiting for public healthcheck: $HEALTHCHECK_URL"
 if ! wait_for_http "$HEALTHCHECK_URL"; then

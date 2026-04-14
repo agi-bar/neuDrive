@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -49,7 +49,7 @@ func (s *Store) UpsertProfile(ctx context.Context, userID uuid.UUID, category, c
 		return fmt.Errorf("profile category is required")
 	}
 	if strings.TrimSpace(source) == "" {
-		source = "agenthub"
+		source = "neudrive"
 	}
 	_, err := s.WriteEntry(ctx, userID, hubpath.ProfilePath(category), content, "text/markdown", models.FileTreeWriteOptions{
 		Kind:          "memory_profile",
@@ -77,7 +77,7 @@ func (s *Store) ImportScratch(ctx context.Context, userID uuid.UUID, content, so
 
 func (s *Store) writeScratchEntry(ctx context.Context, userID uuid.UUID, content, source, title string, createdAt time.Time, expiresAt *time.Time, id uuid.UUID) (*models.FileTreeEntry, error) {
 	if strings.TrimSpace(source) == "" {
-		source = "agenthub"
+		source = "neudrive"
 	}
 	if expiresAt == nil {
 		defaultExpiry := createdAt.AddDate(0, 0, 7)

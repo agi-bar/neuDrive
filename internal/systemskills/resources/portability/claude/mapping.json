@@ -4,7 +4,7 @@
   "mappings": [
     {
       "source_feature": "Profile preferences",
-      "agenthub_target": [
+      "neudrive_target": [
         "/memory/profile/preferences"
       ],
       "preferred_interface": [
@@ -19,7 +19,7 @@
     },
     {
       "source_feature": "Styles",
-      "agenthub_target": [
+      "neudrive_target": [
         "/memory/profile/preferences",
         "/memory/archive/claude-styles.md"
       ],
@@ -33,7 +33,7 @@
     },
     {
       "source_feature": "Claude memory summary or exported memory text",
-      "agenthub_target": [
+      "neudrive_target": [
         "/memory/profile/*",
         "/memory/scratch/*",
         "/memory/claude/memory.md"
@@ -51,7 +51,7 @@
     },
     {
       "source_feature": "Standalone chats",
-      "agenthub_target": [
+      "neudrive_target": [
         "/memory/conversations/*.md",
         "/memory/archive/*"
       ],
@@ -67,7 +67,7 @@
     },
     {
       "source_feature": "Project instructions",
-      "agenthub_target": [
+      "neudrive_target": [
         "/projects/<name>/context.md"
       ],
       "preferred_interface": [
@@ -83,7 +83,7 @@
     },
     {
       "source_feature": "Project knowledge and uploaded files",
-      "agenthub_target": [
+      "neudrive_target": [
         "/projects/<name>/...",
         "/skills/claude-<project>/..."
       ],
@@ -101,7 +101,7 @@
     },
     {
       "source_feature": "Project chats and project memory summary",
-      "agenthub_target": [
+      "neudrive_target": [
         "/memory/conversations/*.md",
         "/projects/<name>/...",
         "/memory/archive/*"
@@ -118,7 +118,7 @@
     },
     {
       "source_feature": "single skill directory / files",
-      "agenthub_target": [
+      "neudrive_target": [
         "/skills/<name>/..."
       ],
       "preferred_interface": [
@@ -133,7 +133,7 @@
     },
     {
       "source_feature": "Claude Web skills workspace zip",
-      "agenthub_target": [
+      "neudrive_target": [
         "/skills/<name>/..."
       ],
       "preferred_interface": [
@@ -148,7 +148,7 @@
     },
     {
       "source_feature": "Connectors and external sources",
-      "agenthub_target": [
+      "neudrive_target": [
         "/projects/<name>/...",
         "/memory/archive/*"
       ],
@@ -165,7 +165,7 @@
     },
     {
       "source_feature": "Claude exported data zip",
-      "agenthub_target": [
+      "neudrive_target": [
         "/memory/claude/memory.md",
         "/memory/conversations/*.md",
         "/skills/claude-<project>/..."
@@ -179,7 +179,7 @@
     },
     {
       "source_feature": "Account/user metadata from users.json",
-      "agenthub_target": [
+      "neudrive_target": [
         "/memory/archive/claude-user-export.json"
       ],
       "preferred_interface": [

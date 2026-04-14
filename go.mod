@@ -1,4 +1,4 @@
-module github.com/agi-bar/agenthub
+module github.com/agi-bar/neudrive
 
 go 1.25.0
 

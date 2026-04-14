@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 )
 
@@ -239,7 +239,7 @@ func generateToken() (rawToken, tokenHash, tokenPrefix string, err error) {
 		return "", "", "", fmt.Errorf("sqlite.generateToken: %w", err)
 	}
 	tokenBody := hex.EncodeToString(buf)
-	rawToken = "aht_" + tokenBody
+	rawToken = "ndt_" + tokenBody
 	tokenHash = hashToken(rawToken)
 	tokenPrefix = rawToken[:minInt(len(rawToken), 10)]
 	return rawToken, tokenHash, tokenPrefix, nil

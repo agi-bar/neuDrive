@@ -91,7 +91,7 @@ export default function DataMemoryPage() {
     <div className="page materials-page">
       <section className="materials-hero">
         <div className="materials-hero-copy">
-          <div className="materials-kicker">Agent Hub Data</div>
+          <div className="materials-kicker">neuDrive Data</div>
           <h2 className="materials-title">Memory</h2>
           <p className="materials-subtitle">{tx('这里显示 ', 'This page shows entries under ')}<code>/memory</code>{tx(' 下的记忆内容，不包含“我的资料”使用的 ', ', excluding ') }<code>/memory/profile</code>{tx(' 条目。', ' entries used by My Profile.')}</p>
         </div>

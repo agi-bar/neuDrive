@@ -5,7 +5,7 @@ export default defineConfig({
   timeout: 30000,
   retries: 0,
   use: {
-    baseURL: process.env.AGENTHUB_TEST_URL || 'http://localhost:8080',
+    baseURL: process.env.NEUDRIVE_TEST_URL || 'http://localhost:8080',
     // E2E specs currently assert against Chinese copy across the app.
     locale: 'zh-CN',
     headless: true,

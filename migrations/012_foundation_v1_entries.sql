@@ -1,4 +1,4 @@
--- AgentHub Foundation V1
+-- NeuDrive Foundation V1
 -- Upgrade file_tree into the canonical entry store and backfill legacy domains.
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;

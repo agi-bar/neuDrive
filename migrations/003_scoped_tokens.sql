@@ -4,7 +4,7 @@ CREATE TABLE IF NOT EXISTS scoped_tokens (
     user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name VARCHAR(256) NOT NULL,            -- Human-readable name: "Claude Desktop Token"
     token_hash VARCHAR(512) NOT NULL,       -- SHA-256 hash of the token
-    token_prefix VARCHAR(12) NOT NULL,      -- First 8 chars for display: "aht_abcd..."
+    token_prefix VARCHAR(12) NOT NULL,      -- First 8 chars for display: "ndt_abcd..."
 
     -- Scopes (granular permissions)
     scopes TEXT[] NOT NULL DEFAULT '{}',    -- e.g., ['read:profile', 'write:memory', 'read:vault.auth.*']

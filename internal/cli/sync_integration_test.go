@@ -19,15 +19,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 var (
-	agenthubBinaryOnce sync.Once
-	agenthubBinaryPath string
-	agenthubBinaryErr  error
+	neudriveBinaryOnce sync.Once
+	neudriveBinaryPath string
+	neudriveBinaryErr  error
 )
 
 type syncFixturePlan struct {
@@ -92,8 +92,8 @@ func TestAgenthubSyncLocalSQLiteRoundTrip_WithRealisticFixture(t *testing.T) {
 	binary := buildAgenthubBinary(t)
 	env, _, _, _, workDir := isolatedAgenthubEnv(t)
 	sourceDir := materializeFixtureSource(t, 2)
-	archivePath := filepath.Join(workDir, "fixture.ahubz")
-	pulledPath := filepath.Join(workDir, "fixture-pulled.ahubz")
+	archivePath := filepath.Join(workDir, "fixture.ndrvz")
+	pulledPath := filepath.Join(workDir, "fixture-pulled.ndrvz")
 
 	mustRunAgenthub(t, binary, env, "sync", "export", "--source", sourceDir, "--format", "archive", "-o", archivePath)
 
@@ -124,8 +124,8 @@ func TestAgenthubSyncResume_LocalSQLiteArchiveSession(t *testing.T) {
 	binary := buildAgenthubBinary(t)
 	env, configPath, statePath, _, workDir := isolatedAgenthubEnv(t)
 	sourceDir := materializeFixtureSource(t, 12)
-	archivePath := filepath.Join(workDir, "large.ahubz")
-	pulledPath := filepath.Join(workDir, "large-pulled.ahubz")
+	archivePath := filepath.Join(workDir, "large.ndrvz")
+	pulledPath := filepath.Join(workDir, "large-pulled.ndrvz")
 
 	mustRunAgenthub(t, binary, env, "sync", "export", "--source", sourceDir, "--format", "archive", "-o", archivePath)
 	mustRunAgenthub(t, binary, env, "sync", "history")
@@ -232,26 +232,26 @@ func TestAgenthubRemoteCommands_LocalSQLiteProfile(t *testing.T) {
 func buildAgenthubBinary(t *testing.T) string {
 	t.Helper()
 	requireCLIIntegration(t)
-	agenthubBinaryOnce.Do(func() {
+	neudriveBinaryOnce.Do(func() {
 		root := repoRoot(t)
-		binDir, err := os.MkdirTemp("", "agenthub-cli-bin-")
+		binDir, err := os.MkdirTemp("", "neudrive-cli-bin-")
 		if err != nil {
-			agenthubBinaryErr = err
+			neudriveBinaryErr = err
 			return
 		}
-		agenthubBinaryPath = filepath.Join(binDir, "agenthub")
-		cmd := exec.Command("go", "build", "-o", agenthubBinaryPath, "./cmd/agenthub")
+		neudriveBinaryPath = filepath.Join(binDir, "neudrive")
+		cmd := exec.Command("go", "build", "-o", neudriveBinaryPath, "./cmd/neudrive")
 		cmd.Dir = root
 		output, err := cmd.CombinedOutput()
 		if err != nil {
-			agenthubBinaryErr = fmt.Errorf("go build failed: %w\n%s", err, string(output))
+			neudriveBinaryErr = fmt.Errorf("go build failed: %w\n%s", err, string(output))
 			return
 		}
 	})
-	if agenthubBinaryErr != nil {
-		t.Fatal(agenthubBinaryErr)
+	if neudriveBinaryErr != nil {
+		t.Fatal(neudriveBinaryErr)
 	}
-	return agenthubBinaryPath
+	return neudriveBinaryPath
 }
 
 func repoRoot(t *testing.T) string {
@@ -277,23 +277,23 @@ func isolatedAgenthubEnv(t *testing.T) ([]string, string, string, string, string
 		}
 	}
 	env := append([]string{}, os.Environ()...)
-	configPath := filepath.Join(configHome, "agenthub", "config.json")
-	statePath := filepath.Join(configHome, "agenthub", "runtime.json")
+	configPath := filepath.Join(configHome, "neudrive", "config.json")
+	statePath := filepath.Join(configHome, "neudrive", "runtime.json")
 	env = appendOrReplaceEnv(env, "HOME", home)
 	env = appendOrReplaceEnv(env, "XDG_CONFIG_HOME", configHome)
 	env = appendOrReplaceEnv(env, "XDG_STATE_HOME", stateHome)
 	env = appendOrReplaceEnv(env, "XDG_DATA_HOME", dataHome)
-	env = appendOrReplaceEnv(env, "AGENTHUB_CONFIG", configPath)
+	env = appendOrReplaceEnv(env, "NEUDRIVE_CONFIG", configPath)
 	for _, key := range []string{
-		"AGENTHUB_TOKEN",
-		"AGENTHUB_SYNC_TOKEN",
-		"AGENTHUB_API_BASE",
-		"AGENTHUB_SYNC_API_BASE",
-		"AGENTHUB_SYNC_PROFILE",
+		"NEUDRIVE_TOKEN",
+		"NEUDRIVE_SYNC_TOKEN",
+		"NEUDRIVE_API_BASE",
+		"NEUDRIVE_SYNC_API_BASE",
+		"NEUDRIVE_SYNC_PROFILE",
 	} {
 		env = appendOrReplaceEnv(env, key, "")
 	}
-	sqlitePath := filepath.Join(dataHome, "agenthub", "local.db")
+	sqlitePath := filepath.Join(dataHome, "neudrive", "local.db")
 	return env, configPath, statePath, sqlitePath, workDir
 }
 
@@ -321,7 +321,7 @@ func mustRunAgenthub(t *testing.T, binary string, env []string, args ...string) 
 	t.Helper()
 	stdout, stderr, code := runAgenthub(t, binary, env, args...)
 	if code != 0 {
-		t.Fatalf("agenthub %v exit=%d\nstdout:\n%s\nstderr:\n%s", args, code, stdout, stderr)
+		t.Fatalf("neudrive %v exit=%d\nstdout:\n%s\nstderr:\n%s", args, code, stdout, stderr)
 	}
 	return stdout, stderr
 }

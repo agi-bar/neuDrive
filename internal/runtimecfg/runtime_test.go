@@ -14,9 +14,9 @@ func TestSaveAndLoadConfigRoundTrip(t *testing.T) {
 		t.Fatalf("LoadConfig: %v", err)
 	}
 	cfg.CurrentProfile = "official"
-	cfg.Profiles["official"] = SyncProfile{APIBase: "https://agenthub.agi.bar", Token: "aht_test"}
-	cfg.Local.DatabaseURL = "postgres://agenthub:test@localhost:5432/agenthub?sslmode=disable"
-	cfg.Local.GitMirrorPath = "~/agenthub-mirror"
+	cfg.Profiles["official"] = SyncProfile{APIBase: "https://neudrive.ai", Token: "ndt_test"}
+	cfg.Local.DatabaseURL = "postgres://neudrive:test@localhost:5432/neudrive?sslmode=disable"
+	cfg.Local.GitMirrorPath = "~/neudrive-mirror"
 	if err := SaveConfig(path, cfg); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestSaveAndLoadConfigRoundTrip(t *testing.T) {
 	if loaded.Local.DatabaseURL == "" {
 		t.Fatal("expected local database url to round-trip")
 	}
-	if loaded.Local.GitMirrorPath != "~/agenthub-mirror" {
+	if loaded.Local.GitMirrorPath != "~/neudrive-mirror" {
 		t.Fatalf("git_mirror_path mismatch: got %q", loaded.Local.GitMirrorPath)
 	}
 }

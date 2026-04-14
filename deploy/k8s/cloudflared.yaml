@@ -1,13 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: agenthub-cloudflared
-  namespace: agenthub
+  name: neudrive-cloudflared
+  namespace: neudrive
 spec:
   replicas: 2
   selector:
     matchLabels:
-      app: agenthub-cloudflared
+      app: neudrive-cloudflared
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -16,7 +16,7 @@ spec:
   template:
     metadata:
       labels:
-        app: agenthub-cloudflared
+        app: neudrive-cloudflared
     spec:
       automountServiceAccountToken: false
       affinity:
@@ -26,7 +26,7 @@ spec:
               podAffinityTerm:
                 labelSelector:
                   matchLabels:
-                    app: agenthub-cloudflared
+                    app: neudrive-cloudflared
                 topologyKey: kubernetes.io/hostname
       containers:
         - name: cloudflared
@@ -48,7 +48,7 @@ spec:
             - name: TUNNEL_TOKEN
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-cloudflared-token
+                  name: neudrive-cloudflared-token
                   key: TUNNEL_TOKEN
           ports:
             - containerPort: 2000

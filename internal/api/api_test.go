@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -32,8 +32,8 @@ func TestHealthCheck(t *testing.T) {
 	if body["status"] != "ok" {
 		t.Errorf("expected status=ok, got %v", body["status"])
 	}
-	if body["service"] != "agenthub" {
-		t.Errorf("expected service=agenthub, got %v", body["service"])
+	if body["service"] != "neudrive" {
+		t.Errorf("expected service=neudrive, got %v", body["service"])
 	}
 	if _, ok := body["time"]; !ok {
 		t.Error("expected time field in health response")

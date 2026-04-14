@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -226,17 +226,19 @@ func (r *ProjectRepo) GetProject(ctx context.Context, userID uuid.UUID, name str
 }
 
 func (r *ProjectRepo) GetProjectIdentity(ctx context.Context, projectID uuid.UUID) (string, uuid.UUID, error) {
-	userID, err := r.Store.FirstUserID(ctx)
+	userIDs, err := r.Store.ListUserIDs(ctx)
 	if err != nil {
 		return "", uuid.Nil, err
 	}
-	projects, err := r.Store.ListProjects(ctx, userID)
-	if err != nil {
-		return "", uuid.Nil, err
-	}
-	for _, project := range projects {
-		if project.ID == projectID {
-			return project.Name, userID, nil
+	for _, userID := range userIDs {
+		projects, err := r.Store.ListProjects(ctx, userID)
+		if err != nil {
+			return "", uuid.Nil, err
+		}
+		for _, project := range projects {
+			if project.ID == projectID {
+				return project.Name, userID, nil
+			}
 		}
 	}
 	return "", uuid.Nil, services.ErrEntryNotFound

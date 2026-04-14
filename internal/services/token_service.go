@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -58,7 +58,7 @@ func (s *TokenService) CreateToken(ctx context.Context, userID uuid.UUID, req mo
 		return nil, fmt.Errorf("token.CreateToken: expires_in_days must be at least 1")
 	}
 
-	// Generate random token: aht_ + 40 hex chars (20 bytes)
+	// Generate random token: ndt_ + 40 hex chars (20 bytes)
 	return s.repo.CreateToken(ctx, userID, req)
 }
 
@@ -348,13 +348,13 @@ func (r *postgresTokenRepo) getByID(ctx context.Context, id uuid.UUID) (*models.
 }
 
 // generateToken produces a random token and returns (rawToken, sha256Hash, prefix).
-// Token format: "aht_" + 40 hex chars (20 random bytes).
+// Token format: "ndt_" + 40 hex chars (20 random bytes).
 func generateToken() (rawToken, hashedToken, prefix string, err error) {
 	b := make([]byte, 20)
 	if _, err := rand.Read(b); err != nil {
 		return "", "", "", fmt.Errorf("token: failed to generate random bytes: %w", err)
 	}
-	rawToken = "aht_" + hex.EncodeToString(b)
+	rawToken = "ndt_" + hex.EncodeToString(b)
 	hash := sha256.Sum256([]byte(rawToken))
 	hashedToken = hex.EncodeToString(hash[:])
 	prefix = rawToken[:12]

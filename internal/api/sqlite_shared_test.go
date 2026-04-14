@@ -15,13 +15,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/auth"
-	"github.com/agi-bar/agenthub/internal/config"
-	"github.com/agi-bar/agenthub/internal/localgitsync"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
-	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
-	"github.com/agi-bar/agenthub/internal/vault"
+	"github.com/agi-bar/neudrive/internal/auth"
+	"github.com/agi-bar/neudrive/internal/config"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
+	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/vault"
 	"github.com/google/uuid"
 )
 
@@ -541,7 +541,7 @@ func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 	if status != http.StatusOK || !skills.OK {
 		t.Fatalf("GET /api/tree/skills/ failed: status=%d body=%+v", status, skills)
 	}
-	for _, expected := range []string{`"/skills/demo"`, `"/skills/agenthub/"`} {
+	for _, expected := range []string{`"/skills/demo"`, `"/skills/neudrive/"`} {
 		if !bytes.Contains(skills.Data, []byte(expected)) {
 			t.Fatalf("expected %q in skills payload: %s", expected, string(skills.Data))
 		}
@@ -601,7 +601,7 @@ func TestSQLiteSharedServerImportSkillsZip(t *testing.T) {
 		t.Fatalf("Close zip writer: %v", err)
 	}
 
-	status, env := doMultipartForm(t, http.MethodPost, ts.URL+"/agent/import/skills", skillsToken.Token, "file", "agenthub-skills.zip", zipBuf.Bytes(), map[string]string{
+	status, env := doMultipartForm(t, http.MethodPost, ts.URL+"/agent/import/skills", skillsToken.Token, "file", "neudrive-skills.zip", zipBuf.Bytes(), map[string]string{
 		"platform": "claude-web",
 	})
 	if status != http.StatusOK || !env.OK {

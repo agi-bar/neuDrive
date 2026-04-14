@@ -267,7 +267,7 @@ export default function FilesBrowserPage() {
             rootLabel={tx('根目录', 'Root')}
             ariaLabel={tx('面包屑', 'Breadcrumbs')}
           />
-          <div className="materials-kicker">Agent Hub Data</div>
+          <div className="materials-kicker">neuDrive Data</div>
           <h2 className="materials-title">{tx('文件管理器', 'File Browser')}</h2>
           <p className="materials-subtitle">{tx('参考你给的 Materials 卡片墙，把当前目录里的文件和文件夹统一显示成卡片。点文件名直接打开，双击目录继续下钻。', 'Using the Materials card wall style, this page renders files and folders as cards. Click a file name to open it, or double-click a folder to drill in.')}</p>
         </div>

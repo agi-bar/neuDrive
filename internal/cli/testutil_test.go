@@ -9,10 +9,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
 )
 
-const heavyCLIIntegrationEnv = "AGENTHUB_RUN_CLI_INTEGRATION"
+const heavyCLIIntegrationEnv = "NEUDRIVE_RUN_CLI_INTEGRATION"
 
 func requireCLIIntegration(t *testing.T) {
 	t.Helper()
@@ -23,7 +23,7 @@ func requireCLIIntegration(t *testing.T) {
 
 func configureIsolatedCLIEnv(t *testing.T) string {
 	t.Helper()
-	root, err := os.MkdirTemp("", "agenthub-cli-env-*")
+	root, err := os.MkdirTemp("", "neudrive-cli-env-*")
 	if err != nil {
 		t.Fatalf("mktemp root: %v", err)
 	}
@@ -47,13 +47,13 @@ func configureIsolatedCLIEnv(t *testing.T) string {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 	t.Setenv("GOCACHE", goCache)
-	t.Setenv(runtimecfg.ConfigEnv, filepath.Join(configHome, "agenthub", "config.json"))
+	t.Setenv(runtimecfg.ConfigEnv, filepath.Join(configHome, "neudrive", "config.json"))
 	for _, key := range []string{
-		"AGENTHUB_TOKEN",
-		"AGENTHUB_SYNC_TOKEN",
-		"AGENTHUB_API_BASE",
-		"AGENTHUB_SYNC_API_BASE",
-		"AGENTHUB_SYNC_PROFILE",
+		"NEUDRIVE_TOKEN",
+		"NEUDRIVE_SYNC_TOKEN",
+		"NEUDRIVE_API_BASE",
+		"NEUDRIVE_SYNC_API_BASE",
+		"NEUDRIVE_SYNC_PROFILE",
 	} {
 		t.Setenv(key, "")
 	}
@@ -191,13 +191,13 @@ func installCLIPlatformShims(t *testing.T, env []string, commands ...string) ([]
 	binDir := t.TempDir()
 	logPath := filepath.Join(binDir, "platform-shim.log")
 	for _, name := range commands {
-		script := "#!/bin/sh\nset -eu\nlog=\"${AGENTHUB_TEST_SHIM_LOG:-}\"\nif [ -n \"$log\" ]; then\n  {\n    printf 'CMD=%s' \"$0\"\n    for arg in \"$@\"; do printf ' ARG=%s' \"$arg\"; done\n    printf '\\n'\n    env | sort | grep -E '^(AGENTHUB_|DATABASE_URL=|JWT_SECRET=|VAULT_MASTER_KEY=|PUBLIC_BASE_URL=)' || true\n    printf '%s\\n' '--'\n  } >> \"$log\"\nfi\nif [ \"$(basename \"$0\")\" = \"codex\" ] && [ \"${1:-}\" = \"exec\" ]; then\n  out=\"\"\n  shift\n  while [ \"$#\" -gt 0 ]; do\n    case \"$1\" in\n      --output-last-message)\n        out=\"$2\"\n        shift 2\n        ;;\n      --output-schema)\n        shift 2\n        ;;\n      *)\n        shift\n        ;;\n    esac\n  done\n  payload='{\"platform\":\"codex\",\"command\":\"export\",\"profile_rules\":[{\"title\":\"Working style\",\"content\":\"Be concise and actionable.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.codex/AGENTS.md\"],\"confidence\":0.95}],\"memory_items\":[{\"title\":\"Approval policy\",\"content\":\"User prefers never approval in the fixture config.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.codex/config.toml\"],\"confidence\":0.91}],\"projects\":[{\"name\":\"codex-fixture\",\"context\":\"Imported from the Codex agent export shim.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.codex/sessions/demo.md\"]}],\"automations\":[{\"name\":\"fixture-automation\",\"content\":\"Automation metadata\",\"exactness\":\"reference\"}],\"tools\":[{\"name\":\"fixture-tool\",\"content\":\"Tool metadata\",\"exactness\":\"reference\"}],\"connections\":[{\"name\":\"agenthub-local\",\"content\":\"Local MCP connection\",\"exactness\":\"exact\"}],\"archives\":[{\"name\":\"legacy-session\",\"content\":\"Archived session note\",\"exactness\":\"reference\"}],\"unsupported\":[{\"name\":\"cloud-memory\",\"content\":\"Cloud-only memory is not exported in fixture mode.\",\"exactness\":\"reference\"}],\"notes\":[\"fixture codex export\"]}'\n  if [ -n \"$out\" ]; then\n    printf '%s\\n' \"$payload\" > \"$out\"\n  else\n    printf '%s\\n' \"$payload\"\n  fi\n  exit 0\nfi\nif [ \"$(basename \"$0\")\" = \"claude\" ] && [ \"${1:-}\" = \"-p\" ]; then\n  payload='{\"platform\":\"claude-code\",\"command\":\"export\",\"profile_rules\":[{\"title\":\"Claude working style\",\"content\":\"Prefer concise summaries with explicit follow-ups.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.claude.json\"],\"confidence\":0.93}],\"memory_items\":[{\"title\":\"Claude memory\",\"content\":\"Remember to preserve unsupported exports as archive notes.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.claude/projects/demo.md\"],\"confidence\":0.88}],\"projects\":[{\"name\":\"claude-fixture\",\"context\":\"Imported from the Claude headless export shim.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.claude/projects/demo.md\"]}],\"automations\":[{\"name\":\"claude-automation\",\"content\":\"Automation metadata\",\"exactness\":\"reference\"}],\"tools\":[{\"name\":\"claude-plugin\",\"content\":\"Plugin metadata\",\"exactness\":\"reference\"}],\"connections\":[{\"name\":\"agenthub-local\",\"content\":\"Claude MCP connection\",\"exactness\":\"exact\"}],\"archives\":[{\"name\":\"claude-archive\",\"content\":\"Archived Claude context\",\"exactness\":\"reference\"}],\"unsupported\":[{\"name\":\"cloud-session\",\"content\":\"Cloud-only Claude session not exported in fixture mode.\",\"exactness\":\"reference\"}],\"notes\":[\"fixture claude export\"]}'\n  printf '%s\\n' \"$payload\"\n  exit 0\nfi\nexit 0\n"
+		script := "#!/bin/sh\nset -eu\nlog=\"${NEUDRIVE_TEST_SHIM_LOG:-}\"\nif [ -n \"$log\" ]; then\n  {\n    printf 'CMD=%s' \"$0\"\n    for arg in \"$@\"; do printf ' ARG=%s' \"$arg\"; done\n    printf '\\n'\n    env | sort | grep -E '^(NEUDRIVE_|DATABASE_URL=|JWT_SECRET=|VAULT_MASTER_KEY=|PUBLIC_BASE_URL=)' || true\n    printf '%s\\n' '--'\n  } >> \"$log\"\nfi\nif [ \"$(basename \"$0\")\" = \"codex\" ] && [ \"${1:-}\" = \"exec\" ]; then\n  out=\"\"\n  shift\n  while [ \"$#\" -gt 0 ]; do\n    case \"$1\" in\n      --output-last-message)\n        out=\"$2\"\n        shift 2\n        ;;\n      --output-schema)\n        shift 2\n        ;;\n      *)\n        shift\n        ;;\n    esac\n  done\n  payload='{\"platform\":\"codex\",\"command\":\"export\",\"profile_rules\":[{\"title\":\"Working style\",\"content\":\"Be concise and actionable.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.codex/AGENTS.md\"],\"confidence\":0.95}],\"memory_items\":[{\"title\":\"Approval policy\",\"content\":\"User prefers never approval in the fixture config.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.codex/config.toml\"],\"confidence\":0.91}],\"projects\":[{\"name\":\"codex-fixture\",\"context\":\"Imported from the Codex agent export shim.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.codex/sessions/demo.md\"]}],\"automations\":[{\"name\":\"fixture-automation\",\"content\":\"Automation metadata\",\"exactness\":\"reference\"}],\"tools\":[{\"name\":\"fixture-tool\",\"content\":\"Tool metadata\",\"exactness\":\"reference\"}],\"connections\":[{\"name\":\"neudrive-local\",\"content\":\"Local MCP connection\",\"exactness\":\"exact\"}],\"archives\":[{\"name\":\"legacy-session\",\"content\":\"Archived session note\",\"exactness\":\"reference\"}],\"unsupported\":[{\"name\":\"cloud-memory\",\"content\":\"Cloud-only memory is not exported in fixture mode.\",\"exactness\":\"reference\"}],\"notes\":[\"fixture codex export\"]}'\n  if [ -n \"$out\" ]; then\n    printf '%s\\n' \"$payload\" > \"$out\"\n  else\n    printf '%s\\n' \"$payload\"\n  fi\n  exit 0\nfi\nif [ \"$(basename \"$0\")\" = \"claude\" ] && [ \"${1:-}\" = \"-p\" ]; then\n  payload='{\"platform\":\"claude-code\",\"command\":\"export\",\"profile_rules\":[{\"title\":\"Claude working style\",\"content\":\"Prefer concise summaries with explicit follow-ups.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.claude.json\"],\"confidence\":0.93}],\"memory_items\":[{\"title\":\"Claude memory\",\"content\":\"Remember to preserve unsupported exports as archive notes.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.claude/projects/demo.md\"],\"confidence\":0.88}],\"projects\":[{\"name\":\"claude-fixture\",\"context\":\"Imported from the Claude headless export shim.\",\"exactness\":\"derived\",\"source_paths\":[\"~/.claude/projects/demo.md\"]}],\"automations\":[{\"name\":\"claude-automation\",\"content\":\"Automation metadata\",\"exactness\":\"reference\"}],\"tools\":[{\"name\":\"claude-plugin\",\"content\":\"Plugin metadata\",\"exactness\":\"reference\"}],\"connections\":[{\"name\":\"neudrive-local\",\"content\":\"Claude MCP connection\",\"exactness\":\"exact\"}],\"archives\":[{\"name\":\"claude-archive\",\"content\":\"Archived Claude context\",\"exactness\":\"reference\"}],\"unsupported\":[{\"name\":\"cloud-session\",\"content\":\"Cloud-only Claude session not exported in fixture mode.\",\"exactness\":\"reference\"}],\"notes\":[\"fixture claude export\"]}'\n  printf '%s\\n' \"$payload\"\n  exit 0\nfi\nexit 0\n"
 		path := filepath.Join(binDir, name)
 		if err := os.WriteFile(path, []byte(script), 0o755); err != nil {
 			t.Fatalf("write shim %s: %v", name, err)
 		}
 	}
 	env = prependPathEnv(env, binDir)
-	env = appendOrReplaceEnv(env, "AGENTHUB_TEST_SHIM_LOG", logPath)
+	env = appendOrReplaceEnv(env, "NEUDRIVE_TEST_SHIM_LOG", logPath)
 	return env, logPath
 }

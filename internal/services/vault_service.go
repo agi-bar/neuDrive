@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/vault"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/vault"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

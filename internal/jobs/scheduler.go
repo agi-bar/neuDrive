@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 // JobConfig controls whether a job is enabled and how often it runs.

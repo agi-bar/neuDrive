@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { registerOAuthApp } from './helpers'
 
 const CF_URL = process.env.CF_URL || 'http://localhost:8080'
 
@@ -27,7 +28,18 @@ test.describe('OAuth Authorization Flow', () => {
       data: { slug, email, password },
     })
 
-    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=admin&state=test123`
+    const { response, clientID, redirectURI } = await registerOAuthApp(request, await (async () => {
+      const loginRes = await request.post('/api/auth/login', {
+        data: { email, password },
+      })
+      const body = await loginRes.json()
+      return body.access_token
+    })(), {
+      name: 'OAuth Flow Test App',
+    })
+    expect(response.ok()).toBeTruthy()
+
+    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientID)}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=admin&state=test123`
 
     // Visit OAuth authorize — redirects to login
     await page.goto(authorizeURL)
@@ -38,25 +50,13 @@ test.describe('OAuth Authorization Flow', () => {
     await page.getByPlaceholder('输入密码').fill(password)
     await page.locator('button[type="submit"]').click()
 
-    // After login, should redirect back to authorize page
-    await page.waitForTimeout(3000)
+    await page.waitForURL(/\/oauth\/authorize/, { timeout: 15000 })
+    await expect(page.locator('.oauth-card')).toBeVisible()
+    await expect(page.locator('.oauth-btn-approve')).toBeVisible()
+    await expect(page.locator('.oauth-btn-deny')).toBeVisible()
+    await expect(page.locator('.oauth-app-info')).toBeVisible()
 
-    const finalURL = page.url()
-    console.log('Final URL:', finalURL)
-
-    // Should be on the authorize page showing consent
-    if (finalURL.includes('/oauth/authorize')) {
-      // Consent card should be visible with Authorize button
-      const consentCard = await page.locator('.consent-card').isVisible().catch(() => false)
-      expect(consentCard).toBe(true)
-
-      // Email/password fields should NOT be visible
-      const emailField = await page.locator('input[name="email"]').isVisible().catch(() => false)
-      expect(emailField).toBe(false)
-
-      // Authorize button should be visible
-      const authorizeBtn = await page.locator('button.btn-approve').isVisible().catch(() => false)
-      expect(authorizeBtn).toBe(true)
-    }
+    const emailField = await page.locator('input[name="email"]').isVisible().catch(() => false)
+    expect(emailField).toBe(false)
   })
 })

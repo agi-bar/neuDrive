@@ -23,11 +23,11 @@ const (
 	DefaultLocalHost      = "127.0.0.1"
 	DefaultPortStart      = 42690
 	DefaultPortEnd        = 42719
-	DefaultDatabaseURL    = "postgres://agenthub:agenthub_dev@localhost:5432/agenthub?sslmode=disable"
+	DefaultDatabaseURL    = "postgres://neudrive:neudrive_dev@localhost:5432/neudrive?sslmode=disable"
 	DefaultStorage        = "sqlite"
-	DefaultGitMirrorPath  = "./agenthub-export/git-mirror"
-	DefaultRemoteOfficial = "https://agenthub.agi.bar"
-	ConfigEnv             = "AGENTHUB_CONFIG"
+	DefaultGitMirrorPath  = "./neudrive-export/git-mirror"
+	DefaultRemoteOfficial = "https://neudrive.ai"
+	ConfigEnv             = "NEUDRIVE_CONFIG"
 )
 
 type SyncProfile struct {
@@ -92,16 +92,16 @@ func DefaultConfigPath() string {
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
 	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "AgentHub", "config.json")
+		return filepath.Join(home, "Library", "Application Support", "NeuDrive", "config.json")
 	case "windows":
 		if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
-			return filepath.Join(appData, "AgentHub", "config.json")
+			return filepath.Join(appData, "NeuDrive", "config.json")
 		}
 	}
 	if xdg := strings.TrimSpace(os.Getenv("XDG_CONFIG_HOME")); xdg != "" {
-		return filepath.Join(expandUser(xdg), "agenthub", "config.json")
+		return filepath.Join(expandUser(xdg), "neudrive", "config.json")
 	}
-	return filepath.Join(home, ".config", "agenthub", "config.json")
+	return filepath.Join(home, ".config", "neudrive", "config.json")
 }
 
 func DefaultStatePath() string {
@@ -113,32 +113,32 @@ func DefaultLogPath() string {
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
 	case "darwin":
-		return filepath.Join(home, "Library", "Logs", "AgentHub", "daemon.log")
+		return filepath.Join(home, "Library", "Logs", "NeuDrive", "daemon.log")
 	case "windows":
 		if localAppData := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); localAppData != "" {
-			return filepath.Join(localAppData, "AgentHub", "daemon.log")
+			return filepath.Join(localAppData, "NeuDrive", "daemon.log")
 		}
 	}
 	if xdg := strings.TrimSpace(os.Getenv("XDG_STATE_HOME")); xdg != "" {
-		return filepath.Join(expandUser(xdg), "agenthub", "daemon.log")
+		return filepath.Join(expandUser(xdg), "neudrive", "daemon.log")
 	}
-	return filepath.Join(home, ".local", "state", "agenthub", "daemon.log")
+	return filepath.Join(home, ".local", "state", "neudrive", "daemon.log")
 }
 
 func DefaultSQLitePath() string {
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
 	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "AgentHub", "local.db")
+		return filepath.Join(home, "Library", "Application Support", "NeuDrive", "local.db")
 	case "windows":
 		if localAppData := strings.TrimSpace(os.Getenv("LOCALAPPDATA")); localAppData != "" {
-			return filepath.Join(localAppData, "AgentHub", "local.db")
+			return filepath.Join(localAppData, "NeuDrive", "local.db")
 		}
 	}
 	if xdg := strings.TrimSpace(os.Getenv("XDG_DATA_HOME")); xdg != "" {
-		return filepath.Join(expandUser(xdg), "agenthub", "local.db")
+		return filepath.Join(expandUser(xdg), "neudrive", "local.db")
 	}
-	return filepath.Join(home, ".local", "share", "agenthub", "local.db")
+	return filepath.Join(home, ".local", "share", "neudrive", "local.db")
 }
 
 func LoadConfig(path string) (string, *CLIConfig, error) {
@@ -341,7 +341,7 @@ func EnsureLocalDaemon(ctx context.Context, executable string, extraEnv map[stri
 	cmd.Env = append(cmd.Env,
 		"CORS_ORIGINS="+apiBase,
 		"PORT="+fmt.Sprintf("%d", port),
-		"AGENTHUB_LOCAL_MODE=1",
+		"NEUDRIVE_LOCAL_MODE=1",
 	)
 	if runtime.GOOS != "windows" {
 		cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}

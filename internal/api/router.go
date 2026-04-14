@@ -11,13 +11,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/auth"
-	"github.com/agi-bar/agenthub/internal/config"
-	"github.com/agi-bar/agenthub/internal/localgitsync"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
-	vaultpkg "github.com/agi-bar/agenthub/internal/vault"
-	"github.com/agi-bar/agenthub/internal/web"
+	"github.com/agi-bar/neudrive/internal/auth"
+	"github.com/agi-bar/neudrive/internal/config"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
+	vaultpkg "github.com/agi-bar/neudrive/internal/vault"
+	"github.com/agi-bar/neudrive/internal/web"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -451,7 +451,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		// Try Bearer JWT first.
 		tokenStr, err := auth.ExtractTokenFromHeader(r)
 		if err == nil {
-			if strings.HasPrefix(tokenStr, "aht_") && s.TokenService != nil {
+			if strings.HasPrefix(tokenStr, "ndt_") && s.TokenService != nil {
 				s.handleScopedTokenAuth(w, r, next, tokenStr)
 				return
 			}
@@ -468,7 +468,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 		// Fall back to X-API-Key.
 		apiKey := auth.ExtractAPIKey(r)
 		if apiKey != "" {
-			if strings.HasPrefix(apiKey, "aht_") && s.TokenService != nil {
+			if strings.HasPrefix(apiKey, "ndt_") && s.TokenService != nil {
 				s.handleScopedTokenAuth(w, r, next, apiKey)
 				return
 			}
@@ -494,17 +494,17 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 
 // apiKeyMiddleware authenticates requests for the Agent API.
 // It supports:
-//  1. Authorization: Bearer aht_xxxxx (scoped token — checked first)
-//  2. X-API-Key: aht_xxxxx (scoped token via API key header)
+//  1. Authorization: Bearer ndt_xxxxx (scoped token — checked first)
+//  2. X-API-Key: ndt_xxxxx (scoped token via API key header)
 //  3. X-API-Key: ahk_xxxxx (connection API key — legacy fallback)
 //
 // For scoped tokens: validates the token, checks rate limit, derives trust
 // level from the token's max_trust_level, and injects scopes into context.
 func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Step 1: Check Authorization: Bearer aht_xxxxx header first.
+		// Step 1: Check Authorization: Bearer ndt_xxxxx header first.
 		if bearerToken, err := auth.ExtractTokenFromHeader(r); err == nil {
-			if strings.HasPrefix(bearerToken, "aht_") && s.TokenService != nil {
+			if strings.HasPrefix(bearerToken, "ndt_") && s.TokenService != nil {
 				s.handleScopedTokenAuth(w, r, next, bearerToken)
 				return
 			}
@@ -513,12 +513,12 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		// Step 2: Check X-API-Key header.
 		apiKey := auth.ExtractAPIKey(r)
 		if apiKey == "" {
-			respondError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "missing authentication: provide Authorization: Bearer aht_xxx or X-API-Key header")
+			respondError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "missing authentication: provide Authorization: Bearer ndt_xxx or X-API-Key header")
 			return
 		}
 
-		// Step 2a: Scoped token via X-API-Key (aht_ prefix).
-		if strings.HasPrefix(apiKey, "aht_") && s.TokenService != nil {
+		// Step 2a: Scoped token via X-API-Key (ndt_ prefix).
+		if strings.HasPrefix(apiKey, "ndt_") && s.TokenService != nil {
 			s.handleScopedTokenAuth(w, r, next, apiKey)
 			return
 		}
@@ -637,7 +637,7 @@ func scopesFromCtx(ctx context.Context) []string {
 func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]interface{}{
 		"status":  "ok",
-		"service": "agenthub",
+		"service": "neudrive",
 		"time":    time.Now().UTC().Format(time.RFC3339),
 	}
 	if s.Storage != "" {

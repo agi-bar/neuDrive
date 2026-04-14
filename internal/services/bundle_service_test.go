@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 )
 
 func TestNormalizeBundleMode(t *testing.T) {

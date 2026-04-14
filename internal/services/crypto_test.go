@@ -70,10 +70,10 @@ func TestGenerateToken(t *testing.T) {
 		t.Fatalf("generateToken() error: %v", err)
 	}
 
-	if !strings.HasPrefix(raw, "aht_") {
-		t.Errorf("raw token should start with 'aht_', got %q", raw[:8])
+	if !strings.HasPrefix(raw, "ndt_") {
+		t.Errorf("raw token should start with 'ndt_', got %q", raw[:8])
 	}
-	// aht_ + 40 hex chars (20 bytes)
+	// ndt_ + 40 hex chars (20 bytes)
 	if len(raw) != 4+40 {
 		t.Errorf("raw token length = %d, want %d", len(raw), 4+40)
 	}

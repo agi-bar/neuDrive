@@ -1,6 +1,6 @@
-# Agent Hub Python SDK
+# neuDrive Python SDK
 
-Python client library for [Agent Hub](https://github.com/agi-bar/agenthub) -- AI identity and trust infrastructure.
+Python client library for [neuDrive](https://github.com/agi-bar/neudrive) -- AI identity and trust infrastructure.
 
 The client wraps the scoped-token `/agent/*` API surface, including the
 canonical virtual tree sync endpoints.
@@ -8,7 +8,7 @@ canonical virtual tree sync endpoints.
 ## Installation
 
 ```bash
-pip install agenthub-sdk
+pip install neudrive-sdk
 ```
 
 Or install from source:
@@ -21,9 +21,9 @@ pip install -e .
 ## Quick Start
 
 ```python
-from agenthub import AgentHub
+from neudrive import NeuDrive
 
-with AgentHub("https://hub.example.com", token="aht_xxx") as hub:
+with NeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
     # Read your profile
     profiles = hub.get_profile("preferences")
     for p in profiles:
@@ -44,10 +44,10 @@ with AgentHub("https://hub.example.com", token="aht_xxx") as hub:
 
 ```python
 import asyncio
-from agenthub import AsyncAgentHub
+from neudrive import AsyncNeuDrive
 
 async def main():
-    async with AsyncAgentHub("https://hub.example.com", token="aht_xxx") as hub:
+    async with AsyncNeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
         projects = await hub.list_projects()
         devices = await hub.list_devices()
         stats = await hub.get_stats()
@@ -135,9 +135,9 @@ data = hub.export_all()
 ### Bundle Sync
 
 ```python
-from agenthub import AgentHub
+from neudrive import NeuDrive
 
-with AgentHub("https://hub.example.com", token="aht_xxx") as hub:
+with NeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
     auth = hub.get_auth_info()
     print(auth["user_slug"], auth["scopes"])
 
@@ -172,9 +172,9 @@ print(stats)  # {"connections": 3, "skills": 12, "devices": 2, "projects": 4, ..
 ## OAuth for Third-Party Apps
 
 ```python
-from agenthub import AgentHubAuth
+from neudrive import NeuDriveAuth
 
-auth = AgentHubAuth(
+auth = NeuDriveAuth(
     base_url="https://hub.example.com",
     client_id="my-app",
     client_secret="secret",

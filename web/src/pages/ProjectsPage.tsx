@@ -198,7 +198,7 @@ export default function ProjectsPage() {
     <div className="page materials-page">
       <section className="materials-hero">
         <div className="materials-hero-copy">
-          <div className="materials-kicker">Agent Hub Data</div>
+          <div className="materials-kicker">neuDrive Data</div>
           <h2 className="materials-title">{tx('项目', 'Projects')}</h2>
           <p className="materials-subtitle">{tx('把项目看成一组长期上下文卡片。点击任意项目卡片，可以继续查看 context 和最近日志。', 'Treat projects as long-lived context cards. Open any project card to inspect its context and recent logs.')}</p>
         </div>

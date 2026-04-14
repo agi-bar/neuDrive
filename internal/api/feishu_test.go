@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/config"
+	"github.com/agi-bar/neudrive/internal/config"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -167,7 +167,7 @@ func TestSendFeishuAckUsesTenantAccessTokenAndChatMessageAPI(t *testing.T) {
 			if err := json.Unmarshal([]byte(body["content"]), &content); err != nil {
 				t.Fatalf("failed to decode content payload: %v", err)
 			}
-			if content["text"] != "Agent Hub 已收到你的消息。" {
+			if content["text"] != "neuDrive 已收到你的消息。" {
 				t.Fatalf("unexpected message text: %q", content["text"])
 			}
 			w.Header().Set("Content-Type", "application/json")
@@ -185,7 +185,7 @@ func TestSendFeishuAckUsesTenantAccessTokenAndChatMessageAPI(t *testing.T) {
 		"cli_test_app",
 		"app_secret_value",
 		"oc_chat_123",
-		"Agent Hub 已收到你的消息。",
+		"neuDrive 已收到你的消息。",
 	)
 	if err != nil {
 		t.Fatalf("sendFeishuAck returned error: %v", err)

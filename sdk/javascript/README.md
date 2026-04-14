@@ -1,6 +1,6 @@
-# @agenthub/sdk
+# @neudrive/sdk
 
-Agent Hub SDK for JavaScript/TypeScript.
+neuDrive SDK for JavaScript/TypeScript.
 
 The SDK targets the scoped-token `/agent/*` surface and supports both typed APIs
 and the canonical virtual tree sync primitives (`snapshot` / `changes`).
@@ -9,11 +9,11 @@ and the canonical virtual tree sync primitives (`snapshot` / `changes`).
 
 ### With Scoped Token (Agent/MCP use)
 ```typescript
-import { AgentHub } from '@agenthub/sdk'
+import { NeuDrive } from '@neudrive/sdk'
 
-const hub = new AgentHub({
+const hub = new NeuDrive({
   baseURL: 'https://hub.example.com',
-  token: 'aht_xxxxx'
+  token: 'ndt_xxxxx'
 })
 
 // Read user preferences
@@ -32,9 +32,9 @@ await hub.callDevice('living-room-light', 'off')
 
 ### With OAuth (Third-party app)
 ```typescript
-import { AgentHubAuth } from '@agenthub/sdk'
+import { NeuDriveAuth } from '@neudrive/sdk'
 
-const auth = new AgentHubAuth({
+const auth = new NeuDriveAuth({
   baseURL: 'https://hub.example.com',
   clientId: 'your-client-id',
   clientSecret: 'your-client-secret'
@@ -50,12 +50,12 @@ const { access_token, user } = await auth.exchangeCode(code, 'https://yourapp.co
 ## Installation
 
 ```bash
-npm install @agenthub/sdk
+npm install @neudrive/sdk
 ```
 
 ## API Reference
 
-### `AgentHub` (scoped token client)
+### `NeuDrive` (scoped token client)
 
 | Method | Description |
 |--------|-------------|
@@ -93,11 +93,11 @@ npm install @agenthub/sdk
 ### Bundle Sync Example
 
 ```typescript
-import { AgentHub } from '@agenthub/sdk'
+import { NeuDrive } from '@neudrive/sdk'
 
-const hub = new AgentHub({
+const hub = new NeuDrive({
   baseURL: 'https://hub.example.com',
-  token: 'aht_xxxxx',
+  token: 'ndt_xxxxx',
 })
 
 const auth = await hub.getAuthInfo()
@@ -127,7 +127,7 @@ await hub.commitSession(session.session_id, preview.fingerprint)
 
 For CLI login/profile setup and operational guidance, see [`docs/sync.md`](../../docs/sync.md).
 
-### `AgentHubAuth` (OAuth helper)
+### `NeuDriveAuth` (OAuth helper)
 
 | Method | Description |
 |--------|-------------|

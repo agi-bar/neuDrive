@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>neuDrive · 文件（交互原型 · 内置假数据）</title>
+  <style>
+    :root{--bg:#f5f7fb;--surface:#fff;--border:#e7e9f0;--muted:#6b7280;--text:#0f172a;--primary:#2563eb;--radius:10px}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif}
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border)}
+    .brand{padding:18px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:baseline}
+    .brand b{font-weight:700}
+    .nav{padding:10px 8px}
+    .nav a{display:block;padding:8px 12px;border-radius:8px;color:#334155;text-decoration:none}
+    .nav a.active{background:#eef4ff;color:var(--primary);font-weight:600}
+    .main{flex:1}
+    .page{max-width:1160px;margin:0 auto;padding:18px}
+    .h1{font-size:20px;font-weight:800;margin:6px 0 2px}
+    .sub{color:var(--muted);font-size:12px}
+    .toolbar{display:flex;align-items:center;gap:8px;margin:10px 0}
+    .crumbs{font-size:12px;color:var(--muted)}
+    .crumbs a{color:var(--primary);text-decoration:none;cursor:pointer}
+    .spacer{flex:1}
+    .search input{padding:7px 10px;border:1px solid var(--border);border-radius:8px;width:320px}
+    .btn{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
+    .chips{display:flex;gap:6px;margin:8px 0}
+    .chip{border:1px solid var(--border);background:#fafbff;border-radius:999px;padding:4px 10px;font-size:12px;color:#475569;cursor:pointer}
+    .chip.active{background:#eef4ff;color:#2563eb;border-color:#dbe7ff}
+    .grid{display:grid;grid-template-columns: 1fr 360px;gap:14px;align-items:start}
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+    .panel .head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)}
+    .table .row{display:grid;grid-template-columns: 1fr 120px 140px 160px;gap:0;align-items:center;padding:10px 12px;border-top:1px solid var(--border)}
+    .table .row.h{color:#64748b;font-weight:700;background:#f7f9ff}
+    .table .row:hover{background:#f6f8ff}
+    .name{display:flex;align-items:center;gap:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .badge{display:inline-block;border:1px solid #dbe7ff;background:#eef4ff;color:#2563eb;border-radius:999px;font-size:12px;padding:2px 8px;margin-left:8px}
+    .muted{color:#64748b}
+    pre{white-space:pre-wrap;background:#fbfcff;border:1px solid var(--border);padding:10px;border-radius:8px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><b>neuDrive</b><span style="font-size:11px;color:#94a3b8">v0.0.1</span></div>
+      <nav class="nav">
+        <a href="#">概览</a>
+        <a href="#">连接设置</a>
+        <a href="#">连接管理</a>
+        <a href="#">我的资料</a>
+        <a href="#" class="active">数据文件</a>
+        <a href="#">协作</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page">
+        <div class="h1">文件（交互原型 · 内置假数据）</div>
+        <div class="sub">像 OneDrive 一样浏览/搜索/预览；已融合 Projects/Skills/Memory/Devices/Roles/Inbox/Notes/Root</div>
+        <div class="toolbar">
+          <div class="crumbs" id="crumbs"></div>
+          <div class="spacer"></div>
+          <div class="search"><input id="q" placeholder="搜索（关键词/namespace:skills/ext:.md）" /></div>
+          <button class="btn" id="btnNew">新建</button>
+          <button class="btn" id="btnUpload">上传</button>
+          <button class="btn" id="btnDel">删除</button>
+        </div>
+        <div class="chips" id="chips"></div>
+
+        <div class="grid">
+          <div class="panel table">
+            <div class="head"><b id="listTitle">根目录</b><span id="listPath" class="muted">/</span></div>
+            <div class="row h"><div>名称</div><div>大小</div><div>命名空间</div><div>最近修改</div></div>
+            <!-- 预渲染几行（即使 JS 失败也有内容） -->
+            <div class="row"><div class="name">📁 projects</div><div>-</div><div>projects</div><div>—</div></div>
+            <div class="row"><div class="name">📁 skills</div><div>-</div><div>skills</div><div>—</div></div>
+            <div class="row"><div class="name">📁 memory</div><div>-</div><div>memory</div><div>—</div></div>
+            <div class="row"><div class="name">📁 notes</div><div>-</div><div>notes</div><div>—</div></div>
+          </div>
+          <div class="panel">
+            <div class="head"><b>预览</b><span id="meta" class="muted"></span></div>
+            <div style="padding:12px">
+              <div id="preview">选择一个 Markdown/文本查看内容预览</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <script>
+  // —— 假数据 ——
+  const NOW=new Date();function daysAgo(n){const d=new Date(NOW);d.setDate(d.getDate()-n);return d.toISOString()}
+  const DATA=[]
+  ;(['alpha','bravo','charlie']).forEach((p,idx)=>{DATA.push({path:`/projects/${p}`,name:p,is_dir:true,ns:'projects',t:daysAgo(idx)});DATA.push({path:`/projects/${p}/context.md`,name:'context.md',is_dir:false,ns:'projects',kind:'project_context',size:2200+idx*30,t:daysAgo(idx),content:`# ${p.toUpperCase()} 项目\n- 目标：对齐 OneDrive 范式\n- 范围：文件浏览/搜索/预览`});DATA.push({path:`/projects/${p}/notes.md`,name:'notes.md',is_dir:false,ns:'projects',size:900+idx*50,t:daysAgo(idx+1),content:`- [ ] ${p} TODO A\n- [ ] ${p} TODO B`})})
+  ;([{b:'qa-bot',n:'QA Bot',ro:false},{b:'translator',n:'Translator',ro:true}]).forEach((s,idx)=>{const base=`/skills/${s.b}`;DATA.push({path:base,name:s.b,is_dir:true,ns:'skills',t:daysAgo(1+idx),ro:!!s.ro});DATA.push({path:`${base}/SKILL.md`,name:'SKILL.md',is_dir:false,ns:'skills',kind:'skill',size:3200+idx*120,t:daysAgo(1+idx),ro:!!s.ro,content:`---\nname: ${s.n}\n---\n# ${s.n}\n说明与使用…`});DATA.push({path:`${base}/assets/prompt.md`,name:'prompt.md',is_dir:false,ns:'skills',size:1200+idx*40,t:daysAgo(2+idx),ro:!!s.ro,content:'You are a helpful assistant…'})})
+  DATA.push({path:'/memory/profile/display_name.md',name:'display_name.md',is_dir:false,ns:'memory',kind:'memory_profile',size:40,t:daysAgo(2),content:'neuDrive User'})
+  for(let i=1;i<=6;i++){DATA.push({path:`/memory/scratch/note-${i}.md`,name:`note-${i}.md`,is_dir:false,ns:'memory',kind:'memory_scratch',size:150+i*5,t:daysAgo(3+Math.floor(i/3)),content:`快速笔记 ${i}\n- 事项 A\n- 事项 B`})}
+  DATA.push({path:'/notes/todo-1.md',name:'todo-1.md',is_dir:false,ns:'notes',size:280,t:daysAgo(0),content:'- [ ] 任务 1'})
+  ;(['readme.md','roadmap.md']).forEach((f,idx)=>{DATA.push({path:`/${f}`,name:f,is_dir:false,ns:'root',size:800+idx*200,t:daysAgo(7+idx),content:`# ${f}`})})
+  // 顶层命名空间目录
+  ;(['projects','skills','memory','devices','roles','inbox','notes']).forEach((seg,i)=>{if(!DATA.find(n=>n.path===`/${seg}`)) DATA.push({path:`/${seg}`,name:seg,is_dir:true,ns:seg,t:daysAgo(1+i)})})
+
+  const store=new Map(DATA.map(n=>[n.path,{...n}]));
+  function list(path){const base=path.endsWith('/')?path.slice(0,-1):path;const out=[];for(const n of store.values()){const parent=n.path.slice(0,n.path.lastIndexOf('/'))||'/';if(parent===base) out.push(n)}return out}
+  function fmtSize(n){if(!n||n<=0)return'-';const u=['B','KB','MB','GB'];let i=0,v=n;while(v>=1024&&i<u.length-1){v/=1024;i++}return v.toFixed(1)+' '+u[i]}
+  function fmtTime(v){try{return new Date(v).toLocaleString('zh-CN')}catch{return v||'-'}}
+  function nsLabel(ns){return ns||'root'}
+
+  let cur='/' , filter='all' , q=''
+
+  function renderChips(){const el=document.getElementById('chips');el.innerHTML='';[['all','全部'],['projects','Projects'],['skills','Skills'],['memory','Memory'],['devices','Devices'],['roles','Roles'],['inbox','Inbox'],['notes','Notes'],['root','Root']].forEach(([k,lab])=>{const d=document.createElement('div');d.className='chip'+(filter===k?' active':'');d.textContent=lab;d.onclick=()=>{filter=k;renderList()};el.appendChild(d)})}
+  function renderCrumbs(){const el=document.getElementById('crumbs');el.innerHTML='';const parts=cur.replace(/^\/+/, '').split('/').filter(Boolean);const segs=['/',...parts.map((_,i)=>'/'+parts.slice(0,i+1).join('/'))];const labels=['根目录',...parts];segs.forEach((seg,i)=>{if(i>0) el.appendChild(document.createTextNode(' / ')); const a=document.createElement('a'); a.textContent=labels[i]; a.onclick=()=>{cur=seg;renderAll()}; el.appendChild(a)})}
+  function visible(){let rows=[]; if(q.trim()){const qq=q.trim().toLowerCase(); for(const n of store.values()){if(n.is_dir) continue; if(filter!=='all' && n.ns!==filter) continue; const hay=(n.name+' '+n.path+' '+(n.kind||'')).toLowerCase(); if(hay.includes(qq)) rows.push(n)} } else { rows=list(cur).filter(n=> filter==='all' || n.ns===filter) } return rows.sort((a,b)=> a.is_dir===b.is_dir ? a.name.localeCompare(b.name) : (a.is_dir?-1:1)) }
+  function renderList(){document.getElementById('listTitle').textContent = cur==='/'? '根目录' : cur.split('/').pop(); document.getElementById('listPath').textContent = cur; const host=document.querySelector('.panel.table'); host.querySelectorAll('.row:not(.h)').forEach(n=>n.remove()); const rows=visible(); if(rows.length===0){const r=document.createElement('div'); r.className='row'; r.innerHTML='<div class="muted">该目录暂无内容</div><div></div><div></div><div></div>'; host.appendChild(r); return } rows.forEach(n=>{ const r=document.createElement('div'); r.className='row'; r.onclick=()=>{ if(n.is_dir) {cur=n.path; renderAll()} else {document.getElementById('meta').textContent = `${n.path} · ${fmtSize(n.size)} · ${fmtTime(n.t)} · ${n.kind||'file'}`; document.getElementById('preview').innerHTML = /\.md$/i.test(n.name)? (n.content||'').replace(/^# (.*)$/gm,'<h3>$1</h3>').replace(/\n/g,'<br/>') : `<pre>${(n.content||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>` } } ; r.innerHTML = `<div class="name">${n.is_dir?'📁':(/\.md$/i.test(n.name)?'📝':'📄')} ${n.name}${n.kind==='skill'?' <span class=badge>bundle</span>':''}${n.ro?' <span class=muted>🔒</span>':''}</div><div>${n.is_dir?'-':fmtSize(n.size)}</div><div>${nsLabel(n.ns)}</div><div>${fmtTime(n.t)}</div>`; host.appendChild(r) }) }
+  function renderAll(){renderChips(); renderCrumbs(); renderList()}
+  document.getElementById('q').addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ q=e.target.value; renderList() } if(e.key==='Escape'){ e.target.value=''; q=''; renderList() } })
+  renderAll();
+  </script>
+</body>
+</html>
+

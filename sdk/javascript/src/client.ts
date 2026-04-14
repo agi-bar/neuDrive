@@ -1,5 +1,5 @@
 import type {
-  AgentHubConfig,
+  NeuDriveConfig,
   Profile,
   Project,
   ProjectLog,
@@ -22,9 +22,9 @@ import type {
 } from './types'
 
 /**
- * AgentHubError is thrown when the API returns a non-2xx response.
+ * NeuDriveError is thrown when the API returns a non-2xx response.
  */
-export class AgentHubError extends Error {
+export class NeuDriveError extends Error {
   constructor(
     public readonly status: number,
     public readonly body: unknown,
@@ -34,29 +34,29 @@ export class AgentHubError extends Error {
         ? (body as { error: string }).error
         : `HTTP ${status}`
     super(msg)
-    this.name = 'AgentHubError'
+    this.name = 'NeuDriveError'
   }
 }
 
 /**
- * Main client for Agent Hub.
+ * Main client for neuDrive.
  *
  * Uses the `/agent/*` API surface authenticated via a scoped token
- * (aht_xxxxx) sent as `Authorization: Bearer <token>`.
+ * (ndt_xxxxx) sent as `Authorization: Bearer <token>`.
  *
  * @example
  * ```ts
- * const hub = new AgentHub({ baseURL: 'https://hub.example.com', token: 'aht_xxxxx' })
+ * const hub = new NeuDrive({ baseURL: 'https://hub.example.com', token: 'ndt_xxxxx' })
  * const profile = await hub.getProfile('preferences')
  * ```
  */
-export class AgentHub {
+export class NeuDrive {
   private readonly baseURL: string
   private readonly token: string
 
-  constructor(config: AgentHubConfig) {
-    if (!config.baseURL) throw new Error('AgentHub: baseURL is required')
-    if (!config.token) throw new Error('AgentHub: token is required')
+  constructor(config: NeuDriveConfig) {
+    if (!config.baseURL) throw new Error('NeuDrive: baseURL is required')
+    if (!config.token) throw new Error('NeuDrive: token is required')
     this.baseURL = config.baseURL.replace(/\/+$/, '')
     this.token = config.token
   }
@@ -96,7 +96,7 @@ export class AgentHub {
       } catch {
         errBody = await res.text()
       }
-      throw new AgentHubError(res.status, errBody)
+      throw new NeuDriveError(res.status, errBody)
     }
     // Some endpoints return 204 No Content
     if (res.status === 204) return undefined as T
@@ -134,7 +134,7 @@ export class AgentHub {
       } catch {
         errBody = await res.text()
       }
-      throw new AgentHubError(res.status, errBody)
+      throw new NeuDriveError(res.status, errBody)
     }
     return new Uint8Array(await res.arrayBuffer())
   }

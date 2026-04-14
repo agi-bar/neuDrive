@@ -70,7 +70,7 @@ ON CONFLICT (user_id, name) DO NOTHING;
 INSERT INTO projects (id, user_id, name, status, context_md) VALUES
     ('b5000000-0000-0000-0000-000000000001', 'd0000000-0000-0000-0000-000000000001',
      'AGI Bar', 'active',
-     '# AGI Bar\n\nAI 从业者社区。核心成员 50+，公众号关注 5000+。\n\n当前重点：Agent Hub 基础设施、社区线下活动、内容输出。'),
+     '# AGI Bar\n\nAI 从业者社区。核心成员 50+，公众号关注 5000+。\n\n当前重点：neuDrive 基础设施、社区线下活动、内容输出。'),
     ('b5000000-0000-0000-0000-000000000002', 'd0000000-0000-0000-0000-000000000001',
      'CyberZen Writing', 'active',
      '# 禅与赛博朋克\n\n公众号写作项目。风格：信息密度高、不用句号结尾、段落简短。\n\n已发布 30+ 篇，主题覆盖 AI 政策、技术趋势、产品思考。'),
@@ -78,8 +78,8 @@ INSERT INTO projects (id, user_id, name, status, context_md) VALUES
      'Haidian Policy', 'active',
      '# 海淀算力券政策研究\n\n跟踪海淀区 AI 算力补贴政策，分析对创业公司的实际影响。'),
     ('b5000000-0000-0000-0000-000000000004', 'd0000000-0000-0000-0000-000000000001',
-     'Agent Hub', 'active',
-     '# Agent Hub\n\nAI 时代的身份与信任基础设施。Phase 1 核心系统开发中。'),
+     'neuDrive', 'active',
+     '# neuDrive\n\nAI 时代的身份与信任基础设施。Phase 1 核心系统开发中。'),
     ('b5000000-0000-0000-0000-000000000005', 'd0000000-0000-0000-0000-000000000001',
      'ClawColony', 'archived',
      '# ClawColony\n\n之前的游戏项目，已归档。')
@@ -100,7 +100,7 @@ INSERT INTO memory_profile (user_id, category, content, source) VALUES
      '写作风格：段落结尾不用句号、标题信息密度高、不用比喻、段落保持简短（3-5句）、中英混排时英文词前后不加空格、偏好用短句和破折号、数据优先于观点、标题不超过20字',
      'claude'),
     ('d0000000-0000-0000-0000-000000000001', 'relationships',
-     'Alice — 产品经理，AGI Bar 核心成员，负责社区运营\nBob — 设计师，负责 Agent Hub 的 UI/UX\nCarol — VC，关注 AI infra 赛道\nDave — 开发者社区运营，在深圳',
+     'Alice — 产品经理，AGI Bar 核心成员，负责社区运营\nBob — 设计师，负责 neuDrive 的 UI/UX\nCarol — VC，关注 AI infra 赛道\nDave — 开发者社区运营，在深圳',
      'claude'),
     ('d0000000-0000-0000-0000-000000000001', 'principles',
      '先做再说，不做PPT\n最小可行，够用就行\n代码即文档\n不预设用户需求，从真实痛点出发\n一个人能做的事不要两个人做\n技术选型：选无聊的那个',
@@ -110,13 +110,13 @@ ON CONFLICT (user_id, category) DO UPDATE SET content = EXCLUDED.content;
 -- Memory scratch (recent days)
 INSERT INTO memory_scratch (user_id, date, content, source) VALUES
     ('d0000000-0000-0000-0000-000000000001', CURRENT_DATE,
-     '今天在 Claude Code 里完成了 Agent Hub Phase 1 的核心系统搭建，包括 Go 后端、React 前端、PostgreSQL schema、Scoped Token 鉴权、登录注册系统、批量导入 API',
+     '今天在 Claude Code 里完成了 neuDrive Phase 1 的核心系统搭建，包括 Go 后端、React 前端、PostgreSQL schema、Scoped Token 鉴权、登录注册系统、批量导入 API',
      'claude'),
     ('d0000000-0000-0000-0000-000000000001', CURRENT_DATE - 1,
-     '和 Alice 讨论了 Agent Hub 的冷启动策略，决定先从 MCP + AGI Bar 社区切入。晚上用 GPT 翻译了一篇关于 AI Agent 协作的论文',
+     '和 Alice 讨论了 neuDrive 的冷启动策略，决定先从 MCP + AGI Bar 社区切入。晚上用 GPT 翻译了一篇关于 AI Agent 协作的论文',
      'claude'),
     ('d0000000-0000-0000-0000-000000000001', CURRENT_DATE - 2,
-     '研究了 GitHub Personal Access Token 的设计，作为 Agent Hub Scoped Token 的参考。整理了海淀算力券最新政策变动',
+     '研究了 GitHub Personal Access Token 的设计，作为 neuDrive Scoped Token 的参考。整理了海淀算力券最新政策变动',
      'claude')
 ON CONFLICT (user_id, date, source) DO NOTHING;
 

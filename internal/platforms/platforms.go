@@ -12,23 +12,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/storage/sqlite"
-	"github.com/agi-bar/agenthub/internal/systemskills"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/systemskills"
 )
 
-const LocalServerName = "agenthub-local"
+const LocalServerName = "neudrive-local"
 
 var lookPath = exec.LookPath
 
 const (
-	agenthubSkillName       = "agenthub"
-	managedMarkerFile       = ".agenthub-managed.json"
-	managedCommandHeader    = "<!-- agenthub-managed:command -->"
-	codexEntrypointDir      = "~/.agents/skills/agenthub"
-	claudeEntrypointDir     = "~/.claude/skills/agenthub"
-	claudeCommandEntrypoint = "~/.claude/commands/agenthub.md"
+	neudriveSkillName       = "neudrive"
+	managedMarkerFile       = ".neudrive-managed.json"
+	managedCommandHeader    = "<!-- neudrive-managed:command -->"
+	codexEntrypointDir      = "~/.agents/skills/neudrive"
+	claudeEntrypointDir     = "~/.claude/skills/neudrive"
+	claudeCommandEntrypoint = "~/.claude/commands/neudrive.md"
 )
 
 type Source = sqlite.Source
@@ -285,7 +285,7 @@ func (a *claudeAdapter) init() *claudeAdapter {
 			"command",
 			claudeCommandEntrypoint,
 			[]string{"claude"},
-			[]string{"/agenthub ls", "/agenthub read profile/preferences", "/agenthub write memory \"Remember this\"", "/agenthub create project demo", "/agenthub import platform claude", "/agenthub token create --kind sync --purpose backup", "/agenthub git init", "/agenthub git pull"},
+			[]string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import platform claude", "/neudrive token create --kind sync --purpose backup", "/neudrive git init", "/neudrive git pull"},
 			[]string{"connections", "skills", "projects", "prompts", "tools", "archives"},
 			[]Source{
 				{Domain: "connections", Label: "claude.json", Path: expandUser("~/.claude.json")},
@@ -328,7 +328,7 @@ func (a *claudeAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, 
 	connection.EntrypointType = "command"
 	connection.EntrypointPath = commandPath
 	connection.ManagedPaths = append(managedPaths, commandPath)
-	connection.ChatUsage = []string{"/agenthub ls", "/agenthub read profile/preferences", "/agenthub write memory \"Remember this\"", "/agenthub create project demo", "/agenthub import platform claude", "/agenthub token create --kind sync --purpose backup", "/agenthub git init", "/agenthub git pull"}
+	connection.ChatUsage = []string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import platform claude", "/neudrive token create --kind sync --purpose backup", "/neudrive git init", "/neudrive git pull"}
 	_ = skillPath
 	return connection, nil
 }
@@ -351,7 +351,7 @@ func (a *codexAdapter) init() *codexAdapter {
 			"skill",
 			codexEntrypointDir,
 			nil,
-			[]string{"$agenthub ls", "$agenthub read profile/preferences", "$agenthub write memory \"Remember this\"", "$agenthub create project demo", "$agenthub import platform codex", "$agenthub token create --kind sync --purpose backup", "$agenthub git init", "$agenthub git pull"},
+			[]string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import platform codex", "$neudrive token create --kind sync --purpose backup", "$neudrive git init", "$neudrive git pull"},
 			[]string{"connections", "skills", "profile", "memory", "projects", "automations", "archives"},
 			[]Source{
 				{Domain: "profile", Label: "config.toml", Path: expandUser("~/.codex/config.toml")},
@@ -382,15 +382,15 @@ func (a *codexAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, e
 	_ = run(ctx, "codex", "mcp", "remove", LocalServerName)
 	if err := run(ctx,
 		"codex", "mcp", "add", LocalServerName,
-		"--env", "AGENTHUB_TOKEN="+connection.Token,
-		"--env", "AGENTHUB_STORAGE="+cfg.Local.Storage,
-		"--env", "AGENTHUB_SQLITE_PATH="+cfg.Local.SQLitePath,
+		"--env", "NEUDRIVE_TOKEN="+connection.Token,
+		"--env", "NEUDRIVE_STORAGE="+cfg.Local.Storage,
+		"--env", "NEUDRIVE_SQLITE_PATH="+cfg.Local.SQLitePath,
 		"--env", "DATABASE_URL="+cfg.Local.DatabaseURL,
 		"--env", "JWT_SECRET="+cfg.Local.JWTSecret,
 		"--env", "VAULT_MASTER_KEY="+cfg.Local.VaultMasterKey,
 		"--env", "PUBLIC_BASE_URL="+cfg.Local.PublicBaseURL,
 		"--",
-		executable, "mcp", "stdio", "--storage", cfg.Local.Storage, "--sqlite-path", cfg.Local.SQLitePath, "--token-env", "AGENTHUB_TOKEN",
+		executable, "mcp", "stdio", "--storage", cfg.Local.Storage, "--sqlite-path", cfg.Local.SQLitePath, "--token-env", "NEUDRIVE_TOKEN",
 	); err != nil {
 		return connection, err
 	}
@@ -403,7 +403,7 @@ func (a *codexAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, e
 	connection.EntrypointType = "skill"
 	connection.EntrypointPath = skillPath
 	connection.ManagedPaths = managedPaths
-	connection.ChatUsage = []string{"$agenthub ls", "$agenthub read profile/preferences", "$agenthub write memory \"Remember this\"", "$agenthub create project demo", "$agenthub import platform codex", "$agenthub token create --kind sync --purpose backup", "$agenthub git init", "$agenthub git pull"}
+	connection.ChatUsage = []string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import platform codex", "$neudrive token create --kind sync --purpose backup", "$neudrive git init", "$neudrive git pull"}
 	return connection, nil
 }
 func (a *codexAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
@@ -626,7 +626,7 @@ func managedPathsForPlatform(cfg *runtimecfg.CLIConfig, platform string, default
 }
 
 func installManagedSkill(targetDir, platform string) (string, []string, error) {
-	files, err := systemskills.ExportSkillFiles(agenthubSkillName)
+	files, err := systemskills.ExportSkillFiles(neudriveSkillName)
 	if err != nil {
 		return "", nil, err
 	}
@@ -635,7 +635,7 @@ func installManagedSkill(targetDir, platform string) (string, []string, error) {
 			return "", nil, fmt.Errorf("%s exists and is not a directory", targetDir)
 		}
 		if !isManagedSkillDir(targetDir) {
-			return "", nil, fmt.Errorf("%s already exists and is not managed by Agent Hub", targetDir)
+			return "", nil, fmt.Errorf("%s already exists and is not managed by neuDrive", targetDir)
 		}
 		if err := os.RemoveAll(targetDir); err != nil {
 			return "", nil, err
@@ -656,7 +656,7 @@ func installManagedSkill(targetDir, platform string) (string, []string, error) {
 		}
 	}
 	markerData, _ := json.MarshalIndent(managedInstallMarker{
-		Name:        agenthubSkillName,
+		Name:        neudriveSkillName,
 		Kind:        "skill",
 		Platform:    platform,
 		GeneratedAt: time.Now().UTC().Format(time.RFC3339),
@@ -670,7 +670,7 @@ func installManagedSkill(targetDir, platform string) (string, []string, error) {
 func installManagedClaudeCommand(targetPath string) (string, error) {
 	if data, err := os.ReadFile(targetPath); err == nil {
 		if !strings.HasPrefix(string(data), managedCommandHeader) {
-			return "", fmt.Errorf("%s already exists and is not managed by Agent Hub", targetPath)
+			return "", fmt.Errorf("%s already exists and is not managed by neuDrive", targetPath)
 		}
 	} else if !os.IsNotExist(err) {
 		return "", err
@@ -681,21 +681,21 @@ func installManagedClaudeCommand(targetPath string) (string, error) {
 	content := strings.Join([]string{
 		managedCommandHeader,
 		"---",
-		"description: Route `/agenthub <subcommand>` through the installed Agent Hub skill and MCP surface.",
+		"description: Route `/neudrive <subcommand>` through the installed neuDrive skill and MCP surface.",
 		"---",
 		"",
-		"Use the installed `agenthub` skill at `~/.claude/skills/agenthub/SKILL.md`.",
+		"Use the installed `neudrive` skill at `~/.claude/skills/neudrive/SKILL.md`.",
 		"",
-		"Treat the first argument after `/agenthub` as the subcommand.",
+		"Treat the first argument after `/neudrive` as the subcommand.",
 		"Supported subcommands: `ls`, `read`, `write`, `search`, `create`, `log`, `import`, `token`, `stats`, `git`, `export`, `status`, `help`.",
-		"Examples: `/agenthub ls`, `/agenthub read profile/preferences`, `/agenthub git init`, `/agenthub git pull`.",
-		"Use `/agenthub help` or `/agenthub help import` when the user needs guidance on the command surface.",
-		"Use `/agenthub git init` to create the local Git mirror and `/agenthub git pull` to refresh it.",
+		"Examples: `/neudrive ls`, `/neudrive read profile/preferences`, `/neudrive git init`, `/neudrive git pull`.",
+		"Use `/neudrive help` or `/neudrive help import` when the user needs guidance on the command surface.",
+		"Use `/neudrive git init` to create the local Git mirror and `/neudrive git pull` to refresh it.",
 		"",
-		"1. Read `~/.claude/skills/agenthub/SKILL.md`.",
-		"2. Read the matching command document under `~/.claude/skills/agenthub/commands/`.",
-		"3. Use Agent Hub MCP tools for all Hub reads and writes.",
-		"4. Use `~/.claude/skills/agenthub/references/platforms/claude.md` for Claude-specific routing.",
+		"1. Read `~/.claude/skills/neudrive/SKILL.md`.",
+		"2. Read the matching command document under `~/.claude/skills/neudrive/commands/`.",
+		"3. Use neuDrive MCP tools for all Hub reads and writes.",
+		"4. Use `~/.claude/skills/neudrive/references/platforms/claude.md` for Claude-specific routing.",
 		"",
 		"If no subcommand is provided, treat it as `help`.",
 	}, "\n")
@@ -714,7 +714,7 @@ func isManagedSkillDir(dir string) bool {
 	if err := json.Unmarshal(data, &marker); err != nil {
 		return false
 	}
-	return marker.Name == agenthubSkillName && marker.Kind == "skill"
+	return marker.Name == neudriveSkillName && marker.Kind == "skill"
 }
 
 func removeManagedPath(target string) error {
@@ -731,7 +731,7 @@ func removeManagedPath(target string) error {
 	}
 	if info.IsDir() {
 		if !isManagedSkillDir(target) {
-			return fmt.Errorf("%s is not managed by Agent Hub", target)
+			return fmt.Errorf("%s is not managed by neuDrive", target)
 		}
 		return os.RemoveAll(target)
 	}
@@ -740,7 +740,7 @@ func removeManagedPath(target string) error {
 		return err
 	}
 	if !strings.HasPrefix(string(data), managedCommandHeader) {
-		return fmt.Errorf("%s is not managed by Agent Hub", target)
+		return fmt.Errorf("%s is not managed by neuDrive", target)
 	}
 	return os.Remove(target)
 }

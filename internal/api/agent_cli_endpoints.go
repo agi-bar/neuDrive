@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 )
 
 const (
@@ -128,7 +128,7 @@ func (s *Server) handleAgentCreateEphemeralToken(w http.ResponseWriter, r *http.
 			"expires_at": created.ScopedToken.ExpiresAt.Format(time.RFC3339),
 			"api_base":   baseURL,
 			"scopes":     created.ScopedToken.Scopes,
-			"usage":      fmt.Sprintf("agenthub sync login --api-base %s --token %s && agenthub sync push --bundle backup.ahub", baseURL, created.Token),
+			"usage":      fmt.Sprintf("neudrive sync login --api-base %s --token %s && neudrive sync push --bundle backup.ndrv", baseURL, created.Token),
 		})
 		return
 
@@ -156,7 +156,7 @@ func (s *Server) handleAgentCreateEphemeralToken(w http.ResponseWriter, r *http.
 			"scopes":                       created.ScopedToken.Scopes,
 			"usage":                        "Probe connectivity first, then upload the skills zip directly from the sandbox or browser.",
 			"warning":                      agentSkillsUploadWarning(),
-			"curl_example":                 fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/agenthub-skills.zip" "%s"`, created.Token, platform, uploadURL),
+			"curl_example":                 fmt.Sprintf(`curl -f -X POST -H "Authorization: Bearer %s" -F "platform=%s" -F "file=@/mnt/user-data/outputs/neudrive-skills.zip" "%s"`, created.Token, platform, uploadURL),
 			"inline_archive_max_zip_bytes": agentSkillsUploadMaxZipBytes,
 		})
 		return

@@ -1,6 +1,6 @@
 # Bundle Sync 指南
 
-Agent Hub 现在有两条并行通道：
+neuDrive 现在有两条并行通道：
 
 - MCP：适合小而智能的在线操作
 - Bundle Sync：适合迁移、备份、恢复、大体积 skill 和二进制资源
@@ -9,8 +9,8 @@ Bundle Sync 支持两种文件格式：
 
 | 格式 | 何时使用 | 特点 |
 | --- | --- | --- |
-| `.ahub` | 小体积、调试、想直接看 JSON 内容 | 结构直观，便于 review 和脚本处理 |
-| `.ahubz` | 大 bundle、二进制、需要 session/resume | zip 容器，支持 archive session 上传 |
+| `.ndrv` | 小体积、调试、想直接看 JSON 内容 | 结构直观，便于 review 和脚本处理 |
+| `.ndrvz` | 大 bundle、二进制、需要 session/resume | zip 容器，支持 archive session 上传 |
 
 ## Token 与权限
 
@@ -30,13 +30,13 @@ Bundle Sync 支持两种文件格式：
 
 ## CLI 配置与登录
 
-`agenthub sync` 现在支持本地 profile 配置。登录一次后，后续 `preview / push / pull / resume / history / whoami` 默认都会读取当前 profile，不需要每次重复传 `--token` 和 `--api-base`。
+`neudrive sync` 现在支持本地 profile 配置。登录一次后，后续 `preview / push / pull / resume / history / whoami` 默认都会读取当前 profile，不需要每次重复传 `--token` 和 `--api-base`。
 
 默认配置文件位置：
 
-- macOS：`~/Library/Application Support/AgentHub/config.json`
-- Linux：`$XDG_CONFIG_HOME/agenthub/config.json`
-- Linux（无 XDG 时）：`~/.config/agenthub/config.json`
+- macOS：`~/Library/Application Support/NeuDrive/config.json`
+- Linux：`$XDG_CONFIG_HOME/neudrive/config.json`
+- Linux（无 XDG 时）：`~/.config/neudrive/config.json`
 
 配置里会保存：
 
@@ -45,14 +45,14 @@ Bundle Sync 支持两种文件格式：
 - `profiles.<name>.token`
 - `profiles.<name>.expires_at`
 - `profiles.<name>.scopes`
-- `local.git_mirror_path`（给 `agenthub git init` 提供默认镜像目录；如果缺失，首次 `git init` 会自动写入 `./agenthub-export/git-mirror`）
+- `local.git_mirror_path`（给 `neudrive git init` 提供默认镜像目录；如果缺失，首次 `git init` 会自动写入 `./neudrive-export/git-mirror`）
 
 例如：
 
 ```json
 {
   "local": {
-    "git_mirror_path": "~/agenthub/git-mirror"
+    "git_mirror_path": "~/neudrive/git-mirror"
   }
 }
 ```
@@ -66,33 +66,33 @@ Bundle Sync 支持两种文件格式：
 
 相关环境变量：
 
-- `AGENTHUB_SYNC_CONFIG`
-- `AGENTHUB_SYNC_PROFILE`
-- `AGENTHUB_SYNC_API_BASE` 或 `AGENTHUB_API_BASE`
-- `AGENTHUB_SYNC_TOKEN` 或 `AGENTHUB_TOKEN`
+- `NEUDRIVE_SYNC_CONFIG`
+- `NEUDRIVE_SYNC_PROFILE`
+- `NEUDRIVE_SYNC_API_BASE` 或 `NEUDRIVE_API_BASE`
+- `NEUDRIVE_SYNC_TOKEN` 或 `NEUDRIVE_TOKEN`
 
 首次登录推荐直接走浏览器：
 
 ```bash
-agenthub sync login --api-base https://agenthub.agi.bar
-agenthub sync profiles
-agenthub sync whoami
+neudrive sync login --api-base https://neudrive.ai
+neudrive sync profiles
+neudrive sync whoami
 ```
 
 也支持手工粘贴 token：
 
 ```bash
-agenthub sync login \
+neudrive sync login \
   --profile prod \
-  --api-base https://agenthub.agi.bar \
-  --token aht_xxx
+  --api-base https://neudrive.ai \
+  --token ndt_xxx
 ```
 
 多 profile 切换：
 
 ```bash
-agenthub sync use prod
-agenthub sync logout --profile staging
+neudrive sync use prod
+neudrive sync logout --profile staging
 ```
 
 ## `merge` 与 `mirror`
@@ -107,61 +107,61 @@ agenthub sync logout --profile staging
 ### 1. 本地导出
 
 ```bash
-agenthub sync export --source /path/to/skills -o backup.ahub
-agenthub sync export --source /path/to/skills --format archive -o backup.ahubz
+neudrive sync export --source /path/to/skills -o backup.ndrv
+neudrive sync export --source /path/to/skills --format archive -o backup.ndrvz
 ```
 
 ### 2. 预览
 
 ```bash
-agenthub sync preview --bundle backup.ahub
-agenthub sync preview --bundle backup.ahubz --mode mirror
+neudrive sync preview --bundle backup.ndrv
+neudrive sync preview --bundle backup.ndrvz --mode mirror
 ```
 
 ### 3. 导入
 
 ```bash
-agenthub sync push --bundle backup.ahub --transport json
-agenthub sync push --bundle backup.ahubz --transport auto
+neudrive sync push --bundle backup.ndrv --transport json
+neudrive sync push --bundle backup.ndrvz --transport auto
 ```
 
 `auto` 的规则：
 
 - JSON 编码后不超过 8 MiB：直接走 `/agent/import/bundle`
-- 超过 8 MiB，或输入本身就是 `.ahubz`：走 session + parts + commit
+- 超过 8 MiB，或输入本身就是 `.ndrvz`：走 session + parts + commit
 
 ### 4. 导出回本地
 
 ```bash
-agenthub sync pull -o pulled.ahub
-agenthub sync pull --format archive -o pulled.ahubz
+neudrive sync pull -o pulled.ndrv
+neudrive sync pull --format archive -o pulled.ndrvz
 ```
 
 ### 5. 继续未完成上传
 
 如果 archive 上传中断，CLI 会在 bundle 同目录写一个 sidecar：
 
-- `backup.ahubz.session.json`
+- `backup.ndrvz.session.json`
 
 继续时：
 
 ```bash
-agenthub sync resume --bundle backup.ahubz
+neudrive sync resume --bundle backup.ndrvz
 ```
 
-前提是你重新选择原始 `.ahubz` 文件，而不是一个新的 archive。
+前提是你重新选择原始 `.ndrvz` 文件，而不是一个新的 archive。
 
 ### 6. 查看历史
 
 ```bash
-agenthub sync history
+neudrive sync history
 ```
 
 ### 7. 比对结果
 
 ```bash
-agenthub sync diff --left backup.ahubz --right pulled.ahubz
-agenthub sync diff --left backup.ahub --right pulled.ahubz --format json
+neudrive sync diff --left backup.ndrvz --right pulled.ndrvz
+neudrive sync diff --left backup.ndrv --right pulled.ndrvz --format json
 ```
 
 退出码：
@@ -175,13 +175,13 @@ agenthub sync diff --left backup.ahub --right pulled.ahubz --format json
 可以按 domain 和 skill 过滤：
 
 ```bash
-agenthub sync export \
+neudrive sync export \
   --source /path/to/skills \
   --format archive \
   --include-domain skills \
   --include-skill atlas-brief \
   --exclude-skill atlas-layout \
-  -o partial.ahubz
+  -o partial.ndrvz
 ```
 
 支持的 domain：

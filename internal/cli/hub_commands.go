@@ -17,10 +17,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/api"
-	"github.com/agi-bar/agenthub/internal/localgitsync"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/api"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
 )
 
 type hubCommandOptions struct {
@@ -105,7 +105,7 @@ func runHubLS(args []string) int {
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub ls [path] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("ls [path] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	targetPath := ""
@@ -150,7 +150,7 @@ func runHubRead(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub read <path> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("read <path> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -191,7 +191,7 @@ func runHubWrite(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub write <path> <content-or-file> [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("write <path> <content-or-file> [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -239,7 +239,7 @@ func runHubSearch(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) < 1 || len(positionals) > 2 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub search <query> [path] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("search <query> [path] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -288,7 +288,7 @@ func runHubCreate(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 2 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub create <category> <name> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("create <category> <name> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	if normalizeExternalCategory(positionals[0]) != "project" {
@@ -339,11 +339,11 @@ func runHubLog(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub log <path> --action ACTION --summary <text-or-file> [--tags a,b] [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("log <path> --action ACTION --summary <text-or-file> [--tags a,b] [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	if strings.TrimSpace(*action) == "" || strings.TrimSpace(*summary) == "" {
-		fmt.Fprintln(os.Stderr, "usage: agenthub log <path> --action ACTION --summary <text-or-file> [--tags a,b]")
+		fmt.Fprintln(os.Stderr, usageLine("log <path> --action ACTION --summary <text-or-file> [--tags a,b]"))
 		return 2
 	}
 
@@ -371,7 +371,7 @@ func runHubLog(args []string) int {
 	}
 
 	req := map[string]any{
-		"source":  "agenthub-cli",
+		"source":  "neudrive-cli",
 		"action":  *action,
 		"summary": content,
 	}
@@ -441,7 +441,7 @@ func runHubImportSkill(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import skill <local-dir> [--name NAME] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("import skill <local-dir> [--name NAME] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	srcDir, err := resolveExistingLocalDir(positionals[0])
@@ -500,7 +500,7 @@ func runHubImportProfile(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import profile <local-file> [--category preferences|relationships|principles] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("import profile <local-file> [--category preferences|relationships|principles] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	content, err := readCLIContentArg(positionals[0], false)
@@ -553,7 +553,7 @@ func runHubImportMemory(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import memory <local-file-or-dir> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("import memory <local-file-or-dir> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	src := positionals[0]
@@ -638,7 +638,7 @@ func runHubImportProject(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import project <local-file-or-dir> [--name NAME] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("import project <local-file-or-dir> [--name NAME] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	src := positionals[0]
@@ -750,7 +750,7 @@ func runHubTokenCreate(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 0 || strings.TrimSpace(*kind) == "" || strings.TrimSpace(*purpose) == "" {
-		fmt.Fprintln(os.Stderr, "usage: agenthub token create --kind sync|skills-upload --purpose PURPOSE [--access push|pull|both] [--platform PLATFORM] [--ttl-minutes N]")
+		fmt.Fprintln(os.Stderr, usageLine("token create --kind sync|skills-upload --purpose PURPOSE [--access push|pull|both] [--platform PLATFORM] [--ttl-minutes N]"))
 		return 2
 	}
 
@@ -796,7 +796,7 @@ func runHubStats(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub stats [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]")
+		fmt.Fprintln(os.Stderr, usageLine("stats [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -823,7 +823,7 @@ func runHubStats(args []string) int {
 func bindHubCommandFlags(fs *flag.FlagSet, includeLiteral bool) *hubCommandOptions {
 	opts := &hubCommandOptions{}
 	fs.StringVar(&opts.Profile, "profile", "", "explicit remote profile name")
-	fs.StringVar(&opts.APIBase, "api-base", "", "explicit Agent Hub API base")
+	fs.StringVar(&opts.APIBase, "api-base", "", "explicit neuDrive API base")
 	fs.StringVar(&opts.Token, "token", "", "explicit scoped token")
 	fs.BoolVar(&opts.JSON, "json", false, "output JSON")
 	fs.StringVar(&opts.Output, "output", "", "write final output to a local file")
@@ -977,14 +977,14 @@ func hubWrite(ctx context.Context, target *hubTarget, rawPath, content string) (
 		req := map[string]any{
 			"category": resolved.Name,
 			"content":  content,
-			"source":   "agenthub-cli",
+			"source":   "neudrive-cli",
 		}
 		var profile hubProfileResponse
 		syncInfo, err := localAPIJSONWithSync(ctx, http.MethodPut, target.APIBase, target.Token, "/agent/memory/profile", req, &profile)
 		return fmt.Sprintf("Updated profile/%s.", resolved.Name), profile, syncInfo, err
 	case "memory":
 		if strings.TrimSpace(resolved.Rest) == "" {
-			req := map[string]any{"content": content, "source": "agenthub-cli"}
+			req := map[string]any{"content": content, "source": "neudrive-cli"}
 			var resp api.ImportResponse
 			syncInfo, err := localAPIJSONWithSync(ctx, http.MethodPost, target.APIBase, target.Token, "/agent/memory/scratch", req, &resp)
 			return "Saved memory note.", resp, syncInfo, err
@@ -1366,7 +1366,7 @@ func loadTextTree(root string) (map[string]string, error) {
 			return err
 		}
 		if looksBinary(data) {
-			return fmt.Errorf("%s looks binary; use agenthub token create --kind skills-upload for archive-heavy imports", current)
+			return fmt.Errorf("%s looks binary; use neudrive token create --kind skills-upload for archive-heavy imports", current)
 		}
 		rel, err := filepath.Rel(root, current)
 		if err != nil {
@@ -1460,7 +1460,7 @@ func importMemoryContent(ctx context.Context, target *hubTarget, src, content st
 	}
 	req := map[string]any{
 		"content": content,
-		"source":  "agenthub-cli",
+		"source":  "neudrive-cli",
 		"title":   title,
 	}
 	syncInfo, err := localAPIJSONWithSync(ctx, http.MethodPost, target.APIBase, target.Token, "/agent/memory/scratch", req, &resp)

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/systemskills"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/systemskills"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

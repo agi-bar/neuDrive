@@ -14,15 +14,15 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT / "sdk" / "python"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from agenthub import AgentHub  # noqa: E402
+from neudrive import NeuDrive  # noqa: E402
 from sync_fixture import export_bundle_with_cli, materialize_source  # noqa: E402
 
-BASE_URL = os.environ.get("AGENTHUB_TEST_URL", "").rstrip("/")
+BASE_URL = os.environ.get("NEUDRIVE_TEST_URL", "").rstrip("/")
 
 def _register_user() -> tuple[str, str]:
     slug = f"py-sync-{int(time.time() * 1000)}"
     email = f"{slug}@test.local"
-    password = "agenthub-sync-1234"
+    password = "neudrive-sync-1234"
     response = httpx.post(
         f"{BASE_URL}/api/auth/register",
         json={"slug": slug, "email": email, "password": password},
@@ -56,7 +56,7 @@ def _create_scoped_token(jwt_token: str, scopes: list[str]) -> str:
     return body["token"]
 
 
-@unittest.skipIf(not BASE_URL, "AGENTHUB_TEST_URL not set")
+@unittest.skipIf(not BASE_URL, "NEUDRIVE_TEST_URL not set")
 class TestPythonSyncIntegration(unittest.TestCase):
     def setUp(self) -> None:
         jwt_token, _ = _register_user()
@@ -69,7 +69,7 @@ class TestPythonSyncIntegration(unittest.TestCase):
         self.assertIsNotNone(bundle)
         bundle = bundle or {}
 
-        with AgentHub(BASE_URL, self.token) as hub:
+        with NeuDrive(BASE_URL, self.token) as hub:
             preview = hub.preview_bundle(bundle=bundle)
             self.assertTrue(preview.get("fingerprint"))
 
@@ -89,7 +89,7 @@ class TestPythonSyncIntegration(unittest.TestCase):
         self.assertIsNotNone(manifest)
         manifest = manifest or {}
 
-        with AgentHub(BASE_URL, self.token) as hub:
+        with NeuDrive(BASE_URL, self.token) as hub:
             session = hub.start_sync_session({
                 "transport_version": "ahub.sync/v1",
                 "format": "archive",
@@ -131,7 +131,7 @@ class TestPythonSyncIntegration(unittest.TestCase):
         self.assertIsNotNone(bundle)
         bundle = bundle or {}
 
-        with AgentHub(BASE_URL, self.token) as hub:
+        with NeuDrive(BASE_URL, self.token) as hub:
             preview = hub.preview_bundle(bundle=bundle)
             self.assertTrue(preview.get("fingerprint"))
             jobs = hub.list_sync_jobs()
@@ -140,14 +140,14 @@ class TestPythonSyncIntegration(unittest.TestCase):
         read_token = _create_scoped_token(self.jwt_token, ["read:bundle"])
         write_token = _create_scoped_token(self.jwt_token, ["write:bundle"])
 
-        with AgentHub(BASE_URL, read_token) as hub:
+        with NeuDrive(BASE_URL, read_token) as hub:
             exported = hub.export_bundle("json")
             self.assertEqual(exported.get("version"), "ahub.bundle/v1")
             self.assertGreaterEqual(len(hub.list_sync_jobs()), 1)
             with self.assertRaises(Exception):
                 hub.import_bundle(bundle)
 
-        with AgentHub(BASE_URL, write_token) as hub:
+        with NeuDrive(BASE_URL, write_token) as hub:
             preview = hub.preview_bundle(bundle=bundle)
             self.assertTrue(preview.get("fingerprint"))
             with self.assertRaises(Exception):
@@ -183,7 +183,7 @@ class TestPythonSyncIntegration(unittest.TestCase):
         response.raise_for_status()
         body = response.json()["data"]
 
-        with AgentHub(BASE_URL, body["token"]) as hub:
+        with NeuDrive(BASE_URL, body["token"]) as hub:
             info = hub.get_auth_info()
 
         self.assertEqual(info["api_base"], BASE_URL)

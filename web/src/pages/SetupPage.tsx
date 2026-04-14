@@ -60,8 +60,8 @@ const EMPTY_MODE_STATE: Record<ModeKey, boolean> = {
   advanced: false,
 }
 
-export const TOKEN_ENV_NAME = 'AGENTHUB_TOKEN'
-export const TOKEN_PLACEHOLDER = '<YOUR_AGENTHUB_TOKEN>'
+export const TOKEN_ENV_NAME = 'NEUDRIVE_TOKEN'
+export const TOKEN_PLACEHOLDER = '<YOUR_NEUDRIVE_TOKEN>'
 
 export interface SetupOutletContext {
   tokens: ScopedTokenResponse[]
@@ -254,14 +254,14 @@ export default function SetupPage() {
   const isSecureOrigin = baseUrl.startsWith('https://')
   const cloudModeNeedsPublicUrl = !isSecureOrigin || isLocalOrigin
 
-  const claudeCloudCommand = `claude mcp add -s user --transport http agenthub \\
+  const claudeCloudCommand = `claude mcp add -s user --transport http neudrive \\
   ${baseUrl}/mcp`
-  const codexCloudCommand = `codex mcp add agenthub --url ${baseUrl}/mcp`
-  const geminiCloudCommand = `gemini mcp add --transport http agenthub ${baseUrl}/mcp`
-  const cursorAgentLoginCommand = 'cursor-agent mcp login agenthub'
+  const codexCloudCommand = `codex mcp add neudrive --url ${baseUrl}/mcp`
+  const geminiCloudCommand = `gemini mcp add --transport http neudrive ${baseUrl}/mcp`
+  const cursorAgentLoginCommand = 'cursor-agent mcp login neudrive'
   const cursorAgentStatusCommand = 'cursor-agent mcp list'
-  const codexLoginCommand = 'codex mcp login agenthub'
-  const geminiAuthCommand = '/mcp auth agenthub'
+  const codexLoginCommand = 'codex mcp login neudrive'
+  const geminiAuthCommand = '/mcp auth neudrive'
   const codexStatusCommand = 'codex mcp list'
   const localSessionToken = modeTokens.local?.token ?? ''
   const advancedSessionToken = modeTokens.advanced?.token ?? ''
@@ -269,9 +269,9 @@ export default function SetupPage() {
   const advancedTokenText = modeTokens.advanced?.token ?? TOKEN_PLACEHOLDER
   const localEnvCommand = `export ${TOKEN_ENV_NAME}=${localTokenText}`
   const advancedEnvCommand = `export ${TOKEN_ENV_NAME}=${advancedTokenText}`
-  const localClaudeCommand = `claude mcp add -s user agenthub -- agenthub-mcp --token-env ${TOKEN_ENV_NAME}`
-  const localCodexCommand = `codex mcp add agenthub -- agenthub-mcp --token-env ${TOKEN_ENV_NAME}`
-  const advancedCodexCommand = `codex mcp add agenthub --url ${baseUrl}/mcp --bearer-token-env-var ${TOKEN_ENV_NAME}`
+  const localClaudeCommand = `claude mcp add -s user neudrive -- neudrive-mcp --token-env ${TOKEN_ENV_NAME}`
+  const localCodexCommand = `codex mcp add neudrive -- neudrive-mcp --token-env ${TOKEN_ENV_NAME}`
+  const advancedCodexCommand = `codex mcp add neudrive --url ${baseUrl}/mcp --bearer-token-env-var ${TOKEN_ENV_NAME}`
 
   const buildModeTokenRequest = (mode: ModeKey): CreateTokenRequest => {
     const defaults = MODE_DEFAULTS[mode]
@@ -323,8 +323,8 @@ export default function SetupPage() {
 
   const localConfig = JSON.stringify({
     mcpServers: {
-      agenthub: {
-        command: 'agenthub-mcp',
+      neudrive: {
+        command: 'neudrive-mcp',
         args: ['--token-env', TOKEN_ENV_NAME],
       },
     },
@@ -332,7 +332,7 @@ export default function SetupPage() {
 
   const advancedConfig = JSON.stringify({
     mcpServers: {
-      agenthub: {
+      neudrive: {
         type: 'http',
         url: `${baseUrl}/mcp`,
         headers: {
@@ -431,7 +431,7 @@ export default function SetupPage() {
   const pageTitle = isTokenManagementRoute ? tx('Token 管理', 'Token Manager') : tx('连接设置', 'Connection Setup')
   const pageSubtitle = isTokenManagementRoute
     ? tx('创建、改名、吊销和查看用于 API、脚本与高级 MCP 客户端的 Bearer Token。', 'Create, rename, revoke, and review Bearer tokens for APIs, scripts, and advanced MCP clients.')
-    : tx('把 Agent Hub 配置到网页应用、CLI 和其他 MCP 客户端。', 'Configure Agent Hub for web apps, CLIs, and other MCP clients.')
+    : tx('把 neuDrive 配置到网页应用、CLI 和其他 MCP 客户端。', 'Configure neuDrive for web apps, CLIs, and other MCP clients.')
 
   return (
     <div className="page materials-page">

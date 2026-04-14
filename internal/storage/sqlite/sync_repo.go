@@ -10,10 +10,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
-	"github.com/agi-bar/agenthub/internal/systemskills"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neudrive/internal/systemskills"
 	"github.com/google/uuid"
 )
 
@@ -52,7 +52,7 @@ func (r *SyncRepo) ExportBundleJSON(ctx context.Context, userID uuid.UUID, filte
 	bundle := &models.Bundle{
 		Version:   models.BundleVersionV1,
 		CreatedAt: time.Now().UTC().Format(time.RFC3339),
-		Source:    "agenthub-local",
+		Source:    "neudrive-local",
 		Mode:      "merge",
 		Profile:   map[string]string{},
 		Skills:    map[string]models.BundleSkill{},
@@ -141,7 +141,7 @@ func (r *SyncRepo) ExportArchive(ctx context.Context, userID uuid.UUID, filters 
 		Direction:   models.SyncJobDirectionExport,
 		Transport:   models.SyncJobTransportArchive,
 		Status:      models.SyncJobStatusSucceeded,
-		Source:      "agenthub-local",
+		Source:      "neudrive-local",
 		Mode:        manifest.Mode,
 		Filters:     filters,
 		Summary:     syncSummaryFromBundleStats(bundle.Stats),

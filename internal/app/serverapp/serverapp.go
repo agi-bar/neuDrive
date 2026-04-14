@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/app/appcore"
-	"github.com/agi-bar/agenthub/internal/jobs"
-	"github.com/agi-bar/agenthub/internal/logger"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/app/appcore"
+	"github.com/agi-bar/neudrive/internal/jobs"
+	"github.com/agi-bar/neudrive/internal/logger"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 type Options struct {
@@ -33,7 +33,7 @@ type Options struct {
 }
 
 func Run(ctx context.Context, opts Options) error {
-	if !opts.LocalMode && strings.TrimSpace(os.Getenv("AGENTHUB_LOCAL_MODE")) == "1" {
+	if !opts.LocalMode && strings.TrimSpace(os.Getenv("NEUDRIVE_LOCAL_MODE")) == "1" {
 		opts.LocalMode = true
 	}
 	storage := appcore.ResolveStorageBackend(opts.Storage, opts.SQLitePath, opts.DatabaseURL, appcore.DefaultServerStorage)
@@ -86,7 +86,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}
 	logger.Init(logLevel, logFormat)
-	slog.Info("starting Agent Hub server...", "listen", listenAddr)
+	slog.Info("starting neuDrive server...", "listen", listenAddr)
 	if cfg != nil && cfg.CaptureOAuth {
 		slog.Info("oauth capture enabled", "dir", cfg.CaptureDir)
 	}

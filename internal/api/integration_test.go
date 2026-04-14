@@ -16,13 +16,13 @@ import (
 // Full integration tests against a live server.
 //
 // Run with:
-//   AGENTHUB_TEST_URL=http://localhost:8080 go test ./internal/api/ -run TestIntegration -v -count=1
+//   NEUDRIVE_TEST_URL=http://localhost:8080 go test ./internal/api/ -run TestIntegration -v -count=1
 //
 // Requires: docker compose up (server + database running)
 // ---------------------------------------------------------------------------
 
 func baseURL() string {
-	u := os.Getenv("AGENTHUB_TEST_URL")
+	u := os.Getenv("NEUDRIVE_TEST_URL")
 	if u == "" {
 		return ""
 	}
@@ -33,7 +33,7 @@ func skipIfNoServer(t *testing.T) string {
 	t.Helper()
 	u := baseURL()
 	if u == "" {
-		t.Skip("AGENTHUB_TEST_URL not set; skipping integration test")
+		t.Skip("NEUDRIVE_TEST_URL not set; skipping integration test")
 	}
 	return u
 }
@@ -427,8 +427,8 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 			t.Fatalf("expected 201, got %d: %v", status, body)
 		}
 		scopedToken = mustStr(t, body, "token")
-		if !strings.HasPrefix(scopedToken, "aht_") {
-			t.Errorf("token should start with aht_, got %q", scopedToken[:8])
+		if !strings.HasPrefix(scopedToken, "ndt_") {
+			t.Errorf("token should start with ndt_, got %q", scopedToken[:8])
 		}
 		st := body["scoped_token"].(map[string]any)
 		tokenID = mustStr(t, st, "id")
@@ -812,8 +812,8 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 			t.Fatalf("expected 200, got %d", resp.StatusCode)
 		}
 		body, _ := io.ReadAll(resp.Body)
-		if !strings.Contains(string(body), "Agent Hub") {
-			t.Error("frontend should contain 'Agent Hub'")
+		if !strings.Contains(string(body), "neuDrive") {
+			t.Error("frontend should contain 'neuDrive'")
 		}
 	})
 }

@@ -274,7 +274,7 @@ export default function DataSkillsPage() {
               <span className="breadcrumbs-sep">/</span>
               <span>{bundleRoute || 'bundle'}</span>
             </nav>
-            <div className="materials-kicker">Agent Hub Data</div>
+            <div className="materials-kicker">neuDrive Data</div>
             <h2 className="materials-title">{currentSkill?.name || bundleRoute}</h2>
             <p className="materials-subtitle">{skillSummaryDescription(currentSkill) || tx('这个技能 bundle 里的文件现在和文件管理器使用同一套卡片展示。', 'Files in this skill bundle now use the same card layout as the file browser.')}</p>
           </div>
@@ -392,7 +392,7 @@ export default function DataSkillsPage() {
     <div className="page materials-page">
       <section className="materials-hero">
         <div className="materials-hero-copy">
-          <div className="materials-kicker">Agent Hub Data</div>
+          <div className="materials-kicker">neuDrive Data</div>
           <h2 className="materials-title">{tx('技能', 'Skills')}</h2>
           <p className="materials-subtitle">{tx('按 skill bundle 展示 ', 'Show skills in ')}<code>/skills</code>{tx(' 下的技能。一个文件夹就是一个 skill，点开后再看 bundle 详情。', '. Each folder is a skill. Open it to inspect bundle details.')}</p>
         </div>

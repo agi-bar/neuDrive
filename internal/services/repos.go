@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 )
 

@@ -11,10 +11,10 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
-		if !strings.Contains(stdout, "Root-directory command surface for local and remote Agent Hub data.") {
+		if !strings.Contains(stdout, "Root-directory command surface for local and remote neuDrive data.") {
 			t.Fatalf("expected root usage in stdout, got %q", stdout)
 		}
-		if !strings.Contains(stdout, "agenthub help [topic]") {
+		if !strings.Contains(stdout, "neudrive help [topic]") {
 			t.Fatalf("expected explicit help command in stdout, got %q", stdout)
 		}
 	})
@@ -25,7 +25,7 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
 		for _, expected := range []string{
-			"agenthub write",
+			"neudrive write",
 			"Create or update Hub content from literal text, stdin, or a local file path.",
 			"Use `--literal` when an argument that looks like a path should stay plain text.",
 		} {
@@ -41,7 +41,7 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
 		for _, expected := range []string{
-			"Agent Hub Path Model",
+			"neuDrive Path Model",
 			"Public roots are `profile`, `memory`, `project`, `skill`, `secret`, and `platform`.",
 			"`project/<name>` is a summary view.",
 		} {
@@ -123,7 +123,7 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
-		if !strings.Contains(stdout, "Mirror local Agent Hub data into a local Git repository and keep it refreshed.") {
+		if !strings.Contains(stdout, "Mirror local neuDrive data into a local Git repository and keep it refreshed.") {
 			t.Fatalf("expected descriptive git help, got %q", stdout)
 		}
 	})
@@ -139,24 +139,24 @@ func TestRootCommandsUsageAndExitCodes(t *testing.T) {
 	}{
 		{name: "unknown root", args: []string{"wat"}, want: 2, substr: "unknown command", stream: "stderr"},
 		{name: "platform unknown", args: []string{"platform", "wat"}, want: 2, substr: "unknown platform subcommand", stream: "stderr"},
-		{name: "platform show missing", args: []string{"platform", "show"}, want: 2, substr: "usage: agenthub platform show <platform>", stream: "stderr"},
-		{name: "read missing", args: []string{"read"}, want: 2, substr: "usage: agenthub read <path>", stream: "stderr"},
-		{name: "write missing", args: []string{"write"}, want: 2, substr: "usage: agenthub write <path> <content-or-file>", stream: "stderr"},
-		{name: "search missing", args: []string{"search"}, want: 2, substr: "usage: agenthub search <query> [path]", stream: "stderr"},
-		{name: "create missing", args: []string{"create"}, want: 2, substr: "usage: agenthub create <category> <name>", stream: "stderr"},
-		{name: "log missing", args: []string{"log"}, want: 2, substr: "usage: agenthub log <path>", stream: "stderr"},
-		{name: "connect missing", args: []string{"connect"}, want: 2, substr: "usage: agenthub connect <platform>", stream: "stderr"},
-		{name: "disconnect missing", args: []string{"disconnect"}, want: 2, substr: "usage: agenthub disconnect <platform>", stream: "stderr"},
-		{name: "import missing", args: []string{"import"}, want: 0, substr: "Bring local files or platform exports into Agent Hub.", stream: "stdout"},
+		{name: "platform show missing", args: []string{"platform", "show"}, want: 2, substr: "usage: neudrive platform show <platform>", stream: "stderr"},
+		{name: "read missing", args: []string{"read"}, want: 2, substr: "usage: neudrive read <path>", stream: "stderr"},
+		{name: "write missing", args: []string{"write"}, want: 2, substr: "usage: neudrive write <path> <content-or-file>", stream: "stderr"},
+		{name: "search missing", args: []string{"search"}, want: 2, substr: "usage: neudrive search <query> [path]", stream: "stderr"},
+		{name: "create missing", args: []string{"create"}, want: 2, substr: "usage: neudrive create <category> <name>", stream: "stderr"},
+		{name: "log missing", args: []string{"log"}, want: 2, substr: "usage: neudrive log <path>", stream: "stderr"},
+		{name: "connect missing", args: []string{"connect"}, want: 2, substr: "usage: neudrive connect <platform>", stream: "stderr"},
+		{name: "disconnect missing", args: []string{"disconnect"}, want: 2, substr: "usage: neudrive disconnect <platform>", stream: "stderr"},
+		{name: "import missing", args: []string{"import"}, want: 0, substr: "Bring local files or platform exports into neuDrive.", stream: "stdout"},
 		{name: "import zip invalid mode", args: []string{"import", "platform", "claude", "--zip", "skills.zip", "--mode", "agent"}, want: 2, substr: "--zip can only be combined with --mode files", stream: "stderr"},
 		{name: "token missing", args: []string{"token"}, want: 0, substr: "Create short-lived tokens for sync or prepared skills upload workflows.", stream: "stdout"},
-		{name: "export missing", args: []string{"export"}, want: 2, substr: "usage: agenthub export <platform> [--output DIR]", stream: "stderr"},
-		{name: "browse extra", args: []string{"browse", "/one", "/two"}, want: 2, substr: "usage: agenthub browse [--print-url] [/route]", stream: "stderr"},
+		{name: "export missing", args: []string{"export"}, want: 2, substr: "usage: neudrive export <platform> [--output DIR]", stream: "stderr"},
+		{name: "browse extra", args: []string{"browse", "/one", "/two"}, want: 2, substr: "usage: neudrive browse [--print-url] [/route]", stream: "stderr"},
 		{name: "daemon unknown", args: []string{"daemon", "wat"}, want: 2, substr: "unknown daemon subcommand", stream: "stderr"},
 		{name: "sync unknown", args: []string{"sync", "wat"}, want: 2, substr: "unknown sync subcommand", stream: "stderr"},
 		{name: "remote unknown", args: []string{"remote", "wat"}, want: 2, substr: "unknown remote subcommand", stream: "stderr"},
-		{name: "remote login missing", args: []string{"remote", "login"}, want: 2, substr: "usage: agenthub remote login <profile>", stream: "stderr"},
-		{name: "remote use missing", args: []string{"remote", "use"}, want: 2, substr: "usage: agenthub remote use <profile>", stream: "stderr"},
+		{name: "remote login missing", args: []string{"remote", "login"}, want: 2, substr: "usage: neudrive remote login <profile>", stream: "stderr"},
+		{name: "remote use missing", args: []string{"remote", "use"}, want: 2, substr: "usage: neudrive remote use <profile>", stream: "stderr"},
 		{name: "help unknown topic", args: []string{"help", "wat"}, want: 2, substr: "available topics:", stream: "stderr"},
 	}
 

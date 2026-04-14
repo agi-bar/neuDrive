@@ -3,8 +3,8 @@ package serverapp
 import (
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/app/appcore"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/app/appcore"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 func TestSchedulerTokenServiceAllowsSQLiteBackends(t *testing.T) {

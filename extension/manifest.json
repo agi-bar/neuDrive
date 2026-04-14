@@ -1,6 +1,6 @@
 {
   "manifest_version": 3,
-  "name": "Agent Hub",
+  "name": "neuDrive",
   "version": "0.1.0",
   "description": "将你的 AI 身份和记忆连接到任何 AI 平台",
   "permissions": ["storage", "activeTab"],

@@ -1,8 +1,8 @@
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: agenthub-agi-bar
-  namespace: agenthub
+  name: neudrive-agi-bar
+  namespace: neudrive
   annotations:
     nginx.ingress.kubernetes.io/force-ssl-redirect: "false"
     nginx.ingress.kubernetes.io/proxy-body-size: "50m"
@@ -10,13 +10,13 @@ metadata:
 spec:
   ingressClassName: nginx
   rules:
-    - host: agenthub.agi.bar
+    - host: neudrive.ai
       http:
         paths:
           - path: /
             pathType: Prefix
             backend:
               service:
-                name: agenthub-server
+                name: neudrive-server
                 port:
                   number: 8080

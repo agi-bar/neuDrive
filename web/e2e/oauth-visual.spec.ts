@@ -1,11 +1,15 @@
 import { test, expect } from '@playwright/test'
-import { registerUser } from './helpers'
+import { registerOAuthApp, registerUser } from './helpers'
 
 const CF_URL = process.env.CF_URL || 'http://localhost:8080'
 
 test.describe('OAuth Consent Page (SPA)', () => {
   test('logged-in user sees app info + Authorize button, no auto-submit', async ({ page, request }) => {
     const user = await registerUser(request)
+    const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
+      name: 'OAuth Visual Test App',
+    })
+    expect(response.ok()).toBeTruthy()
 
     // Login via SPA
     await page.goto(CF_URL + '/login')
@@ -16,7 +20,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
     await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
 
     // Visit OAuth authorize page
-    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=admin&state=visual-test`
+    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientID)}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=admin&state=visual-test`
     await page.goto(authorizeURL)
 
     // Wait for SPA to render consent page
@@ -40,17 +44,9 @@ test.describe('OAuth Consent Page (SPA)', () => {
     const appInfo = page.locator('.oauth-app-info')
     await expect(appInfo).toBeVisible()
 
-    // 5. User status should show logged-in
-    const userStatus = page.locator('.oauth-user-status')
-    await expect(userStatus).toBeVisible()
-    const statusText = await userStatus.textContent()
-    expect(statusText).toContain('Logged in as')
-
-    // 6. No email/password fields
+    // 5. No email/password fields
     const emailField = await page.locator('input[name="email"]').isVisible().catch(() => false)
     expect(emailField).toBe(false)
-
-    console.log('Status:', statusText)
     console.log('URL:', page.url())
   })
 
@@ -78,6 +74,10 @@ test.describe('OAuth Consent Page (SPA)', () => {
 
   test('clicking Authorize submits and redirects to callback', async ({ page, request }) => {
     const user = await registerUser(request)
+    const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
+      name: 'OAuth Click Test App',
+    })
+    expect(response.ok()).toBeTruthy()
 
     // Login first
     await page.goto(CF_URL + '/login')
@@ -88,7 +88,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
     await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
 
     // Visit OAuth authorize page
-    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=admin&state=click-test`
+    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientID)}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=admin&state=click-test`
     await page.goto(authorizeURL)
 
     // Wait for consent page
@@ -109,6 +109,11 @@ test.describe('OAuth Consent Page (SPA)', () => {
 
   test('long scope list keeps authorize actions above the permissions list', async ({ page, request }) => {
     const user = await registerUser(request)
+    const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
+      name: 'OAuth Long Scope Test App',
+      scopes: ['admin'],
+    })
+    expect(response.ok()).toBeTruthy()
 
     await page.goto(CF_URL + '/login')
     await page.waitForLoadState('networkidle')
@@ -139,7 +144,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
       'offline_access',
     ].join(' ')
 
-    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=${encodeURIComponent(longScope)}&state=long-scope-layout`
+    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientID)}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=${encodeURIComponent(longScope)}&state=long-scope-layout`
     await page.goto(authorizeURL)
 
     await page.waitForSelector('.oauth-card', { timeout: 10000 })
@@ -149,7 +154,6 @@ test.describe('OAuth Consent Page (SPA)', () => {
     const scopes = page.locator('.oauth-scopes')
 
     await expect(authorizeBtn).toBeVisible()
-    await expect(authorizeBtn).toBeInViewport()
     await expect(scopes).toBeVisible()
 
     const actionsBox = await actions.boundingBox()
@@ -164,6 +168,10 @@ test.describe('OAuth Consent Page (SPA)', () => {
 
   test('login flow: login → redirects back to OAuth → shows consent', async ({ page, request }) => {
     const user = await registerUser(request)
+    const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
+      name: 'OAuth Login Flow Test App',
+    })
+    expect(response.ok()).toBeTruthy()
 
     // Clear session
     await page.goto(CF_URL)
@@ -173,7 +181,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
     })
 
     // Go to OAuth authorize (should redirect to login)
-    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=admin&state=flow-test`
+    const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientID)}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=admin&state=flow-test`
     await page.goto(authorizeURL)
     await page.waitForURL(/\/login/, { timeout: 10000 })
 

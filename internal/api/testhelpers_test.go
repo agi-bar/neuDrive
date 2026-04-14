@@ -9,9 +9,9 @@ import (
 	"net/http/httptest"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/auth"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/auth"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -264,7 +264,7 @@ func (st *inMemoryTokenStore) handleCreateToken(w http.ResponseWriter, r *http.R
 	}
 
 	rawToken, tokenHash, tokenPrefix, _ := services.GenerateAPIKey()
-	rawToken = "aht_" + rawToken[4:]
+	rawToken = "ndt_" + rawToken[4:]
 
 	id := uuid.New()
 	now := time.Now().UTC()

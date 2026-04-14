@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
-	"github.com/agi-bar/agenthub/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neudrive/internal/storage/sqlite"
 	"github.com/google/uuid"
 )
 
@@ -216,11 +216,11 @@ func TestDeleteDirectoryKeepsProtectedSystemSkills(t *testing.T) {
 	for _, entry := range skillRoot {
 		paths = append(paths, entry.Path)
 	}
-	if !reflect.DeepEqual(paths, []string{"/skills/agenthub/", "/skills/portability/"}) {
+	if !reflect.DeepEqual(paths, []string{"/skills/neudrive/", "/skills/portability/"}) {
 		t.Fatalf("/skills children mismatch: got %v", paths)
 	}
 
-	if _, err := store.Read(ctx, userID, "/skills/agenthub/SKILL.md", models.TrustLevelGuest); err != nil {
+	if _, err := store.Read(ctx, userID, "/skills/neudrive/SKILL.md", models.TrustLevelGuest); err != nil {
 		t.Fatalf("system skill missing after delete: %v", err)
 	}
 }

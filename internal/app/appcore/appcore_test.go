@@ -8,14 +8,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/mcp"
-	"github.com/agi-bar/agenthub/internal/models"
-	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/mcp"
+	"github.com/agi-bar/neudrive/internal/models"
+	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
 )
 
 func TestBuildSQLiteAppProvidesHTTPAndMCP(t *testing.T) {
 	ctx := context.Background()
-	sqlitePath := filepath.Join(t.TempDir(), "agenthub.db")
+	sqlitePath := filepath.Join(t.TempDir(), "neudrive.db")
 
 	app, err := Build(ctx, Options{
 		Storage:       "sqlite",
@@ -74,7 +74,7 @@ func TestResolveStorageBackend(t *testing.T) {
 	})
 
 	t.Run("sqlite path beats server default", func(t *testing.T) {
-		if got := ResolveStorageBackend("", "/tmp/agenthub.db", "", DefaultServerStorage); got != "sqlite" {
+		if got := ResolveStorageBackend("", "/tmp/neudrive.db", "", DefaultServerStorage); got != "sqlite" {
 			t.Fatalf("got %q want sqlite", got)
 		}
 	})

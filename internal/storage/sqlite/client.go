@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/skillsarchive"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/skillsarchive"
 	"github.com/google/uuid"
 )
 
@@ -97,7 +97,7 @@ func (c *Client) ImportPlatformSources(ctx context.Context, platform string, sou
 					return walkErr
 				}
 				if d.IsDir() {
-					if pathValue != source.Path && isManagedAgentHubDir(pathValue) {
+					if pathValue != source.Path && isManagedNeuDriveDir(pathValue) {
 						return filepath.SkipDir
 					}
 					return nil
@@ -146,7 +146,7 @@ func (c *Client) ImportPlatformSources(ctx context.Context, platform string, sou
 
 func (c *Client) ExportPlatformSnapshot(ctx context.Context, platform, outputRoot string) (*ExportResult, error) {
 	if outputRoot == "" {
-		outputRoot = filepath.Join(".", "agenthub-export", platform)
+		outputRoot = filepath.Join(".", "neudrive-export", platform)
 	}
 	result := &ExportResult{Platform: platform, OutputRoot: outputRoot}
 	snapshot, err := c.store.Snapshot(ctx, c.userID, filepath.ToSlash(filepath.Join("/platforms", platform)), models.TrustLevelFull)
@@ -215,8 +215,8 @@ func looksBinary(path string, data []byte) bool {
 	return skillsarchive.LooksBinary(path, data)
 }
 
-func isManagedAgentHubDir(pathValue string) bool {
-	_, err := os.Stat(filepath.Join(pathValue, ".agenthub-managed.json"))
+func isManagedNeuDriveDir(pathValue string) bool {
+	_, err := os.Stat(filepath.Join(pathValue, ".neudrive-managed.json"))
 	return err == nil
 }
 

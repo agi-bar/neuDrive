@@ -1,5 +1,5 @@
 /**
- * Agent Hub - Content Script
+ * neuDrive - Content Script
  * Injects floating Hub button and context panel into AI chat interfaces.
  */
 
@@ -43,11 +43,11 @@
   const platform = PLATFORMS[hostname];
 
   if (!platform) {
-    console.log('[AgentHub] Unsupported platform:', hostname);
+    console.log('[NeuDrive] Unsupported platform:', hostname);
     return;
   }
 
-  console.log(`[AgentHub] Detected platform: ${platform.name}`);
+  console.log(`[NeuDrive] Detected platform: ${platform.name}`);
 
   // --- State ---
 
@@ -81,14 +81,14 @@
 
   function createFloatingButton() {
     const btn = document.createElement('div');
-    btn.id = 'agenthub-fab';
+    btn.id = 'neudrive-fab';
     btn.innerHTML = `
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
         <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/>
         <text x="12" y="16" text-anchor="middle" font-size="10" font-weight="bold" fill="currentColor">H</text>
       </svg>
     `;
-    btn.title = 'Agent Hub';
+    btn.title = 'neuDrive';
     btn.addEventListener('click', togglePanel);
     document.body.appendChild(btn);
     return btn;
@@ -96,38 +96,38 @@
 
   function createPanel() {
     const panel = document.createElement('div');
-    panel.id = 'agenthub-panel';
+    panel.id = 'neudrive-panel';
     panel.innerHTML = `
-      <div class="agenthub-panel-header">
-        <span class="agenthub-panel-title">Agent Hub</span>
-        <button class="agenthub-panel-close" title="关闭">&times;</button>
+      <div class="neudrive-panel-header">
+        <span class="neudrive-panel-title">neuDrive</span>
+        <button class="neudrive-panel-close" title="关闭">&times;</button>
       </div>
-      <div class="agenthub-panel-body">
-        <div id="agenthub-status" class="agenthub-status">检查连接中...</div>
-        <div id="agenthub-profile" class="agenthub-profile" style="display:none;"></div>
-        <div id="agenthub-actions" class="agenthub-actions" style="display:none;">
-          <button class="agenthub-btn" data-action="inject-preferences">
-            <span class="agenthub-btn-icon">&#9881;</span>
+      <div class="neudrive-panel-body">
+        <div id="neudrive-status" class="neudrive-status">检查连接中...</div>
+        <div id="neudrive-profile" class="neudrive-profile" style="display:none;"></div>
+        <div id="neudrive-actions" class="neudrive-actions" style="display:none;">
+          <button class="neudrive-btn" data-action="inject-preferences">
+            <span class="neudrive-btn-icon">&#9881;</span>
             注入偏好
           </button>
-          <button class="agenthub-btn" data-action="inject-project">
-            <span class="agenthub-btn-icon">&#128193;</span>
+          <button class="neudrive-btn" data-action="inject-project">
+            <span class="neudrive-btn-icon">&#128193;</span>
             注入项目上下文
           </button>
-          <button class="agenthub-btn" data-action="inject-skills">
-            <span class="agenthub-btn-icon">&#9889;</span>
+          <button class="neudrive-btn" data-action="inject-skills">
+            <span class="neudrive-btn-icon">&#9889;</span>
             注入技能
           </button>
         </div>
-        <div id="agenthub-not-connected" style="display:none;">
-          <p class="agenthub-hint">请先在扩展弹窗中配置 Agent Hub 连接。</p>
+        <div id="neudrive-not-connected" style="display:none;">
+          <p class="neudrive-hint">请先在扩展弹窗中配置 neuDrive 连接。</p>
         </div>
       </div>
     `;
 
     // Event listeners
-    panel.querySelector('.agenthub-panel-close').addEventListener('click', togglePanel);
-    panel.querySelectorAll('.agenthub-btn[data-action]').forEach(btn => {
+    panel.querySelector('.neudrive-panel-close').addEventListener('click', togglePanel);
+    panel.querySelectorAll('.neudrive-btn[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleInjectAction(btn.dataset.action));
     });
 
@@ -137,13 +137,13 @@
 
   function togglePanel() {
     panelVisible = !panelVisible;
-    const panel = document.getElementById('agenthub-panel');
-    const fab = document.getElementById('agenthub-fab');
+    const panel = document.getElementById('neudrive-panel');
+    const fab = document.getElementById('neudrive-fab');
     if (panel) {
-      panel.classList.toggle('agenthub-panel-visible', panelVisible);
+      panel.classList.toggle('neudrive-panel-visible', panelVisible);
     }
     if (fab) {
-      fab.classList.toggle('agenthub-fab-active', panelVisible);
+      fab.classList.toggle('neudrive-fab-active', panelVisible);
     }
     if (panelVisible) {
       refreshStatus();
@@ -153,10 +153,10 @@
   // --- Status & Profile ---
 
   async function refreshStatus() {
-    const statusEl = document.getElementById('agenthub-status');
-    const profileEl = document.getElementById('agenthub-profile');
-    const actionsEl = document.getElementById('agenthub-actions');
-    const notConnectedEl = document.getElementById('agenthub-not-connected');
+    const statusEl = document.getElementById('neudrive-status');
+    const profileEl = document.getElementById('neudrive-profile');
+    const actionsEl = document.getElementById('neudrive-actions');
+    const notConnectedEl = document.getElementById('neudrive-not-connected');
 
     if (!statusEl) return;
 
@@ -167,29 +167,29 @@
 
       if (status.connected && status.profile) {
         const p = status.profile;
-        statusEl.innerHTML = '<span class="agenthub-dot agenthub-dot-ok"></span> 已连接';
+        statusEl.innerHTML = '<span class="neudrive-dot neudrive-dot-ok"></span> 已连接';
         profileEl.style.display = 'block';
         profileEl.innerHTML = `
-          <div class="agenthub-profile-name">${escapeHtml(p.name || p.username || 'User')}</div>
-          ${p.bio ? `<div class="agenthub-profile-bio">${escapeHtml(p.bio)}</div>` : ''}
+          <div class="neudrive-profile-name">${escapeHtml(p.name || p.username || 'User')}</div>
+          ${p.bio ? `<div class="neudrive-profile-bio">${escapeHtml(p.bio)}</div>` : ''}
         `;
         actionsEl.style.display = 'flex';
         notConnectedEl.style.display = 'none';
       } else if (status.configured && !status.connected) {
-        statusEl.innerHTML = '<span class="agenthub-dot agenthub-dot-err"></span> 连接失败';
+        statusEl.innerHTML = '<span class="neudrive-dot neudrive-dot-err"></span> 连接失败';
         profileEl.style.display = 'none';
         actionsEl.style.display = 'none';
         notConnectedEl.style.display = 'block';
-        notConnectedEl.querySelector('.agenthub-hint').textContent = status.error || '无法连接到 Agent Hub 服务器。';
+        notConnectedEl.querySelector('.neudrive-hint').textContent = status.error || '无法连接到 neuDrive 服务器。';
       } else {
-        statusEl.innerHTML = '<span class="agenthub-dot agenthub-dot-off"></span> 未配置';
+        statusEl.innerHTML = '<span class="neudrive-dot neudrive-dot-off"></span> 未配置';
         profileEl.style.display = 'none';
         actionsEl.style.display = 'none';
         notConnectedEl.style.display = 'block';
       }
     } catch (err) {
-      statusEl.innerHTML = '<span class="agenthub-dot agenthub-dot-err"></span> 错误';
-      console.error('[AgentHub] Status check failed:', err);
+      statusEl.innerHTML = '<span class="neudrive-dot neudrive-dot-err"></span> 错误';
+      console.error('[NeuDrive] Status check failed:', err);
     }
   }
 
@@ -235,7 +235,7 @@
         showToast('上下文已注入');
       }
     } catch (err) {
-      console.error('[AgentHub] Inject failed:', err);
+      console.error('[NeuDrive] Inject failed:', err);
       showToast('注入失败: ' + err.message);
     }
   }
@@ -315,33 +315,33 @@
         showAutoInjectBanner();
       }, 1000);
     } catch (err) {
-      console.error('[AgentHub] Auto-inject check failed:', err);
+      console.error('[NeuDrive] Auto-inject check failed:', err);
     }
   }
 
   function showAutoInjectBanner() {
     // Don't show if already present
-    if (document.getElementById('agenthub-auto-banner')) return;
+    if (document.getElementById('neudrive-auto-banner')) return;
 
     const banner = document.createElement('div');
-    banner.id = 'agenthub-auto-banner';
+    banner.id = 'neudrive-auto-banner';
     banner.innerHTML = `
-      <span>Agent Hub: 检测到新对话，是否注入用户上下文？</span>
-      <button id="agenthub-auto-yes" class="agenthub-banner-btn agenthub-banner-btn-yes">注入</button>
-      <button id="agenthub-auto-no" class="agenthub-banner-btn agenthub-banner-btn-no">跳过</button>
+      <span>neuDrive: 检测到新对话，是否注入用户上下文？</span>
+      <button id="neudrive-auto-yes" class="neudrive-banner-btn neudrive-banner-btn-yes">注入</button>
+      <button id="neudrive-auto-no" class="neudrive-banner-btn neudrive-banner-btn-no">跳过</button>
     `;
     document.body.appendChild(banner);
 
     // Auto-dismiss after 10 seconds
     const timer = setTimeout(() => removeBanner(), 10000);
 
-    banner.querySelector('#agenthub-auto-yes').addEventListener('click', async () => {
+    banner.querySelector('#neudrive-auto-yes').addEventListener('click', async () => {
       clearTimeout(timer);
       removeBanner();
       await handleInjectAction('inject-preferences');
     });
 
-    banner.querySelector('#agenthub-auto-no').addEventListener('click', () => {
+    banner.querySelector('#neudrive-auto-no').addEventListener('click', () => {
       clearTimeout(timer);
       removeBanner();
     });
@@ -354,21 +354,21 @@
   // --- Toast Notification ---
 
   function showToast(message) {
-    const existing = document.getElementById('agenthub-toast');
+    const existing = document.getElementById('neudrive-toast');
     if (existing) existing.remove();
 
     const toast = document.createElement('div');
-    toast.id = 'agenthub-toast';
+    toast.id = 'neudrive-toast';
     toast.textContent = message;
     document.body.appendChild(toast);
 
     // Trigger animation
     requestAnimationFrame(() => {
-      toast.classList.add('agenthub-toast-visible');
+      toast.classList.add('neudrive-toast-visible');
     });
 
     setTimeout(() => {
-      toast.classList.remove('agenthub-toast-visible');
+      toast.classList.remove('neudrive-toast-visible');
       setTimeout(() => toast.remove(), 300);
     }, 2500);
   }
@@ -409,7 +409,7 @@
       // Not configured yet, that's fine
     });
 
-    console.log(`[AgentHub] Content script initialized on ${platform.name}`);
+    console.log(`[NeuDrive] Content script initialized on ${platform.name}`);
   }
 
   // Wait for DOM to be ready

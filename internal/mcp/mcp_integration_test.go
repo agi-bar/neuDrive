@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/database"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
-	"github.com/agi-bar/agenthub/internal/vault"
+	"github.com/agi-bar/neudrive/internal/database"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neudrive/internal/vault"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -28,19 +28,19 @@ var (
 // MCP integration tests against a real database.
 //
 // Run with:
-//   AGENTHUB_TEST_DB="postgres://agenthub:agenthub_dev@localhost:5434/agenthub?sslmode=disable" \
-//   AGENTHUB_VAULT_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" \
+//   NEUDRIVE_TEST_DB="postgres://neudrive:neudrive_dev@localhost:5434/neudrive?sslmode=disable" \
+//   NEUDRIVE_VAULT_KEY="0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef" \
 //   go test ./internal/mcp/ -run TestMCPInteg -v -count=1
 // ---------------------------------------------------------------------------
 
 func setupIntegrationMCP(t *testing.T) *MCPServer {
 	t.Helper()
 
-	dbURL := os.Getenv("AGENTHUB_TEST_DB")
+	dbURL := os.Getenv("NEUDRIVE_TEST_DB")
 	if dbURL == "" {
-		t.Skip("AGENTHUB_TEST_DB not set; skipping MCP integration test")
+		t.Skip("NEUDRIVE_TEST_DB not set; skipping MCP integration test")
 	}
-	vaultKey := os.Getenv("AGENTHUB_VAULT_KEY")
+	vaultKey := os.Getenv("NEUDRIVE_VAULT_KEY")
 	if vaultKey == "" {
 		vaultKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 	}
@@ -513,7 +513,7 @@ func TestMCPInteg_CreateSyncToken(t *testing.T) {
 	if isErr {
 		t.Fatalf("create_sync_token error: %s", text)
 	}
-	if !strings.Contains(text, "\"token\": \"aht_") {
+	if !strings.Contains(text, "\"token\": \"ndt_") {
 		t.Fatalf("expected scoped token output, got %s", text)
 	}
 	if !strings.Contains(text, models.ScopeWriteBundle) || !strings.Contains(text, models.ScopeReadBundle) {
@@ -532,7 +532,7 @@ func TestMCPInteg_PrepareSkillsUpload(t *testing.T) {
 	if isErr {
 		t.Fatalf("prepare_skills_upload error: %s", text)
 	}
-	if !strings.Contains(text, "\"token\": \"aht_") {
+	if !strings.Contains(text, "\"token\": \"ndt_") {
 		t.Fatalf("expected scoped token output, got %s", text)
 	}
 	if !strings.Contains(text, models.ScopeWriteSkills) {

@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>neuDrive · Skill Bundle 详情（高保真草稿）</title>
+  <style>
+    :root{--bg:#f6f7fb;--surface:#ffffff;--surface-sub:#fbfcff;--border:#e6e8ee;--muted:#6b7280;--text:#0f172a;--primary:#2563eb;--radius:10px}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif}
+    .shell{max-width:1160px;margin:0 auto;padding:20px}
+    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .title{font-size:20px;font-weight:700}
+    .actions{display:flex;gap:8px}
+    .btn{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
+    .btn-primary{background:var(--primary);border-color:var(--primary);color:#fff}
+    .layout{display:grid;grid-template-columns: 380px 1fr;gap:16px;align-items:start}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius)}
+    .card-header{display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border);padding:12px 14px}
+    .card-body{padding:14px}
+    .bundle-head{display:flex;align-items:center;gap:12px}
+    .bundle-icon{width:40px;height:40px;border-radius:10px;background:linear-gradient(135deg,#e0ebff,#f6f9ff);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--primary)}
+    .bundle-meta{color:var(--muted);font-size:12px}
+    .badge{display:inline-block;border:1px solid #dbe7ff;background:#eef4ff;color:var(--primary);border-radius:999px;font-size:12px;padding:2px 8px;margin-left:8px}
+    .kv{display:grid;grid-template-columns:120px 1fr;gap:6px 10px}
+    .k{color:#64748b}
+    .v{color:#111827}
+    pre{background:var(--surface-sub);border:1px solid var(--border);padding:10px;border-radius:8px;white-space:pre-wrap}
+    .table{border-top:1px solid var(--border)}
+    .trow{display:grid;grid-template-columns: 1fr 120px 150px 160px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)}
+    .trow:hover{background:#f7f9ff}
+    .trow .name{display:flex;align-items:center;gap:8px}
+    .ns{display:inline-block;border:1px solid #eef0f2;background:#f9fafb;color:#475569;border-radius:999px;padding:2px 8px;font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <div class="header">
+      <div class="title">Skill Bundle · QA Bot <span class="badge">bundle</span></div>
+      <div class="actions">
+        <button class="btn">复制路径</button>
+        <button class="btn">在编辑器打开 SKILL.md</button>
+        <button class="btn btn-primary">发布/同步</button>
+      </div>
+    </div>
+    <div class="layout">
+      <div class="card">
+        <div class="card-header">
+          <div class="bundle-head">
+            <div class="bundle-icon">Q</div>
+            <div>
+              <div style="font-weight:700">QA Bot <span class="badge">skills</span></div>
+              <div class="bundle-meta">/skills/qa-bot · 最近更新：2026-04-06 21:10</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="kv" style="margin-bottom:10px">
+            <div class="k">标识</div><div class="v">qa-bot</div>
+            <div class="k">版本</div><div class="v">0.2.1</div>
+            <div class="k">标签</div><div class="v">assistant, qa, markdown</div>
+            <div class="k">只读</div><div class="v">否</div>
+          </div>
+          <div class="k" style="margin:8px 0 6px">描述</div>
+          <pre>为产品/文档提供问答，内置 prompt 与示例；支持 Markdown 片段抽取与多轮追问。</pre>
+          <div class="k" style="margin:10px 0 6px">SKILL.md（片段）</div>
+          <pre>---
+name: QA Bot
+version: 0.2.1
+tags: [qa, assistant]
+---
+
+# QA Bot
+简要说明…
+          </pre>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-header"><div style="font-weight:700">Bundle 文件</div></div>
+        <div class="card-body">
+          <div class="table">
+            <div class="trow" style="font-weight:600;color:#64748b">
+              <div>名称</div><div>大小</div><div>命名空间</div><div>最近修改</div>
+            </div>
+            <div class="trow">
+              <div class="name">🧩 SKILL.md</div>
+              <div>3.2 KB</div>
+              <div><span class="ns">skills</span></div>
+              <div>2026-04-06 21:10</div>
+            </div>
+            <div class="trow">
+              <div class="name">📁 assets/</div>
+              <div>-</div>
+              <div><span class="ns">skills</span></div>
+              <div>2026-04-06 20:01</div>
+            </div>
+            <div class="trow">
+              <div class="name">📝 assets/prompt.md</div>
+              <div>1.2 KB</div>
+              <div><span class="ns">skills</span></div>
+              <div>2026-04-06 20:01</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
+

@@ -29,16 +29,16 @@
 
 真实数据要求：
 
-- 优先 `.ahubz`
-- 或者可导出成 `.ahub` / 原始 skill 目录
+- 优先 `.ndrvz`
+- 或者可导出成 `.ndrv` / 原始 skill 目录
 - 使用专用验收用户，不混用正式业务用户
 
 ## 部署前检查
 
 ```bash
 curl -fsS "$BASE_URL/api/health"
-agenthub sync --help
-agenthub sync diff --help
+neudrive sync --help
+neudrive sync diff --help
 ```
 
 打开 Web 管理后台的数据同步页面，确认：
@@ -61,12 +61,12 @@ agenthub sync diff --help
 命令模板：
 
 ```bash
-agenthub sync login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
-agenthub sync export --source /path/to/fixture --format archive -o fixture.ahubz
-agenthub sync preview --bundle fixture.ahubz
-agenthub sync push --bundle fixture.ahubz --transport auto
-agenthub sync pull --format archive -o fixture-pulled.ahubz
-agenthub sync diff --left fixture.ahubz --right fixture-pulled.ahubz
+neudrive sync login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
+neudrive sync export --source /path/to/fixture --format archive -o fixture.ndrvz
+neudrive sync preview --bundle fixture.ndrvz
+neudrive sync push --bundle fixture.ndrvz --transport auto
+neudrive sync pull --format archive -o fixture-pulled.ndrvz
+neudrive sync diff --left fixture.ndrvz --right fixture-pulled.ndrvz
 ```
 
 通过标准：
@@ -102,7 +102,7 @@ agenthub sync diff --left fixture.ahubz --right fixture-pulled.ahubz
 CLI 方式：
 
 ```bash
-agenthub sync resume --bundle real.ahubz
+neudrive sync resume --bundle real.ndrvz
 ```
 
 通过标准：

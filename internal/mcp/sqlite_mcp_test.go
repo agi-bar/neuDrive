@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/agenthub/internal/localgitsync"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
-	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
+	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
 )
 
 func setupSQLiteMCPServer(t *testing.T) (context.Context, *sqlitestorage.Store, *models.User, *MCPServer) {
@@ -248,7 +248,7 @@ func TestServerCoreToolsImportSkillsArchivePreservesAssets(t *testing.T) {
 			Name: "import_skills_archive",
 			Arguments: map[string]interface{}{
 				"archive_base64": base64.StdEncoding.EncodeToString(archive),
-				"archive_name":   "agenthub-skills.zip",
+				"archive_name":   "neudrive-skills.zip",
 				"platform":       "claude-web",
 			},
 		}),

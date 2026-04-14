@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>neuDrive · 文件（高保真草稿 · OneDrive 风格）</title>
+  <style>
+    :root{--bg:#f5f7fb;--surface:#fff;--border:#e7e9f0;--muted:#6b7280;--text:#0f172a;--primary:#2563eb;--radius:10px;--shadow:0 6px 20px rgba(15,23,42,.06)}
+    *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font:14px -apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Hiragino Sans GB','Microsoft YaHei',sans-serif}
+    .app{display:flex;min-height:100vh}
+    .sidebar{width:220px;background:var(--surface);border-right:1px solid var(--border)}
+    .brand{padding:18px 14px;border-bottom:1px solid var(--border);display:flex;gap:8px;align-items:baseline}
+    .brand b{font-weight:700}
+    .nav{padding:10px 8px}
+    .nav a{display:block;padding:8px 12px;border-radius:8px;color:#334155;text-decoration:none}
+    .nav a.active{background:#eef4ff;color:var(--primary);font-weight:600}
+    .main{flex:1}
+    .page{max-width:1160px;margin:0 auto;padding:18px}
+    .h1{font-size:20px;font-weight:800;margin:6px 0 2px}
+    .sub{color:var(--muted);font-size:12px}
+    .toolbar{display:flex;align-items:center;gap:8px;margin:10px 0}
+    .crumbs{font-size:12px;color:var(--muted)}
+    .crumbs a{color:var(--primary);text-decoration:none}
+    .spacer{flex:1}
+    .search input{padding:7px 10px;border:1px solid var(--border);border-radius:8px;width:320px}
+    .btn{padding:8px 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);cursor:pointer}
+    .chips{display:flex;gap:6px;margin:8px 0}
+    .chip{border:1px solid var(--border);background:#fafbff;border-radius:999px;padding:4px 10px;font-size:12px;color:#475569}
+    .grid{display:grid;grid-template-columns: 1fr 360px;gap:14px;align-items:start}
+    .panel{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow)}
+    .panel .head{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;border-bottom:1px solid var(--border)}
+    .table .row{display:grid;grid-template-columns: 1fr 120px 140px 160px;gap:0;align-items:center;padding:10px 12px;border-top:1px solid var(--border)}
+    .table .row.h{color:#64748b;font-weight:700;background:#f7f9ff}
+    .name{display:flex;align-items:center;gap:8px}
+    .badge{display:inline-block;border:1px solid #dbe7ff;background:#eef4ff;color:var(--primary);border-radius:999px;font-size:12px;padding:2px 8px;margin-left:8px}
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><b>neuDrive</b><span style="font-size:11px;color:#94a3b8">v0.0.1</span></div>
+      <nav class="nav">
+        <a href="#">概览</a>
+        <a href="#">连接设置</a>
+        <a href="#">连接管理</a>
+        <a href="#">我的资料</a>
+        <a href="#" class="active">数据文件</a>
+        <a href="#">协作</a>
+      </nav>
+    </aside>
+    <main class="main">
+      <div class="page">
+        <div class="h1">文件（高保真草稿）</div>
+        <div class="sub">OneDrive/Dropbox 风格；统一承载 Projects / Skills / Memory / Devices / Roles / Inbox / Notes / Root</div>
+        <div class="toolbar">
+          <div class="crumbs"><a>根目录</a> / <a>skills</a> / qa-bot</div>
+          <div class="spacer"></div>
+          <div class="search"><input placeholder="搜索（关键词/namespace:skills/ext:.md）" /></div>
+          <button class="btn">新建</button>
+          <button class="btn">上传</button>
+          <button class="btn">删除</button>
+        </div>
+        <div class="chips">
+          <div class="chip">全部</div><div class="chip">Projects</div><div class="chip" style="background:#eef4ff;color:#2563eb;border-color:#dbe7ff">Skills</div>
+          <div class="chip">Memory</div><div class="chip">Devices</div><div class="chip">Roles</div><div class="chip">Inbox</div><div class="chip">Notes</div><div class="chip">Root</div>
+        </div>
+
+        <div class="grid">
+          <div class="panel table">
+            <div class="head"><b>技能 Bundle：qa-bot</b><span style="color:#64748b">/skills/qa-bot</span></div>
+            <div class="row h"><div>名称</div><div>大小</div><div>命名空间</div><div>最近修改</div></div>
+            <div class="row"><div class="name">🧩 SKILL.md <span class="badge">bundle</span></div><div>3.2 KB</div><div>skills</div><div>2026-04-06 21:10</div></div>
+            <div class="row"><div class="name">📁 assets/</div><div>-</div><div>skills</div><div>2026-04-06 20:01</div></div>
+            <div class="row"><div class="name">📝 assets/prompt.md</div><div>1.2 KB</div><div>skills</div><div>2026-04-06 20:01</div></div>
+          </div>
+          <div class="panel">
+            <div class="head"><b>Bundle 概览</b><div><button class="btn">编辑 SKILL.md</button></div></div>
+            <div style="padding:12px">
+              <div style="display:flex;align-items:center;gap:12px;margin-bottom:10px">
+                <div style="width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,#e0ebff,#f6f9ff);display:flex;align-items:center;justify-content:center;font-weight:800;color:#2563eb">Q</div>
+                <div>
+                  <div style="font-weight:800">QA Bot <span class="badge">skills</span></div>
+                  <div style="color:#64748b;font-size:12px">最近更新：2026-04-06 21:10 · 路径：/skills/qa-bot</div>
+                </div>
+              </div>
+              <div style="color:#111827;line-height:1.6;margin-bottom:12px">为产品/文档提供问答，内置 prompt 与示例；支持 Markdown 片段抽取与多轮追问。</div>
+              <div style="font-size:12px;color:#64748b;margin-bottom:6px">SKILL.md 片段</div>
+              <pre style="background:#fbfcff;border:1px solid var(--border);padding:10px;border-radius:8px;white-space:pre-wrap">---
+name: QA Bot
+version: 0.2.1
+tags: [qa, assistant]
+---
+
+# QA Bot
+简要说明…</pre>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </main>
+  </div>
+</body>
+</html>
+

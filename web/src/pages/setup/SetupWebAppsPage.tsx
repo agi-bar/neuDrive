@@ -15,7 +15,7 @@ export default function SetupWebAppsPage() {
     <SetupSection
       icon={<>&#127760;</>}
       title="Web / Desktop Apps"
-      description={tx('在网页应用或桌面图形应用里，把 Agent Hub 添加成远程 MCP Server。', 'Add Agent Hub as a remote MCP server inside web apps or desktop GUI apps.')}
+      description={tx('在网页应用或桌面图形应用里，把 neuDrive 添加成远程 MCP Server。', 'Add neuDrive as a remote MCP server inside web apps or desktop GUI apps.')}
       highlight
     >
       {cloudModeNeedsPublicUrl && (
@@ -72,7 +72,7 @@ export default function SetupWebAppsPage() {
           <>
             <h4 className="setup-platform-title">Claude Connectors</h4>
             <p className="setup-note setup-note-first">
-              {tx('登录 Claude 网页应用后，在 Connectors 里创建一个自定义 connector，再完成 Agent Hub 的网页登录与授权。', 'After signing in to Claude web, create a custom connector in Connectors, then complete Agent Hub sign-in and authorization.')}
+              {tx('登录 Claude 网页应用后，在 Connectors 里创建一个自定义 connector，再完成 neuDrive 的网页登录与授权。', 'After signing in to Claude web, create a custom connector in Connectors, then complete neuDrive sign-in and authorization.')}
             </p>
 
             <SetupCodeBlock
@@ -86,11 +86,11 @@ export default function SetupWebAppsPage() {
             <ol className="setup-steps">
               <li>{tx('登录 Claude 网页应用，进入 ', 'Sign in to Claude web, open ')}<code>Settings -&gt; Connectors</code>{tx('，点击 ', ', then click ')}<code>Go to Customize</code>{tx('。', '.')}</li>
               <li>{tx('在 Customize 页的 Connectors 区域点击 ', 'In the Connectors area on the Customize page, click ')}<code>+</code>{tx('，再点击 ', ', then click ')}<code>Add custom connector</code>{tx('。', '.')}</li>
-              <li>{tx('名称可以自定义，例如 ', 'Choose any name you like, for example ')}<code>AgentHub</code>{tx('；把 ', '. Set ')}<code>Remote MCP server URL</code>{tx(' 填写为 ', ' to ')}<code>{mcpUrl}</code>{tx('，然后点击 ', ', then click ')}<code>Add</code>{tx('。', '.')}</li>
-              <li>{tx('回到 connector 列表后，打开刚创建的 ', 'Return to the connector list, open the newly created ')}<code>AgentHub</code>{tx(' connector，点击 ', ' connector, then click ')}<code>Connect</code>{tx('。', '.')}</li>
-              <li>{tx('浏览器会跳转到 Agent Hub 的登录与授权页；登录后点击授权，完成后回到 Claude，会显示成功连接。', 'The browser opens Agent Hub sign-in and authorization. After approval, return to Claude and it will show the connector as connected.')}</li>
-              <li>{tx('可选：在 ', 'Optional: in ')}<code>AgentHub</code>{tx(' configuration 的 ', ' configuration, set ')}<code>Tools Permissions</code>{tx(' 里选择 ', ' to ')}<code>Always allow</code>{tx('，减少每次工具调用前的确认。', ' to reduce confirmation prompts before each tool call.')}</li>
-              <li>{tx('回到 Claude chat 后，就可以直接发起工具调用，例如“从 Agent Hub 中读取我的 profile”。', 'Back in Claude chat, you can immediately call tools, for example asking it to read your profile from Agent Hub.')}</li>
+              <li>{tx('名称可以自定义，例如 ', 'Choose any name you like, for example ')}<code>NeuDrive</code>{tx('；把 ', '. Set ')}<code>Remote MCP server URL</code>{tx(' 填写为 ', ' to ')}<code>{mcpUrl}</code>{tx('，然后点击 ', ', then click ')}<code>Add</code>{tx('。', '.')}</li>
+              <li>{tx('回到 connector 列表后，打开刚创建的 ', 'Return to the connector list, open the newly created ')}<code>NeuDrive</code>{tx(' connector，点击 ', ' connector, then click ')}<code>Connect</code>{tx('。', '.')}</li>
+              <li>{tx('浏览器会跳转到 neuDrive 的登录与授权页；登录后点击授权，完成后回到 Claude，会显示成功连接。', 'The browser opens neuDrive sign-in and authorization. After approval, return to Claude and it will show the connector as connected.')}</li>
+              <li>{tx('可选：在 ', 'Optional: in ')}<code>NeuDrive</code>{tx(' configuration 的 ', ' configuration, set ')}<code>Tools Permissions</code>{tx(' 里选择 ', ' to ')}<code>Always allow</code>{tx('，减少每次工具调用前的确认。', ' to reduce confirmation prompts before each tool call.')}</li>
+              <li>{tx('回到 Claude chat 后，就可以直接发起工具调用，例如“从 neuDrive 中读取我的 profile”。', 'Back in Claude chat, you can immediately call tools, for example asking it to read your profile from neuDrive.')}</li>
             </ol>
 
             <div className="setup-screenshot-grid">
@@ -99,8 +99,8 @@ export default function SetupWebAppsPage() {
                 caption={tx('占位图：Settings -> Connectors -> Go to Customize -> Add custom connector', 'Placeholder: Settings -> Connectors -> Go to Customize -> Add custom connector')}
               />
               <SetupScreenshotPlaceholder
-                title={tx('Agent Hub 授权完成', 'Agent Hub authorization complete')}
-                caption={tx('占位图：Claude 中的 AgentHub connector 已显示 Connected', 'Placeholder: the AgentHub connector shows Connected inside Claude')}
+                title={tx('neuDrive 授权完成', 'neuDrive authorization complete')}
+                caption={tx('占位图：Claude 中的 NeuDrive connector 已显示 Connected', 'Placeholder: the NeuDrive connector shows Connected inside Claude')}
               />
             </div>
 
@@ -112,7 +112,7 @@ export default function SetupWebAppsPage() {
           <>
             <h4 className="setup-platform-title">ChatGPT Apps</h4>
             <p className="setup-note setup-note-first">
-              {tx('登录 ChatGPT 后，在 Apps 设置里创建一个指向 Agent Hub 的 MCP app，再按提示完成连接。', 'After signing in to ChatGPT, create an MCP app pointing to Agent Hub from Apps settings, then finish the connection flow.')}
+              {tx('登录 ChatGPT 后，在 Apps 设置里创建一个指向 neuDrive 的 MCP app，再按提示完成连接。', 'After signing in to ChatGPT, create an MCP app pointing to neuDrive from Apps settings, then finish the connection flow.')}
             </p>
 
             <div className="alert alert-warn">
@@ -131,7 +131,7 @@ export default function SetupWebAppsPage() {
               <li>{tx('登录 ChatGPT，进入 ', 'Sign in to ChatGPT and open ')}<code>Settings -&gt; Apps</code>{tx('。', '.')}</li>
               <li>{tx('在 ', 'In the ')}<code>Advanced settings</code>{tx(' 区域点击 ', ' section, click ')}<code>Create app</code>{tx('。', '.')}</li>
               <li>{tx('把 ', 'Set ')}<code>MCP Server URL</code>{tx(' 填写为 ', ' to ')}<code>{mcpUrl}</code>{tx('，然后点击 ', ', then click ')}<code>Create</code>{tx('。', '.')}</li>
-              <li>{tx('如果随后出现 ', 'If you then see prompts such as ')}<code>Connect</code>{tx('、', ', ')}<code>Sign in</code>{tx(' 或授权提示，按提示跳转到 Agent Hub 登录并完成授权。', ', or authorization, follow them to Agent Hub sign-in and finish approval.')}</li>
+              <li>{tx('如果随后出现 ', 'If you then see prompts such as ')}<code>Connect</code>{tx('、', ', ')}<code>Sign in</code>{tx(' 或授权提示，按提示跳转到 neuDrive 登录并完成授权。', ', or authorization, follow them to neuDrive sign-in and finish approval.')}</li>
               <li>{tx('返回 ChatGPT 后，确认这个 app 已处于可用状态，再回到对话里使用对应工具。', 'Back in ChatGPT, confirm the app is available, then return to the conversation and use its tools.')}</li>
             </ol>
 
@@ -142,12 +142,12 @@ export default function SetupWebAppsPage() {
               />
               <SetupScreenshotPlaceholder
                 title={tx('ChatGPT App 已创建', 'ChatGPT app created')}
-                caption={tx('占位图：新建的 AgentHub app 已出现在 Apps 列表中', 'Placeholder: the new AgentHub app appears in the Apps list')}
+                caption={tx('占位图：新建的 NeuDrive app 已出现在 Apps 列表中', 'Placeholder: the new NeuDrive app appears in the Apps list')}
               />
             </div>
 
             <p className="setup-note">
-              {tx('创建完成后，你可以回到 ChatGPT 对话中直接要求它使用 Agent Hub，例如“从 Agent Hub 中读取我的 profile”。', 'After creation, you can return to ChatGPT and directly ask it to use Agent Hub, for example to read your profile from Agent Hub.')}
+              {tx('创建完成后，你可以回到 ChatGPT 对话中直接要求它使用 neuDrive，例如“从 neuDrive 中读取我的 profile”。', 'After creation, you can return to ChatGPT and directly ask it to use neuDrive, for example to read your profile from neuDrive.')}
             </p>
           </>
         ) : platform === 'cursor' ? (
@@ -169,7 +169,7 @@ export default function SetupWebAppsPage() {
               label={tx('可选：~/.cursor/mcp.json', 'Optional: ~/.cursor/mcp.json')}
               content={JSON.stringify({
                 mcpServers: {
-                  agenthub: {
+                  neudrive: {
                     url: mcpUrl,
                   },
                 },
@@ -182,8 +182,8 @@ export default function SetupWebAppsPage() {
             <ol className="setup-steps">
               <li>{tx('打开 Cursor，进入 ', 'Open Cursor, go to ')}<code>Settings -&gt; Tools &amp; MCPs</code>{tx('，点击 ', ', then click ')}<code>Add Custom MCP</code>{tx('。', '.')}</li>
               <li>{tx('如果界面要求填写 URL，就把 ', 'If the UI asks for a URL, set ')}<code>Remote MCP Server URL</code>{tx(' 设为 ', ' to ')}<code>{mcpUrl}</code>{tx('；如果要求粘贴配置，也可以直接使用上面的 ', '. If it asks for pasted config, you can use the ')}<code>~/.cursor/mcp.json</code>{tx(' 片段。', ' snippet above instead.')}</li>
-              <li>{tx('保存后点击 ', 'After saving, click ')}<code>Connect</code>{tx(' 或 ', ' or ')}<code>Authenticate</code>{tx('；Cursor 会自动发现 Agent Hub 的 OAuth metadata。', '. Cursor will automatically discover Agent Hub OAuth metadata.')}</li>
-              <li>{tx('浏览器会跳转到 Agent Hub 的登录与授权页；完成登录和批准后，Cursor 会回到已连接状态。', 'The browser opens Agent Hub sign-in and authorization. After approval, Cursor returns to a connected state.')}</li>
+              <li>{tx('保存后点击 ', 'After saving, click ')}<code>Connect</code>{tx(' 或 ', ' or ')}<code>Authenticate</code>{tx('；Cursor 会自动发现 neuDrive 的 OAuth metadata。', '. Cursor will automatically discover neuDrive OAuth metadata.')}</li>
+              <li>{tx('浏览器会跳转到 neuDrive 的登录与授权页；完成登录和批准后，Cursor 会回到已连接状态。', 'The browser opens neuDrive sign-in and authorization. After approval, Cursor returns to a connected state.')}</li>
               <li>{tx('接通后，Cursor 会立即拉取工具和资源列表；你可以直接在对话里让它读取 profile、Memory、项目或技能。', 'Once connected, Cursor fetches tools and resources immediately. You can ask it in chat to read profile, Memory, projects, or skills.')}</li>
             </ol>
 
@@ -210,7 +210,7 @@ export default function SetupWebAppsPage() {
               label="~/.codeium/windsurf/mcp_config.json"
               content={JSON.stringify({
                 mcpServers: {
-                  agenthub: {
+                  neudrive: {
                     serverUrl: mcpUrl,
                   },
                 },
@@ -224,9 +224,9 @@ export default function SetupWebAppsPage() {
               <li>{tx('打开 ', 'Open ')}<code>Windsurf Settings</code>{tx('，点击 ', ', then click ')}<code>Cascade</code>{tx('。', '.')}</li>
               <li>{tx('在 ', 'In the ')}<code>MCP Servers</code>{tx(' 区域点击 ', ' section, click ')}<code>Open MCP Marketplace</code>{tx('。', '.')}</li>
               <li>{tx('进入 MCP Marketplace 后，点击右上角的 config 图标；Windsurf 会打开 ', 'After entering MCP Marketplace, click the config icon in the upper right. Windsurf opens ')}<code>~/.codeium/windsurf/mcp_config.json</code>{tx('。', '.')}</li>
-              <li>{tx('把上面的 ', 'Paste the ')}<code>agenthub</code>{tx(' 配置写进去并保存。', ' config above into it and save.')}</li>
-              <li>{tx('保存后会弹出授权提示框；点击 ', 'Saving opens an authorization prompt. Click ')}<code>Open</code>{tx('，浏览器会跳转到 Agent Hub 的登录与授权页。', ' and the browser will open Agent Hub sign-in and authorization.')}</li>
-              <li>{tx('完成登录和批准后，回到 Windsurf 的 MCP Marketplace，可以看到 ', 'After login and approval, return to Windsurf MCP Marketplace and you will see ')}<code>agenthub</code>{tx(' 出现在 ', ' under ')}<code>Installed MCPs</code>{tx(' 中，并且状态为 ', ' with status ')}<code>Enabled</code>{tx('。', '.')}</li>
+              <li>{tx('把上面的 ', 'Paste the ')}<code>neudrive</code>{tx(' 配置写进去并保存。', ' config above into it and save.')}</li>
+              <li>{tx('保存后会弹出授权提示框；点击 ', 'Saving opens an authorization prompt. Click ')}<code>Open</code>{tx('，浏览器会跳转到 neuDrive 的登录与授权页。', ' and the browser will open neuDrive sign-in and authorization.')}</li>
+              <li>{tx('完成登录和批准后，回到 Windsurf 的 MCP Marketplace，可以看到 ', 'After login and approval, return to Windsurf MCP Marketplace and you will see ')}<code>neudrive</code>{tx(' 出现在 ', ' under ')}<code>Installed MCPs</code>{tx(' 中，并且状态为 ', ' with status ')}<code>Enabled</code>{tx('。', '.')}</li>
             </ol>
 
             <p className="setup-note">

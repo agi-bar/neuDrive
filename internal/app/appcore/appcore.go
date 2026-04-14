@@ -10,16 +10,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/api"
-	"github.com/agi-bar/agenthub/internal/auth"
-	"github.com/agi-bar/agenthub/internal/config"
-	"github.com/agi-bar/agenthub/internal/database"
-	"github.com/agi-bar/agenthub/internal/localgitsync"
-	"github.com/agi-bar/agenthub/internal/mcp"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/services"
-	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
-	"github.com/agi-bar/agenthub/internal/vault"
+	"github.com/agi-bar/neudrive/internal/api"
+	"github.com/agi-bar/neudrive/internal/auth"
+	"github.com/agi-bar/neudrive/internal/config"
+	"github.com/agi-bar/neudrive/internal/database"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/mcp"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/services"
+	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/vault"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -483,7 +483,7 @@ func loadConfig(opts Options) (*config.Config, error) {
 func loadSQLiteConfig(opts Options) (*config.Config, error) {
 	sqliteOpts := opts
 	if strings.TrimSpace(sqliteOpts.JWTSecret) == "" {
-		sqliteOpts.JWTSecret = "agenthub-local-sqlite-jwt-secret"
+		sqliteOpts.JWTSecret = "neudrive-local-sqlite-jwt-secret"
 	}
 	if strings.TrimSpace(sqliteOpts.VaultMasterKey) == "" {
 		sqliteOpts.VaultMasterKey = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"

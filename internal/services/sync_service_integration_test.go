@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/database"
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/database"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -18,9 +18,9 @@ import (
 func setupSyncIntegration(t *testing.T) (context.Context, uuid.UUID, *SyncService, *FileTreeService, *MemoryService) {
 	t.Helper()
 
-	dbURL := os.Getenv("AGENTHUB_TEST_DB")
+	dbURL := os.Getenv("NEUDRIVE_TEST_DB")
 	if dbURL == "" {
-		t.Skip("AGENTHUB_TEST_DB not set; skipping sync integration test")
+		t.Skip("NEUDRIVE_TEST_DB not set; skipping sync integration test")
 	}
 
 	ctx := context.Background()

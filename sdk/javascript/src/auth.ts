@@ -1,7 +1,7 @@
 import type { User, AuthTokenResponse } from './types'
 
-export interface AgentHubAuthConfig {
-  /** Base URL of the Agent Hub instance */
+export interface NeuDriveAuthConfig {
+  /** Base URL of the neuDrive instance */
   baseURL: string
   /** OAuth client ID */
   clientId: string
@@ -10,11 +10,11 @@ export interface AgentHubAuthConfig {
 }
 
 /**
- * OAuth helper for third-party applications integrating with Agent Hub.
+ * OAuth helper for third-party applications integrating with neuDrive.
  *
  * @example
  * ```ts
- * const auth = new AgentHubAuth({
+ * const auth = new NeuDriveAuth({
  *   baseURL: 'https://hub.example.com',
  *   clientId: 'your-client-id',
  *   clientSecret: 'your-client-secret',
@@ -27,16 +27,16 @@ export interface AgentHubAuthConfig {
  * const { access_token, user } = await auth.exchangeCode(code, 'https://yourapp.com/callback')
  * ```
  */
-export class AgentHubAuth {
+export class NeuDriveAuth {
   private readonly baseURL: string
   private readonly clientId: string
   private readonly clientSecret: string
 
-  constructor(config: AgentHubAuthConfig) {
-    if (!config.baseURL) throw new Error('AgentHubAuth: baseURL is required')
-    if (!config.clientId) throw new Error('AgentHubAuth: clientId is required')
+  constructor(config: NeuDriveAuthConfig) {
+    if (!config.baseURL) throw new Error('NeuDriveAuth: baseURL is required')
+    if (!config.clientId) throw new Error('NeuDriveAuth: clientId is required')
     if (!config.clientSecret)
-      throw new Error('AgentHubAuth: clientSecret is required')
+      throw new Error('NeuDriveAuth: clientSecret is required')
     this.baseURL = config.baseURL.replace(/\/+$/, '')
     this.clientId = config.clientId
     this.clientSecret = config.clientSecret
@@ -45,7 +45,7 @@ export class AgentHubAuth {
   /**
    * Build the authorization URL that the user should be redirected to.
    *
-   * @param redirectURI - Where Agent Hub should redirect after the user authorises.
+   * @param redirectURI - Where neuDrive should redirect after the user authorises.
    * @param scopes      - Requested permission scopes (e.g. ["read:profile", "read:memory"]).
    * @returns A fully-qualified URL string.
    */
@@ -92,7 +92,7 @@ export class AgentHubAuth {
         typeof body === 'object' && body !== null && 'error' in body
           ? (body as { error: string }).error
           : `HTTP ${res.status}`
-      throw new Error(`AgentHubAuth: token exchange failed: ${msg}`)
+      throw new Error(`NeuDriveAuth: token exchange failed: ${msg}`)
     }
 
     return (await res.json()) as AuthTokenResponse
@@ -123,7 +123,7 @@ export class AgentHubAuth {
         typeof body === 'object' && body !== null && 'error' in body
           ? (body as { error: string }).error
           : `HTTP ${res.status}`
-      throw new Error(`AgentHubAuth: getUserInfo failed: ${msg}`)
+      throw new Error(`NeuDriveAuth: getUserInfo failed: ${msg}`)
     }
 
     return (await res.json()) as User

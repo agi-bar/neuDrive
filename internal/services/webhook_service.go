@@ -13,7 +13,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -177,7 +177,7 @@ func (s *WebhookService) Test(ctx context.Context, webhookID, userID uuid.UUID) 
 	envelope := models.WebhookPayload{
 		Event:     "test",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
-		Data:      map[string]string{"message": "This is a test webhook from Agent Hub."},
+		Data:      map[string]string{"message": "This is a test webhook from neuDrive."},
 	}
 
 	body, err := json.Marshal(envelope)
@@ -204,8 +204,8 @@ func (s *WebhookService) deliver(webhookID uuid.UUID, url, secret, event string,
 	req.Body = newBytesReadCloser(body)
 	req.ContentLength = int64(len(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-AgentHub-Event", event)
-	req.Header.Set("X-AgentHub-Signature", "sha256="+sig)
+	req.Header.Set("X-NeuDrive-Event", event)
+	req.Header.Set("X-NeuDrive-Signature", "sha256="+sig)
 
 	resp, err := s.client.Do(req)
 	if err != nil {

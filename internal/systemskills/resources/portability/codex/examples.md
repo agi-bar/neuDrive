@@ -2,11 +2,11 @@
 
 ## Import Prompt
 
-> Read `/skills/portability/codex/SKILL.md` first. Separate stable workspace conventions from project-specific context, then migrate each class into the nearest AgentHub domain. Preserve tools, MCP configuration, and automations as metadata or recreation notes.
+> Read `/skills/portability/codex/SKILL.md` first. Separate stable workspace conventions from project-specific context, then migrate each class into the nearest NeuDrive domain. Preserve tools, MCP configuration, and automations as metadata or recreation notes.
 
 ## Export Prompt
 
-> Read `/skills/portability/codex/SKILL.md` first. Generate Codex-compatible project instructions, reusable prompt bundles, tool configuration drafts, and automation recreation notes from AgentHub data. Mark all manual steps clearly.
+> Read `/skills/portability/codex/SKILL.md` first. Generate Codex-compatible project instructions, reusable prompt bundles, tool configuration drafts, and automation recreation notes from NeuDrive data. Mark all manual steps clearly.
 
 ## Reporting Template
 

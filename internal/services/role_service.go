@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -160,7 +160,7 @@ func (s *RoleService) syncRoleTree(ctx context.Context, role models.Role) error 
 
 func renderRoleSkill(role models.Role) string {
 	return strings.TrimSpace(fmt.Sprintf(
-		"# Role: %s\n\nThis role represents the `%s` persona inside AgentHub.\n\n## Lifecycle\n%s\n\n## Allowed Paths\n%s\n\n## Allowed Vault Scopes\n%s\n",
+		"# Role: %s\n\nThis role represents the `%s` persona inside NeuDrive.\n\n## Lifecycle\n%s\n\n## Allowed Paths\n%s\n\n## Allowed Vault Scopes\n%s\n",
 		role.Name,
 		role.RoleType,
 		role.Lifecycle,

@@ -2,10 +2,10 @@
 // Configuration
 // ---------------------------------------------------------------------------
 
-export interface AgentHubConfig {
-  /** Base URL of the Agent Hub instance (e.g. "https://hub.example.com") */
+export interface NeuDriveConfig {
+  /** Base URL of the neuDrive instance (e.g. "https://hub.example.com") */
   baseURL: string
-  /** Scoped token (aht_xxxxx) for agent/MCP authentication */
+  /** Scoped token (ndt_xxxxx) for agent/MCP authentication */
   token?: string
   /** OAuth client ID for third-party app flow */
   clientId?: string

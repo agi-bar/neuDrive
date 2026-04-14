@@ -35,3 +35,29 @@ export async function setupUser(page: Page, request: any) {
   await loginViaUI(page, user.email, user.password)
   return user
 }
+
+export async function registerOAuthApp(request: any, token: string, overrides: {
+  name?: string
+  redirectURI?: string
+  scopes?: string[]
+  description?: string
+} = {}) {
+  const redirectURI = overrides.redirectURI || 'https://claude.ai/api/mcp/auth_callback'
+  const response = await request.post('/api/oauth/apps', {
+    headers: { Authorization: `Bearer ${token}` },
+    data: {
+      name: overrides.name || 'Claude Connector',
+      redirect_uris: [redirectURI],
+      scopes: overrides.scopes || ['admin'],
+      description: overrides.description || 'Playwright OAuth test app',
+    },
+  })
+  const body = await response.json()
+  const payload = body?.data || body
+  return {
+    response,
+    clientID: payload.client_id,
+    redirectURI,
+    raw: payload,
+  }
+}

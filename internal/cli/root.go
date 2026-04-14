@@ -18,15 +18,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/api"
-	"github.com/agi-bar/agenthub/internal/app/appcore"
-	"github.com/agi-bar/agenthub/internal/app/mcpapp"
-	"github.com/agi-bar/agenthub/internal/app/serverapp"
-	"github.com/agi-bar/agenthub/internal/localgitsync"
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/platforms"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/synccli"
+	"github.com/agi-bar/neudrive/internal/api"
+	"github.com/agi-bar/neudrive/internal/app/appcore"
+	"github.com/agi-bar/neudrive/internal/app/mcpapp"
+	"github.com/agi-bar/neudrive/internal/app/serverapp"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/platforms"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/synccli"
 )
 
 func Run(args []string) int {
@@ -127,7 +127,7 @@ func runServer(args []string) int {
 		VaultMasterKey: *vaultKey,
 		PublicBaseURL:  *publicBaseURL,
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "agenthub server failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s server failed: %v\n", rootCommand(), err)
 		return 1
 	}
 	return 0
@@ -170,7 +170,7 @@ func runMCP(args []string) int {
 		VaultMasterKey: *vaultKey,
 		PublicBaseURL:  *publicBaseURL,
 	}); err != nil {
-		fmt.Fprintf(os.Stderr, "agenthub mcp stdio failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s mcp stdio failed: %v\n", rootCommand(), err)
 		return 1
 	}
 	return 0
@@ -186,7 +186,7 @@ func runStatus(args []string) int {
 		return 0
 	}
 	if len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub status")
+		fmt.Fprintln(os.Stderr, usageLine("status"))
 		return 2
 	}
 	configPath, cfg, err := runtimecfg.LoadConfig("")
@@ -243,7 +243,7 @@ func runDoctor(args []string) int {
 		return 0
 	}
 	if len(args) > 0 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub doctor")
+		fmt.Fprintln(os.Stderr, usageLine("doctor"))
 		return 2
 	}
 	_, cfg, err := runtimecfg.LoadConfig("")
@@ -321,7 +321,7 @@ func runPlatformLS(args []string) int {
 		return 0
 	}
 	if len(args) != 0 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub platform ls")
+		fmt.Fprintln(os.Stderr, usageLine("platform ls"))
 		return 2
 	}
 	_, cfg, err := runtimecfg.LoadConfig("")
@@ -346,7 +346,7 @@ func runPlatformShow(args []string) int {
 		return 0
 	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub platform show <platform>")
+		fmt.Fprintln(os.Stderr, usageLine("platform show <platform>"))
 		return 2
 	}
 	_, cfg, err := runtimecfg.LoadConfig("")
@@ -414,7 +414,7 @@ func runConnect(args []string) int {
 		return 0
 	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub connect <platform>")
+		fmt.Fprintln(os.Stderr, usageLine("connect <platform>"))
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
@@ -474,7 +474,7 @@ func runDisconnect(args []string) int {
 		return 0
 	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub disconnect <platform>")
+		fmt.Fprintln(os.Stderr, usageLine("disconnect <platform>"))
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -510,18 +510,18 @@ func runDisconnect(args []string) int {
 		fmt.Fprintf(os.Stderr, "save config: %v\n", err)
 		return 1
 	}
-	fmt.Printf("Disconnected %s and removed Agent Hub managed entrypoints.\n", args[0])
+	fmt.Printf("Disconnected %s and removed neuDrive managed entrypoints.\n", args[0])
 	return 0
 }
 
 func runLegacyImport(args []string) int {
 	if isHelpArg(args) || len(args) == 0 {
-		fmt.Println("usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]")
+		fmt.Println(usageLine("import <platform> [--mode agent|files|all] [--zip FILE]"))
 		return 0
 	}
 	platform := strings.TrimSpace(args[0])
 	if platform == "" || strings.HasPrefix(platform, "-") {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]")
+		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--zip FILE]"))
 		return 2
 	}
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
@@ -535,7 +535,7 @@ func runLegacyImport(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub import <platform> [--mode agent|files|all] [--zip FILE]")
+		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--zip FILE]"))
 		return 2
 	}
 	if strings.TrimSpace(*zipPath) != "" && strings.TrimSpace(*mode) != "" && strings.TrimSpace(*mode) != string(platforms.ImportModeFiles) {
@@ -643,7 +643,7 @@ func runExport(args []string) int {
 		rest = append([]string{platform}, rest...)
 	}
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub export <platform> [--output DIR]")
+		fmt.Fprintln(os.Stderr, usageLine("export <platform> [--output DIR]"))
 		return 2
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
@@ -701,7 +701,7 @@ func runGit(args []string) int {
 			return 2
 		}
 		if fs.NArg() != 0 {
-			fmt.Fprintln(os.Stderr, "usage: agenthub git init [--output DIR]")
+			fmt.Fprintln(os.Stderr, usageLine("git init [--output DIR]"))
 			return 2
 		}
 		return runGitInit(*output)
@@ -719,13 +719,13 @@ func runGit(args []string) int {
 			return 2
 		}
 		if fs.NArg() != 0 {
-			fmt.Fprintln(os.Stderr, "usage: agenthub git pull")
+			fmt.Fprintln(os.Stderr, usageLine("git pull"))
 			return 2
 		}
 		return runGitPull()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown git subcommand %q\n\n", args[0])
-		fmt.Println("usage: agenthub git init [--output DIR]\n       agenthub git pull")
+		fmt.Println(renderCLIText("usage: neudrive git init [--output DIR]\n       neudrive git pull"))
 		return 2
 	}
 }
@@ -763,7 +763,7 @@ func runGitPull() int {
 		return 1
 	}
 	if info == nil || !info.Enabled || strings.TrimSpace(info.Path) == "" {
-		fmt.Fprintln(os.Stderr, "git pull: no local Git mirror is configured; run `agenthub git init [--output DIR]` first")
+		fmt.Fprintln(os.Stderr, renderCLIText("git pull: no local Git mirror is configured; run `neudrive git init [--output DIR]` first"))
 		return 1
 	}
 
@@ -789,7 +789,7 @@ func runBrowse(args []string) int {
 	}
 	route := "/"
 	if fs.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub browse [--print-url] [/route]")
+		fmt.Fprintln(os.Stderr, usageLine("browse [--print-url] [/route]"))
 		return 2
 	}
 	if fs.NArg() == 1 {
@@ -812,7 +812,7 @@ func runBrowse(args []string) int {
 		fmt.Println(target)
 		return 0
 	}
-	fmt.Printf("Opening Agent Hub dashboard:\n%s\n", target)
+	fmt.Printf("Opening neuDrive dashboard:\n%s\n", target)
 	if err := openBrowser(target); err != nil {
 		fmt.Fprintf(os.Stderr, "open browser: %v\n", err)
 		fmt.Println(target)
@@ -823,7 +823,7 @@ func runBrowse(args []string) int {
 
 func runFiles(args []string) int {
 	if len(args) == 0 || isHelpArg(args) {
-		fmt.Println("Usage: agenthub files ls [path]\n       agenthub files cat <path>")
+		fmt.Println(renderCLIText("Usage: neudrive files ls [path]\n       neudrive files cat <path>"))
 		return 0
 	}
 	switch args[0] {
@@ -839,11 +839,11 @@ func runFiles(args []string) int {
 
 func runFilesLS(args []string) int {
 	if isHelpArg(args) {
-		fmt.Println("usage: agenthub files ls [path]")
+		fmt.Println(usageLine("files ls [path]"))
 		return 0
 	}
 	if len(args) > 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub files ls [path]")
+		fmt.Fprintln(os.Stderr, usageLine("files ls [path]"))
 		return 2
 	}
 	targetPath := "/"
@@ -882,11 +882,11 @@ func runFilesLS(args []string) int {
 
 func runFilesCat(args []string) int {
 	if isHelpArg(args) {
-		fmt.Println("usage: agenthub files cat <path>")
+		fmt.Println(usageLine("files cat <path>"))
 		return 0
 	}
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "usage: agenthub files cat <path>")
+		fmt.Fprintln(os.Stderr, usageLine("files cat <path>"))
 		return 2
 	}
 	targetPath := normalizeHubPath(args[0])
@@ -912,7 +912,7 @@ func runFilesCat(args []string) int {
 		return 2
 	}
 	if node.Content == "" && !isTextLikeContent(node.MimeType) {
-		fmt.Fprintf(os.Stderr, "files cat: %s is a binary file (%s); use agenthub browse or export instead\n", node.Path, node.MimeType)
+		fmt.Fprintf(os.Stderr, "%s\n", renderCLIText(fmt.Sprintf("files cat: %s is a binary file (%s); use neudrive browse or export instead", node.Path, node.MimeType)))
 		return 1
 	}
 	fmt.Print(node.Content)
@@ -1024,10 +1024,10 @@ func runSync(args []string) int {
 			fmt.Fprintf(os.Stderr, "prepare local sync defaults: %v\n", err)
 			return 1
 		}
-		envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_API_BASE", state.APIBase))
-		envRestore = append(envRestore, setTempEnv("AGENTHUB_API_BASE", state.APIBase))
-		envRestore = append(envRestore, setTempEnv("AGENTHUB_SYNC_TOKEN", cfg.Local.OwnerToken))
-		envRestore = append(envRestore, setTempEnv("AGENTHUB_TOKEN", cfg.Local.OwnerToken))
+		envRestore = append(envRestore, setTempEnv("NEUDRIVE_SYNC_API_BASE", state.APIBase))
+		envRestore = append(envRestore, setTempEnv("NEUDRIVE_API_BASE", state.APIBase))
+		envRestore = append(envRestore, setTempEnv("NEUDRIVE_SYNC_TOKEN", cfg.Local.OwnerToken))
+		envRestore = append(envRestore, setTempEnv("NEUDRIVE_TOKEN", cfg.Local.OwnerToken))
 	}
 
 	if err := synccli.Run(args); err != nil {
@@ -1035,7 +1035,7 @@ func runSync(args []string) int {
 		if errors.As(err, &exitErr) {
 			return exitErr.Code
 		}
-		fmt.Fprintf(os.Stderr, "agenthub sync failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "%s sync failed: %v\n", rootCommand(), err)
 		return 1
 	}
 	return 0
@@ -1067,11 +1067,11 @@ func runRemote(args []string) int {
 		return 0
 	case "login":
 		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println("usage: agenthub remote login <profile> [--url URL] [--token TOKEN]")
+			fmt.Println(usageLine("remote login <profile> [--url URL] [--token TOKEN]"))
 			return 0
 		}
 		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: agenthub remote login <profile> [--url URL] [--token TOKEN]")
+			fmt.Fprintln(os.Stderr, usageLine("remote login <profile> [--url URL] [--token TOKEN]"))
 			return 2
 		}
 		profileName := args[1]
@@ -1083,17 +1083,17 @@ func runRemote(args []string) int {
 		return runSync(loginArgs)
 	case "use":
 		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println("usage: agenthub remote use <profile>")
+			fmt.Println(usageLine("remote use <profile>"))
 			return 0
 		}
 		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, "usage: agenthub remote use <profile>")
+			fmt.Fprintln(os.Stderr, usageLine("remote use <profile>"))
 			return 2
 		}
 		return runSync([]string{"use", "--profile", args[1]})
 	case "logout":
 		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println("usage: agenthub remote logout [profile]")
+			fmt.Println(usageLine("remote logout [profile]"))
 			return 0
 		}
 		logoutArgs := []string{"logout"}
@@ -1103,7 +1103,7 @@ func runRemote(args []string) int {
 		return runSync(logoutArgs)
 	case "whoami":
 		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println("usage: agenthub remote whoami [profile]")
+			fmt.Println(usageLine("remote whoami [profile]"))
 			return 0
 		}
 		whoamiArgs := []string{"whoami"}
@@ -1493,7 +1493,7 @@ func isHelpArg(args []string) bool {
 func SelfContainedBinaryPath() string {
 	exe, err := os.Executable()
 	if err != nil {
-		return "agenthub"
+		return "neudrive"
 	}
 	return filepath.Clean(exe)
 }

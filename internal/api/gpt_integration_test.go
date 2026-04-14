@@ -13,7 +13,7 @@ import (
 // browser extension/SDK and ChatGPT GPT Actions.
 //
 // Run with:
-//   AGENTHUB_TEST_URL=http://localhost:8080 go test ./internal/api/ -run TestAgent_FullLifecycle -v -count=1
+//   NEUDRIVE_TEST_URL=http://localhost:8080 go test ./internal/api/ -run TestAgent_FullLifecycle -v -count=1
 //
 // Requires: docker compose up (server + database running)
 // ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ func TestAgent_FullLifecycle(t *testing.T) {
 	})
 
 	t.Run("InvalidToken_Returns401", func(t *testing.T) {
-		status, _ := apiCall(t, "GET", "/agent/memory/profile", "aht_invalid_token_12345", nil)
+		status, _ := apiCall(t, "GET", "/agent/memory/profile", "ndt_invalid_token_12345", nil)
 		if status != 401 {
 			t.Fatalf("expected 401, got %d", status)
 		}

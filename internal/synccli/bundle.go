@@ -15,8 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/services"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/services"
 )
 
 var binaryExtensions = map[string]struct{}{
@@ -192,7 +192,7 @@ func loadBundleFile(path string) (*models.Bundle, *models.BundleArchiveManifest,
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	if strings.EqualFold(filepath.Ext(path), ".ahubz") {
+	if strings.EqualFold(filepath.Ext(path), ".ndrvz") {
 		bundle, manifest, err := services.ParseBundleArchive(data)
 		return bundle, manifest, data, err
 	}

@@ -1,16 +1,16 @@
 /**
- * Agent Hub - Background Service Worker
+ * neuDrive - Background Service Worker
  * Manages API connection, token storage, profile caching,
  * and message handling for content scripts and popup.
  */
 
-importScripts('lib/agenthub-client.js');
+importScripts('lib/neudrive-client.js');
 
-const client = new AgentHubClient();
+const client = new NeuDriveClient();
 
 // Initialize client on startup
 client.init().then(configured => {
-  console.log('[AgentHub] Background initialized, configured:', configured);
+  console.log('[NeuDrive] Background initialized, configured:', configured);
 });
 
 /**

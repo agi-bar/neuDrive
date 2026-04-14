@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agi-bar/agenthub/internal/localgitsync"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/storage/sqlite"
-	"github.com/agi-bar/agenthub/internal/systemskills"
+	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/systemskills"
 )
 
 type ImportMode string
@@ -105,7 +105,7 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 func ensureAgentImportReady(cfg *runtimecfg.CLIConfig, platform string) error {
 	connection, ok := cfg.Local.Connections[platform]
 	if !ok || strings.TrimSpace(connection.Token) == "" {
-		return fmt.Errorf("%s is not connected; run `agenthub connect %s` first", platformDisplayName(platform), preferredConnectName(platform))
+		return fmt.Errorf("%s is not connected; run `neudrive connect %s` first", platformDisplayName(platform), preferredConnectName(platform))
 	}
 	return nil
 }
@@ -166,15 +166,15 @@ func runAgentExport(ctx context.Context, platform string) (sqlite.AgentExportPay
 }
 
 func runCodexAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error) {
-	skillDoc, err := readSystemDoc("/skills/agenthub/SKILL.md")
+	skillDoc, err := readSystemDoc("/skills/neudrive/SKILL.md")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
-	commandDoc, err := readSystemDoc("/skills/agenthub/commands/export.md")
+	commandDoc, err := readSystemDoc("/skills/neudrive/commands/export.md")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
-	platformDoc, err := readSystemDoc("/skills/agenthub/references/platforms/codex.md")
+	platformDoc, err := readSystemDoc("/skills/neudrive/references/platforms/codex.md")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
@@ -183,14 +183,14 @@ func runCodexAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error)
 		return sqlite.AgentExportPayload{}, err
 	}
 
-	tempDir, err := os.MkdirTemp("", "agenthub-codex-export-*")
+	tempDir, err := os.MkdirTemp("", "neudrive-codex-export-*")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
 	defer os.RemoveAll(tempDir)
 
 	schemaPath := filepath.Join(tempDir, "schema.json")
-	outputPath := filepath.Join(tempDir, "agenthub-export.json")
+	outputPath := filepath.Join(tempDir, "neudrive-export.json")
 	schema, err := json.MarshalIndent(agentExportSchema(), "", "  ")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
@@ -229,15 +229,15 @@ func runCodexAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error)
 }
 
 func runClaudeAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error) {
-	skillDoc, err := readSystemDoc("/skills/agenthub/SKILL.md")
+	skillDoc, err := readSystemDoc("/skills/neudrive/SKILL.md")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
-	commandDoc, err := readSystemDoc("/skills/agenthub/commands/export.md")
+	commandDoc, err := readSystemDoc("/skills/neudrive/commands/export.md")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
-	platformDoc, err := readSystemDoc("/skills/agenthub/references/platforms/claude.md")
+	platformDoc, err := readSystemDoc("/skills/neudrive/references/platforms/claude.md")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
@@ -246,7 +246,7 @@ func runClaudeAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error
 		return sqlite.AgentExportPayload{}, err
 	}
 
-	tempDir, err := os.MkdirTemp("", "agenthub-claude-export-*")
+	tempDir, err := os.MkdirTemp("", "neudrive-claude-export-*")
 	if err != nil {
 		return sqlite.AgentExportPayload{}, err
 	}
@@ -289,17 +289,17 @@ func readSystemDoc(publicPath string) (string, error) {
 }
 
 func buildAgentExportPrompt(platformDisplayName, referenceTag, portabilityTag, skillDoc, commandDoc, platformDoc, portabilityDoc string) string {
-	return strings.TrimSpace(fmt.Sprintf(`You are executing the installed Agent Hub %s entrypoint.
+	return strings.TrimSpace(fmt.Sprintf(`You are executing the installed neuDrive %s entrypoint.
 
 Follow the umbrella skill and platform portability instructions below. Return only JSON matching the provided schema. Do not wrap the JSON in markdown fences.
 
-<agenthub-skill>
+<neudrive-skill>
 %s
-</agenthub-skill>
+</neudrive-skill>
 
-<agenthub-export-command>
+<neudrive-export-command>
 %s
-</agenthub-export-command>
+</neudrive-export-command>
 
 <%s>
 %s

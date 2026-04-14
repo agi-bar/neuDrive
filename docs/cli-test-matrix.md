@@ -1,57 +1,57 @@
-# Agent Hub CLI Test Matrix
+# neuDrive CLI Test Matrix
 
-This matrix maps every user-facing `agenthub` command to its automated coverage layer.
+This matrix maps every user-facing `neudrive` command to its automated coverage layer.
 
 - `L1`: command surface, usage, exit codes
-- `L2`: SQLite local CLI integration with a real built `agenthub` binary
+- `L2`: SQLite local CLI integration with a real built `neudrive` binary
 - `L3`: platform adapter contract tests with isolated HOME and shim binaries
 
 ## Root Commands
 
 | Command | Coverage | Primary test files | Real execution | Platform shim |
 | --- | --- | --- | --- | --- |
-| `agenthub status` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/daemon_integration_test.go` | Yes | No |
-| `agenthub doctor` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/daemon_integration_test.go` | Yes | No |
-| `agenthub platform ls` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go` | Yes | Yes |
-| `agenthub platform show <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
-| `agenthub ls` | L2 | `internal/cli/platform_integration_test.go` | Yes | Yes |
-| `agenthub ls <platform>` | L2 | `internal/cli/platform_integration_test.go` | Yes | Yes |
-| `agenthub connect <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
-| `agenthub disconnect <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
-| `agenthub import <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
-| `agenthub export <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
-| `agenthub daemon status` | L2 | `internal/cli/daemon_integration_test.go` | Yes | No |
-| `agenthub daemon stop` | L2 | `internal/cli/daemon_integration_test.go` | Yes | No |
-| `agenthub daemon logs` | L2 | `internal/cli/daemon_integration_test.go` | Yes | No |
-| `agenthub server` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/server_mcp_integration_test.go` | Yes | No |
-| `agenthub mcp stdio` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/server_mcp_integration_test.go` | Yes | No |
+| `neudrive status` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/daemon_integration_test.go` | Yes | No |
+| `neudrive doctor` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/daemon_integration_test.go` | Yes | No |
+| `neudrive platform ls` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go` | Yes | Yes |
+| `neudrive platform show <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
+| `neudrive ls` | L2 | `internal/cli/platform_integration_test.go` | Yes | Yes |
+| `neudrive ls <platform>` | L2 | `internal/cli/platform_integration_test.go` | Yes | Yes |
+| `neudrive connect <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
+| `neudrive disconnect <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
+| `neudrive import <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
+| `neudrive export <platform>` | L1, L2, L3 | `internal/cli/root_commands_test.go`, `internal/cli/platform_integration_test.go`, `internal/platforms/adapter_contract_test.go` | Yes | Yes |
+| `neudrive daemon status` | L2 | `internal/cli/daemon_integration_test.go` | Yes | No |
+| `neudrive daemon stop` | L2 | `internal/cli/daemon_integration_test.go` | Yes | No |
+| `neudrive daemon logs` | L2 | `internal/cli/daemon_integration_test.go` | Yes | No |
+| `neudrive server` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/server_mcp_integration_test.go` | Yes | No |
+| `neudrive mcp stdio` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/server_mcp_integration_test.go` | Yes | No |
 
-## `agenthub sync`
-
-| Command | Coverage | Primary test files | Real execution | Platform shim |
-| --- | --- | --- | --- | --- |
-| `agenthub sync login` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync profiles` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync use` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync whoami` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync logout` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync export` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync preview` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync push` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync pull` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync resume` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync history` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub sync diff` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-
-## `agenthub remote`
+## `neudrive sync`
 
 | Command | Coverage | Primary test files | Real execution | Platform shim |
 | --- | --- | --- | --- | --- |
-| `agenthub remote ls` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub remote login` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub remote use` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub remote logout` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
-| `agenthub remote whoami` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync login` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync profiles` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync use` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync whoami` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync logout` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync export` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync preview` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync push` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync pull` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync resume` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync history` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive sync diff` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+
+## `neudrive remote`
+
+| Command | Coverage | Primary test files | Real execution | Platform shim |
+| --- | --- | --- | --- | --- |
+| `neudrive remote ls` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive remote login` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive remote use` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive remote logout` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
+| `neudrive remote whoami` | L1, L2 | `internal/cli/root_commands_test.go`, `internal/cli/sync_integration_test.go` | Yes | No |
 
 ## Platform Adapters
 

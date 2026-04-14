@@ -1,5 +1,5 @@
 {
-  "name": "agenthub-web",
+  "name": "neudrive-web",
   "private": true,
   "version": "0.0.1",
   "type": "module",
@@ -7,7 +7,7 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "demo:agentdrive": "bash ./tools/agentdrive_demo.sh 8787"
+    "demo:neudrive": "bash ./tools/neudrive_demo.sh 8787"
   },
   "dependencies": {
     "@uiw/react-markdown-preview": "^5.1.2",

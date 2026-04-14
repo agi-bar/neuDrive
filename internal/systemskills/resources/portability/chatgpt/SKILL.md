@@ -1,13 +1,13 @@
 ---
 name: portability/chatgpt
-description: Guide for importing ChatGPT data into AgentHub or restoring AgentHub data into ChatGPT-compatible structures.
+description: Guide for importing ChatGPT data into NeuDrive or restoring NeuDrive data into ChatGPT-compatible structures.
 when_to_use: Use when the user asks to migrate, back up, restore, import, or export ChatGPT data and platform features.
 tags:
   - portability
   - migration
   - backup
   - chatgpt
-  - agenthub
+  - neudrive
 source: system
 read_only: true
 ---
@@ -15,16 +15,16 @@ read_only: true
 
 ## Overview
 
-Use this skill when the user wants to move data between ChatGPT and AgentHub.
-Treat AgentHub as the canonical store, preserve original meaning, and never hide portability gaps.
+Use this skill when the user wants to move data between ChatGPT and NeuDrive.
+Treat NeuDrive as the canonical store, preserve original meaning, and never hide portability gaps.
 
 ## When To Use
 
 Use this skill for:
 
-- backing up ChatGPT data into AgentHub
-- restoring AgentHub data into ChatGPT-compatible structures
-- mapping ChatGPT features into AgentHub domains
+- backing up ChatGPT data into NeuDrive
+- restoring NeuDrive data into ChatGPT-compatible structures
+- mapping ChatGPT features into NeuDrive domains
 - producing a step-by-step migration prompt for another agent
 
 ## Platform Feature Map
@@ -42,7 +42,7 @@ Use this skill for:
 ## Skill And Package Rules
 
 ChatGPT does not expose Claude-style `/mnt/skills/user` directories.
-If the migration still needs reusable prompt/code/tool bundles to land under Agent Hub `/skills`, the agent must assemble that bundle explicitly.
+If the migration still needs reusable prompt/code/tool bundles to land under neuDrive `/skills`, the agent must assemble that bundle explicitly.
 
 - Use `import_skill(name, files)` for one text/code bundle whose full directory can be represented as `map[path]string`.
 - Nested paths like `scripts/run.py`, `prompts/review.txt`, and `config/tool.yaml` are allowed.
@@ -53,26 +53,26 @@ If the migration still needs reusable prompt/code/tool bundles to land under Age
   - one skill at zip root: `SKILL.md`, `scripts/...`, `prompts/...`, `assets/...`
   - many skills as top-level directories: `skill-a/SKILL.md`, `skill-b/SKILL.md`, and related files below each directory
 - Every imported skill directory must contain `SKILL.md`.
-- All skill imports land under Agent Hub `/skills/<name>/...`.
+- All skill imports land under neuDrive `/skills/<name>/...`.
 - Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation, because that can crash the conversation session.
 - If one archive is too large for a single MCP tool call, use `prepare_skills_upload` and present both the browser upload link and the curl command when available. Prefer the browser path for ordinary users and curl for terminal-comfortable users.
 
-## Import Into AgentHub
+## Import Into NeuDrive
 
 Recommended order:
 
 1. Identify whether the user wants profile, memory, projects, knowledge files, conversations, tools, connections, automations, or everything.
-2. Classify each item into AgentHub domains before writing.
+2. Classify each item into NeuDrive domains before writing.
 3. Write stable rules and preferences into `memory/profile`.
 4. Write project context into `/projects/<name>/context.md`.
-5. Use `write_file` for imported data that should be preserved as files even when it does not fit a first-class Agent Hub domain such as profile, memory, project, or skill. The agent may design a sensible custom directory structure for those files.
-6. If the task includes reusable bundles that should live under Agent Hub `/skills`, apply the skill/package rules above and preserve the entire directory contents, not just the instruction file.
+5. Use `write_file` for imported data that should be preserved as files even when it does not fit a first-class neuDrive domain such as profile, memory, project, or skill. The agent may design a sensible custom directory structure for those files.
+6. If the task includes reusable bundles that should live under neuDrive `/skills`, apply the skill/package rules above and preserve the entire directory contents, not just the instruction file.
 7. Preserve chats, knowledge uploads, GPT configuration, and other unsupported surfaces as structured archive, shadow metadata, or custom file trees when no first-class domain exists yet.
 8. End with a coverage report: native imports, archived items, manual follow-ups, and unsupported parity.
 
 ## Export Back To ChatGPT
 
-When exporting AgentHub data back into ChatGPT:
+When exporting NeuDrive data back into ChatGPT:
 
 1. Compress stable preferences into reusable Custom Instructions text.
 2. Convert project context into one project seed document per project.
@@ -85,13 +85,13 @@ When exporting AgentHub data back into ChatGPT:
 - ChatGPT feature availability may vary by account and product surface.
 - Knowledge uploads and library-like assets may require manual handling.
 - GPT Actions can usually be preserved as metadata and draft configuration, but not always auto-restored.
-- Secrets and tokens should stay governed by AgentHub vault policy by default.
+- Secrets and tokens should stay governed by NeuDrive vault policy by default.
 - Automation parity is partial and should be described as intent plus recreation guidance.
 
 ## Prompt Template
 
 Use or adapt this prompt when another agent needs to execute ChatGPT portability work:
 
-> Help me migrate data between ChatGPT and AgentHub. First classify the data into profile, memory, projects, knowledge/files, tools/connections, automations, conversations, and any reusable bundles that should live under Agent Hub `/skills`. Then map each item to the nearest AgentHub canonical domain. Use `write_file` for additional imported file-like data that should be preserved even when it does not fit a first-class Agent Hub domain, and choose a sensible custom directory structure for those files. If one bundle is a text/code skill-like directory, use `import_skill` with the full directory contents, not just `SKILL.md`. If the user asks for all skills, a workspace export, or any multi-bundle batch, do not use `import_skill` as the primary transport. If the bundle is multi-skill, binary-heavy, or too large for one tool call, use `import_skills_archive` or `prepare_skills_upload` as appropriate. Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation. Preserve ChatGPT-specific structure as archive, shadow metadata, or custom file trees instead of dropping it. If exporting back to ChatGPT, generate the nearest ChatGPT-compatible outputs and clearly mark manual steps and unsupported parity.
+> Help me migrate data between ChatGPT and NeuDrive. First classify the data into profile, memory, projects, knowledge/files, tools/connections, automations, conversations, and any reusable bundles that should live under neuDrive `/skills`. Then map each item to the nearest NeuDrive canonical domain. Use `write_file` for additional imported file-like data that should be preserved even when it does not fit a first-class neuDrive domain, and choose a sensible custom directory structure for those files. If one bundle is a text/code skill-like directory, use `import_skill` with the full directory contents, not just `SKILL.md`. If the user asks for all skills, a workspace export, or any multi-bundle batch, do not use `import_skill` as the primary transport. If the bundle is multi-skill, binary-heavy, or too large for one tool call, use `import_skills_archive` or `prepare_skills_upload` as appropriate. Do not `cat` base64(zip), paste archive base64 into chat, or otherwise emit long archive strings into the conversation. Preserve ChatGPT-specific structure as archive, shadow metadata, or custom file trees instead of dropping it. If exporting back to ChatGPT, generate the nearest ChatGPT-compatible outputs and clearly mark manual steps and unsupported parity.
 
 {{CURRENT_USER_SNAPSHOT}}

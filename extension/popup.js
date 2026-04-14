@@ -1,5 +1,5 @@
 /**
- * Agent Hub - Popup Script
+ * neuDrive - Popup Script
  * Handles login, status display, settings, and quick links.
  */
 

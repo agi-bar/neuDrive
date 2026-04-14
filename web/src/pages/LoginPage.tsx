@@ -114,7 +114,7 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
         <div className="login-card-header">
           <LanguageToggle />
         </div>
-        <h1 className="login-title">Agent Hub</h1>
+        <h1 className="login-title">neuDrive</h1>
         <p className="login-desc">
           {tx('个人 AI Agent 管理中心', 'Personal AI agent control center')}
         </p>

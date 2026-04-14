@@ -1,5 +1,5 @@
 /* ============================================
-   Agent Hub - Content Script Styles
+   neuDrive - Content Script Styles
    Non-intrusive floating UI for AI chat platforms.
    Supports light and dark modes.
    ============================================ */
@@ -44,7 +44,7 @@ body[data-theme="dark"] :root {
 }
 
 /* --- Floating Action Button --- */
-#agenthub-fab {
+#neudrive-fab {
   position: fixed;
   bottom: 24px;
   right: 24px;
@@ -64,24 +64,24 @@ body[data-theme="dark"] :root {
   -webkit-user-select: none;
 }
 
-#agenthub-fab:hover {
+#neudrive-fab:hover {
   transform: scale(1.08);
   box-shadow: 0 6px 20px rgba(99, 102, 241, 0.5);
   background: var(--ah-primary-hover);
 }
 
-#agenthub-fab.agenthub-fab-active {
+#neudrive-fab.neudrive-fab-active {
   transform: scale(0.95);
   background: var(--ah-primary-hover);
 }
 
-#agenthub-fab svg {
+#neudrive-fab svg {
   width: 24px;
   height: 24px;
 }
 
 /* --- Panel --- */
-#agenthub-panel {
+#neudrive-panel {
   position: fixed;
   bottom: 84px;
   right: 24px;
@@ -102,14 +102,14 @@ body[data-theme="dark"] :root {
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
 
-#agenthub-panel.agenthub-panel-visible {
+#neudrive-panel.neudrive-panel-visible {
   opacity: 1;
   transform: translateY(0) scale(1);
   pointer-events: auto;
 }
 
 /* Panel Header */
-.agenthub-panel-header {
+.neudrive-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -118,13 +118,13 @@ body[data-theme="dark"] :root {
   background: var(--ah-bg-secondary);
 }
 
-.agenthub-panel-title {
+.neudrive-panel-title {
   font-weight: 600;
   font-size: 14px;
   color: var(--ah-text);
 }
 
-.agenthub-panel-close {
+.neudrive-panel-close {
   background: none;
   border: none;
   color: var(--ah-text-secondary);
@@ -135,19 +135,19 @@ body[data-theme="dark"] :root {
   transition: color 0.15s;
 }
 
-.agenthub-panel-close:hover {
+.neudrive-panel-close:hover {
   color: var(--ah-text);
 }
 
 /* Panel Body */
-.agenthub-panel-body {
+.neudrive-panel-body {
   padding: 16px;
   overflow-y: auto;
   max-height: 380px;
 }
 
 /* Status */
-.agenthub-status {
+.neudrive-status {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -156,7 +156,7 @@ body[data-theme="dark"] :root {
   margin-bottom: 12px;
 }
 
-.agenthub-dot {
+.neudrive-dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -164,44 +164,44 @@ body[data-theme="dark"] :root {
   flex-shrink: 0;
 }
 
-.agenthub-dot-ok {
+.neudrive-dot-ok {
   background: #22c55e;
 }
 
-.agenthub-dot-err {
+.neudrive-dot-err {
   background: #ef4444;
 }
 
-.agenthub-dot-off {
+.neudrive-dot-off {
   background: #94a3b8;
 }
 
 /* Profile */
-.agenthub-profile {
+.neudrive-profile {
   margin-bottom: 16px;
 }
 
-.agenthub-profile-name {
+.neudrive-profile-name {
   font-weight: 600;
   font-size: 15px;
   color: var(--ah-text);
   margin-bottom: 4px;
 }
 
-.agenthub-profile-bio {
+.neudrive-profile-bio {
   font-size: 12px;
   color: var(--ah-text-secondary);
   line-height: 1.4;
 }
 
 /* Action Buttons */
-.agenthub-actions {
+.neudrive-actions {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.agenthub-btn {
+.neudrive-btn {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -218,19 +218,19 @@ body[data-theme="dark"] :root {
   text-align: left;
 }
 
-.agenthub-btn:hover {
+.neudrive-btn:hover {
   background: var(--ah-primary);
   color: #ffffff;
   border-color: var(--ah-primary);
 }
 
-.agenthub-btn-icon {
+.neudrive-btn-icon {
   font-size: 16px;
   flex-shrink: 0;
 }
 
 /* Hint Text */
-.agenthub-hint {
+.neudrive-hint {
   font-size: 12px;
   color: var(--ah-text-secondary);
   line-height: 1.5;
@@ -238,7 +238,7 @@ body[data-theme="dark"] :root {
 }
 
 /* --- Toast Notification --- */
-#agenthub-toast {
+#neudrive-toast {
   position: fixed;
   bottom: 84px;
   left: 50%;
@@ -257,13 +257,13 @@ body[data-theme="dark"] :root {
   box-shadow: var(--ah-shadow);
 }
 
-#agenthub-toast.agenthub-toast-visible {
+#neudrive-toast.neudrive-toast-visible {
   opacity: 1;
   transform: translateX(-50%) translateY(0);
 }
 
 /* --- Auto-Inject Banner --- */
-#agenthub-auto-banner {
+#neudrive-auto-banner {
   position: fixed;
   top: 16px;
   left: 50%;
@@ -280,10 +280,10 @@ body[data-theme="dark"] :root {
   color: var(--ah-text);
   z-index: 2147483647;
   box-shadow: var(--ah-shadow);
-  animation: agenthub-slide-in 0.3s ease;
+  animation: neudrive-slide-in 0.3s ease;
 }
 
-@keyframes agenthub-slide-in {
+@keyframes neudrive-slide-in {
   from {
     opacity: 0;
     transform: translateX(-50%) translateY(-20px);
@@ -294,7 +294,7 @@ body[data-theme="dark"] :root {
   }
 }
 
-.agenthub-banner-btn {
+.neudrive-banner-btn {
   padding: 6px 14px;
   border-radius: 6px;
   border: none;
@@ -305,21 +305,21 @@ body[data-theme="dark"] :root {
   transition: background 0.15s;
 }
 
-.agenthub-banner-btn-yes {
+.neudrive-banner-btn-yes {
   background: var(--ah-primary);
   color: #ffffff;
 }
 
-.agenthub-banner-btn-yes:hover {
+.neudrive-banner-btn-yes:hover {
   background: var(--ah-primary-hover);
 }
 
-.agenthub-banner-btn-no {
+.neudrive-banner-btn-no {
   background: var(--ah-bg-secondary);
   color: var(--ah-text-secondary);
   border: 1px solid var(--ah-border);
 }
 
-.agenthub-banner-btn-no:hover {
+.neudrive-banner-btn-no:hover {
   background: var(--ah-border);
 }

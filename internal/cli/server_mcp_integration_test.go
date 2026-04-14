@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/mcp"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
-	"github.com/agi-bar/agenthub/internal/storage/sqlite"
+	"github.com/agi-bar/neudrive/internal/mcp"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/storage/sqlite"
 )
 
 func TestAgenthubServerCommand_SQLite(t *testing.T) {

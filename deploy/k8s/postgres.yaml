@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: agenthub-postgres
-  namespace: agenthub
+  name: neudrive-postgres
+  namespace: neudrive
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: agenthub-postgres
-  serviceName: agenthub-postgres
+      app: neudrive-postgres
+  serviceName: neudrive-postgres
   template:
     metadata:
       labels:
-        app: agenthub-postgres
+        app: neudrive-postgres
     spec:
       containers:
         - name: postgres
@@ -23,24 +23,24 @@ spec:
             - name: POSTGRES_DB
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-postgres
+                  name: neudrive-postgres
                   key: POSTGRES_DB
             - name: POSTGRES_USER
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-postgres
+                  name: neudrive-postgres
                   key: POSTGRES_USER
             - name: POSTGRES_PASSWORD
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-postgres
+                  name: neudrive-postgres
                   key: POSTGRES_PASSWORD
           readinessProbe:
             exec:
               command:
                 - sh
                 - -c
-                - pg_isready -U agenthub -d agenthub
+                - pg_isready -U neudrive -d neudrive
             initialDelaySeconds: 5
             periodSeconds: 5
             timeoutSeconds: 3
@@ -60,11 +60,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: agenthub-postgres
-  namespace: agenthub
+  name: neudrive-postgres
+  namespace: neudrive
 spec:
   selector:
-    app: agenthub-postgres
+    app: neudrive-postgres
   ports:
     - name: postgres
       port: 5432

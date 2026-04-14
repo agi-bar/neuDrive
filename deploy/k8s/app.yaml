@@ -1,13 +1,13 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: agenthub-server
-  namespace: agenthub
+  name: neudrive-server
+  namespace: neudrive
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: agenthub-server
+      app: neudrive-server
   strategy:
     type: RollingUpdate
     rollingUpdate:
@@ -16,11 +16,11 @@ spec:
   template:
     metadata:
       labels:
-        app: agenthub-server
+        app: neudrive-server
     spec:
       containers:
-        - name: agenthub-server
-          image: agenthub:latest
+        - name: neudrive-server
+          image: neudrive:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
@@ -28,42 +28,42 @@ spec:
             - name: PORT
               valueFrom:
                 configMapKeyRef:
-                  name: agenthub-config
+                  name: neudrive-config
                   key: PORT
             - name: CORS_ORIGINS
               valueFrom:
                 configMapKeyRef:
-                  name: agenthub-config
+                  name: neudrive-config
                   key: CORS_ORIGINS
             - name: PUBLIC_BASE_URL
               valueFrom:
                 configMapKeyRef:
-                  name: agenthub-config
+                  name: neudrive-config
                   key: PUBLIC_BASE_URL
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-app
+                  name: neudrive-app
                   key: DATABASE_URL
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-app
+                  name: neudrive-app
                   key: JWT_SECRET
             - name: VAULT_MASTER_KEY
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-app
+                  name: neudrive-app
                   key: VAULT_MASTER_KEY
             - name: GITHUB_CLIENT_ID
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-app
+                  name: neudrive-app
                   key: GITHUB_CLIENT_ID
             - name: GITHUB_CLIENT_SECRET
               valueFrom:
                 secretKeyRef:
-                  name: agenthub-app
+                  name: neudrive-app
                   key: GITHUB_CLIENT_SECRET
           livenessProbe:
             httpGet:
@@ -85,11 +85,11 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: agenthub-server
-  namespace: agenthub
+  name: neudrive-server
+  namespace: neudrive
 spec:
   selector:
-    app: agenthub-server
+    app: neudrive-server
   ports:
     - port: 8080
       targetPort: 8080

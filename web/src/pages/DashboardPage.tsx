@@ -105,7 +105,7 @@ export default function DashboardPage() {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `agenthub-export-${new Date().toISOString().slice(0, 10)}.json`
+      a.download = `neudrive-export-${new Date().toISOString().slice(0, 10)}.json`
       document.body.appendChild(a)
       a.click()
       document.body.removeChild(a)
@@ -258,7 +258,7 @@ export default function DashboardPage() {
       <div className="card">
         <h3 className="card-title">{tx('数据管理', 'Data')}</h3>
         <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
-          {tx('下载你所有的 Hub 数据，或进入新的 Bundle Sync 页面执行 `.ahub` / `.ahubz` 的导入、导出和历史查看。', 'Download all Hub data, or open Bundle Sync to import, export, and review `.ahub` / `.ahubz` history.')}
+          {tx('下载你所有的 Hub 数据，或进入新的 Bundle Sync 页面执行 `.ndrv` / `.ndrvz` 的导入、导出和历史查看。', 'Download all Hub data, or open Bundle Sync to import, export, and review `.ndrv` / `.ndrvz` history.')}
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
           <Link to="/data/sync" className="btn">

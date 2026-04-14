@@ -10,17 +10,17 @@ import { setupUser } from './helpers'
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..')
 
-function runAgentHub(args: string[]) {
-  const configured = process.env.AGENTHUB_CLI
+function runNeuDrive(args: string[]) {
+  const configured = process.env.NEUDRIVE_CLI
   if (configured) {
     execFileSync(configured, args, { stdio: 'inherit' })
     return
   }
-  if (fs.existsSync('/tmp/agenthub')) {
-    execFileSync('/tmp/agenthub', args, { stdio: 'inherit' })
+  if (fs.existsSync('/tmp/neudrive')) {
+    execFileSync('/tmp/neudrive', args, { stdio: 'inherit' })
     return
   }
-  execFileSync('go', ['run', './cmd/agenthub', ...args], { cwd: ROOT, stdio: 'inherit' })
+  execFileSync('go', ['run', './cmd/neudrive', ...args], { cwd: ROOT, stdio: 'inherit' })
 }
 
 function writeJSONBundle(filePath: string, bundle: Record<string, unknown>) {
@@ -95,7 +95,7 @@ test.describe('Bundle Sync', () => {
       const payload = await callback.received
       expect(payload.state).toBe('pw-sync-state')
       expect(payload.profile).toBe('prod')
-      expect(payload.token.startsWith('aht_')).toBeTruthy()
+      expect(payload.token.startsWith('ndt_')).toBeTruthy()
       expect(payload.api_base).toMatch(/^http/)
     } finally {
       await callback.close()
@@ -105,7 +105,7 @@ test.describe('Bundle Sync', () => {
   test('preview mirror deletes with expanded detail list', async ({ page, request }) => {
     await setupUser(page, request)
 
-    const initialBundlePath = path.join(os.tmpdir(), `pw-sync-initial-${Date.now()}.ahub`)
+    const initialBundlePath = path.join(os.tmpdir(), `pw-sync-initial-${Date.now()}.ndrv`)
     const initialBundle = {
       version: 'ahub.bundle/v1',
       created_at: new Date().toISOString(),
@@ -131,7 +131,7 @@ test.describe('Bundle Sync', () => {
         memory_items: 0,
       },
     }
-    const mirrorBundlePath = path.join(os.tmpdir(), `pw-sync-mirror-${Date.now()}.ahub`)
+    const mirrorBundlePath = path.join(os.tmpdir(), `pw-sync-mirror-${Date.now()}.ndrv`)
     const mirrorBundle = {
       ...initialBundle,
       mode: 'mirror',
@@ -182,9 +182,9 @@ test.describe('Bundle Sync', () => {
   test('resume archive session from history', async ({ page, request }) => {
     const user = await setupUser(page, request)
     const sourceDir = writeSkillSourceDir('pw-archive-skill')
-    const archivePath = path.join(os.tmpdir(), `pw-sync-${Date.now()}.ahubz`)
+    const archivePath = path.join(os.tmpdir(), `pw-sync-${Date.now()}.ndrvz`)
 
-    runAgentHub(['sync', 'export', '--source', sourceDir, '--format', 'archive', '-o', archivePath])
+    runNeuDrive(['sync', 'export', '--source', sourceDir, '--format', 'archive', '-o', archivePath])
 
     const archiveBytes = fs.readFileSync(archivePath)
     const manifestFiles = unzipSync(new Uint8Array(archiveBytes))

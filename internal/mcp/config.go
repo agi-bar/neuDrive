@@ -1,12 +1,12 @@
 package mcp
 
-const DefaultTokenEnvVar = "AGENTHUB_TOKEN"
+const DefaultTokenEnvVar = "NEUDRIVE_TOKEN"
 
 // GenerateStdioConfig returns the Claude Code MCP config for stdio transport
 func GenerateStdioConfig(binaryPath, token string) map[string]interface{} {
 	return map[string]interface{}{
 		"mcpServers": map[string]interface{}{
-			"agenthub": map[string]interface{}{
+			"neudrive": map[string]interface{}{
 				"command": binaryPath,
 				"args":    []string{"--token", token},
 			},
@@ -22,7 +22,7 @@ func GenerateStdioEnvConfig(binaryPath, tokenEnvVar string) map[string]interface
 	}
 	return map[string]interface{}{
 		"mcpServers": map[string]interface{}{
-			"agenthub": map[string]interface{}{
+			"neudrive": map[string]interface{}{
 				"command": binaryPath,
 				"args":    []string{"--token-env", tokenEnvVar},
 			},
@@ -35,7 +35,7 @@ func GenerateStdioEnvConfig(binaryPath, tokenEnvVar string) map[string]interface
 func GenerateHTTPOAuthConfig(baseURL string) map[string]interface{} {
 	return map[string]interface{}{
 		"mcpServers": map[string]interface{}{
-			"agenthub": map[string]interface{}{
+			"neudrive": map[string]interface{}{
 				"type": "http",
 				"url":  baseURL + "/mcp",
 			},
@@ -48,7 +48,7 @@ func GenerateHTTPOAuthConfig(baseURL string) map[string]interface{} {
 func GenerateHTTPBearerConfig(baseURL, token string) map[string]interface{} {
 	return map[string]interface{}{
 		"mcpServers": map[string]interface{}{
-			"agenthub": map[string]interface{}{
+			"neudrive": map[string]interface{}{
 				"type": "http",
 				"url":  baseURL + "/mcp",
 				"headers": map[string]string{
@@ -67,7 +67,7 @@ func GenerateHTTPConfig(baseURL, token string) map[string]interface{} {
 
 // GenerateCLICommand returns the `claude mcp add` command string
 func GenerateCLICommand(binaryPath, token string) string {
-	return "claude mcp add agenthub --transport stdio -- " + binaryPath + " --token " + token
+	return "claude mcp add neudrive --transport stdio -- " + binaryPath + " --token " + token
 }
 
 // GenerateCLIEnvCommand returns the `claude mcp add` command string for
@@ -76,5 +76,5 @@ func GenerateCLIEnvCommand(binaryPath, tokenEnvVar string) string {
 	if tokenEnvVar == "" {
 		tokenEnvVar = DefaultTokenEnvVar
 	}
-	return "claude mcp add agenthub -- " + binaryPath + " --token-env " + tokenEnvVar
+	return "claude mcp add neudrive -- " + binaryPath + " --token-env " + tokenEnvVar
 }

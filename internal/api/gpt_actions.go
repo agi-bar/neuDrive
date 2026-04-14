@@ -14,7 +14,7 @@ func (s *Server) handleGPTOpenAPISchema(w http.ResponseWriter, r *http.Request) 
 	schema := map[string]interface{}{
 		"openapi": "3.1.0",
 		"info": map[string]string{
-			"title":       "Agent Hub",
+			"title":       "neuDrive",
 			"description": "连接你的 AI 身份和记忆到 ChatGPT",
 			"version":     "1.0.0",
 		},
@@ -26,7 +26,7 @@ func (s *Server) handleGPTOpenAPISchema(w http.ResponseWriter, r *http.Request) 
 				"BearerAuth": map[string]string{
 					"type":        "http",
 					"scheme":      "bearer",
-					"description": "Agent Hub Token (aht_...)",
+					"description": "neuDrive Token (ndt_...)",
 				},
 			},
 		},

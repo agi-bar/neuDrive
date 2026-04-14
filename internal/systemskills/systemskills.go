@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/hubpath"
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/hubpath"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/google/uuid"
 )
 
@@ -27,18 +27,18 @@ const currentUserSnapshotPlaceholder = "{{CURRENT_USER_SNAPSHOT}}"
 var (
 	systemSkillTimestamp = time.Date(2026, 4, 5, 0, 0, 0, 0, time.UTC)
 	skillsRoot           = "/skills"
-	agentHubRoot         = "/skills/agenthub"
+	agentHubRoot         = "/skills/neudrive"
 	portabilityRoot      = "/skills/portability"
 	portabilityPlatforms = []string{"general", "claude", "chatgpt", "codex"}
-	systemSkillOrder     = []string{"agenthub", "portability/general", "portability/claude", "portability/chatgpt", "portability/codex"}
-	agenthubManifest     = skillManifest{
-		DisplayName: "Agent Hub",
-		SkillName:   "agenthub",
+	systemSkillOrder     = []string{"neudrive", "portability/general", "portability/claude", "portability/chatgpt", "portability/codex"}
+	neudriveManifest     = skillManifest{
+		DisplayName: "neuDrive",
+		SkillName:   "neudrive",
 		Path:        agentHubRoot,
-		ResourceDir: "resources/agenthub",
-		Description: "Umbrella skill for using the full Agent Hub MCP surface from inside supported agent platforms.",
-		WhenToUse:   "Use when the user wants to export into Agent Hub, import Agent Hub data back into a platform, list syncable data, or check Agent Hub platform connectivity.",
-		Tags:        []string{"agenthub", "mcp", "platforms", "sync", "portability"},
+		ResourceDir: "resources/neudrive",
+		Description: "Umbrella skill for using the full neuDrive MCP surface from inside supported agent platforms.",
+		WhenToUse:   "Use when the user wants to export into neuDrive, import neuDrive data back into a platform, list syncable data, or check neuDrive platform connectivity.",
+		Tags:        []string{"neudrive", "mcp", "platforms", "sync", "portability"},
 	}
 	platformManifests = map[string]skillManifest{
 		"general": {
@@ -46,9 +46,9 @@ var (
 			SkillName:   "portability/general",
 			Path:        portabilityRoot + "/general",
 			ResourceDir: "resources/portability/general",
-			Description: "Fallback guide for migrating data from platforms that do not yet have a dedicated AgentHub portability manual.",
+			Description: "Fallback guide for migrating data from platforms that do not yet have a dedicated NeuDrive portability manual.",
 			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export platform data and no dedicated portability/<platform> manual exists, or the dedicated manual does not cover the needed surface.",
-			Tags:        []string{"portability", "migration", "backup", "general", "agenthub"},
+			Tags:        []string{"portability", "migration", "backup", "general", "neudrive"},
 			Platform:    "general",
 		},
 		"claude": {
@@ -56,9 +56,9 @@ var (
 			SkillName:   "portability/claude",
 			Path:        portabilityRoot + "/claude",
 			ResourceDir: "resources/portability/claude",
-			Description: "Guide for importing Claude data into AgentHub or restoring AgentHub data into Claude-compatible structures.",
+			Description: "Guide for importing Claude data into NeuDrive or restoring NeuDrive data into Claude-compatible structures.",
 			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export Claude data and skills.",
-			Tags:        []string{"portability", "migration", "backup", "claude", "agenthub"},
+			Tags:        []string{"portability", "migration", "backup", "claude", "neudrive"},
 			Platform:    "claude",
 		},
 		"chatgpt": {
@@ -66,9 +66,9 @@ var (
 			SkillName:   "portability/chatgpt",
 			Path:        portabilityRoot + "/chatgpt",
 			ResourceDir: "resources/portability/chatgpt",
-			Description: "Guide for importing ChatGPT data into AgentHub or restoring AgentHub data into ChatGPT-compatible structures.",
+			Description: "Guide for importing ChatGPT data into NeuDrive or restoring NeuDrive data into ChatGPT-compatible structures.",
 			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export ChatGPT data and platform features.",
-			Tags:        []string{"portability", "migration", "backup", "chatgpt", "agenthub"},
+			Tags:        []string{"portability", "migration", "backup", "chatgpt", "neudrive"},
 			Platform:    "chatgpt",
 		},
 		"codex": {
@@ -76,9 +76,9 @@ var (
 			SkillName:   "portability/codex",
 			Path:        portabilityRoot + "/codex",
 			ResourceDir: "resources/portability/codex",
-			Description: "Guide for importing Codex workspace conventions into AgentHub or exporting AgentHub context back into Codex workflows.",
+			Description: "Guide for importing Codex workspace conventions into NeuDrive or exporting NeuDrive context back into Codex workflows.",
 			WhenToUse:   "Use when the user asks to migrate, back up, restore, import, or export Codex projects, prompts, tools, or automations.",
-			Tags:        []string{"portability", "migration", "backup", "codex", "agenthub"},
+			Tags:        []string{"portability", "migration", "backup", "codex", "neudrive"},
 			Platform:    "codex",
 		},
 	}
@@ -536,10 +536,10 @@ func recommendedNextStep(platform, connected string, profilePresent bool, projec
 	}
 
 	if !profilePresent {
-		return "Migrate profile and memory first so stable preferences land in AgentHub before project data."
+		return "Migrate profile and memory first so stable preferences land in NeuDrive before project data."
 	}
 	if projectCount == 0 {
-		return "Migrate project context next so workspaces and ongoing tasks have a canonical home in AgentHub."
+		return "Migrate project context next so workspaces and ongoing tasks have a canonical home in NeuDrive."
 	}
 	return "Migrate knowledge files, tools, and automations next, then review platform-specific portability gaps."
 }
@@ -552,8 +552,8 @@ func displayName(platform string) string {
 }
 
 func systemManifestByKey(key string) (skillManifest, bool) {
-	if key == "agenthub" {
-		return agenthubManifest, true
+	if key == "neudrive" {
+		return neudriveManifest, true
 	}
 	if strings.HasPrefix(key, "portability/") {
 		platform := strings.TrimPrefix(key, "portability/")
@@ -566,7 +566,7 @@ func systemManifestByKey(key string) (skillManifest, bool) {
 func resourceRootForPath(publicPath string) (string, string, bool) {
 	publicPath = strings.TrimSuffix(hubpath.NormalizePublic(publicPath), "/")
 	if publicPath == agentHubRoot || strings.HasPrefix(publicPath, agentHubRoot+"/") {
-		return agenthubManifest.ResourceDir, agenthubManifest.Path, true
+		return neudriveManifest.ResourceDir, neudriveManifest.Path, true
 	}
 	for _, platform := range portabilityPlatforms {
 		manifest := platformManifests[platform]
@@ -595,7 +595,7 @@ func resourceForFile(publicPath string) (skillManifest, string, bool) {
 
 func manifestForRoot(publicRoot string) (skillManifest, bool) {
 	if publicRoot == agentHubRoot {
-		return agenthubManifest, true
+		return neudriveManifest, true
 	}
 	for _, platform := range portabilityPlatforms {
 		manifest := platformManifests[platform]
@@ -609,8 +609,8 @@ func manifestForRoot(publicRoot string) (skillManifest, bool) {
 func ExportSkillFiles(skillName string) (map[string]string, error) {
 	var manifest skillManifest
 	switch strings.TrimSpace(skillName) {
-	case agenthubManifest.SkillName:
-		manifest = agenthubManifest
+	case neudriveManifest.SkillName:
+		manifest = neudriveManifest
 	default:
 		platform, ok := strings.CutPrefix(strings.TrimSpace(skillName), "portability/")
 		if !ok {

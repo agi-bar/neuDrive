@@ -43,7 +43,7 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 	}
 
 	cfg := &Config{
-		DatabaseURL:             envOrOverride("DATABASE_URL", "postgres://localhost:5432/agenthub?sslmode=disable"),
+		DatabaseURL:             envOrOverride("DATABASE_URL", "postgres://localhost:5432/neudrive?sslmode=disable"),
 		Port:                    envOrOverride("PORT", "8080"),
 		JWTSecret:               envOrOverride("JWT_SECRET", ""),
 		GithubClientID:          envOrOverride("GITHUB_CLIENT_ID", ""),
@@ -59,8 +59,8 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		MaxBodySize:             int64(getEnvInt("MAX_BODY_SIZE", 10*1024*1024)),
 		LogLevel:                envOrOverride("LOG_LEVEL", "info"),
 		LogFormat:               envOrOverride("LOG_FORMAT", "text"),
-		CaptureOAuth:            getEnvBool("AGENTHUB_CAPTURE_OAUTH", false),
-		CaptureDir:              envOrOverride("AGENTHUB_CAPTURE_DIR", "tmp/oauth-captures"),
+		CaptureOAuth:            getEnvBool("NEUDRIVE_CAPTURE_OAUTH", false),
+		CaptureDir:              envOrOverride("NEUDRIVE_CAPTURE_DIR", "tmp/oauth-captures"),
 	}
 
 	if cfg.JWTSecret == "" {

@@ -1,6 +1,6 @@
--- Agent Hub: AI Identity and Trust Infrastructure
+-- neuDrive: AI Identity and Trust Infrastructure
 -- Migration 001: Initial Schema
--- Description: Creates all core tables for the Agent Hub system
+-- Description: Creates all core tables for the neuDrive system
 
 -- Users table
 CREATE TABLE IF NOT EXISTS users (

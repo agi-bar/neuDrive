@@ -18,7 +18,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -157,7 +157,7 @@ func (s *Server) handleFeishuEventCallback(w http.ResponseWriter, r *http.Reques
 				s.Config.FeishuAppID,
 				s.Config.FeishuAppSecret,
 				chatID,
-				"Agent Hub 已收到你的消息。",
+				"neuDrive 已收到你的消息。",
 			); err != nil {
 				slog.Warn("feishu ack failed", "chat_id", chatID, "error", err)
 			}
@@ -439,7 +439,7 @@ func sendFeishuTextMessage(
 		"receive_id": chatID,
 		"msg_type":   "text",
 		"content":    string(content),
-		"uuid":       fmt.Sprintf("agenthub-feishu-%d", time.Now().UnixNano()),
+		"uuid":       fmt.Sprintf("neudrive-feishu-%d", time.Now().UnixNano()),
 	})
 	if err != nil {
 		return err

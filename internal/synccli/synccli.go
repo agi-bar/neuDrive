@@ -19,22 +19,22 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/agenthub/internal/models"
-	"github.com/agi-bar/agenthub/internal/runtimecfg"
+	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
 )
 
 const (
 	fallbackAPIBase = "http://localhost:8080"
 	loginTimeout    = 5 * time.Minute
-	syncConfigEnv   = "AGENTHUB_SYNC_CONFIG"
-	syncProfileEnv  = "AGENTHUB_SYNC_PROFILE"
-	syncAPIBaseEnv  = "AGENTHUB_SYNC_API_BASE"
-	syncTokenEnv    = "AGENTHUB_SYNC_TOKEN"
+	syncConfigEnv   = "NEUDRIVE_SYNC_CONFIG"
+	syncProfileEnv  = "NEUDRIVE_SYNC_PROFILE"
+	syncAPIBaseEnv  = "NEUDRIVE_SYNC_API_BASE"
+	syncTokenEnv    = "NEUDRIVE_SYNC_TOKEN"
 )
 
 var (
-	apiBaseEnvs = []string{syncAPIBaseEnv, "AGENTHUB_API_BASE"}
-	tokenEnvs   = []string{syncTokenEnv, "AGENTHUB_TOKEN"}
+	apiBaseEnvs = []string{syncAPIBaseEnv, "NEUDRIVE_API_BASE"}
+	tokenEnvs   = []string{syncTokenEnv, "NEUDRIVE_TOKEN"}
 )
 
 type ExitError struct {
@@ -127,14 +127,14 @@ func Run(args []string) error {
 }
 
 func printUsage() {
-	fmt.Println("Usage: agenthub sync login|profiles|use|whoami|logout|export|preview|push|pull|resume|history|diff")
+	fmt.Println("Usage: neudrive sync login|profiles|use|whoami|logout|export|preview|push|pull|resume|history|diff")
 }
 
 func runLogin(args []string) error {
 	fs := flag.NewFlagSet("sync login", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	token := fs.String("token", "", "existing sync scoped token")
-	apiBase := fs.String("api-base", "", "Agent Hub base URL")
+	apiBase := fs.String("api-base", "", "neuDrive base URL")
 	profile := fs.String("profile", "", "profile name to save")
 	configPath := fs.String("config", "", "override config path")
 	access := fs.String("access", "both", "push, pull, or both")
@@ -341,8 +341,8 @@ func runExport(args []string) error {
 	source := fs.String("source", "", "directory containing skill subdirectories")
 	mode := fs.String("mode", "merge", "merge or mirror")
 	format := fs.String("format", "json", "json or archive")
-	output := fs.String("output", "backup.ahub", "output bundle path")
-	fs.StringVar(output, "o", "backup.ahub", "output bundle path")
+	output := fs.String("output", "backup.ndrv", "output bundle path")
+	fs.StringVar(output, "o", "backup.ndrv", "output bundle path")
 	filters, err := addFilterFlags(fs)
 	if err != nil {
 		return err
@@ -479,14 +479,14 @@ func runPush(args []string) error {
 		}
 	}
 	bundlePath := input.BundlePath
-	if !strings.HasSuffix(strings.ToLower(bundlePath), ".ahubz") {
+	if !strings.HasSuffix(strings.ToLower(bundlePath), ".ndrvz") {
 		stem := "bundle"
 		if input.SourceDir != "" {
 			stem = filepath.Base(filepath.Clean(input.SourceDir))
 		} else if bundlePath != "" {
 			stem = strings.TrimSuffix(filepath.Base(bundlePath), filepath.Ext(bundlePath))
 		}
-		bundlePath = filepath.Join(".", stem+".ahubz")
+		bundlePath = filepath.Join(".", stem+".ndrvz")
 		if err := os.WriteFile(bundlePath, archiveBytes, 0o644); err != nil {
 			return err
 		}
@@ -578,7 +578,7 @@ func runResume(args []string) error {
 	fs.SetOutput(os.Stderr)
 	var opts commonOptions
 	addCommonFlags(fs, &opts)
-	bundle := fs.String("bundle", "", "existing .ahubz bundle path")
+	bundle := fs.String("bundle", "", "existing .ndrvz bundle path")
 	sessionFile := fs.String("session-file", "", "resume state path")
 	if err := parseFlags(fs, args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -655,8 +655,8 @@ func runHistory(args []string) error {
 func runDiff(args []string) error {
 	fs := flag.NewFlagSet("sync diff", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	left := fs.String("left", "", "left bundle (.ahub or .ahubz)")
-	right := fs.String("right", "", "right bundle (.ahub or .ahubz)")
+	left := fs.String("left", "", "left bundle (.ndrv or .ndrvz)")
+	right := fs.String("right", "", "right bundle (.ndrv or .ndrvz)")
 	format := fs.String("format", "text", "text or json")
 	filters, err := addFilterFlags(fs)
 	if err != nil {
@@ -731,7 +731,7 @@ func parseInputCommand(name string, args []string, includeTransport bool) (commo
 	var opts commonOptions
 	addCommonFlags(fs, &opts)
 	source := fs.String("source", "", "directory containing skill subdirectories")
-	bundle := fs.String("bundle", "", "existing .ahub or .ahubz bundle file")
+	bundle := fs.String("bundle", "", "existing .ndrv or .ndrvz bundle file")
 	mode := fs.String("mode", "merge", "merge or mirror")
 	sessionFile := fs.String("session-file", "", "session state file")
 	transport := fs.String("transport", models.SyncTransportAuto, "auto, json, or archive")
@@ -777,7 +777,7 @@ func parseInputCommand(name string, args []string, includeTransport bool) (commo
 	input.Manifest = manifest
 	input.ArchiveBytes = archiveBytes
 	input.BundlePath = *bundle
-	if strings.EqualFold(filepath.Ext(*bundle), ".ahubz") {
+	if strings.EqualFold(filepath.Ext(*bundle), ".ndrvz") {
 		input.Kind = models.BundleFormatArchive
 	} else {
 		input.Kind = models.BundleFormatJSON
@@ -791,8 +791,8 @@ func parsePullFlags(args []string) (pullOptions, models.BundleFilters, error) {
 	var opts pullOptions
 	addCommonFlags(fs, &opts.commonOptions)
 	format := fs.String("format", "json", "json or archive")
-	output := fs.String("output", "backup.ahub", "output file")
-	fs.StringVar(output, "o", "backup.ahub", "output file")
+	output := fs.String("output", "backup.ndrv", "output file")
+	fs.StringVar(output, "o", "backup.ndrv", "output file")
 	filters, err := addFilterFlags(fs)
 	if err != nil {
 		return pullOptions{}, models.BundleFilters{}, err
@@ -827,7 +827,7 @@ func parseCommonOptions(name string, args []string) (commonOptions, error) {
 
 func addCommonFlags(fs *flag.FlagSet, opts *commonOptions) {
 	fs.StringVar(&opts.Token, "token", "", "override sync token")
-	fs.StringVar(&opts.APIBase, "api-base", "", "override Agent Hub base URL")
+	fs.StringVar(&opts.APIBase, "api-base", "", "override neuDrive base URL")
 	fs.StringVar(&opts.Profile, "profile", "", "profile name")
 	fs.StringVar(&opts.ConfigPath, "config", "", "override config path")
 }
@@ -903,13 +903,13 @@ func resolveRuntimeAuth(opts commonOptions, state *sessionState) (string, *runti
 	}
 	profileName, profile, ok := profileEntry(opts.Profile, cfg)
 	if !ok {
-		return "", nil, "", "", "", "", errors.New("no sync token found; run `agenthub sync login` or pass --token")
+		return "", nil, "", "", "", "", errors.New("no sync token found; run `neudrive sync login` or pass --token")
 	}
 	if strings.TrimSpace(profile.Token) == "" {
-		return "", nil, "", "", "", "", fmt.Errorf("profile %s has no saved token; run `agenthub sync login --profile %s`", profileName, profileName)
+		return "", nil, "", "", "", "", fmt.Errorf("profile %s has no saved token; run `neudrive sync login --profile %s`", profileName, profileName)
 	}
 	if profileExpired(profile) {
-		return "", nil, "", "", "", "", fmt.Errorf("stored token for profile %s expired at %s; run `agenthub sync login --profile %s`", profileName, profile.ExpiresAt, profileName)
+		return "", nil, "", "", "", "", fmt.Errorf("stored token for profile %s expired at %s; run `neudrive sync login --profile %s`", profileName, profile.ExpiresAt, profileName)
 	}
 	return configPath, cfg, apiBaseValue, profile.Token, profileName, "profile:" + profileName, nil
 }
@@ -990,7 +990,7 @@ func pickProfileName(cfg *runtimecfg.CLIConfig, requested, apiBaseValue string) 
 
 func renderProfiles(cfg *runtimecfg.CLIConfig) string {
 	if len(cfg.Profiles) == 0 {
-		return "No saved profiles. Run `agenthub sync login`."
+		return "No saved profiles. Run `neudrive sync login`."
 	}
 	names := make([]string, 0, len(cfg.Profiles))
 	for name := range cfg.Profiles {
@@ -1106,7 +1106,7 @@ func waitForBrowserLogin(apiBaseValue, profileName, access string, ttlMinutes in
 		"cli_callback":    []string{callbackURL},
 		"cli_state":       []string{state},
 	}.Encode())
-	fmt.Printf("Opening browser for Agent Hub sync login:\n%s\n", syncURL)
+	fmt.Printf("Opening browser for neuDrive sync login:\n%s\n", syncURL)
 	_ = openBrowser(syncURL)
 	timer := time.NewTimer(loginTimeout)
 	defer timer.Stop()

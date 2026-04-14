@@ -11,7 +11,7 @@ type I18nContextValue = {
   isZh: boolean
 }
 
-const STORAGE_KEY = 'agenthub.locale'
+const STORAGE_KEY = 'neudrive.locale'
 
 const I18nContext = createContext<I18nContextValue | null>(null)
 

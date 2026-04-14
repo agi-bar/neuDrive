@@ -4,7 +4,7 @@
   "mappings": [
     {
       "source_feature": "workspace or project instructions",
-      "agenthub_target": [
+      "neudrive_target": [
         "/projects/<name>/context.md",
         "/memory/profile/*"
       ],
@@ -12,7 +12,7 @@
     },
     {
       "source_feature": "reusable prompts",
-      "agenthub_target": [
+      "neudrive_target": [
         "skill_reference_material",
         "project_assets"
       ],
@@ -20,7 +20,7 @@
     },
     {
       "source_feature": "tools / MCP config",
-      "agenthub_target": [
+      "neudrive_target": [
         "tool_metadata",
         "connection_metadata"
       ],
@@ -28,14 +28,14 @@
     },
     {
       "source_feature": "automation manifests",
-      "agenthub_target": [
+      "neudrive_target": [
         "automation_shadow"
       ],
       "restore_strategy": "manual_recreation"
     },
     {
       "source_feature": "session transcripts or notes",
-      "agenthub_target": [
+      "neudrive_target": [
         "conversation_archive",
         "/projects/<name>/log.jsonl"
       ],

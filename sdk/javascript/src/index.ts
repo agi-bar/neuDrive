@@ -1,8 +1,8 @@
-export { AgentHub, AgentHubError } from './client'
-export { AgentHubAuth } from './auth'
-export type { AgentHubAuthConfig } from './auth'
+export { NeuDrive, NeuDriveError } from './client'
+export { NeuDriveAuth } from './auth'
+export type { NeuDriveAuthConfig } from './auth'
 export type {
-  AgentHubConfig,
+  NeuDriveConfig,
   User,
   Profile,
   Project,

@@ -126,7 +126,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		Summary:   "Mirror local Agent Hub data into a local Git repository and keep it refreshed.",
 		Usage:     []string{"agenthub git init [--output DIR]", "agenthub git pull"},
 		Examples:  []string{"agenthub git init --output ./agenthub-export/git-mirror", "agenthub git pull"},
-		Notes:     []string{"`git init` exports all non-secret local Hub data, initializes the repo when needed, and registers it as the active mirror.", "`git pull` refreshes the active mirror from the current local Hub state.", "Secrets are not exported; vault only contributes scope metadata.", "GitHub sync still requires running `git add / git commit / git remote add origin / git push` in that directory."},
+		Notes:     []string{"`git init` exports all non-secret local Hub data, initializes the repo when needed, and registers it as the active mirror.", "If `--output` is omitted, Agent Hub uses `local.git_mirror_path` from `config.json`; if it is missing, Agent Hub writes the default `./agenthub-export/git-mirror` into `config.json` first.", "`git pull` refreshes the active mirror from the current local Hub state.", "Secrets are not exported; vault only contributes scope metadata.", "GitHub sync still requires running `git add / git commit / git remote add origin / git push` in that directory."},
 		SeeAlso:   []string{"import", "write"},
 		SortOrder: 110,
 	},

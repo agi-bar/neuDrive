@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
 )
 
 func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
@@ -243,6 +245,76 @@ func TestAgenthubGitInitPullAndAutoSync(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(mirrorDir, "memory", "profile", "codex-agent.md")); err != nil {
 		t.Fatalf("expected git pull to restore mirrored file: %v", err)
+	}
+}
+
+func TestAgenthubGitInitUsesConfiguredMirrorPath(t *testing.T) {
+	binary := buildAgenthubBinary(t)
+	env, configPath, _, _, workDir := isolatedAgenthubEnv(t)
+	home := envValue(env, "HOME")
+	seedCLIPlatformFixtures(t, home)
+	env, _ = installCLIPlatformShims(t, env, "codex")
+
+	mustRunAgenthub(t, binary, env, "connect", "codex")
+	stdout, _ := mustRunAgenthub(t, binary, env, "import", "codex")
+	if !strings.Contains(stdout, "Imported codex using mode=agent") {
+		t.Fatalf("unexpected initial import output: %s", stdout)
+	}
+
+	cfg := loadCLIConfigForTest(t, configPath)
+	configuredMirrorDir := filepath.Join(workDir, "configured-git-mirror")
+	cfg.Local.GitMirrorPath = configuredMirrorDir
+	if err := runtimecfg.SaveConfig(configPath, cfg); err != nil {
+		t.Fatalf("save config with git mirror path: %v", err)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "git", "init")
+	if !strings.Contains(stdout, "本地 Git 镜像目录: "+configuredMirrorDir) {
+		t.Fatalf("expected configured mirror path in output: %s", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(configuredMirrorDir, ".git")); err != nil {
+		t.Fatalf("expected configured mirror repo initialized: %v", err)
+	}
+}
+
+func TestAgenthubGitInitWritesDefaultMirrorPathToConfig(t *testing.T) {
+	binary := buildAgenthubBinary(t)
+	env, configPath, _, _, workDir := isolatedAgenthubEnv(t)
+	home := envValue(env, "HOME")
+	seedCLIPlatformFixtures(t, home)
+	env, _ = installCLIPlatformShims(t, env, "codex")
+
+	previousWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(workDir); err != nil {
+		t.Fatalf("chdir work dir: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chdir(previousWD); err != nil {
+			t.Fatalf("restore cwd: %v", err)
+		}
+	})
+
+	mustRunAgenthub(t, binary, env, "connect", "codex")
+	stdout, _ := mustRunAgenthub(t, binary, env, "import", "codex")
+	if !strings.Contains(stdout, "Imported codex using mode=agent") {
+		t.Fatalf("unexpected initial import output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "git", "init")
+	expectedMirrorDir := filepath.Join(workDir, "agenthub-export", "git-mirror")
+	if !strings.Contains(stdout, "本地 Git 镜像目录: "+expectedMirrorDir) {
+		t.Fatalf("expected default mirror path in output: %s", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(expectedMirrorDir, ".git")); err != nil {
+		t.Fatalf("expected default mirror repo initialized: %v", err)
+	}
+
+	cfg := loadCLIConfigForTest(t, configPath)
+	if cfg.Local.GitMirrorPath != runtimecfg.DefaultGitMirrorPath {
+		t.Fatalf("expected default git_mirror_path %q in config, got %q", runtimecfg.DefaultGitMirrorPath, cfg.Local.GitMirrorPath)
 	}
 }
 

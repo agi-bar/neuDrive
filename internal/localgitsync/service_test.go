@@ -70,3 +70,17 @@ func TestEnsureGitRepoIgnoresInheritedGitEnv(t *testing.T) {
 		t.Fatalf("expected inherited git env not to mutate outer config\nbefore:\n%s\nafter:\n%s", string(before), string(after))
 	}
 }
+
+func TestResolveMirrorRootExpandsUser(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+
+	got, err := resolveMirrorRoot("~/mirror")
+	if err != nil {
+		t.Fatalf("resolveMirrorRoot: %v", err)
+	}
+	want := filepath.Join(home, "mirror")
+	if got != want {
+		t.Fatalf("resolveMirrorRoot = %q, want %q", got, want)
+	}
+}

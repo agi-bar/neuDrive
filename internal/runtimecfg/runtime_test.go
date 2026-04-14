@@ -16,6 +16,7 @@ func TestSaveAndLoadConfigRoundTrip(t *testing.T) {
 	cfg.CurrentProfile = "official"
 	cfg.Profiles["official"] = SyncProfile{APIBase: "https://agenthub.agi.bar", Token: "aht_test"}
 	cfg.Local.DatabaseURL = "postgres://agenthub:test@localhost:5432/agenthub?sslmode=disable"
+	cfg.Local.GitMirrorPath = "~/agenthub-mirror"
 	if err := SaveConfig(path, cfg); err != nil {
 		t.Fatalf("SaveConfig: %v", err)
 	}
@@ -31,6 +32,9 @@ func TestSaveAndLoadConfigRoundTrip(t *testing.T) {
 	}
 	if loaded.Local.DatabaseURL == "" {
 		t.Fatal("expected local database url to round-trip")
+	}
+	if loaded.Local.GitMirrorPath != "~/agenthub-mirror" {
+		t.Fatalf("git_mirror_path mismatch: got %q", loaded.Local.GitMirrorPath)
 	}
 }
 
@@ -74,6 +78,9 @@ func TestEnsureLocalDefaultsPrefersSQLite(t *testing.T) {
 	}
 	if cfg.Local.DatabaseURL != "" {
 		t.Fatalf("expected sqlite defaults to leave database URL empty, got %q", cfg.Local.DatabaseURL)
+	}
+	if cfg.Local.GitMirrorPath != DefaultGitMirrorPath {
+		t.Fatalf("expected git mirror path default %q, got %q", DefaultGitMirrorPath, cfg.Local.GitMirrorPath)
 	}
 	if cfg.Local.JWTSecret == "" || cfg.Local.VaultMasterKey == "" {
 		t.Fatal("expected local secrets to be generated")

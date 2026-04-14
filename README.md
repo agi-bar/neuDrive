@@ -84,8 +84,24 @@ agenthub browse
 - 本地 daemon 默认使用 SQLite，首次启动时会自动创建本地数据库
 - `agenthub browse` 会打开本地 dashboard，并自动附带本地 owner token
 - `agenthub files ls|cat` 可以快速检查 profile / memory / project context 是否已经导入
-- `agenthub git init [--output DIR]` 可以把当前本地 Hub 的非 secret 数据导出成一个已 `git init` 的本地目录
+- `agenthub git init [--output DIR]` 可以把当前本地 Hub 的非 secret 数据导出成一个已 `git init` 的本地目录；未传 `--output` 时会直接使用 `config.json` 里的 `local.git_mirror_path`，如果还没配置，Agent Hub 会先把默认值 `./agenthub-export/git-mirror` 写进 `config.json`
 - `agenthub git pull` 可以手动把当前 Hub 状态刷新到这个本地 Git 目录；同时之后新的 import / write 也会自动同步到这个目录
+
+如果你想把默认镜像目录固定下来，可以直接编辑 Agent Hub 本地配置文件；如果你不手动配，`agenthub git init` 也会先把默认值写进去，方便你之后找到：
+
+```json
+{
+  "local": {
+    "git_mirror_path": "~/agenthub/git-mirror"
+  }
+}
+```
+
+配置文件默认位置：
+
+- macOS: `~/Library/Application Support/AgentHub/config.json`
+- Linux: `$XDG_CONFIG_HOME/agenthub/config.json`
+- Linux（无 XDG 时）: `~/.config/agenthub/config.json`
 
 也可以直接用：
 

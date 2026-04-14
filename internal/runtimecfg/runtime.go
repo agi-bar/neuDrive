@@ -25,6 +25,7 @@ const (
 	DefaultPortEnd        = 42719
 	DefaultDatabaseURL    = "postgres://agenthub:agenthub_dev@localhost:5432/agenthub?sslmode=disable"
 	DefaultStorage        = "sqlite"
+	DefaultGitMirrorPath  = "./agenthub-export/git-mirror"
 	DefaultRemoteOfficial = "https://agenthub.agi.bar"
 	ConfigEnv             = "AGENTHUB_CONFIG"
 )
@@ -59,6 +60,7 @@ type LocalConfig struct {
 	Storage        string                     `json:"storage,omitempty"`
 	SQLitePath     string                     `json:"sqlite_path,omitempty"`
 	DatabaseURL    string                     `json:"database_url,omitempty"`
+	GitMirrorPath  string                     `json:"git_mirror_path,omitempty"`
 	JWTSecret      string                     `json:"jwt_secret,omitempty"`
 	VaultMasterKey string                     `json:"vault_master_key,omitempty"`
 	PublicBaseURL  string                     `json:"public_base_url,omitempty"`
@@ -256,6 +258,9 @@ func EnsureLocalDefaults(cfg *CLIConfig) error {
 		if cfg.Local.DatabaseURL == "" {
 			cfg.Local.DatabaseURL = DefaultDatabaseURL
 		}
+	}
+	if strings.TrimSpace(cfg.Local.GitMirrorPath) == "" {
+		cfg.Local.GitMirrorPath = DefaultGitMirrorPath
 	}
 	if cfg.Local.JWTSecret == "" {
 		secret, err := randomHex(32)

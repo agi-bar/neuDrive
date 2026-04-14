@@ -13,6 +13,7 @@ import (
 
 	"github.com/agi-bar/agenthub/internal/hubpath"
 	"github.com/agi-bar/agenthub/internal/models"
+	"github.com/agi-bar/agenthub/internal/runtimecfg"
 	"github.com/agi-bar/agenthub/internal/services"
 	sqlitestorage "github.com/agi-bar/agenthub/internal/storage/sqlite"
 	"github.com/agi-bar/agenthub/internal/systemskills"
@@ -21,8 +22,7 @@ import (
 )
 
 const (
-	defaultMirrorRoot = "./agenthub-export/git-mirror"
-	readmePath        = "README.md"
+	readmePath = "README.md"
 )
 
 type mirrorRepo interface {
@@ -87,7 +87,7 @@ func NewWithDeps(
 }
 
 func DefaultMirrorRoot() string {
-	return defaultMirrorRoot
+	return runtimecfg.DefaultGitMirrorPath
 }
 
 func (s *Service) GetActiveMirror(ctx context.Context, userID uuid.UUID) (*models.LocalGitMirror, error) {
@@ -321,9 +321,9 @@ func (s *Service) writeSidecars(ctx context.Context, userID uuid.UUID, rootPath 
 func resolveMirrorRoot(outputRoot string) (string, error) {
 	target := strings.TrimSpace(outputRoot)
 	if target == "" {
-		target = defaultMirrorRoot
+		target = DefaultMirrorRoot()
 	}
-	return filepath.Abs(target)
+	return filepath.Abs(expandUser(target))
 }
 
 func validateMirrorRoot(rootPath string, active *models.LocalGitMirror) error {
@@ -491,6 +491,14 @@ func mirrorCreatedAt(active *models.LocalGitMirror, fallback time.Time) time.Tim
 
 func samePath(left, right string) bool {
 	return filepath.Clean(strings.TrimSpace(left)) == filepath.Clean(strings.TrimSpace(right))
+}
+
+func expandUser(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, _ := os.UserHomeDir()
+		return filepath.Join(home, strings.TrimPrefix(path, "~/"))
+	}
+	return path
 }
 
 func isBinaryEntry(metadata map[string]interface{}) bool {

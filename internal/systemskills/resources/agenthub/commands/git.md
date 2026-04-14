@@ -5,7 +5,7 @@ Use this command when the user wants to mirror the current local Agent Hub into 
 ## Subcommands
 
 - `agenthub git init [--output DIR]`
-  Export all non-secret local Hub data into a local folder, run `git init` when needed, and register that folder as the active mirror for future syncs.
+  Export all non-secret local Hub data into a local folder, run `git init` when needed, and register that folder as the active mirror for future syncs. If `--output` is omitted, use `local.git_mirror_path` from the local `config.json`; if it is missing, write the default `./agenthub-export/git-mirror` into `config.json` first.
 - `agenthub git pull`
   Refresh the active local Git mirror from the current local Hub state.
 

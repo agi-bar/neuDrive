@@ -734,11 +734,12 @@ func runGitInit(output string) int {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
+	cfg, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "prepare local git mirror: %v\n", err)
 		return 1
 	}
+	output = configuredGitMirrorPath(cfg, output)
 	var info localgitsync.SyncInfo
 	if err := localAPIPostJSON(ctx, state.APIBase, token, "/agent/local-git-mirror/register", map[string]string{"output_root": output}, &info); err != nil {
 		fmt.Fprintf(os.Stderr, "git init: %v\n", err)
@@ -1148,6 +1149,17 @@ func ensureLocalOwnerAccessForAPI(ctx context.Context) (*runtimecfg.CLIConfig, *
 		return nil, nil, "", err
 	}
 	return cfg, state, cfg.Local.OwnerToken, nil
+}
+
+func configuredGitMirrorPath(cfg *runtimecfg.CLIConfig, output string) string {
+	output = strings.TrimSpace(output)
+	if output != "" {
+		return output
+	}
+	if cfg == nil {
+		return ""
+	}
+	return strings.TrimSpace(cfg.Local.GitMirrorPath)
 }
 
 func ensureOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CLIConfig, apiBase string) error {

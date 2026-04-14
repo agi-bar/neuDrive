@@ -45,6 +45,17 @@ Bundle Sync 支持两种文件格式：
 - `profiles.<name>.token`
 - `profiles.<name>.expires_at`
 - `profiles.<name>.scopes`
+- `local.git_mirror_path`（给 `agenthub git init` 提供默认镜像目录；如果缺失，首次 `git init` 会自动写入 `./agenthub-export/git-mirror`）
+
+例如：
+
+```json
+{
+  "local": {
+    "git_mirror_path": "~/agenthub/git-mirror"
+  }
+}
+```
 
 参数优先级：
 

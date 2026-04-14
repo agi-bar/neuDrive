@@ -118,6 +118,32 @@ export interface SkillSummary {
   min_trust_level?: number
 }
 
+export interface LocalGitSyncInfo {
+  enabled: boolean
+  path?: string
+  synced: boolean
+  last_synced_at?: string
+  message?: string
+  last_error?: string
+  auto_commit_enabled?: boolean
+  auto_push_enabled?: boolean
+  auth_mode?: string
+  remote_name?: string
+  remote_branch?: string
+  last_commit_at?: string
+  last_commit_hash?: string
+  last_push_at?: string
+  last_push_error?: string
+  commit_created?: boolean
+  push_attempted?: boolean
+  push_succeeded?: boolean
+}
+
+export interface RequestEnvelope<T> {
+  data: T
+  localGitSync?: LocalGitSyncInfo
+}
+
 // ---------------------------------------------------------------------------
 // Token refresh logic
 // ---------------------------------------------------------------------------
@@ -155,7 +181,7 @@ async function doRefreshToken(): Promise<AuthResponse | null> {
 // Core request function with automatic 401 refresh
 // ---------------------------------------------------------------------------
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function requestWithMetadata<T>(path: string, options?: RequestInit): Promise<RequestEnvelope<T>> {
   const token = localStorage.getItem('token')
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
@@ -193,9 +219,12 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       }
       const retryJson = await retryRes.json()
       if (retryJson && retryJson.ok === true && retryJson.data !== undefined) {
-        return retryJson.data
+        return {
+          data: retryJson.data,
+          localGitSync: retryJson.local_git_sync,
+        }
       }
-      return retryJson
+      return { data: retryJson }
     }
     throw new Error('session expired')
   }
@@ -207,9 +236,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const json = await res.json()
   // Unwrap APISuccess envelope: {ok: true, data: {...}} → return data
   if (json && json.ok === true && json.data !== undefined) {
-    return json.data
+    return {
+      data: json.data,
+      localGitSync: json.local_git_sync,
+    }
   }
-  return json
+  return { data: json }
+}
+
+async function request<T>(path: string, options?: RequestInit): Promise<T> {
+  const result = await requestWithMetadata<T>(path, options)
+  return result.data
+}
+
+async function requestEnvelope<T>(path: string, options?: RequestInit): Promise<RequestEnvelope<T>> {
+  return requestWithMetadata<T>(path, options)
 }
 
 async function agentRequest<T>(path: string, token: string, options?: RequestInit): Promise<T> {
@@ -431,6 +472,8 @@ export const api = {
   // Vault
   getVaultScopes: () => request<{ scopes: any[] }>('/vault/scopes').then(r => r.scopes || []),
 
+  requestEnvelope,
+
   // Import / Export
   importSkills: (skills: SkillFile[]) =>
     request<ImportResult>('/import/skills', {
@@ -582,6 +625,21 @@ export const api = {
     if (format === 'archive') return agentRequestBytes(path, token)
     return agentRequest(path, token)
   },
+
+  getLocalGitMirror: (): Promise<GitMirrorSettings> =>
+    request<GitMirrorSettings>('/local/git-mirror'),
+
+  updateLocalGitMirror: (req: UpdateGitMirrorRequest): Promise<GitMirrorSettings> =>
+    request<GitMirrorSettings>('/local/git-mirror', {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  testGitMirrorGitHubToken: (req: GitMirrorGitHubTestRequest): Promise<GitMirrorGitHubTestResult> =>
+    request<GitMirrorGitHubTestResult>('/local/git-mirror/github/test', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
 }
 
 // ---------------------------------------------------------------------------
@@ -732,6 +790,53 @@ export interface SyncJob {
   created_at: string
   updated_at: string
   completed_at?: string
+}
+
+export interface GitMirrorSettings {
+  enabled: boolean
+  path?: string
+  auto_commit_enabled: boolean
+  auto_push_enabled: boolean
+  auth_mode: 'local_credentials' | 'github_token'
+  remote_name: string
+  remote_url?: string
+  remote_branch: string
+  last_synced_at?: string
+  last_error?: string
+  last_commit_at?: string
+  last_commit_hash?: string
+  last_push_at?: string
+  last_push_error?: string
+  github_token_configured: boolean
+  github_token_verified_at?: string
+  github_token_login?: string
+  github_repo_permission?: string
+  message?: string
+}
+
+export interface UpdateGitMirrorRequest {
+  auto_commit_enabled: boolean
+  auto_push_enabled: boolean
+  auth_mode: 'local_credentials' | 'github_token'
+  remote_name?: string
+  remote_url?: string
+  remote_branch?: string
+  github_token?: string
+  clear_github_token?: boolean
+}
+
+export interface GitMirrorGitHubTestRequest {
+  remote_url: string
+  github_token: string
+}
+
+export interface GitMirrorGitHubTestResult {
+  ok: boolean
+  login?: string
+  repo?: string
+  normalized_remote_url?: string
+  permission?: string
+  message?: string
 }
 
 // ---------------------------------------------------------------------------

@@ -5,8 +5,11 @@ import {
   api,
   type BundleFilters,
   type BundlePreviewResult,
+  type GitMirrorGitHubTestResult,
+  type GitMirrorSettings,
   type SyncJob,
   type SyncTokenResponse,
+  type UpdateGitMirrorRequest,
 } from '../../api'
 import { formatDateTime, summarizeText } from './DataShared'
 
@@ -106,6 +109,23 @@ function jobStatusLabel(job: SyncJob, locale: 'zh-CN' | 'en') {
 
 export default function DataSyncPage() {
   const { locale, tx } = useI18n()
+  const [gitMirror, setGitMirror] = useState<GitMirrorSettings | null>(null)
+  const [gitMirrorBusy, setGitMirrorBusy] = useState(false)
+  const [gitMirrorSaving, setGitMirrorSaving] = useState(false)
+  const [gitMirrorTesting, setGitMirrorTesting] = useState(false)
+  const [gitMirrorError, setGitMirrorError] = useState('')
+  const [gitMirrorMessage, setGitMirrorMessage] = useState('')
+  const [gitMirrorTokenInput, setGitMirrorTokenInput] = useState('')
+  const [gitMirrorTokenTest, setGitMirrorTokenTest] = useState<GitMirrorGitHubTestResult | null>(null)
+  const [gitMirrorDraft, setGitMirrorDraft] = useState<UpdateGitMirrorRequest>({
+    auto_commit_enabled: false,
+    auto_push_enabled: false,
+    auth_mode: 'local_credentials',
+    remote_name: 'origin',
+    remote_url: '',
+    remote_branch: 'main',
+  })
+
   const [syncToken, setSyncToken] = useState<SyncTokenResponse | null>(null)
   const [ttlMinutes, setTTLMinutes] = useState(30)
   const [tokenBusy, setTokenBusy] = useState(false)
@@ -132,6 +152,33 @@ export default function DataSyncPage() {
   const [jobs, setJobs] = useState<SyncJob[]>([])
   const [jobsBusy, setJobsBusy] = useState(false)
   const [jobsError, setJobsError] = useState('')
+
+  const syncGitMirrorDraft = (settings: GitMirrorSettings) => {
+    setGitMirrorDraft({
+      auto_commit_enabled: settings.auto_commit_enabled,
+      auto_push_enabled: settings.auto_push_enabled,
+      auth_mode: settings.auth_mode,
+      remote_name: settings.remote_name || 'origin',
+      remote_url: settings.remote_url || '',
+      remote_branch: settings.remote_branch || 'main',
+    })
+    setGitMirrorTokenInput('')
+    setGitMirrorTokenTest(null)
+  }
+
+  const loadGitMirror = async () => {
+    setGitMirrorBusy(true)
+    setGitMirrorError('')
+    try {
+      const settings = await api.getLocalGitMirror()
+      setGitMirror(settings)
+      syncGitMirrorDraft(settings)
+    } catch (err: any) {
+      setGitMirrorError(err.message || tx('加载 Git Mirror 配置失败', 'Failed to load Git Mirror settings'))
+    } finally {
+      setGitMirrorBusy(false)
+    }
+  }
 
   const exportFilters = useMemo<BundleFilters>(() => ({
     include_domains: [
@@ -161,6 +208,10 @@ export default function DataSyncPage() {
       void loadJobs(syncToken.token)
     }
   }, [syncToken?.token])
+
+  useEffect(() => {
+    void loadGitMirror()
+  }, [])
 
   const handleCreateSyncToken = async () => {
     setTokenBusy(true)
@@ -273,6 +324,101 @@ export default function DataSyncPage() {
     }
   }
 
+  const updateGitMirrorDraft = (patch: Partial<UpdateGitMirrorRequest>) => {
+    setGitMirrorDraft((prev) => {
+      const next = { ...prev, ...patch }
+      if (!next.auto_commit_enabled) {
+        next.auto_push_enabled = false
+      }
+      if (next.auto_push_enabled) {
+        next.auto_commit_enabled = true
+      }
+      return next
+    })
+    setGitMirrorMessage('')
+    setGitMirrorError('')
+    setGitMirrorTokenTest(null)
+  }
+
+  const gitMirrorVerificationCurrent = useMemo(() => {
+    if (!gitMirror) return false
+    if (gitMirrorDraft.auth_mode !== 'github_token') return true
+    if (gitMirrorTokenInput.trim()) {
+      return !!gitMirrorTokenTest?.ok
+    }
+    return !!gitMirror.github_token_configured &&
+      !!gitMirror.github_token_verified_at &&
+      (gitMirror.remote_url || '') === (gitMirrorDraft.remote_url || '')
+  }, [gitMirror, gitMirrorDraft.auth_mode, gitMirrorDraft.remote_url, gitMirrorTokenInput, gitMirrorTokenTest])
+
+  const handleGitMirrorTest = async () => {
+    setGitMirrorTesting(true)
+    setGitMirrorError('')
+    setGitMirrorMessage('')
+    try {
+      const result = await api.testGitMirrorGitHubToken({
+        remote_url: gitMirrorDraft.remote_url || '',
+        github_token: gitMirrorTokenInput.trim(),
+      })
+      setGitMirrorTokenTest(result)
+      if (result.normalized_remote_url) {
+        setGitMirrorDraft((prev) => ({ ...prev, remote_url: result.normalized_remote_url || prev.remote_url }))
+      }
+      if (!result.ok) {
+        setGitMirrorError(result.message || tx('GitHub token 校验失败', 'GitHub token validation failed'))
+      } else {
+        setGitMirrorMessage(result.message || tx('GitHub token 可用', 'GitHub token is valid'))
+      }
+    } catch (err: any) {
+      setGitMirrorError(err.message || tx('GitHub token 测试失败', 'Failed to test GitHub token'))
+    } finally {
+      setGitMirrorTesting(false)
+    }
+  }
+
+  const handleGitMirrorSave = async () => {
+    if (gitMirrorDraft.auth_mode === 'github_token' && gitMirrorDraft.auto_push_enabled && !gitMirrorVerificationCurrent) {
+      setGitMirrorError(tx('启用 GitHub token 自动推送前，请先测试并确认 token 可用。', 'Test and verify the GitHub token before enabling auto push.'))
+      return
+    }
+    setGitMirrorSaving(true)
+    setGitMirrorError('')
+    setGitMirrorMessage('')
+    try {
+      const saved = await api.updateLocalGitMirror({
+        ...gitMirrorDraft,
+        github_token: gitMirrorTokenInput.trim() || undefined,
+      })
+      setGitMirror(saved)
+      syncGitMirrorDraft(saved)
+      setGitMirrorMessage(tx('Git Mirror 配置已保存', 'Git Mirror settings saved'))
+    } catch (err: any) {
+      setGitMirrorError(err.message || tx('保存 Git Mirror 配置失败', 'Failed to save Git Mirror settings'))
+    } finally {
+      setGitMirrorSaving(false)
+    }
+  }
+
+  const handleGitMirrorClearToken = async () => {
+    setGitMirrorSaving(true)
+    setGitMirrorError('')
+    setGitMirrorMessage('')
+    try {
+      const saved = await api.updateLocalGitMirror({
+        ...gitMirrorDraft,
+        auto_push_enabled: false,
+        clear_github_token: true,
+      })
+      setGitMirror(saved)
+      syncGitMirrorDraft(saved)
+      setGitMirrorMessage(tx('已清除保存的 GitHub token', 'Saved GitHub token was cleared'))
+    } catch (err: any) {
+      setGitMirrorError(err.message || tx('清除 GitHub token 失败', 'Failed to clear the GitHub token'))
+    } finally {
+      setGitMirrorSaving(false)
+    }
+  }
+
   return (
     <div className="page materials-page">
       <section className="materials-hero">
@@ -282,6 +428,168 @@ export default function DataSyncPage() {
           <p className="materials-subtitle">{tx('把同步也收进同一套卡片语言里。这里集中处理 token、bundle 导入导出，以及最近的同步历史。', 'Bring sync into the same card-based language. This page handles tokens, bundle import/export, and recent sync history.')}</p>
         </div>
       </section>
+
+      <div className="materials-panel data-sync-card">
+        <div className="card-header">
+          <h3 className="card-title">{tx('Git Mirror', 'Git Mirror')}</h3>
+        </div>
+        <p className="data-record-secondary">
+          {tx('每次 Hub 写入后，本地 mirror 会先刷新文件，再按这里的设置自动 commit，并可选自动 push 到 GitHub。', 'After each Hub write, the local mirror refreshes first, then auto-commits and can optionally auto-push to GitHub from this configuration.')}
+        </p>
+        {gitMirrorBusy && <div className="page-loading">{tx('加载中...', 'Loading...')}</div>}
+        {!gitMirrorBusy && gitMirror && !gitMirror.enabled && (
+          <div className="alert alert-warn">
+            {tx('当前还没有初始化 Git Mirror。请先运行 `neudrive git init`，然后回来配置自动 commit / push。', 'No Git Mirror is initialized yet. Run `neudrive git init` first, then return here to configure auto commit and push.')}
+          </div>
+        )}
+        {!gitMirrorBusy && gitMirror?.enabled && (
+          <>
+            <div className="data-sync-status-grid">
+              <div className="data-sync-status-card">
+                <div className="data-record-title">{tx('镜像目录', 'Mirror path')}</div>
+                <code>{gitMirror.path}</code>
+              </div>
+              <div className="data-sync-status-card">
+                <div className="data-record-title">{tx('最近同步', 'Last sync')}</div>
+                <div className="data-record-secondary">{formatDateTime(gitMirror.last_synced_at, locale)}</div>
+                {gitMirror.message && <div className="data-record-secondary">{gitMirror.message}</div>}
+              </div>
+              <div className="data-sync-status-card">
+                <div className="data-record-title">{tx('最近提交', 'Last commit')}</div>
+                <div className="data-record-secondary">{gitMirror.last_commit_hash ? `${gitMirror.last_commit_hash.slice(0, 8)} · ${formatDateTime(gitMirror.last_commit_at, locale)}` : tx('暂无', 'None yet')}</div>
+              </div>
+              <div className="data-sync-status-card">
+                <div className="data-record-title">{tx('最近推送', 'Last push')}</div>
+                <div className="data-record-secondary">{gitMirror.last_push_at ? formatDateTime(gitMirror.last_push_at, locale) : tx('暂无', 'None yet')}</div>
+                {gitMirror.last_push_error && <div className="data-record-secondary">{gitMirror.last_push_error}</div>}
+              </div>
+            </div>
+
+            <div className="data-sync-grid">
+              <label className="data-sync-checkbox">
+                <input
+                  type="checkbox"
+                  checked={gitMirrorDraft.auto_commit_enabled}
+                  onChange={(e) => updateGitMirrorDraft({ auto_commit_enabled: e.target.checked })}
+                />
+                <span>{tx('自动 commit', 'Auto commit')}</span>
+              </label>
+              <label className="data-sync-checkbox">
+                <input
+                  type="checkbox"
+                  checked={gitMirrorDraft.auto_push_enabled}
+                  onChange={(e) => updateGitMirrorDraft({ auto_push_enabled: e.target.checked, auto_commit_enabled: e.target.checked ? true : gitMirrorDraft.auto_commit_enabled })}
+                />
+                <span>{tx('自动 push', 'Auto push')}</span>
+              </label>
+            </div>
+
+            <div className="data-sync-row">
+              <select
+                aria-label="Git mirror auth mode"
+                value={gitMirrorDraft.auth_mode}
+                onChange={(e) => updateGitMirrorDraft({ auth_mode: e.target.value as 'local_credentials' | 'github_token' })}
+              >
+                <option value="local_credentials">{tx('本机 Git 凭证', 'Local Git credentials')}</option>
+                <option value="github_token">{tx('GitHub Token', 'GitHub token')}</option>
+              </select>
+              <input
+                aria-label="Git mirror repo URL"
+                value={gitMirrorDraft.remote_url || ''}
+                onChange={(e) => updateGitMirrorDraft({ remote_url: e.target.value })}
+                placeholder={tx('GitHub repo URL，例如 https://github.com/org/repo.git', 'GitHub repo URL, for example https://github.com/org/repo.git')}
+              />
+              <input
+                aria-label="Git mirror branch"
+                value={gitMirrorDraft.remote_branch || ''}
+                onChange={(e) => updateGitMirrorDraft({ remote_branch: e.target.value })}
+                placeholder="main"
+              />
+            </div>
+
+            <div className="data-record-secondary">
+              {tx('remote name 固定使用 ', 'The remote name is fixed to ')}<code>{gitMirrorDraft.remote_name || 'origin'}</code>
+            </div>
+
+            {gitMirrorDraft.auth_mode === 'local_credentials' ? (
+              <div className="alert alert-warn" style={{ marginTop: 12 }}>
+                {tx('本模式会复用你机器上现有的 Git 凭证（SSH key、credential helper 或已登录 Git 环境）。', 'This mode reuses the Git credentials already available on your machine, such as SSH keys or a credential helper.')}
+              </div>
+            ) : (
+              <div className="data-sync-token-box">
+                <div className="data-record-title">{tx('GitHub Token', 'GitHub token')}</div>
+                <div className="data-record-secondary">
+                  {gitMirror.github_token_configured
+                    ? tx('当前已经保存过一个 token；这里不会回显原值。填写新 token 会替换旧值。', 'A token is already saved; its raw value is never shown again here. Entering a new token will replace it.')
+                    : tx('当前还没有保存 GitHub token。', 'No GitHub token is saved yet.')}
+                </div>
+                <div className="data-sync-row">
+                  <input
+                    aria-label="GitHub token"
+                    type="password"
+                    value={gitMirrorTokenInput}
+                    onChange={(e) => {
+                      setGitMirrorTokenInput(e.target.value)
+                      setGitMirrorTokenTest(null)
+                      setGitMirrorError('')
+                      setGitMirrorMessage('')
+                    }}
+                    placeholder={tx('粘贴新的 GitHub token', 'Paste a new GitHub token')}
+                  />
+                  <button className="btn" onClick={() => { void handleGitMirrorTest() }} disabled={gitMirrorTesting || !gitMirrorDraft.remote_url || !gitMirrorTokenInput.trim()}>
+                    {gitMirrorTesting ? tx('测试中...', 'Testing...') : tx('测试 Token', 'Test token')}
+                  </button>
+                  {gitMirror.github_token_configured && (
+                    <button className="btn" onClick={() => { void handleGitMirrorClearToken() }} disabled={gitMirrorSaving}>
+                      {tx('清除已保存 Token', 'Clear saved token')}
+                    </button>
+                  )}
+                </div>
+                <div className="data-inline-list" style={{ marginTop: 12 }}>
+                  <span className="token-list-prefix">
+                    {tx('已保存 Token', 'Saved token')} {gitMirror.github_token_configured ? tx('是', 'Yes') : tx('否', 'No')}
+                  </span>
+                  {gitMirror.github_token_login && (
+                    <span className="token-list-prefix">
+                      GitHub {gitMirror.github_token_login}
+                    </span>
+                  )}
+                  {gitMirror.github_repo_permission && (
+                    <span className="token-list-prefix">
+                      {tx('仓库权限', 'Repo permission')} {gitMirror.github_repo_permission}
+                    </span>
+                  )}
+                </div>
+                {gitMirror.github_token_verified_at && (
+                  <div className="data-record-secondary" style={{ marginTop: 8 }}>
+                    {tx('最近验证时间：', 'Last verified: ')}{formatDateTime(gitMirror.github_token_verified_at, locale)}
+                  </div>
+                )}
+                {gitMirrorTokenTest && (
+                  <div className={gitMirrorTokenTest.ok ? 'alert alert-success' : 'alert alert-warn'} style={{ marginTop: 12 }}>
+                    {gitMirrorTokenTest.message}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {gitMirrorMessage && <div className="alert alert-success" style={{ marginTop: 12 }}>{gitMirrorMessage}</div>}
+            {gitMirrorError && <div className="alert alert-error">{gitMirrorError}</div>}
+            {gitMirror.last_error && <div className="alert alert-warn">{gitMirror.last_error}</div>}
+
+            <div className="data-sync-row">
+              <button className="btn btn-primary" onClick={() => { void handleGitMirrorSave() }} disabled={gitMirrorSaving}>
+                {gitMirrorSaving ? tx('保存中...', 'Saving...') : tx('保存 Git Mirror 配置', 'Save Git Mirror settings')}
+              </button>
+              {gitMirrorDraft.auth_mode === 'github_token' && gitMirrorDraft.auto_push_enabled && !gitMirrorVerificationCurrent && (
+                <span className="data-record-secondary">
+                  {tx('启用 GitHub token 自动推送前，需要先测试 token。', 'Test the token before enabling GitHub-token auto push.')}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </div>
 
       <div className="materials-panel data-sync-card">
         <div className="card-header">

@@ -12,8 +12,14 @@ import (
 
 func (s *Store) GetActiveLocalGitMirror(ctx context.Context, userID uuid.UUID) (*models.LocalGitMirror, error) {
 	row := s.db.QueryRowContext(ctx,
-		`SELECT user_id, root_path, is_active, COALESCE(git_initialized_at, ''), COALESCE(last_synced_at, ''),
-		        COALESCE(last_error, ''), created_at, updated_at
+		`SELECT user_id, root_path, is_active,
+		        auto_commit_enabled, auto_push_enabled, COALESCE(auth_mode, ''), COALESCE(remote_name, ''),
+		        COALESCE(remote_url, ''), COALESCE(remote_branch, ''),
+		        COALESCE(git_initialized_at, ''), COALESCE(last_synced_at, ''),
+		        COALESCE(last_error, ''), COALESCE(last_commit_at, ''), COALESCE(last_commit_hash, ''),
+		        COALESCE(last_push_at, ''), COALESCE(last_push_error, ''),
+		        COALESCE(github_token_verified_at, ''), COALESCE(github_token_login, ''),
+		        COALESCE(github_repo_permission, ''), created_at, updated_at
 		   FROM local_git_mirrors
 		  WHERE user_id = ? AND is_active = 1
 		  LIMIT 1`,
@@ -21,16 +27,51 @@ func (s *Store) GetActiveLocalGitMirror(ctx context.Context, userID uuid.UUID) (
 	)
 
 	var (
-		rawUserID        string
-		rootPath         string
-		isActive         bool
-		gitInitializedAt string
-		lastSyncedAt     string
-		lastError        string
-		createdAt        string
-		updatedAt        string
+		rawUserID             string
+		rootPath              string
+		isActive              bool
+		autoCommitEnabled     bool
+		autoPushEnabled       bool
+		authMode              string
+		remoteName            string
+		remoteURL             string
+		remoteBranch          string
+		gitInitializedAt      string
+		lastSyncedAt          string
+		lastError             string
+		lastCommitAt          string
+		lastCommitHash        string
+		lastPushAt            string
+		lastPushError         string
+		githubTokenVerifiedAt string
+		githubTokenLogin      string
+		githubRepoPermission  string
+		createdAt             string
+		updatedAt             string
 	)
-	if err := row.Scan(&rawUserID, &rootPath, &isActive, &gitInitializedAt, &lastSyncedAt, &lastError, &createdAt, &updatedAt); err != nil {
+	if err := row.Scan(
+		&rawUserID,
+		&rootPath,
+		&isActive,
+		&autoCommitEnabled,
+		&autoPushEnabled,
+		&authMode,
+		&remoteName,
+		&remoteURL,
+		&remoteBranch,
+		&gitInitializedAt,
+		&lastSyncedAt,
+		&lastError,
+		&lastCommitAt,
+		&lastCommitHash,
+		&lastPushAt,
+		&lastPushError,
+		&githubTokenVerifiedAt,
+		&githubTokenLogin,
+		&githubRepoPermission,
+		&createdAt,
+		&updatedAt,
+	); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
@@ -41,14 +82,27 @@ func (s *Store) GetActiveLocalGitMirror(ctx context.Context, userID uuid.UUID) (
 		return nil, err
 	}
 	return &models.LocalGitMirror{
-		UserID:           parsedUserID,
-		RootPath:         rootPath,
-		IsActive:         isActive,
-		GitInitializedAt: nullableTime(gitInitializedAt),
-		LastSyncedAt:     nullableTime(lastSyncedAt),
-		LastError:        lastError,
-		CreatedAt:        mustParseTime(createdAt),
-		UpdatedAt:        mustParseTime(updatedAt),
+		UserID:                parsedUserID,
+		RootPath:              rootPath,
+		IsActive:              isActive,
+		AutoCommitEnabled:     autoCommitEnabled,
+		AutoPushEnabled:       autoPushEnabled,
+		AuthMode:              authMode,
+		RemoteName:            remoteName,
+		RemoteURL:             remoteURL,
+		RemoteBranch:          remoteBranch,
+		GitInitializedAt:      nullableTime(gitInitializedAt),
+		LastSyncedAt:          nullableTime(lastSyncedAt),
+		LastError:             lastError,
+		LastCommitAt:          nullableTime(lastCommitAt),
+		LastCommitHash:        lastCommitHash,
+		LastPushAt:            nullableTime(lastPushAt),
+		LastPushError:         lastPushError,
+		GitHubTokenVerifiedAt: nullableTime(githubTokenVerifiedAt),
+		GitHubTokenLogin:      githubTokenLogin,
+		GitHubRepoPermission:  githubRepoPermission,
+		CreatedAt:             mustParseTime(createdAt),
+		UpdatedAt:             mustParseTime(updatedAt),
 	}, nil
 }
 
@@ -61,22 +115,51 @@ func (s *Store) UpsertActiveLocalGitMirror(ctx context.Context, mirror models.Lo
 
 	_, err := s.db.ExecContext(ctx,
 		`INSERT INTO local_git_mirrors (
-			user_id, root_path, is_active, git_initialized_at, last_synced_at, last_error, created_at, updated_at
+			user_id, root_path, is_active, auto_commit_enabled, auto_push_enabled, auth_mode, remote_name, remote_url,
+			remote_branch, git_initialized_at, last_synced_at, last_error, last_commit_at, last_commit_hash,
+			last_push_at, last_push_error, github_token_verified_at, github_token_login, github_repo_permission,
+			created_at, updated_at
 		)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(user_id) DO UPDATE SET
 			root_path = excluded.root_path,
 			is_active = excluded.is_active,
+			auto_commit_enabled = excluded.auto_commit_enabled,
+			auto_push_enabled = excluded.auto_push_enabled,
+			auth_mode = excluded.auth_mode,
+			remote_name = excluded.remote_name,
+			remote_url = excluded.remote_url,
+			remote_branch = excluded.remote_branch,
 			git_initialized_at = excluded.git_initialized_at,
 			last_synced_at = excluded.last_synced_at,
 			last_error = excluded.last_error,
+			last_commit_at = excluded.last_commit_at,
+			last_commit_hash = excluded.last_commit_hash,
+			last_push_at = excluded.last_push_at,
+			last_push_error = excluded.last_push_error,
+			github_token_verified_at = excluded.github_token_verified_at,
+			github_token_login = excluded.github_token_login,
+			github_repo_permission = excluded.github_repo_permission,
 			updated_at = excluded.updated_at`,
 		mirror.UserID.String(),
 		mirror.RootPath,
 		boolToSQLite(mirror.IsActive),
+		boolToSQLite(mirror.AutoCommitEnabled),
+		boolToSQLite(mirror.AutoPushEnabled),
+		mirror.AuthMode,
+		mirror.RemoteName,
+		mirror.RemoteURL,
+		mirror.RemoteBranch,
 		localGitMirrorNullableTimeText(mirror.GitInitializedAt),
 		localGitMirrorNullableTimeText(mirror.LastSyncedAt),
 		mirror.LastError,
+		localGitMirrorNullableTimeText(mirror.LastCommitAt),
+		mirror.LastCommitHash,
+		localGitMirrorNullableTimeText(mirror.LastPushAt),
+		mirror.LastPushError,
+		localGitMirrorNullableTimeText(mirror.GitHubTokenVerifiedAt),
+		mirror.GitHubTokenLogin,
+		mirror.GitHubRepoPermission,
 		timeText(mirror.CreatedAt),
 		timeText(mirror.UpdatedAt),
 	)

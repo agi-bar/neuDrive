@@ -23,8 +23,18 @@ function runNeuDrive(args: string[]) {
   execFileSync('go', ['run', './cmd/neudrive', ...args], { cwd: ROOT, stdio: 'inherit' })
 }
 
-function writeJSONBundle(filePath: string, bundle: Record<string, unknown>) {
-  fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2))
+async function expectAPISuccess(response: any) {
+  const body = await response.json()
+  expect(response.ok(), JSON.stringify(body)).toBeTruthy()
+  return body.data
+}
+
+async function createSyncToken(request: any, userToken: string, access: 'push' | 'pull' | 'both' = 'both') {
+  const data = await expectAPISuccess(await request.post('/api/tokens/sync', {
+    headers: { Authorization: `Bearer ${userToken}` },
+    data: { access, ttl_minutes: 30 },
+  }))
+  return data.token as string
 }
 
 function writeSkillSourceDir(skillName: string) {
@@ -102,10 +112,20 @@ test.describe('Bundle Sync', () => {
     }
   })
 
-  test('preview mirror deletes with expanded detail list', async ({ page, request }) => {
+  test('legacy sync route redirects to system settings', async ({ page, request }) => {
     await setupUser(page, request)
 
-    const initialBundlePath = path.join(os.tmpdir(), `pw-sync-initial-${Date.now()}.ndrv`)
+    await page.goto('/data/sync')
+    await page.waitForURL(/\/settings$/, { timeout: 15000 })
+    await expect(page.getByRole('heading', { name: '系统设置' })).toBeVisible()
+    await expect(page.getByText('Git Mirror', { exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'config.json' })).toBeVisible()
+  })
+
+  test('preview mirror deletes with sync preview API', async ({ request, page }) => {
+    const user = await setupUser(page, request)
+    const syncToken = await createSyncToken(request, user.token, 'both')
+
     const initialBundle = {
       version: 'ahub.bundle/v1',
       created_at: new Date().toISOString(),
@@ -131,7 +151,6 @@ test.describe('Bundle Sync', () => {
         memory_items: 0,
       },
     }
-    const mirrorBundlePath = path.join(os.tmpdir(), `pw-sync-mirror-${Date.now()}.ndrv`)
     const mirrorBundle = {
       ...initialBundle,
       mode: 'mirror',
@@ -152,37 +171,35 @@ test.describe('Bundle Sync', () => {
         memory_items: 0,
       },
     }
-    writeJSONBundle(initialBundlePath, initialBundle)
-    writeJSONBundle(mirrorBundlePath, mirrorBundle)
 
-    try {
-      await page.goto('/data/sync')
-      await page.getByRole('button', { name: '生成 Sync Token' }).click()
-      await expect(page.getByText('当前 Token', { exact: true })).toBeVisible()
+    const imported = await expectAPISuccess(await request.post('/agent/import/bundle', {
+      headers: { Authorization: `Bearer ${syncToken}` },
+      data: initialBundle,
+    }))
+    expect(imported.mode).toBe('merge')
+    expect(imported.files_written).toBeGreaterThan(0)
 
-      await page.getByLabel('Bundle file').setInputFiles(initialBundlePath)
-      await page.getByRole('button', { name: '开始导入' }).click()
-      await expect(page.getByText(/导入完成/)).toBeVisible({ timeout: 15000 })
-      await expect(page.getByText(/import \/ json/)).toBeVisible({ timeout: 15000 })
-
-      await page.getByLabel('Bundle file').setInputFiles(mirrorBundlePath)
-      await page.getByLabel('Import mode').selectOption('mirror')
-      await page.getByRole('button', { name: 'Preview' }).click()
-      await expect(page.locator('.data-sync-preview .data-record-title').filter({ hasText: 'Preview' })).toBeVisible()
-      await expect(page.getByText('pw-sync-skill', { exact: true })).toBeVisible()
-      await expect(page.getByText('/skills/pw-sync-skill/references/notes.md')).toBeVisible()
-      await expect(page.getByText('只会影响 bundle 中声明的 skill')).toBeVisible()
-      await expect(page.locator('.preview-action-delete').first()).toBeVisible()
-    } finally {
-      fs.unlinkSync(initialBundlePath)
-      fs.unlinkSync(mirrorBundlePath)
-    }
+    const preview = await expectAPISuccess(await request.post('/agent/import/preview', {
+      headers: { Authorization: `Bearer ${syncToken}` },
+      data: mirrorBundle,
+    }))
+    expect(preview.mode).toBe('mirror')
+    expect(preview.fingerprint).toBeTruthy()
+    expect(preview.summary.delete).toBeGreaterThan(0)
+    expect(preview.skills['pw-sync-skill']).toBeTruthy()
+    expect(preview.skills['pw-sync-skill'].files).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        path: '/skills/pw-sync-skill/references/notes.md',
+        action: 'delete',
+      }),
+    ]))
   })
 
-  test('resume archive session from history', async ({ page, request }) => {
+  test('archive sync session can be resumed and committed through API', async ({ page, request }) => {
     const user = await setupUser(page, request)
     const sourceDir = writeSkillSourceDir('pw-archive-skill')
     const archivePath = path.join(os.tmpdir(), `pw-sync-${Date.now()}.ndrvz`)
+    const syncToken = await createSyncToken(request, user.token, 'both')
 
     runNeuDrive(['sync', 'export', '--source', sourceDir, '--format', 'archive', '-o', archivePath])
 
@@ -190,17 +207,9 @@ test.describe('Bundle Sync', () => {
     const manifestFiles = unzipSync(new Uint8Array(archiveBytes))
     const manifest = JSON.parse(strFromU8(manifestFiles['manifest.json']))
 
-    const syncTokenRes = await request.post('/api/tokens/sync', {
-      headers: { Authorization: `Bearer ${user.token}` },
-      data: { access: 'both', ttl_minutes: 30 },
-    })
-    const syncTokenBody = await syncTokenRes.json()
-    const syncToken = syncTokenBody.data.token
-
     const startRes = await request.post('/agent/import/session', {
       headers: {
         Authorization: `Bearer ${syncToken}`,
-        'Content-Type': 'application/json',
       },
       data: {
         transport_version: 'ahub.sync/v1',
@@ -211,18 +220,56 @@ test.describe('Bundle Sync', () => {
         archive_sha256: manifest.archive_sha256,
       },
     })
-    expect(startRes.ok()).toBeTruthy()
+    const started = await expectAPISuccess(startRes)
+    expect(started.session_id).toBeTruthy()
+    expect(started.total_parts).toBeGreaterThan(0)
 
     try {
-      await page.goto('/data/sync')
-      await page.getByRole('button', { name: '生成 Sync Token' }).click()
-      await expect(page.getByText('当前 Token', { exact: true })).toBeVisible()
-      await expect(page.locator('.token-list-prefix').filter({ hasText: /^(会话|Session|session) / })).toBeVisible({ timeout: 15000 })
-      await page.getByRole('button', { name: '选择并继续这个 Session' }).click()
-      await expect(page.locator('.alert-warn').filter({ hasText: '已选择继续未完成 session' })).toBeVisible()
-      await page.getByLabel('Bundle file').setInputFiles(archivePath)
-      await page.getByRole('button', { name: '开始导入' }).click()
-      await expect(page.getByText(/导入完成/)).toBeVisible({ timeout: 20000 })
+      const uploading = await expectAPISuccess(await request.get(`/agent/import/session/${started.session_id}`, {
+        headers: { Authorization: `Bearer ${syncToken}` },
+      }))
+      expect(uploading.status).toBe('uploading')
+
+      const chunkSize = Number(started.chunk_size_bytes)
+      for (let index = 0; index < started.total_parts; index += 1) {
+        const start = index * chunkSize
+        const end = Math.min(start + chunkSize, archiveBytes.length)
+        const uploaded = await expectAPISuccess(await request.put(`/agent/import/session/${started.session_id}/parts/${index}`, {
+          headers: {
+            Authorization: `Bearer ${syncToken}`,
+            'Content-Type': 'application/octet-stream',
+          },
+          data: archiveBytes.subarray(start, end),
+        }))
+        expect(uploaded.session_id).toBe(started.session_id)
+      }
+
+      const ready = await expectAPISuccess(await request.get(`/agent/import/session/${started.session_id}`, {
+        headers: { Authorization: `Bearer ${syncToken}` },
+      }))
+      expect(ready.status).toBe('ready')
+
+      const preview = await expectAPISuccess(await request.post('/agent/import/preview', {
+        headers: { Authorization: `Bearer ${syncToken}` },
+        data: { manifest },
+      }))
+      expect(preview.fingerprint).toBeTruthy()
+
+      const committed = await expectAPISuccess(await request.post(`/agent/import/session/${started.session_id}/commit`, {
+        headers: { Authorization: `Bearer ${syncToken}` },
+        data: {},
+      }))
+      expect(committed.files_written).toBeGreaterThan(0)
+
+      const session = await expectAPISuccess(await request.get(`/agent/import/session/${started.session_id}`, {
+        headers: { Authorization: `Bearer ${syncToken}` },
+      }))
+      expect(session.status).toBe('committed')
+
+      const importedSkill = await expectAPISuccess(await request.get('/api/tree/skills/pw-archive-skill/SKILL.md', {
+        headers: { Authorization: `Bearer ${user.token}` },
+      }))
+      expect(importedSkill.content).toContain('pw-archive-skill')
     } finally {
       fs.rmSync(sourceDir, { recursive: true, force: true })
       fs.unlinkSync(archivePath)

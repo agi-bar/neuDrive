@@ -8,6 +8,10 @@ import (
 )
 
 func (s *Server) handleLocalGitMirrorGet(w http.ResponseWriter, r *http.Request) {
+	if !s.systemSettingsEnabled() {
+		respondForbidden(w, "system settings are disabled")
+		return
+	}
 	if s.LocalGitSync == nil {
 		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "local git mirror is only available in local mode")
 		return
@@ -26,6 +30,10 @@ func (s *Server) handleLocalGitMirrorGet(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) handleLocalGitMirrorUpdate(w http.ResponseWriter, r *http.Request) {
+	if !s.systemSettingsEnabled() {
+		respondForbidden(w, "system settings are disabled")
+		return
+	}
 	if s.LocalGitSync == nil {
 		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "local git mirror is only available in local mode")
 		return
@@ -49,6 +57,10 @@ func (s *Server) handleLocalGitMirrorUpdate(w http.ResponseWriter, r *http.Reque
 }
 
 func (s *Server) handleLocalGitMirrorGitHubTest(w http.ResponseWriter, r *http.Request) {
+	if !s.systemSettingsEnabled() {
+		respondForbidden(w, "system settings are disabled")
+		return
+	}
 	if s.LocalGitSync == nil {
 		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "local git mirror is only available in local mode")
 		return

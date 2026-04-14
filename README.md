@@ -99,7 +99,7 @@ neudrive browse
 
 配置文件默认位置：
 
-- macOS: `~/Library/Application Support/NeuDrive/config.json`
+- macOS: `~/.config/neudrive/config.json`
 - Linux: `$XDG_CONFIG_HOME/neudrive/config.json`
 - Linux（无 XDG 时）: `~/.config/neudrive/config.json`
 
@@ -476,6 +476,7 @@ neudrive/
 | `MAX_BODY_SIZE` | 请求体大小限制 | `10485760` (10MB) |
 | `LOG_LEVEL` | 日志级别 | `info` |
 | `LOG_FORMAT` | 日志格式 (`text`/`json`) | `text` |
+| `NEUDRIVE_ENABLE_SYSTEM_SETTINGS` | 是否开放“系统设置”页面及其本地修改 API | `true` |
 
 ---
 

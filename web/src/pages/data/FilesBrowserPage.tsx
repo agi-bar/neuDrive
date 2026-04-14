@@ -201,6 +201,15 @@ export default function FilesBrowserPage() {
     navigate(dataFileEditorRoute(item.path))
   }, [closeMenu, isEditableNode, navigate])
 
+  const handleDownloadZip = useCallback(async (pathValue: string) => {
+    closeMenu()
+    try {
+      await api.downloadTreeZip(pathValue)
+    } catch (err: any) {
+      setError(err.message || tx('下载 ZIP 失败', 'Failed to download ZIP'))
+    }
+  }, [closeMenu, tx])
+
   const handleSelect = (pathValue: string, multi = false) => {
     setSelected((prev) => {
       const next = new Set(prev)
@@ -483,6 +492,13 @@ export default function FilesBrowserPage() {
                               },
                             }]
                           : []),
+                        {
+                          key: 'download',
+                          label: tx('下载 ZIP', 'Download ZIP'),
+                          onSelect: () => {
+                            void handleDownloadZip(item.path)
+                          },
+                        },
                         {
                           key: 'select',
                           label: isSelected(item.path) ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),

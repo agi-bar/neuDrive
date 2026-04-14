@@ -1,8 +1,10 @@
 package api
 
 import (
+	"archive/zip"
 	"bytes"
 	"context"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -425,6 +427,203 @@ func TestFileTreeListSystemPortabilityDirectory(t *testing.T) {
 	}
 	if len(children) != 4 {
 		t.Fatalf("expected 4 platform directories, got %d", len(children))
+	}
+}
+
+func TestFileTreeDownloadZipForFile(t *testing.T) {
+	now := time.Date(2026, 4, 14, 16, 0, 0, 0, time.UTC)
+	repo := stubFileTreeRepo{
+		readFn: func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
+			if path != "/notes/demo.md" {
+				return nil, services.ErrEntryNotFound
+			}
+			return &models.FileTreeEntry{
+				ID:          uuid.New(),
+				UserID:      userID,
+				Path:        path,
+				Kind:        "note",
+				Content:     "# demo\n",
+				ContentType: "text/markdown",
+				CreatedAt:   now,
+				UpdatedAt:   now,
+			}, nil
+		},
+	}
+	ts, _ := newTestServerWithFileTree(services.NewFileTreeServiceWithRepo(repo))
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tree/archive?path=%2Fnotes%2Fdemo.md")
+	if err != nil {
+		t.Fatalf("GET /api/tree/archive: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	if got := resp.Header.Get("Content-Type"); got != "application/zip" {
+		t.Fatalf("expected application/zip, got %q", got)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("zip.NewReader: %v", err)
+	}
+	if len(zr.File) != 1 {
+		t.Fatalf("expected 1 file in archive, got %d", len(zr.File))
+	}
+	if zr.File[0].Name != "demo.md" {
+		t.Fatalf("expected demo.md in archive, got %q", zr.File[0].Name)
+	}
+	rc, err := zr.File[0].Open()
+	if err != nil {
+		t.Fatalf("open zip file: %v", err)
+	}
+	content, err := io.ReadAll(rc)
+	rc.Close()
+	if err != nil {
+		t.Fatalf("read zip file: %v", err)
+	}
+	if string(content) != "# demo\n" {
+		t.Fatalf("unexpected content %q", string(content))
+	}
+}
+
+func TestFileTreeDownloadZipForDirectoryIncludesBinaryChildren(t *testing.T) {
+	now := time.Date(2026, 4, 14, 16, 0, 0, 0, time.UTC)
+	binaryEntry := &models.FileTreeEntry{
+		ID:          uuid.MustParse("22222222-2222-2222-2222-222222222222"),
+		Path:        "/skills/demo/assets/logo.png",
+		Kind:        "skill_file",
+		ContentType: "image/png",
+		Metadata:    map[string]interface{}{"binary": true},
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	repo := stubFileTreeRepo{
+		readFn: func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
+			switch path {
+			case "/skills/demo":
+				return &models.FileTreeEntry{
+					ID:          uuid.New(),
+					UserID:      userID,
+					Path:        path,
+					Kind:        "directory",
+					IsDirectory: true,
+					ContentType: "directory",
+					CreatedAt:   now,
+					UpdatedAt:   now,
+				}, nil
+			case "/skills/demo/SKILL.md":
+				return &models.FileTreeEntry{
+					ID:          uuid.New(),
+					UserID:      userID,
+					Path:        path,
+					Kind:        "skill",
+					Content:     "# Demo\n",
+					ContentType: "text/markdown",
+					CreatedAt:   now,
+					UpdatedAt:   now,
+				}, nil
+			case binaryEntry.Path:
+				entry := *binaryEntry
+				entry.UserID = userID
+				return &entry, nil
+			default:
+				return nil, services.ErrEntryNotFound
+			}
+		},
+		listFn: func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
+			switch path {
+			case "/skills/demo":
+				return []models.FileTreeEntry{
+					{
+						ID:          uuid.New(),
+						UserID:      userID,
+						Path:        "/skills/demo/SKILL.md",
+						Kind:        "skill",
+						Content:     "# Demo\n",
+						ContentType: "text/markdown",
+						CreatedAt:   now,
+						UpdatedAt:   now,
+					},
+					{
+						ID:          uuid.New(),
+						UserID:      userID,
+						Path:        "/skills/demo/assets",
+						Kind:        "directory",
+						IsDirectory: true,
+						ContentType: "directory",
+						CreatedAt:   now,
+						UpdatedAt:   now,
+					},
+				}, nil
+			case "/skills/demo/assets":
+				entry := *binaryEntry
+				entry.UserID = userID
+				return []models.FileTreeEntry{entry}, nil
+			default:
+				return nil, services.ErrEntryNotFound
+			}
+		},
+		readBinaryFn: func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]byte, *models.FileTreeEntry, error) {
+			if path != binaryEntry.Path {
+				return nil, nil, services.ErrEntryNotFound
+			}
+			entry := *binaryEntry
+			entry.UserID = userID
+			return []byte{0x89, 'P', 'N', 'G'}, &entry, nil
+		},
+	}
+	ts, _ := newTestServerWithFileTree(services.NewFileTreeServiceWithRepo(repo))
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tree/archive?path=%2Fskills%2Fdemo")
+	if err != nil {
+		t.Fatalf("GET /api/tree/archive: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+
+	zr, err := zip.NewReader(bytes.NewReader(body), int64(len(body)))
+	if err != nil {
+		t.Fatalf("zip.NewReader: %v", err)
+	}
+
+	files := make(map[string][]byte, len(zr.File))
+	for _, file := range zr.File {
+		rc, err := file.Open()
+		if err != nil {
+			t.Fatalf("open %s: %v", file.Name, err)
+		}
+		content, err := io.ReadAll(rc)
+		rc.Close()
+		if err != nil {
+			t.Fatalf("read %s: %v", file.Name, err)
+		}
+		files[file.Name] = content
+	}
+
+	if _, ok := files["demo/"]; !ok {
+		t.Fatal("expected demo/ directory entry in archive")
+	}
+	if got := string(files["demo/SKILL.md"]); got != "# Demo\n" {
+		t.Fatalf("unexpected SKILL.md content %q", got)
+	}
+	if _, ok := files["demo/assets/"]; !ok {
+		t.Fatal("expected demo/assets/ directory entry in archive")
+	}
+	if got := files["demo/assets/logo.png"]; !bytes.Equal(got, []byte{0x89, 'P', 'N', 'G'}) {
+		t.Fatalf("unexpected binary content %v", got)
 	}
 }
 

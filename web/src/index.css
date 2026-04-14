@@ -2214,30 +2214,6 @@ a:hover {
   margin-bottom: 16px;
 }
 
-.data-sync-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin-top: 12px;
-}
-
-.data-sync-row input[type="file"] {
-  max-width: 320px;
-}
-
-.data-sync-row input:not([type="file"]) {
-  min-width: 220px;
-  flex: 1;
-}
-
-.data-sync-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
-}
-
 .data-sync-status-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
@@ -2252,20 +2228,180 @@ a:hover {
   background: var(--color-surface-subtle);
 }
 
-.data-sync-checkbox {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: var(--color-text);
-}
-
 .data-sync-token-box {
   margin-top: 16px;
   padding: 14px 16px;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   background: var(--color-surface-subtle);
+}
+
+.data-sync-settings-shell {
+  margin-top: 16px;
+}
+
+.data-sync-settings-section + .data-sync-settings-section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--color-border-light);
+}
+
+.data-sync-section-title {
+  margin: 0 0 12px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.data-sync-settings-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.data-sync-settings-grid-wide {
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+}
+
+.data-sync-settings-span-wide {
+  grid-column: 1 / -1;
+}
+
+.data-sync-field-note {
+  margin: 6px 0 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--color-text-secondary);
+}
+
+.data-sync-toggle-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.data-sync-toggle-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+  cursor: pointer;
+}
+
+.data-sync-toggle-card input {
+  width: 18px;
+  height: 18px;
+  margin-top: 2px;
+  accent-color: var(--color-primary);
+}
+
+.data-sync-toggle-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.data-sync-toggle-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+}
+
+.data-sync-toggle-copy .data-sync-field-note {
+  margin-bottom: 0;
+}
+
+.data-sync-secret-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.data-sync-secret-input {
+  flex: 1;
+}
+
+.data-sync-visibility-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 42px;
+  padding: 0 10px;
+}
+
+.data-sync-visibility-btn svg {
+  width: 16px;
+  height: 16px;
+}
+
+.data-sync-config-editor {
+  width: 100%;
+  min-height: 360px;
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: 13px/1.6 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  resize: vertical;
+}
+
+.data-sync-config-editor:focus {
+  outline: none;
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px rgba(15, 118, 110, 0.14);
+}
+
+.data-sync-json-editor {
+  min-height: 220px;
+  font: 13px/1.6 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+  resize: vertical;
+}
+
+.data-sync-example {
+  margin-top: 10px;
+  padding: 12px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-surface) 88%, var(--color-bg) 12%);
+}
+
+.data-sync-example-title {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.data-sync-example pre {
+  margin: 0;
+  overflow-x: auto;
+  color: var(--color-text);
+  font: 12px/1.6 "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+}
+
+.data-sync-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.data-sync-actions-compact {
+  margin-top: 12px;
+}
+
+.data-sync-mode-button-active {
+  border-color: var(--color-primary);
+  background: rgba(15, 118, 110, 0.1);
+  color: var(--color-primary);
 }
 
 .data-sync-cli-box {

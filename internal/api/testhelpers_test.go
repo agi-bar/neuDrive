@@ -33,8 +33,9 @@ type inMemoryTokenStore struct {
 }
 
 type stubFileTreeRepo struct {
-	listFn func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error)
-	readFn func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error)
+	listFn       func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error)
+	readFn       func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error)
+	readBinaryFn func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]byte, *models.FileTreeEntry, error)
 }
 
 func (s stubFileTreeRepo) List(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
@@ -79,7 +80,10 @@ func (s stubFileTreeRepo) ListSkillSummaries(context.Context, uuid.UUID, int) ([
 	return nil, nil
 }
 
-func (s stubFileTreeRepo) ReadBinary(context.Context, uuid.UUID, string, int) ([]byte, *models.FileTreeEntry, error) {
+func (s stubFileTreeRepo) ReadBinary(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]byte, *models.FileTreeEntry, error) {
+	if s.readBinaryFn != nil {
+		return s.readBinaryFn(ctx, userID, path, trustLevel)
+	}
 	return nil, nil, services.ErrEntryNotFound
 }
 
@@ -154,6 +158,7 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 		})
 
 		// File tree
+		r.Get("/api/tree/archive", s.handleTreeDownloadZip)
 		r.Get("/api/tree/*", s.handleTreeRead)
 		r.Put("/api/tree/*", s.handleTreeWrite)
 		r.Delete("/api/tree/*", s.handleTreeDelete)

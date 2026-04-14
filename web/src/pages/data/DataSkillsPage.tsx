@@ -224,6 +224,15 @@ export default function DataSkillsPage() {
     navigate(dataFileBrowseRoute(path))
   }
 
+  const handleDownloadZip = useCallback(async (path: string) => {
+    closeMenu()
+    try {
+      await api.downloadTreeZip(path)
+    } catch (err: any) {
+      setError(err.message || tx('下载 ZIP 失败', 'Failed to download ZIP'))
+    }
+  }, [closeMenu, tx])
+
   const handleCreateSkill = async (event: FormEvent) => {
     event.preventDefault()
     const bundleName = normalizeBundleName(newBundleName)
@@ -382,6 +391,13 @@ export default function DataSkillsPage() {
                                 }]
                               : []),
                             {
+                              key: 'download',
+                              label: tx('下载 ZIP', 'Download ZIP'),
+                              onSelect: () => {
+                                void handleDownloadZip(entry.path)
+                              },
+                            },
+                            {
                               key: 'select',
                               label: selectedEntryPath === entry.path ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
                               onSelect: () => {
@@ -526,6 +542,13 @@ export default function DataSkillsPage() {
                           onSelect: () => {
                             closeMenu()
                             openBundleDetail(skill.bundleId)
+                          },
+                        },
+                        {
+                          key: 'download',
+                          label: tx('下载 ZIP', 'Download ZIP'),
+                          onSelect: () => {
+                            void handleDownloadZip(skill.bundlePath)
                           },
                         },
                         {

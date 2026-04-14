@@ -34,7 +34,7 @@ Bundle Sync 支持两种文件格式：
 
 默认配置文件位置：
 
-- macOS：`~/Library/Application Support/NeuDrive/config.json`
+- macOS：`~/.config/neudrive/config.json`
 - Linux：`$XDG_CONFIG_HOME/neudrive/config.json`
 - Linux（无 XDG 时）：`~/.config/neudrive/config.json`
 

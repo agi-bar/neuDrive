@@ -24,6 +24,7 @@ type Config struct {
 	MaxBodySize             int64 // max request body in bytes
 	LogLevel                string
 	LogFormat               string
+	EnableSystemSettings    bool
 	CaptureOAuth            bool
 	CaptureDir              string
 }
@@ -59,6 +60,7 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		MaxBodySize:             int64(getEnvInt("MAX_BODY_SIZE", 10*1024*1024)),
 		LogLevel:                envOrOverride("LOG_LEVEL", "info"),
 		LogFormat:               envOrOverride("LOG_FORMAT", "text"),
+		EnableSystemSettings:    getEnvBool("NEUDRIVE_ENABLE_SYSTEM_SETTINGS", true),
 		CaptureOAuth:            getEnvBool("NEUDRIVE_CAPTURE_OAUTH", false),
 		CaptureDir:              envOrOverride("NEUDRIVE_CAPTURE_DIR", "tmp/oauth-captures"),
 	}

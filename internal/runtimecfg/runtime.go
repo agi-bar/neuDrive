@@ -91,8 +91,6 @@ func DefaultConfigPath() string {
 	}
 	home, _ := os.UserHomeDir()
 	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "NeuDrive", "config.json")
 	case "windows":
 		if appData := strings.TrimSpace(os.Getenv("APPDATA")); appData != "" {
 			return filepath.Join(appData, "NeuDrive", "config.json")
@@ -102,6 +100,43 @@ func DefaultConfigPath() string {
 		return filepath.Join(expandUser(xdg), "neudrive", "config.json")
 	}
 	return filepath.Join(home, ".config", "neudrive", "config.json")
+}
+
+func legacyDarwinConfigPath() string {
+	if runtime.GOOS != "darwin" || strings.TrimSpace(os.Getenv(ConfigEnv)) != "" {
+		return ""
+	}
+	home, _ := os.UserHomeDir()
+	if strings.TrimSpace(home) == "" {
+		return ""
+	}
+	return filepath.Join(home, "Library", "Application Support", "NeuDrive", "config.json")
+}
+
+func legacyDarwinStatePath() string {
+	legacyConfig := legacyDarwinConfigPath()
+	if legacyConfig == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(legacyConfig), "runtime.json")
+}
+
+func readFileWithLegacyFallback(path string, legacyPath string) ([]byte, error) {
+	data, err := os.ReadFile(path)
+	if err == nil {
+		return data, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) || legacyPath == "" {
+		return nil, err
+	}
+	legacyData, legacyErr := os.ReadFile(legacyPath)
+	if legacyErr == nil {
+		return legacyData, nil
+	}
+	if !errors.Is(legacyErr, os.ErrNotExist) {
+		return nil, legacyErr
+	}
+	return nil, err
 }
 
 func DefaultStatePath() string {
@@ -142,8 +177,10 @@ func DefaultSQLitePath() string {
 }
 
 func LoadConfig(path string) (string, *CLIConfig, error) {
+	legacyPath := ""
 	if path == "" {
 		path = DefaultConfigPath()
+		legacyPath = legacyDarwinConfigPath()
 	}
 	cfg := &CLIConfig{
 		Version:  2,
@@ -152,7 +189,7 @@ func LoadConfig(path string) (string, *CLIConfig, error) {
 			Connections: map[string]LocalConnection{},
 		},
 	}
-	data, err := os.ReadFile(path)
+	data, err := readFileWithLegacyFallback(path, legacyPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return path, cfg, nil
@@ -174,9 +211,65 @@ func LoadConfig(path string) (string, *CLIConfig, error) {
 	return path, cfg, nil
 }
 
+func defaultRawConfig() (string, error) {
+	cfg := &CLIConfig{
+		Version:  2,
+		Profiles: map[string]SyncProfile{},
+		Local: LocalConfig{
+			Connections: map[string]LocalConnection{},
+		},
+	}
+	content, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	return string(append(content, '\n')), nil
+}
+
+func LoadRawConfig(path string) (string, string, error) {
+	legacyPath := ""
+	if path == "" {
+		path = DefaultConfigPath()
+		legacyPath = legacyDarwinConfigPath()
+	}
+	data, err := readFileWithLegacyFallback(path, legacyPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			raw, rawErr := defaultRawConfig()
+			return path, raw, rawErr
+		}
+		return path, "", err
+	}
+	if strings.TrimSpace(string(data)) == "" {
+		raw, rawErr := defaultRawConfig()
+		return path, raw, rawErr
+	}
+	return path, string(data), nil
+}
+
+func writeConfigBytes(path string, content []byte) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+		return err
+	}
+	tmp := path + ".tmp"
+	if err := os.WriteFile(tmp, content, 0o600); err != nil {
+		return err
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	if legacyPath := legacyDarwinConfigPath(); legacyPath != "" && legacyPath != path {
+		_ = os.Remove(legacyPath)
+	}
+	return nil
+}
+
 func SaveConfig(path string, cfg *CLIConfig) error {
 	if cfg == nil {
 		return fmt.Errorf("nil config")
+	}
+	if path == "" {
+		path = DefaultConfigPath()
 	}
 	if cfg.Profiles == nil {
 		cfg.Profiles = map[string]SyncProfile{}
@@ -184,26 +277,49 @@ func SaveConfig(path string, cfg *CLIConfig) error {
 	if cfg.Local.Connections == nil {
 		cfg.Local.Connections = map[string]LocalConnection{}
 	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return err
-	}
-	tmp := path + ".tmp"
 	content, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
 	}
 	content = append(content, '\n')
-	if err := os.WriteFile(tmp, content, 0o600); err != nil {
+	return writeConfigBytes(path, content)
+}
+
+func SaveRawConfig(path string, raw string) error {
+	if path == "" {
+		path = DefaultConfigPath()
+	}
+	var value any
+	decoder := json.NewDecoder(strings.NewReader(raw))
+	decoder.UseNumber()
+	if err := decoder.Decode(&value); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		if err == nil {
+			return fmt.Errorf("invalid JSON: multiple top-level values")
+		}
+		return err
+	}
+	objectValue, ok := value.(map[string]any)
+	if !ok {
+		return fmt.Errorf("config.json must contain a JSON object")
+	}
+	content, err := json.MarshalIndent(objectValue, "", "  ")
+	if err != nil {
+		return err
+	}
+	content = append(content, '\n')
+	return writeConfigBytes(path, content)
 }
 
 func LoadState(path string) (string, *RuntimeState, error) {
+	legacyPath := ""
 	if path == "" {
 		path = DefaultStatePath()
+		legacyPath = legacyDarwinStatePath()
 	}
-	data, err := os.ReadFile(path)
+	data, err := readFileWithLegacyFallback(path, legacyPath)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return path, nil, nil
@@ -233,7 +349,13 @@ func SaveState(path string, state *RuntimeState) error {
 	if err := os.WriteFile(tmp, content, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, path)
+	if err := os.Rename(tmp, path); err != nil {
+		return err
+	}
+	if legacyPath := legacyDarwinStatePath(); legacyPath != "" && legacyPath != path {
+		_ = os.Remove(legacyPath)
+	}
+	return nil
 }
 
 func ClearState(path string) error {
@@ -242,6 +364,11 @@ func ClearState(path string) error {
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
+	}
+	if legacyPath := legacyDarwinStatePath(); legacyPath != "" && legacyPath != path {
+		if err := os.Remove(legacyPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
 	}
 	return nil
 }

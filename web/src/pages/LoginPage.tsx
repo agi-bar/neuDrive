@@ -23,10 +23,8 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
   const [githubClientId, setGithubClientId] = useState('')
 
   useEffect(() => {
-    fetch('/api/config')
-      .then(r => r.json())
-      .then(d => {
-        const data = d?.data || d
+    api.getPublicConfig()
+      .then((data) => {
         if (data?.github_client_id) setGithubClientId(data.github_client_id)
       })
       .catch(() => {})

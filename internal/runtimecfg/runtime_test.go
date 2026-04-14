@@ -3,7 +3,9 @@ package runtimecfg
 import (
 	"fmt"
 	"net"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -84,5 +86,82 @@ func TestEnsureLocalDefaultsPrefersSQLite(t *testing.T) {
 	}
 	if cfg.Local.JWTSecret == "" || cfg.Local.VaultMasterKey == "" {
 		t.Fatal("expected local secrets to be generated")
+	}
+}
+
+func TestReadFileWithLegacyFallbackUsesLegacyWhenDefaultMissing(t *testing.T) {
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "config.json")
+	legacyPath := filepath.Join(tempDir, "legacy-config.json")
+	if err := os.WriteFile(legacyPath, []byte(`{"version":2}`), 0o600); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	data, err := readFileWithLegacyFallback(path, legacyPath)
+	if err != nil {
+		t.Fatalf("readFileWithLegacyFallback: %v", err)
+	}
+	if got := string(data); got != `{"version":2}` {
+		t.Fatalf("unexpected data: %q", got)
+	}
+}
+
+func TestReadFileWithLegacyFallbackPrefersDefaultPath(t *testing.T) {
+	tempDir := t.TempDir()
+	path := filepath.Join(tempDir, "config.json")
+	legacyPath := filepath.Join(tempDir, "legacy-config.json")
+	if err := os.WriteFile(path, []byte(`{"version":3}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(default): %v", err)
+	}
+	if err := os.WriteFile(legacyPath, []byte(`{"version":2}`), 0o600); err != nil {
+		t.Fatalf("WriteFile(legacy): %v", err)
+	}
+	data, err := readFileWithLegacyFallback(path, legacyPath)
+	if err != nil {
+		t.Fatalf("readFileWithLegacyFallback: %v", err)
+	}
+	if got := string(data); got != `{"version":3}` {
+		t.Fatalf("unexpected data: %q", got)
+	}
+}
+
+func TestLoadRawConfigReturnsDefaultObjectWhenMissing(t *testing.T) {
+	t.Setenv(ConfigEnv, filepath.Join(t.TempDir(), "config.json"))
+
+	path, raw, err := LoadRawConfig("")
+	if err != nil {
+		t.Fatalf("LoadRawConfig: %v", err)
+	}
+	if path == "" {
+		t.Fatal("expected config path")
+	}
+	for _, expected := range []string{`"version": 2`, `"local": {}`} {
+		if !strings.Contains(raw, expected) {
+			t.Fatalf("expected %q in raw config: %s", expected, raw)
+		}
+	}
+}
+
+func TestSaveRawConfigNormalizesAndPersistsUnknownFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+
+	raw := "{\n  \"version\": 2,\n  \"local\": {\n    \"listen_addr\": \"127.0.0.1:42690\"\n  },\n  \"extra\": {\"keep\": true}\n}"
+	if err := SaveRawConfig(path, raw); err != nil {
+		t.Fatalf("SaveRawConfig: %v", err)
+	}
+
+	_, loadedRaw, err := LoadRawConfig(path)
+	if err != nil {
+		t.Fatalf("LoadRawConfig: %v", err)
+	}
+	if !strings.Contains(loadedRaw, "\"extra\": {\n    \"keep\": true\n  }") {
+		t.Fatalf("expected unknown fields to persist, got: %s", loadedRaw)
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("ReadFile: %v", err)
+	}
+	if string(data) != loadedRaw {
+		t.Fatalf("persisted file mismatch\nfile=%q\nraw=%q", string(data), loadedRaw)
 	}
 }

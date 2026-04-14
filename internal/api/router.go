@@ -261,6 +261,7 @@ func (s *Server) setupRoutes() {
 		r.Delete("/api/auth/sessions/{id}", s.handleAuthRevokeSession)
 
 		// File tree
+		r.Get("/api/tree/archive", s.handleTreeDownloadZip)
 		r.Get("/api/tree/snapshot", s.handleTreeSnapshot)
 		r.Get("/api/tree/changes", s.handleTreeChanges)
 		r.Get("/api/tree/*", s.handleTreeRead)
@@ -303,6 +304,8 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
 
 		// Local Git mirror settings
+		r.Get("/api/local/config", s.handleLocalConfigGet)
+		r.Put("/api/local/config", s.handleLocalConfigUpdate)
 		r.Get("/api/local/git-mirror", s.handleLocalGitMirrorGet)
 		r.Put("/api/local/git-mirror", s.handleLocalGitMirrorUpdate)
 		r.Post("/api/local/git-mirror/github/test", s.handleLocalGitMirrorGitHubTest)
@@ -659,14 +662,25 @@ func (s *Server) healthCheck(w http.ResponseWriter, r *http.Request) {
 // handlePublicConfig returns non-sensitive configuration for the frontend.
 func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]interface{}{
-		"github_client_id": s.GitHubClientID,
-		"github_enabled":   s.GitHubClientID != "",
+		"github_client_id":        s.GitHubClientID,
+		"github_enabled":          s.GitHubClientID != "",
+		"system_settings_enabled": s.systemSettingsEnabled(),
 	}
 	if s.Storage != "" {
 		payload["storage"] = s.Storage
 		payload["local_mode"] = s.isLocalMode()
 	}
 	respondOK(w, payload)
+}
+
+func (s *Server) systemSettingsEnabled() bool {
+	if !s.isLocalMode() {
+		return false
+	}
+	if s.Config == nil {
+		return true
+	}
+	return s.Config.EnableSystemSettings
 }
 
 // ---------------------------------------------------------------------------

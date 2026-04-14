@@ -19,6 +19,7 @@ import (
 	"github.com/agi-bar/neudrive/internal/config"
 	"github.com/agi-bar/neudrive/internal/localgitsync"
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
 	"github.com/agi-bar/neudrive/internal/services"
 	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
 	"github.com/agi-bar/neudrive/internal/vault"
@@ -41,6 +42,19 @@ type fakeGitHubTokenState struct {
 }
 
 func newTestHTTPServer(t *testing.T, gitOpts ...localgitsync.Option) (*httptest.Server, *sqlitestorage.Store, string, string, string) {
+	cfg := &config.Config{
+		JWTSecret:            testJWTSecret,
+		VaultMasterKey:       strings.Repeat("0", 64),
+		CORSOrigins:          []string{"http://localhost:3000"},
+		RateLimit:            100,
+		MaxBodySize:          10 * 1024 * 1024,
+		PublicBaseURL:        "http://127.0.0.1:0",
+		EnableSystemSettings: true,
+	}
+	return newTestHTTPServerWithConfig(t, cfg, gitOpts...)
+}
+
+func newTestHTTPServerWithConfig(t *testing.T, cfg *config.Config, gitOpts ...localgitsync.Option) (*httptest.Server, *sqlitestorage.Store, string, string, string) {
 	t.Helper()
 	ctx := context.Background()
 	store, err := sqlitestorage.Open(filepath.Join(t.TempDir(), "local.db"))
@@ -65,14 +79,6 @@ func newTestHTTPServer(t *testing.T, gitOpts ...localgitsync.Option) (*httptest.
 		t.Fatalf("CreateToken write: %v", err)
 	}
 
-	cfg := &config.Config{
-		JWTSecret:      testJWTSecret,
-		VaultMasterKey: strings.Repeat("0", 64),
-		CORSOrigins:    []string{"http://localhost:3000"},
-		RateLimit:      100,
-		MaxBodySize:    10 * 1024 * 1024,
-		PublicBaseURL:  "http://127.0.0.1:0",
-	}
 	v, err := vault.NewVault(cfg.VaultMasterKey)
 	if err != nil {
 		t.Fatalf("NewVault: %v", err)
@@ -184,9 +190,10 @@ func TestPublicConfigUsesLocalModeInsteadOfStorageBackend(t *testing.T) {
 		Storage:      "postgres",
 		LocalOwnerID: uuid.New(),
 		Config: &config.Config{
-			CORSOrigins: []string{"http://localhost:3000"},
-			RateLimit:   100,
-			MaxBodySize: 10 * 1024 * 1024,
+			CORSOrigins:          []string{"http://localhost:3000"},
+			RateLimit:            100,
+			MaxBodySize:          10 * 1024 * 1024,
+			EnableSystemSettings: true,
 		},
 	})
 	ts := httptest.NewServer(s.Router)
@@ -202,10 +209,46 @@ func TestPublicConfigUsesLocalModeInsteadOfStorageBackend(t *testing.T) {
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
 		t.Fatalf("decode config: %v", err)
 	}
-	for _, expected := range []string{`"storage":"postgres"`, `"local_mode":true`} {
+	for _, expected := range []string{`"storage":"postgres"`, `"local_mode":true`, `"system_settings_enabled":true`} {
 		if !bytes.Contains(payload.Data, []byte(expected)) {
 			t.Fatalf("expected %q in config payload: %s", expected, string(payload.Data))
 		}
+	}
+}
+
+func TestSQLiteSharedServerSystemSettingsDisabledBlocksLocalSettingsAPI(t *testing.T) {
+	cfg := &config.Config{
+		JWTSecret:            testJWTSecret,
+		VaultMasterKey:       strings.Repeat("0", 64),
+		CORSOrigins:          []string{"http://localhost:3000"},
+		RateLimit:            100,
+		MaxBodySize:          10 * 1024 * 1024,
+		PublicBaseURL:        "http://127.0.0.1:0",
+		EnableSystemSettings: false,
+	}
+	ts, _, adminToken, _, _ := newTestHTTPServerWithConfig(t, cfg)
+
+	status, blockedConfig := doJSON(t, http.MethodGet, ts.URL+"/api/local/config", adminToken, nil)
+	if status != http.StatusForbidden || blockedConfig.OK {
+		t.Fatalf("GET /api/local/config should be forbidden when system settings disabled: status=%d body=%+v", status, blockedConfig)
+	}
+
+	status, blockedMirror := doJSON(t, http.MethodGet, ts.URL+"/api/local/git-mirror", adminToken, nil)
+	if status != http.StatusForbidden || blockedMirror.OK {
+		t.Fatalf("GET /api/local/git-mirror should be forbidden when system settings disabled: status=%d body=%+v", status, blockedMirror)
+	}
+
+	resp, err := http.Get(ts.URL + "/api/config")
+	if err != nil {
+		t.Fatalf("GET /api/config: %v", err)
+	}
+	defer resp.Body.Close()
+	var payload testEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode config payload: %v", err)
+	}
+	if !bytes.Contains(payload.Data, []byte(`"system_settings_enabled":false`)) {
+		t.Fatalf("expected disabled system settings in public config: %s", string(payload.Data))
 	}
 }
 
@@ -566,6 +609,83 @@ func TestSQLiteSharedServerGitMirrorGitHubTestEndpointReturnsPermissionFailure(t
 		if !bytes.Contains(tested.Data, []byte(expected)) {
 			t.Fatalf("expected %q in github test payload: %s", expected, string(tested.Data))
 		}
+	}
+}
+
+func TestSQLiteSharedServerLocalConfigRoundTrip(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "config.json")
+	t.Setenv(runtimecfg.ConfigEnv, configPath)
+
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	status, fetched := doJSON(t, http.MethodGet, ts.URL+"/api/local/config", adminToken, nil)
+	if status != http.StatusOK || !fetched.OK {
+		t.Fatalf("GET /api/local/config failed: status=%d body=%+v", status, fetched)
+	}
+
+	var initial struct {
+		Path string `json:"path"`
+		Raw  string `json:"raw"`
+	}
+	if err := json.Unmarshal(fetched.Data, &initial); err != nil {
+		t.Fatalf("unmarshal fetched config: %v", err)
+	}
+	if initial.Path != configPath {
+		t.Fatalf("config path = %q, want %q", initial.Path, configPath)
+	}
+	if !strings.Contains(initial.Raw, `"version": 2`) {
+		t.Fatalf("expected default config payload, got %s", initial.Raw)
+	}
+
+	body, err := json.Marshal(map[string]string{
+		"raw": "{\n  \"version\": 2,\n  \"local\": {\n    \"listen_addr\": \"127.0.0.1:42690\"\n  },\n  \"extra\": {\n    \"keep\": true\n  }\n}",
+	})
+	if err != nil {
+		t.Fatalf("Marshal body: %v", err)
+	}
+	status, updated := doJSON(t, http.MethodPut, ts.URL+"/api/local/config", adminToken, body)
+	if status != http.StatusOK || !updated.OK {
+		t.Fatalf("PUT /api/local/config failed: status=%d body=%+v", status, updated)
+	}
+
+	var saved struct {
+		Path string `json:"path"`
+		Raw  string `json:"raw"`
+	}
+	if err := json.Unmarshal(updated.Data, &saved); err != nil {
+		t.Fatalf("unmarshal updated config: %v", err)
+	}
+	if saved.Path != configPath {
+		t.Fatalf("saved path = %q, want %q", saved.Path, configPath)
+	}
+	if !strings.Contains(saved.Raw, "\"extra\": {\n    \"keep\": true\n  }") {
+		t.Fatalf("expected unknown field to remain, got %s", saved.Raw)
+	}
+
+	persisted, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("ReadFile persisted config: %v", err)
+	}
+	if string(persisted) != saved.Raw {
+		t.Fatalf("persisted config mismatch\npersisted=%q\nsaved=%q", string(persisted), saved.Raw)
+	}
+}
+
+func TestSQLiteSharedServerLocalConfigRejectsInvalidJSON(t *testing.T) {
+	t.Setenv(runtimecfg.ConfigEnv, filepath.Join(t.TempDir(), "config.json"))
+
+	ts, _, adminToken, _, _ := newTestHTTPServer(t)
+
+	body, err := json.Marshal(map[string]string{"raw": "{invalid"})
+	if err != nil {
+		t.Fatalf("Marshal body: %v", err)
+	}
+	status, failed := doJSON(t, http.MethodPut, ts.URL+"/api/local/config", adminToken, body)
+	if status != http.StatusBadRequest {
+		t.Fatalf("PUT /api/local/config invalid json status = %d, body=%+v", status, failed)
+	}
+	if failed.OK {
+		t.Fatalf("expected invalid config update to fail: %+v", failed)
 	}
 }
 

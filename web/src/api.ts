@@ -1,5 +1,33 @@
 const API_BASE = '/api'
 
+function parseDownloadFilename(contentDisposition: string | null, fallback: string) {
+  if (!contentDisposition) return fallback
+  const utf8Match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/i)
+  if (utf8Match?.[1]) {
+    try {
+      return decodeURIComponent(utf8Match[1])
+    } catch {
+      return utf8Match[1]
+    }
+  }
+  const quotedMatch = contentDisposition.match(/filename="([^"]+)"/i)
+  if (quotedMatch?.[1]) return quotedMatch[1]
+  const plainMatch = contentDisposition.match(/filename=([^;]+)/i)
+  if (plainMatch?.[1]) return plainMatch[1].trim()
+  return fallback
+}
+
+function triggerBrowserDownload(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  document.body.removeChild(anchor)
+  URL.revokeObjectURL(url)
+}
+
 // ---------------------------------------------------------------------------
 // Auth types
 // ---------------------------------------------------------------------------
@@ -95,6 +123,14 @@ export interface DashboardPending {
   type: string
   count: number
   message: string
+}
+
+export interface PublicConfig {
+  github_client_id?: string
+  github_enabled?: boolean
+  storage?: string
+  local_mode?: boolean
+  system_settings_enabled?: boolean
 }
 
 export interface DashboardStats {
@@ -337,6 +373,9 @@ export const api = {
       body: JSON.stringify({ code }),
     }),
 
+  getPublicConfig: (): Promise<PublicConfig> =>
+    request<PublicConfig>('/config'),
+
   getSessions: (): Promise<Session[]> =>
     request<Session[]>('/auth/sessions'),
 
@@ -416,6 +455,23 @@ export const api = {
   getTree: (path = '/'): Promise<FileNode> => {
     const normalized = path.startsWith('/') ? path : `/${path}`
     return request<FileNode>(`/tree${normalized}`)
+  },
+  downloadTreeZip: async (path: string) => {
+    const normalized = path.startsWith('/') ? path : `/${path}`
+    const token = localStorage.getItem('token')
+    const fallbackName = `${normalized.split('/').filter(Boolean).slice(-1)[0] || 'root'}.zip`
+    const res = await fetch(`${API_BASE}/tree/archive?path=${encodeURIComponent(normalized)}`, {
+      headers: {
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: res.statusText }))
+      throw new Error(err.message || err.error || res.statusText)
+    }
+    const blob = await res.blob()
+    const filename = parseDownloadFilename(res.headers.get('Content-Disposition'), fallbackName)
+    triggerBrowserDownload(blob, filename)
   },
   getTreeSnapshot: (path = '/'): Promise<TreeSnapshotResponse> =>
     request<TreeSnapshotResponse>(`/tree/snapshot?path=${encodeURIComponent(path)}`),
@@ -628,6 +684,15 @@ export const api = {
     return agentRequest(path, token)
   },
 
+  getLocalConfig: (): Promise<LocalConfigFile> =>
+    request<LocalConfigFile>('/local/config'),
+
+  updateLocalConfig: (req: UpdateLocalConfigRequest): Promise<LocalConfigFile> =>
+    request<LocalConfigFile>('/local/config', {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
   getLocalGitMirror: (): Promise<GitMirrorSettings> =>
     request<GitMirrorSettings>('/local/git-mirror'),
 
@@ -814,6 +879,15 @@ export interface GitMirrorSettings {
   github_token_login?: string
   github_repo_permission?: string
   message?: string
+}
+
+export interface LocalConfigFile {
+  path: string
+  raw: string
+}
+
+export interface UpdateLocalConfigRequest {
+  raw: string
 }
 
 export interface UpdateGitMirrorRequest {

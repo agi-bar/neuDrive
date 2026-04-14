@@ -5,6 +5,10 @@ import LanguageToggle from '../components/LanguageToggle'
 import { useI18n } from '../i18n'
 import { formatDateTime } from './data/DataShared'
 
+interface SyncLoginPageProps {
+  systemSettingsEnabled?: boolean
+}
+
 type CLIAccess = 'push' | 'pull' | 'both'
 
 interface CLILoginRequest {
@@ -92,7 +96,7 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
   }
 }
 
-export default function SyncLoginPage() {
+export default function SyncLoginPage({ systemSettingsEnabled = false }: SyncLoginPageProps) {
   const { locale, tx } = useI18n()
   const [syncToken, setSyncToken] = useState<SyncTokenResponse | null>(null)
   const [busy, setBusy] = useState(false)
@@ -195,9 +199,11 @@ export default function SyncLoginPage() {
               <button className="btn btn-primary" disabled={busy} onClick={() => { void handleAuthorize() }}>
                 {busy ? tx('授权中...', 'Authorizing...') : tx('继续并授权 CLI', 'Continue and authorize CLI')}
               </button>
-              <Link to="/data/sync" className="btn">
-                {tx('打开同步管理页', 'Open Sync page')}
-              </Link>
+              {systemSettingsEnabled && (
+                <Link to="/settings" className="btn">
+                  {tx('打开系统设置页', 'Open System Settings page')}
+                </Link>
+              )}
             </div>
           </>
         )}

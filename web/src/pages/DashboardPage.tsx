@@ -20,7 +20,11 @@ interface UserProfileData {
   updated_at?: string
 }
 
-export default function DashboardPage() {
+interface DashboardPageProps {
+  systemSettingsEnabled?: boolean
+}
+
+export default function DashboardPage({ systemSettingsEnabled = false }: DashboardPageProps) {
   const { locale, tx } = useI18n()
   const [stats, setStats] = useState<DashboardStats>({
     connections: 0,
@@ -265,12 +269,16 @@ export default function DashboardPage() {
       <div className="card">
         <h3 className="card-title">{tx('数据管理', 'Data')}</h3>
         <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
-          {tx('下载你所有的 Hub 数据，或进入新的 Bundle Sync 页面执行 `.ndrv` / `.ndrvz` 的导入、导出和历史查看。', 'Download all Hub data, or open Bundle Sync to import, export, and review `.ndrv` / `.ndrvz` history.')}
+          {systemSettingsEnabled
+            ? tx('下载你所有的 Hub 数据，或打开系统设置页集中查看本地 `config.json` 与 Git Mirror 配置。', 'Download all Hub data, or open System Settings to review local `config.json` and Git Mirror configuration.')
+            : tx('下载你所有的 Hub 数据。', 'Download all Hub data.')}
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-          <Link to="/data/sync" className="btn">
-            {tx('打开 Bundle Sync', 'Open Bundle Sync')}
-          </Link>
+          {systemSettingsEnabled && (
+            <Link to="/settings" className="btn">
+              {tx('打开系统设置', 'Open System Settings')}
+            </Link>
+          )}
           <button
             className="btn btn-primary"
             disabled={exporting}

@@ -26,6 +26,7 @@ import SkillsImportPage from './pages/SkillsImportPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
+  const [publicConfig, setPublicConfig] = useState<any>({})
   const [loading, setLoading] = useState(true)
   const { tx } = useI18n()
   const navigate = useNavigate()
@@ -48,6 +49,13 @@ function App() {
       localStorage.setItem('token', localToken)
       localStorage.removeItem('refresh_token')
       window.history.replaceState({}, '', window.location.pathname)
+    }
+
+    try {
+      const cfg = await api.getPublicConfig()
+      setPublicConfig(cfg || {})
+    } catch {
+      setPublicConfig({})
     }
 
     const token = localStorage.getItem('token')
@@ -109,6 +117,7 @@ function App() {
   const isLegacySyncLoginRoute =
     location.pathname === '/data/sync' &&
     new URLSearchParams(location.search).get('cli_login') === '1'
+  const systemSettingsEnabled = !!publicConfig?.system_settings_enabled
 
   useEffect(() => {
     setIsDataNavOpen(isDataRoute)
@@ -149,7 +158,7 @@ function App() {
   }
 
   if (isSyncLoginRoute) {
-    return <SyncLoginPage />
+    return <SyncLoginPage systemSettingsEnabled={systemSettingsEnabled} />
   }
 
   return (
@@ -186,7 +195,7 @@ function App() {
                 aria-label={tx('数据文件子菜单', 'Data navigation submenu')}
               >
                 <NavLink to="/data/files" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                  {tx('文件管理器', 'File Browser')}
+                  {tx('所有文件', 'All Files')}
                 </NavLink>
                 <NavLink to="/data/projects" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   {tx('项目', 'Projects')}
@@ -196,9 +205,6 @@ function App() {
                 </NavLink>
                 <NavLink to="/data/memory" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   Memory
-                </NavLink>
-                <NavLink to="/data/sync" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                  Sync
                 </NavLink>
               </div>
             )}
@@ -211,6 +217,12 @@ function App() {
             <span className="nav-icon">&#9670;</span>
             <span>{tx('Token 管理', 'Token Manager')}</span>
           </NavLink>
+          {systemSettingsEnabled && (
+            <NavLink to="/settings" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <span className="nav-icon">&#9881;</span>
+              <span>{tx('系统设置', 'System Settings')}</span>
+            </NavLink>
+          )}
         </nav>
 
         <div className="sidebar-footer">
@@ -226,7 +238,7 @@ function App() {
 
       <main className="main-content">
         <Routes>
-          <Route path="/" element={<DashboardPage />} />
+          <Route path="/" element={<DashboardPage systemSettingsEnabled={systemSettingsEnabled} />} />
           <Route path="/setup" element={<SetupPage />}>
             <Route index element={<Navigate to="web-apps" replace />} />
             <Route path="web-apps" element={<SetupWebAppsPage />} />
@@ -237,6 +249,7 @@ function App() {
             <Route path="gpt-actions" element={<SetupGptActionsPage />} />
             <Route path="tokens" element={<SetupTokensPage />} />
           </Route>
+          <Route path="/settings" element={systemSettingsEnabled ? <DataSyncPage /> : <Navigate to="/" replace />} />
           <Route path="/data" element={<Outlet />}>
             <Route index element={<Navigate to="files/browse" replace />} />
             <Route path="files/edit/*" element={<DataFileEditorPage />} />
@@ -250,7 +263,8 @@ function App() {
             <Route path="devices" element={<Navigate to="/data/files" replace />} />
             <Route path="roles" element={<Navigate to="/data/files" replace />} />
             <Route path="inbox" element={<Navigate to="/data/files" replace />} />
-            <Route path="sync" element={<DataSyncPage />} />
+            <Route path="settings" element={<Navigate to={systemSettingsEnabled ? '/settings' : '/'} replace />} />
+            <Route path="sync" element={<Navigate to={systemSettingsEnabled ? '/settings' : '/'} replace />} />
           </Route>
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/info" element={<Navigate to="/data/profile" replace />} />

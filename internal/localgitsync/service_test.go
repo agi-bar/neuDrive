@@ -35,7 +35,9 @@ func TestEnsureGitRepoIgnoresInheritedGitEnv(t *testing.T) {
 	if err := os.MkdirAll(outerRoot, 0o755); err != nil {
 		t.Fatalf("mkdir outer root: %v", err)
 	}
-	if output, err := exec.Command("git", "-C", outerRoot, "init").CombinedOutput(); err != nil {
+	cmd := exec.Command("git", "-C", outerRoot, "init")
+	cmd.Env = gitCommandEnv(nil)
+	if output, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init outer repo: %v: %s", err, strings.TrimSpace(string(output)))
 	}
 

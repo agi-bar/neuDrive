@@ -2226,11 +2226,30 @@ a:hover {
   max-width: 320px;
 }
 
+.data-sync-row input:not([type="file"]) {
+  min-width: 220px;
+  flex: 1;
+}
+
 .data-sync-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 12px;
   margin-top: 12px;
+}
+
+.data-sync-status-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.data-sync-status-card {
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
 }
 
 .data-sync-checkbox {

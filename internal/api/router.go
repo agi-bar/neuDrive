@@ -302,6 +302,11 @@ func (s *Server) setupRoutes() {
 		// Dashboard
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
 
+		// Local Git mirror settings
+		r.Get("/api/local/git-mirror", s.handleLocalGitMirrorGet)
+		r.Put("/api/local/git-mirror", s.handleLocalGitMirrorUpdate)
+		r.Post("/api/local/git-mirror/github/test", s.handleLocalGitMirrorGitHubTest)
+
 		// GPT Setup
 		r.Get("/api/gpt/setup", s.handleGPTSetup)
 

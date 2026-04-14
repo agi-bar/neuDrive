@@ -34,7 +34,13 @@ type testEnvelope struct {
 	} `json:"error"`
 }
 
-func newTestHTTPServer(t *testing.T) (*httptest.Server, *sqlitestorage.Store, string, string, string) {
+type fakeGitHubTokenState struct {
+	login      string
+	fullName   string
+	permission string
+}
+
+func newTestHTTPServer(t *testing.T, gitOpts ...localgitsync.Option) (*httptest.Server, *sqlitestorage.Store, string, string, string) {
 	t.Helper()
 	ctx := context.Background()
 	store, err := sqlitestorage.Open(filepath.Join(t.TempDir(), "local.db"))
@@ -85,7 +91,7 @@ func newTestHTTPServer(t *testing.T) (*httptest.Server, *sqlitestorage.Store, st
 	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
-	localGitSyncSvc := localgitsync.New(store, v)
+	localGitSyncSvc := localgitsync.New(store, v, gitOpts...)
 	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
 		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
 	}
@@ -452,6 +458,114 @@ func TestSQLiteSharedServerWriteResponsesIncludeLocalGitSync(t *testing.T) {
 	}
 	if !bytes.Contains(mirrored, []byte("Keep it concise.")) {
 		t.Fatalf("unexpected mirrored profile content: %s", string(mirrored))
+	}
+}
+
+func TestSQLiteSharedServerGitMirrorSettingsHideStoredGitHubToken(t *testing.T) {
+	gh := newFakeGitHubServer(t, map[string]fakeGitHubTokenState{
+		"ghp_valid": {
+			login:      "octocat",
+			fullName:   "acme/demo",
+			permission: "write",
+		},
+	})
+	ts, store, adminToken, _, _ := newTestHTTPServer(
+		t,
+		localgitsync.WithGitHubAPIBaseURL(gh.URL),
+		localgitsync.WithHTTPClient(gh.Client()),
+	)
+
+	ctx := context.Background()
+	v, err := vault.NewVault(strings.Repeat("0", 64))
+	if err != nil {
+		t.Fatalf("NewVault: %v", err)
+	}
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	mirrorSvc := localgitsync.New(
+		store,
+		v,
+		localgitsync.WithGitHubAPIBaseURL(gh.URL),
+		localgitsync.WithHTTPClient(gh.Client()),
+	)
+	if _, err := mirrorSvc.RegisterMirrorAndSync(ctx, user.ID, filepath.Join(t.TempDir(), "mirror")); err != nil {
+		t.Fatalf("RegisterMirrorAndSync: %v", err)
+	}
+
+	status, updated := doJSON(t, http.MethodPut, ts.URL+"/api/local/git-mirror", adminToken, []byte(`{
+		"auto_commit_enabled": true,
+		"auto_push_enabled": false,
+		"auth_mode": "github_token",
+		"remote_url": "git@github.com:acme/demo.git",
+		"remote_branch": "main",
+		"github_token": "ghp_valid"
+	}`))
+	if status != http.StatusOK || !updated.OK {
+		t.Fatalf("PUT /api/local/git-mirror failed: status=%d body=%+v", status, updated)
+	}
+	if bytes.Contains(updated.Data, []byte("ghp_valid")) {
+		t.Fatalf("settings response must not echo raw github token: %s", string(updated.Data))
+	}
+	for _, expected := range []string{
+		`"github_token_configured":true`,
+		`"github_token_login":"octocat"`,
+		`"github_repo_permission":"write"`,
+		`"remote_url":"https://github.com/acme/demo.git"`,
+	} {
+		if !bytes.Contains(updated.Data, []byte(expected)) {
+			t.Fatalf("expected %q in updated settings payload: %s", expected, string(updated.Data))
+		}
+	}
+
+	status, fetched := doJSON(t, http.MethodGet, ts.URL+"/api/local/git-mirror", adminToken, nil)
+	if status != http.StatusOK || !fetched.OK {
+		t.Fatalf("GET /api/local/git-mirror failed: status=%d body=%+v", status, fetched)
+	}
+	if bytes.Contains(fetched.Data, []byte("ghp_valid")) {
+		t.Fatalf("GET settings must not echo raw github token: %s", string(fetched.Data))
+	}
+
+	vaultSvc := services.NewVaultServiceWithRepo(sqlitestorage.NewVaultRepo(store), v)
+	tokenValue, err := vaultSvc.Read(ctx, user.ID, "auth.github.git_mirror", models.TrustLevelFull)
+	if err != nil {
+		t.Fatalf("Read stored github token: %v", err)
+	}
+	if tokenValue != "ghp_valid" {
+		t.Fatalf("stored github token = %q, want ghp_valid", tokenValue)
+	}
+}
+
+func TestSQLiteSharedServerGitMirrorGitHubTestEndpointReturnsPermissionFailure(t *testing.T) {
+	gh := newFakeGitHubServer(t, map[string]fakeGitHubTokenState{
+		"ghp_readonly": {
+			login:      "octocat",
+			fullName:   "acme/demo",
+			permission: "read",
+		},
+	})
+	ts, _, adminToken, _, _ := newTestHTTPServer(
+		t,
+		localgitsync.WithGitHubAPIBaseURL(gh.URL),
+		localgitsync.WithHTTPClient(gh.Client()),
+	)
+
+	status, tested := doJSON(t, http.MethodPost, ts.URL+"/api/local/git-mirror/github/test", adminToken, []byte(`{
+		"remote_url": "git@github.com:acme/demo.git",
+		"github_token": "ghp_readonly"
+	}`))
+	if status != http.StatusOK || !tested.OK {
+		t.Fatalf("POST /api/local/git-mirror/github/test failed: status=%d body=%+v", status, tested)
+	}
+	for _, expected := range []string{
+		`"ok":false`,
+		`"permission":"read"`,
+		`"normalized_remote_url":"https://github.com/acme/demo.git"`,
+	} {
+		if !bytes.Contains(tested.Data, []byte(expected)) {
+			t.Fatalf("expected %q in github test payload: %s", expected, string(tested.Data))
+		}
 	}
 }
 
@@ -949,6 +1063,40 @@ func doJSON(t *testing.T, method, url, token string, body []byte) (int, testEnve
 		t.Fatalf("decode response: %v", err)
 	}
 	return resp.StatusCode, env
+}
+
+func newFakeGitHubServer(t *testing.T, states map[string]fakeGitHubTokenState) *httptest.Server {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+		state, ok := states[authHeader]
+		if !ok {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"message":"bad credentials"}`))
+			return
+		}
+		switch r.URL.Path {
+		case "/user":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"login": state.login,
+			})
+		case "/repos/acme/demo":
+			permissions := map[string]bool{
+				"admin": state.permission == "admin",
+				"push":  state.permission == "admin" || state.permission == "write",
+				"pull":  state.permission == "admin" || state.permission == "write" || state.permission == "read",
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"full_name":   state.fullName,
+				"permissions": permissions,
+			})
+		default:
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"not found"}`))
+		}
+	}))
+	t.Cleanup(server.Close)
+	return server
 }
 
 func doMultipartForm(t *testing.T, method, url, token, fieldName, filename string, payload []byte, fields map[string]string) (int, testEnvelope) {

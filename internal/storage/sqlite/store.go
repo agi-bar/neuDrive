@@ -142,13 +142,39 @@ func (s *Store) init(ctx context.Context) error {
 			user_id TEXT PRIMARY KEY,
 			root_path TEXT NOT NULL,
 			is_active INTEGER NOT NULL DEFAULT 1,
+			auto_commit_enabled INTEGER NOT NULL DEFAULT 0,
+			auto_push_enabled INTEGER NOT NULL DEFAULT 0,
+			auth_mode TEXT NOT NULL DEFAULT 'local_credentials',
+			remote_name TEXT NOT NULL DEFAULT 'origin',
+			remote_url TEXT NOT NULL DEFAULT '',
+			remote_branch TEXT NOT NULL DEFAULT 'main',
 			git_initialized_at TEXT,
 			last_synced_at TEXT,
 			last_error TEXT NOT NULL DEFAULT '',
+			last_commit_at TEXT,
+			last_commit_hash TEXT NOT NULL DEFAULT '',
+			last_push_at TEXT,
+			last_push_error TEXT NOT NULL DEFAULT '',
+			github_token_verified_at TEXT,
+			github_token_login TEXT NOT NULL DEFAULT '',
+			github_repo_permission TEXT NOT NULL DEFAULT '',
 			created_at TEXT NOT NULL,
 			updated_at TEXT NOT NULL,
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN auto_commit_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN auto_push_enabled INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN auth_mode TEXT NOT NULL DEFAULT 'local_credentials'`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN remote_name TEXT NOT NULL DEFAULT 'origin'`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN remote_url TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN remote_branch TEXT NOT NULL DEFAULT 'main'`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN last_commit_at TEXT`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN last_commit_hash TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN last_push_at TEXT`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN last_push_error TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN github_token_verified_at TEXT`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN github_token_login TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE local_git_mirrors ADD COLUMN github_repo_permission TEXT NOT NULL DEFAULT ''`,
 		`CREATE TABLE IF NOT EXISTS vault_entries (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
@@ -363,7 +389,8 @@ func (s *Store) init(ctx context.Context) error {
 	}
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
-			if strings.Contains(stmt, "ALTER TABLE users ADD COLUMN") && strings.Contains(err.Error(), "duplicate column name") {
+			if strings.Contains(err.Error(), "duplicate column name") && (strings.Contains(stmt, "ALTER TABLE users ADD COLUMN") ||
+				strings.Contains(stmt, "ALTER TABLE local_git_mirrors ADD COLUMN")) {
 				continue
 			}
 			return fmt.Errorf("sqlite.init: %w", err)

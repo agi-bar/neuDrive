@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,35 +22,23 @@ import (
 	"github.com/google/uuid"
 )
 
-const (
-	readmePath = "README.md"
-)
-
 type mirrorRepo interface {
 	GetActiveLocalGitMirror(ctx context.Context, userID uuid.UUID) (*models.LocalGitMirror, error)
 	UpsertActiveLocalGitMirror(ctx context.Context, mirror models.LocalGitMirror) error
-	UpdateLocalGitMirrorState(ctx context.Context, userID uuid.UUID, lastSyncedAt *time.Time, lastError string, gitInitializedAt *time.Time) error
-}
-
-type SyncInfo struct {
-	Enabled      bool   `json:"enabled"`
-	Path         string `json:"path,omitempty"`
-	Synced       bool   `json:"synced"`
-	LastSyncedAt string `json:"last_synced_at,omitempty"`
-	Message      string `json:"message,omitempty"`
-	LastError    string `json:"last_error,omitempty"`
 }
 
 type Service struct {
-	mirrors     mirrorRepo
-	fileTree    *services.FileTreeService
-	users       *services.UserService
-	connections *services.ConnectionService
-	projects    *services.ProjectService
-	vault       *services.VaultService
+	mirrors          mirrorRepo
+	fileTree         *services.FileTreeService
+	users            *services.UserService
+	connections      *services.ConnectionService
+	projects         *services.ProjectService
+	vault            *services.VaultService
+	httpClient       *http.Client
+	githubAPIBaseURL string
 }
 
-func New(store *sqlitestorage.Store, vaultCrypto *vault.Vault) *Service {
+func New(store *sqlitestorage.Store, vaultCrypto *vault.Vault, opts ...Option) *Service {
 	if store == nil {
 		return nil
 	}
@@ -62,6 +51,7 @@ func New(store *sqlitestorage.Store, vaultCrypto *vault.Vault) *Service {
 		services.NewConnectionServiceWithRepo(sqlitestorage.NewConnectionRepo(store)),
 		services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTree),
 		services.NewVaultServiceWithRepo(sqlitestorage.NewVaultRepo(store), vaultCrypto),
+		opts...,
 	)
 }
 
@@ -72,18 +62,27 @@ func NewWithDeps(
 	connections *services.ConnectionService,
 	projects *services.ProjectService,
 	vaultSvc *services.VaultService,
+	opts ...Option,
 ) *Service {
 	if mirrors == nil || fileTree == nil {
 		return nil
 	}
-	return &Service{
-		mirrors:     mirrors,
-		fileTree:    fileTree,
-		users:       users,
-		connections: connections,
-		projects:    projects,
-		vault:       vaultSvc,
+	svc := &Service{
+		mirrors:          mirrors,
+		fileTree:         fileTree,
+		users:            users,
+		connections:      connections,
+		projects:         projects,
+		vault:            vaultSvc,
+		httpClient:       http.DefaultClient,
+		githubAPIBaseURL: defaultGitHubAPIBaseURL,
 	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(svc)
+		}
+	}
+	return svc
 }
 
 func DefaultMirrorRoot() string {
@@ -119,20 +118,21 @@ func (s *Service) RegisterMirrorAndSync(ctx context.Context, userID uuid.UUID, o
 		return nil, err
 	}
 
-	if err := s.mirrors.UpsertActiveLocalGitMirror(ctx, models.LocalGitMirror{
-		UserID:           userID,
-		RootPath:         rootPath,
-		IsActive:         true,
-		GitInitializedAt: gitInitializedAt,
-		LastSyncedAt:     &syncedAt,
-		LastError:        "",
-		CreatedAt:        mirrorCreatedAt(active, syncedAt),
-		UpdatedAt:        syncedAt,
-	}); err != nil {
+	mirror := normalizeMirror(active)
+	mirror.UserID = userID
+	mirror.RootPath = rootPath
+	mirror.IsActive = true
+	mirror.GitInitializedAt = gitInitializedAt
+	mirror.LastSyncedAt = &syncedAt
+	mirror.LastError = ""
+	mirror.CreatedAt = mirrorCreatedAt(active, syncedAt)
+	mirror.UpdatedAt = syncedAt
+
+	if err := s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror); err != nil {
 		return nil, err
 	}
 
-	return buildSuccessInfo(rootPath, syncedAt), nil
+	return s.buildSyncInfo(ctx, userID, mirror, true, false, false, false), nil
 }
 
 func (s *Service) SyncActiveMirror(ctx context.Context, userID uuid.UUID) (*SyncInfo, error) {
@@ -147,20 +147,35 @@ func (s *Service) SyncActiveMirror(ctx context.Context, userID uuid.UUID) (*Sync
 		return &SyncInfo{Enabled: false, Synced: false}, nil
 	}
 
+	mirror := normalizeMirror(active)
 	syncedAt := time.Now().UTC()
-	gitInitializedAt, syncErr := s.syncIntoRoot(ctx, userID, active.RootPath, syncedAt, active)
+	gitInitializedAt, syncErr := s.syncIntoRoot(ctx, userID, mirror.RootPath, syncedAt, &mirror)
+	mirror.GitInitializedAt = gitInitializedAt
 	if syncErr != nil {
-		info := buildFailureInfo(active.RootPath, syncErr)
-		_ = s.mirrors.UpdateLocalGitMirrorState(ctx, userID, active.LastSyncedAt, syncErr.Error(), gitInitializedAt)
-		return info, syncErr
+		mirror.LastError = syncErr.Error()
+		mirror.UpdatedAt = time.Now().UTC()
+		if err := s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror); err != nil {
+			return buildFailureInfo(mirror, syncErr), syncErr
+		}
+		return buildFailureInfo(mirror, syncErr), syncErr
 	}
 
-	if err := s.mirrors.UpdateLocalGitMirrorState(ctx, userID, &syncedAt, "", gitInitializedAt); err != nil {
-		info := buildFailureInfo(active.RootPath, err)
-		return info, err
+	mirror.LastSyncedAt = &syncedAt
+	mirror.LastError = ""
+	result, err := s.finalizeMirrorRepo(ctx, userID, &mirror)
+	mirror.UpdatedAt = time.Now().UTC()
+	if err != nil {
+		mirror.LastError = err.Error()
+		if persistErr := s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror); persistErr != nil {
+			return buildFailureInfo(mirror, err), err
+		}
+		return buildFailureInfo(mirror, err), err
+	}
+	if persistErr := s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror); persistErr != nil {
+		return buildFailureInfo(mirror, persistErr), persistErr
 	}
 
-	return buildSuccessInfo(active.RootPath, syncedAt), nil
+	return s.buildSyncInfo(ctx, userID, mirror, true, result.commitCreated, result.pushAttempted, result.pushSucceeded), nil
 }
 
 func (s *Service) syncIntoRoot(
@@ -384,7 +399,7 @@ func ensureGitRepo(ctx context.Context, rootPath string, existing *models.LocalG
 		return &now, nil
 	}
 	cmd := exec.CommandContext(ctx, "git", "-C", rootPath, "init")
-	cmd.Env = scrubGitEnv(os.Environ())
+	cmd.Env = gitCommandEnv(nil)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return nil, fmt.Errorf("git init failed: %w: %s", err, strings.TrimSpace(string(output)))
@@ -453,33 +468,53 @@ func buildREADME(rootPath string) string {
 	return strings.Join(lines, "\n")
 }
 
-func buildSuccessInfo(rootPath string, syncedAt time.Time) *SyncInfo {
-	return &SyncInfo{
-		Enabled:      true,
-		Path:         rootPath,
-		Synced:       true,
-		LastSyncedAt: syncedAt.UTC().Format(time.RFC3339),
-		Message:      successMessage(rootPath),
-	}
-}
-
-func buildFailureInfo(rootPath string, err error) *SyncInfo {
+func buildFailureInfo(mirror models.LocalGitMirror, err error) *SyncInfo {
 	info := &SyncInfo{
-		Enabled:   true,
-		Path:      rootPath,
-		Synced:    false,
-		LastError: err.Error(),
+		Enabled:           true,
+		Path:              mirror.RootPath,
+		Synced:            false,
+		LastSyncedAt:      formatOptionalTime(mirror.LastSyncedAt),
+		LastError:         err.Error(),
+		AutoCommitEnabled: mirror.AutoCommitEnabled,
+		AutoPushEnabled:   mirror.AutoPushEnabled,
+		AuthMode:          mirror.AuthMode,
+		RemoteName:        mirror.RemoteName,
+		RemoteBranch:      mirror.RemoteBranch,
+		LastCommitAt:      formatOptionalTime(mirror.LastCommitAt),
+		LastCommitHash:    strings.TrimSpace(mirror.LastCommitHash),
+		LastPushAt:        formatOptionalTime(mirror.LastPushAt),
+		LastPushError:     strings.TrimSpace(mirror.LastPushError),
 	}
-	if rootPath != "" {
-		info.Message = fmt.Sprintf("本地 Git 目录同步失败: %s。目录: %s。", err.Error(), rootPath)
+	if mirror.RootPath != "" {
+		info.Message = fmt.Sprintf("本地 Git 目录同步失败: %s。目录: %s。", err.Error(), mirror.RootPath)
 	} else {
 		info.Message = fmt.Sprintf("本地 Git 目录同步失败: %s。", err.Error())
 	}
 	return info
 }
 
-func successMessage(rootPath string) string {
-	return fmt.Sprintf("已同步到本地 Git 目录: %s。如需同步到 GitHub，请在该目录执行 git add / git commit / git remote add origin / git push。", rootPath)
+func (s *Service) buildSyncInfo(_ context.Context, _ uuid.UUID, mirror models.LocalGitMirror, synced, commitCreated, pushAttempted, pushSucceeded bool) *SyncInfo {
+	info := &SyncInfo{
+		Enabled:           true,
+		Path:              mirror.RootPath,
+		Synced:            synced,
+		LastSyncedAt:      formatOptionalTime(mirror.LastSyncedAt),
+		LastError:         strings.TrimSpace(mirror.LastError),
+		AutoCommitEnabled: mirror.AutoCommitEnabled,
+		AutoPushEnabled:   mirror.AutoPushEnabled,
+		AuthMode:          mirror.AuthMode,
+		RemoteName:        mirror.RemoteName,
+		RemoteBranch:      mirror.RemoteBranch,
+		LastCommitAt:      formatOptionalTime(mirror.LastCommitAt),
+		LastCommitHash:    strings.TrimSpace(mirror.LastCommitHash),
+		LastPushAt:        formatOptionalTime(mirror.LastPushAt),
+		LastPushError:     strings.TrimSpace(mirror.LastPushError),
+		CommitCreated:     commitCreated,
+		PushAttempted:     pushAttempted,
+		PushSucceeded:     pushSucceeded,
+		Message:           mirrorSummaryMessage(mirror, commitCreated, pushAttempted, pushSucceeded),
+	}
+	return info
 }
 
 func mirrorCreatedAt(active *models.LocalGitMirror, fallback time.Time) time.Time {

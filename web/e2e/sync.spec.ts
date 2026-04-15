@@ -112,14 +112,22 @@ test.describe('Bundle Sync', () => {
     }
   })
 
-  test('legacy sync route redirects to system settings', async ({ page, request }) => {
+  test('legacy sync route redirects according to public config', async ({ page, request }) => {
     await setupUser(page, request)
+    const configRes = await request.get('/api/config')
+    const configBody = await configRes.json()
+    const systemSettingsEnabled = !!configBody?.data?.system_settings_enabled
 
     await page.goto('/data/sync')
-    await page.waitForURL(/\/settings$/, { timeout: 15000 })
-    await expect(page.getByRole('heading', { name: '系统设置' })).toBeVisible()
-    await expect(page.getByText('Git Mirror', { exact: true })).toBeVisible()
-    await expect(page.getByRole('button', { name: 'config.json' })).toBeVisible()
+    if (systemSettingsEnabled) {
+      await page.waitForURL(/\/settings$/, { timeout: 15000 })
+      await expect(page.getByRole('heading', { name: '系统设置' })).toBeVisible()
+      await expect(page.getByText('Git Mirror', { exact: true })).toBeVisible()
+      await expect(page.getByRole('button', { name: 'config.json' })).toBeVisible()
+    } else {
+      await page.waitForURL(/\/$/, { timeout: 15000 })
+      await expect(page.getByRole('heading', { name: '概览' })).toBeVisible()
+    }
   })
 
   test('preview mirror deletes with sync preview API', async ({ request, page }) => {

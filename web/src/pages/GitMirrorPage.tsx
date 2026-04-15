@@ -28,6 +28,23 @@ const DEFAULT_CREATE_REPO: CreateGitMirrorRepoRequest = {
   remote_branch: 'main',
 }
 
+function repoPermissionRank(permission?: string) {
+  switch (permission) {
+    case 'admin':
+      return 3
+    case 'write':
+      return 2
+    case 'read':
+      return 1
+    default:
+      return 0
+  }
+}
+
+function canWriteRepo(permission?: string) {
+  return permission === 'admin' || permission === 'write'
+}
+
 export default function GitMirrorPage() {
   const { locale, tx } = useI18n()
   const [mirror, setMirror] = useState<GitMirrorSettings | null>(null)
@@ -45,6 +62,10 @@ export default function GitMirrorPage() {
   const [showCreateRepo, setShowCreateRepo] = useState(false)
   const [createRepoBusy, setCreateRepoBusy] = useState(false)
   const [createRepoDraft, setCreateRepoDraft] = useState<CreateGitMirrorRepoRequest>(DEFAULT_CREATE_REPO)
+  const [repoQuery, setRepoQuery] = useState('')
+  const [repoOwnerFilter, setRepoOwnerFilter] = useState('')
+  const [repoWritableOnly, setRepoWritableOnly] = useState(true)
+  const [pendingRepoURL, setPendingRepoURL] = useState('')
 
   const syncDraft = (settings: GitMirrorSettings) => {
     setDraft({
@@ -161,10 +182,62 @@ export default function GitMirrorPage() {
     () => repos.find((repo) => repo.clone_url === draft.remote_url),
     [draft.remote_url, repos],
   )
+  const repoOwners = useMemo(
+    () => Array.from(new Set(repos.map((repo) => repo.owner_login).filter(Boolean))).sort((left, right) => left.localeCompare(right)),
+    [repos],
+  )
+  const filteredRepos = useMemo(() => {
+    const query = repoQuery.trim().toLowerCase()
+    return repos
+      .filter((repo) => {
+        if (repoOwnerFilter && repo.owner_login !== repoOwnerFilter) {
+          return false
+        }
+        if (repoWritableOnly && !canWriteRepo(repo.viewer_permission)) {
+          return false
+        }
+        if (!query) {
+          return true
+        }
+        const haystack = `${repo.full_name} ${repo.owner_login} ${repo.repo_name}`.toLowerCase()
+        return haystack.includes(query)
+      })
+      .sort((left, right) => {
+        const permissionDelta = repoPermissionRank(right.viewer_permission) - repoPermissionRank(left.viewer_permission)
+        if (permissionDelta !== 0) {
+          return permissionDelta
+        }
+        return left.full_name.localeCompare(right.full_name)
+      })
+  }, [repoOwnerFilter, repoQuery, repoWritableOnly, repos])
+  const syncStateHint = useMemo(() => {
+    if (!mirror) return ''
+    if (mirror.sync_state === 'queued') {
+      if (mirror.sync_next_attempt_at) {
+        return tx('后台已排队，下一次重试时间：', 'Queued in the background. Next retry: ') + formatDateTime(mirror.sync_next_attempt_at, locale)
+      }
+      if (mirror.sync_requested_at) {
+        return tx('后台已排队，等待 worker 处理。排队时间：', 'Queued in the background. Requested at: ') + formatDateTime(mirror.sync_requested_at, locale)
+      }
+      return tx('后台已排队，等待 worker 处理。', 'Queued in the background and waiting for the worker.')
+    }
+    if (mirror.sync_state === 'running') {
+      if (mirror.sync_started_at) {
+        return tx('后台同步进行中，开始于：', 'Background sync is running since ') + formatDateTime(mirror.sync_started_at, locale)
+      }
+      return tx('后台同步进行中。', 'Background sync is running.')
+    }
+    if (mirror.sync_state === 'error') {
+      return mirror.last_error || mirror.last_push_error || tx('最近一次后台同步失败。', 'The latest background sync failed.')
+    }
+    return mirror.message || ''
+  }, [locale, mirror, tx])
+  const syncStateHintClass = mirror?.sync_state === 'error' ? 'alert alert-warn' : 'alert alert-ok'
 
   const handleStartGitHubAppBrowser = async () => {
     setError('')
     setMessage('')
+    updateDraft({ auth_mode: 'github_app_user' })
     try {
       const result = await api.startGitMirrorGitHubAppBrowser(window.location.pathname)
       window.location.assign(result.authorization_url)
@@ -214,27 +287,33 @@ export default function GitMirrorPage() {
     }
   }
 
-  const handleSave = async () => {
-    if (draft.auth_mode === 'github_token' && draft.auto_push_enabled && !tokenVerificationCurrent) {
+  const persistDraft = async (nextDraft: UpdateGitMirrorRequest, successMessage: string) => {
+    if (nextDraft.auth_mode === 'github_token' && nextDraft.auto_push_enabled && !tokenVerificationCurrent) {
       setError(tx('启用 GitHub token 自动推送前，请先测试并确认 token 可用。', 'Test and verify the GitHub token before enabling auto push.'))
-      return
+      return null
     }
     setSaving(true)
     setError('')
     setMessage('')
     try {
       const saved = await api.updateGitMirror({
-        ...draft,
+        ...nextDraft,
         github_token: tokenInput.trim() || undefined,
       })
       setMirror(saved)
       syncDraft(saved)
-      setMessage(tx('Git Mirror 配置已保存', 'Git Mirror settings saved'))
+      setMessage(successMessage)
+      return saved
     } catch (err: any) {
       setError(err.message || tx('保存 Git Mirror 配置失败', 'Failed to save Git Mirror settings'))
+      return null
     } finally {
       setSaving(false)
     }
+  }
+
+  const handleSave = async () => {
+    await persistDraft(draft, tx('Git Mirror 配置已保存', 'Git Mirror settings saved'))
   }
 
   const handleSync = async () => {
@@ -252,14 +331,21 @@ export default function GitMirrorPage() {
     }
   }
 
-  const handleSelectRepo = (repo: GitMirrorRepo) => {
-    updateDraft({
+  const handleSelectRepo = async (repo: GitMirrorRepo) => {
+    const nextDraft: UpdateGitMirrorRequest = {
+      ...draft,
       auth_mode: 'github_app_user',
       remote_name: draft.remote_name || 'origin',
       remote_url: repo.clone_url,
       remote_branch: repo.default_branch || 'main',
-    })
-    setMessage(tx('已选中仓库，记得保存配置。', 'Repository selected. Save the settings to apply it.'))
+    }
+    setPendingRepoURL(repo.clone_url)
+    setDraft(nextDraft)
+    try {
+      await persistDraft(nextDraft, tx('仓库已选中并保存。现在可以直接开启 auto push。', 'Repository selected and saved. You can turn on auto push now.'))
+    } finally {
+      setPendingRepoURL('')
+    }
   }
 
   const handleCreateRepo = async () => {
@@ -273,10 +359,16 @@ export default function GitMirrorPage() {
     try {
       const repo = await api.createGitMirrorGitHubAppRepo(createRepoDraft)
       setShowCreateRepo(false)
-      await loadMirror()
       await loadRepos()
-      handleSelectRepo(repo)
-      setMessage(tx('仓库已创建并写回 Mirror 配置。', 'Repository created and written back to the mirror settings.'))
+      const nextDraft: UpdateGitMirrorRequest = {
+        ...draft,
+        auth_mode: 'github_app_user',
+        remote_name: createRepoDraft.remote_name || draft.remote_name || 'origin',
+        remote_url: repo.clone_url,
+        remote_branch: createRepoDraft.remote_branch || repo.default_branch || 'main',
+      }
+      setDraft(nextDraft)
+      await persistDraft(nextDraft, tx('仓库已创建并保存到 Git Mirror。', 'Repository created and saved to Git Mirror.'))
     } catch (err: any) {
       setError(err.message || tx('创建 GitHub 仓库失败', 'Failed to create the GitHub repository'))
     } finally {
@@ -297,7 +389,7 @@ export default function GitMirrorPage() {
           <p className="materials-subtitle">{tx('把 neuDrive Hub 持续同步到 Git 仓库。local 模式继续支持本地 worktree；hosted 模式则会在后台排队执行。', 'Continuously sync your neuDrive Hub into a Git repository. Local mode keeps using a local worktree, while hosted mode runs queued syncs in the background.')}</p>
         </div>
         <div className="materials-actions">
-          <button className="btn" type="button" disabled={reposBusy} onClick={() => void loadRepos()}>
+          <button className="btn" type="button" disabled={reposBusy || !mirror?.github_app_user_connected} onClick={() => void loadRepos()}>
             {reposBusy ? tx('刷新中...', 'Refreshing...') : tx('刷新仓库列表', 'Refresh repos')}
           </button>
           <button className="btn btn-primary" type="button" disabled={syncing} onClick={handleSync}>
@@ -326,7 +418,21 @@ export default function GitMirrorPage() {
           <div className="data-record-title">{tx('最近同步', 'Last sync')}</div>
           <div className="data-record-secondary">{mirror?.last_synced_at ? formatDateTime(mirror.last_synced_at, locale) : tx('还没有', 'Not yet')}</div>
         </div>
+        <div className="data-sync-status-card">
+          <div className="data-record-title">{tx('下次重试', 'Next retry')}</div>
+          <div className="data-record-secondary">{mirror?.sync_next_attempt_at ? formatDateTime(mirror.sync_next_attempt_at, locale) : tx('无', 'None')}</div>
+        </div>
+        <div className="data-sync-status-card">
+          <div className="data-record-title">{tx('尝试次数', 'Attempt count')}</div>
+          <div className="data-record-secondary">{mirror?.sync_attempt_count || 0}</div>
+        </div>
       </div>
+
+      {syncStateHint && (
+        <div className={syncStateHintClass} style={{ marginTop: 16, marginBottom: 0 }}>
+          {syncStateHint}
+        </div>
+      )}
 
       <div className="materials-panel data-sync-card" style={{ marginTop: 16 }}>
         <div className="card-header">
@@ -374,7 +480,13 @@ export default function GitMirrorPage() {
                 <select
                   id="git-mirror-auth-mode"
                   value={draft.auth_mode}
-                  onChange={(e) => updateDraft({ auth_mode: e.target.value as UpdateGitMirrorRequest['auth_mode'] })}
+                  onChange={(e) => {
+                    const nextAuthMode = e.target.value as UpdateGitMirrorRequest['auth_mode']
+                    updateDraft({ auth_mode: nextAuthMode })
+                    if (nextAuthMode === 'github_app_user' && mirror?.github_app_user_connected) {
+                      void loadRepos()
+                    }
+                  }}
                 >
                   {authOptions.map((option) => (
                     <option key={option} value={option}>{option}</option>
@@ -443,26 +555,79 @@ export default function GitMirrorPage() {
                   <div className="data-record-secondary" style={{ marginTop: 12 }}>
                     GitHub {mirror.github_app_user_login || tx('已连接', 'Connected')}
                     {mirror.github_app_user_authorized_at ? ` · ${tx('授权时间', 'Authorized')} ${formatDateTime(mirror.github_app_user_authorized_at, locale)}` : ''}
+                    {mirror.github_app_user_refresh_expires_at ? ` · ${tx('refresh 到期', 'Refresh expires')} ${formatDateTime(mirror.github_app_user_refresh_expires_at, locale)}` : ''}
+                    {mirror.github_repo_permission ? ` · ${tx('当前仓库权限', 'Current repo permission')} ${mirror.github_repo_permission}` : ''}
                   </div>
                 )}
 
                 {mirror?.github_app_user_connected && (
                   <>
-                    <div className="data-sync-actions data-sync-actions-compact">
-                      <select
-                        value={selectedRepo?.clone_url || ''}
-                        onChange={(e) => {
-                          const repo = repos.find((item) => item.clone_url === e.target.value)
-                          if (repo) handleSelectRepo(repo)
-                        }}
-                      >
-                        <option value="">{tx('选择已有仓库', 'Choose a repository')}</option>
-                        {repos.map((repo) => (
-                          <option key={repo.clone_url} value={repo.clone_url}>
-                            {repo.full_name}
-                          </option>
-                        ))}
-                      </select>
+                    <div className="data-sync-settings-grid" style={{ marginTop: 12 }}>
+                      <div className="form-group">
+                        <label htmlFor="git-mirror-repo-query">{tx('搜索仓库', 'Search repositories')}</label>
+                        <input
+                          id="git-mirror-repo-query"
+                          value={repoQuery}
+                          onChange={(e) => setRepoQuery(e.target.value)}
+                          placeholder={tx('按 owner / repo 搜索', 'Search by owner / repo')}
+                        />
+                      </div>
+                      <div className="form-group">
+                        <label htmlFor="git-mirror-owner-filter">{tx('Owner', 'Owner')}</label>
+                        <select id="git-mirror-owner-filter" value={repoOwnerFilter} onChange={(e) => setRepoOwnerFilter(e.target.value)}>
+                          <option value="">{tx('全部 owner', 'All owners')}</option>
+                          {repoOwners.map((owner) => (
+                            <option key={owner} value={owner}>{owner}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <label className="data-sync-toggle-card">
+                        <div className="data-sync-toggle-copy">
+                          <div className="data-sync-toggle-title">{tx('只看可写仓库', 'Writable only')}</div>
+                          <div className="data-sync-field-note">{tx('优先只展示拥有 write / admin 权限的 repo。', 'Only show repositories where you already have write or admin access.')}</div>
+                        </div>
+                        <input type="checkbox" checked={repoWritableOnly} onChange={(e) => setRepoWritableOnly(e.target.checked)} />
+                      </label>
+                    </div>
+
+                    <div style={{ display: 'grid', gap: 10, marginTop: 12 }}>
+                      {filteredRepos.length === 0 ? (
+                        <div className="data-record-secondary">
+                          {reposBusy
+                            ? tx('仓库列表刷新中...', 'Refreshing repositories...')
+                            : tx('没有匹配的仓库。你可以放宽筛选，或直接创建一个新仓库。', 'No repositories match the current filters. Relax the filters or create a new repository.')}
+                        </div>
+                      ) : (
+                        filteredRepos.slice(0, 24).map((repo) => (
+                          <div
+                            key={repo.clone_url}
+                            className="data-sync-status-card"
+                            style={{ display: 'flex', justifyContent: 'space-between', gap: 16, alignItems: 'center' }}
+                          >
+                            <div>
+                              <div className="data-record-title">{repo.full_name}</div>
+                              <div className="data-record-secondary">
+                                {repo.owner_type || 'user'} · {repo.default_branch || 'main'} · {repo.viewer_permission || 'none'}
+                              </div>
+                            </div>
+                            <button
+                              className="btn"
+                              type="button"
+                              disabled={saving && pendingRepoURL === repo.clone_url}
+                              onClick={() => void handleSelectRepo(repo)}
+                            >
+                              {selectedRepo?.clone_url === repo.clone_url
+                                ? tx('重新保存', 'Save again')
+                                : saving && pendingRepoURL === repo.clone_url
+                                  ? tx('保存中...', 'Saving...')
+                                  : tx('使用此仓库', 'Use this repo')}
+                            </button>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <div className="data-sync-actions data-sync-actions-compact" style={{ marginTop: 12 }}>
                       <button className="btn" type="button" onClick={() => setShowCreateRepo((current) => !current)}>
                         {showCreateRepo ? tx('取消创建', 'Cancel create') : tx('创建仓库', 'Create repository')}
                       </button>
@@ -472,7 +637,18 @@ export default function GitMirrorPage() {
                       <div className="data-sync-settings-grid" style={{ marginTop: 12 }}>
                         <div className="form-group">
                           <label htmlFor="create-repo-owner">Owner</label>
-                          <input id="create-repo-owner" value={createRepoDraft.owner_login} onChange={(e) => setCreateRepoDraft((prev) => ({ ...prev, owner_login: e.target.value }))} placeholder={mirror.github_app_user_login || 'owner'} />
+                          <input
+                            id="create-repo-owner"
+                            list="git-mirror-owner-options"
+                            value={createRepoDraft.owner_login}
+                            onChange={(e) => setCreateRepoDraft((prev) => ({ ...prev, owner_login: e.target.value }))}
+                            placeholder={mirror.github_app_user_login || 'owner'}
+                          />
+                          <datalist id="git-mirror-owner-options">
+                            {repoOwners.map((owner) => (
+                              <option key={owner} value={owner} />
+                            ))}
+                          </datalist>
                         </div>
                         <div className="form-group">
                           <label htmlFor="create-repo-name">{tx('仓库名', 'Repository name')}</label>
@@ -491,7 +667,7 @@ export default function GitMirrorPage() {
                         </label>
                         <div className="data-sync-actions data-sync-actions-compact">
                           <button className="btn btn-primary" type="button" disabled={createRepoBusy} onClick={handleCreateRepo}>
-                            {createRepoBusy ? tx('创建中...', 'Creating...') : tx('创建并选中', 'Create and select')}
+                            {createRepoBusy ? tx('创建中...', 'Creating...') : tx('创建并保存', 'Create and save')}
                           </button>
                         </div>
                       </div>
@@ -505,6 +681,18 @@ export default function GitMirrorPage() {
           <section className="data-sync-settings-section">
             <h4 className="data-sync-section-title">{tx('最近状态', 'Recent status')}</h4>
             <div className="data-sync-settings-grid">
+              <div className="data-sync-status-card">
+                <div className="data-record-title">{tx('排队时间', 'Queued at')}</div>
+                <div className="data-record-secondary">
+                  {mirror?.sync_requested_at ? formatDateTime(mirror.sync_requested_at, locale) : tx('还没有', 'Not yet')}
+                </div>
+              </div>
+              <div className="data-sync-status-card">
+                <div className="data-record-title">{tx('开始执行', 'Started at')}</div>
+                <div className="data-record-secondary">
+                  {mirror?.sync_started_at ? formatDateTime(mirror.sync_started_at, locale) : tx('还没有', 'Not yet')}
+                </div>
+              </div>
               <div className="data-sync-status-card">
                 <div className="data-record-title">{tx('最后 commit', 'Last commit')}</div>
                 <div className="data-record-secondary">

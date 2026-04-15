@@ -10,7 +10,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/agi-bar/neudrive/internal/hubpath"
@@ -27,6 +26,7 @@ type mirrorRepo interface {
 	GetActiveLocalGitMirror(ctx context.Context, userID uuid.UUID) (*models.LocalGitMirror, error)
 	UpsertActiveLocalGitMirror(ctx context.Context, mirror models.LocalGitMirror) error
 	ListQueuedLocalGitMirrors(ctx context.Context, executionMode string, now time.Time, limit int) ([]models.LocalGitMirror, error)
+	ClaimQueuedLocalGitMirror(ctx context.Context, userID uuid.UUID, executionMode string, startedAt time.Time) (bool, error)
 }
 
 type Service struct {
@@ -46,7 +46,6 @@ type Service struct {
 	gitHubAppClientSecret string
 	gitHubAppSlug         string
 	stateSigningSecret    string
-	runningUsers          sync.Map
 }
 
 func New(store *sqlitestorage.Store, vaultCrypto *vault.Vault, opts ...Option) *Service {
@@ -496,6 +495,10 @@ func buildFailureInfo(mirror models.LocalGitMirror, err error) *SyncInfo {
 		Path:              path,
 		ExecutionMode:     mirror.ExecutionMode,
 		SyncState:         mirror.SyncState,
+		SyncRequestedAt:   formatOptionalTime(mirror.SyncRequestedAt),
+		SyncStartedAt:     formatOptionalTime(mirror.SyncStartedAt),
+		SyncNextAttemptAt: formatOptionalTime(mirror.SyncNextAttemptAt),
+		SyncAttemptCount:  mirror.SyncAttemptCount,
 		Synced:            false,
 		LastSyncedAt:      formatOptionalTime(mirror.LastSyncedAt),
 		LastError:         err.Error(),
@@ -527,6 +530,10 @@ func (s *Service) buildSyncInfo(_ context.Context, _ uuid.UUID, mirror models.Lo
 		Path:              path,
 		ExecutionMode:     mirror.ExecutionMode,
 		SyncState:         mirror.SyncState,
+		SyncRequestedAt:   formatOptionalTime(mirror.SyncRequestedAt),
+		SyncStartedAt:     formatOptionalTime(mirror.SyncStartedAt),
+		SyncNextAttemptAt: formatOptionalTime(mirror.SyncNextAttemptAt),
+		SyncAttemptCount:  mirror.SyncAttemptCount,
 		Synced:            synced,
 		LastSyncedAt:      formatOptionalTime(mirror.LastSyncedAt),
 		LastError:         strings.TrimSpace(mirror.LastError),

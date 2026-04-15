@@ -268,6 +268,34 @@ func (s *Store) ListQueuedLocalGitMirrors(ctx context.Context, executionMode str
 	return mirrors, nil
 }
 
+func (s *Store) ClaimQueuedLocalGitMirror(ctx context.Context, userID uuid.UUID, executionMode string, startedAt time.Time) (bool, error) {
+	result, err := s.db.ExecContext(ctx,
+		`UPDATE local_git_mirrors
+		    SET sync_state = 'running',
+		        sync_started_at = ?,
+		        sync_next_attempt_at = NULL,
+		        updated_at = ?
+		  WHERE user_id = ?
+		    AND is_active = 1
+		    AND COALESCE(execution_mode, 'local') = ?
+		    AND COALESCE(sync_state, 'idle') = 'queued'
+		    AND (sync_next_attempt_at IS NULL OR sync_next_attempt_at = '' OR sync_next_attempt_at <= ?)`,
+		timeText(startedAt.UTC()),
+		timeText(startedAt.UTC()),
+		userID.String(),
+		executionMode,
+		timeText(startedAt.UTC()),
+	)
+	if err != nil {
+		return false, err
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return rowsAffected > 0, nil
+}
+
 func (s *Store) UpdateLocalGitMirrorState(
 	ctx context.Context,
 	userID uuid.UUID,

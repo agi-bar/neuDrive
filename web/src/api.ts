@@ -163,6 +163,10 @@ export interface LocalGitSyncInfo {
   path?: string
   execution_mode?: 'local' | 'hosted'
   sync_state?: 'idle' | 'queued' | 'running' | 'error'
+  sync_requested_at?: string
+  sync_started_at?: string
+  sync_next_attempt_at?: string
+  sync_attempt_count?: number
   synced: boolean
   last_synced_at?: string
   message?: string
@@ -911,6 +915,10 @@ export interface GitMirrorSettings {
   path?: string
   execution_mode?: 'local' | 'hosted'
   sync_state?: 'idle' | 'queued' | 'running' | 'error'
+  sync_requested_at?: string
+  sync_started_at?: string
+  sync_next_attempt_at?: string
+  sync_attempt_count?: number
   auto_commit_enabled: boolean
   auto_push_enabled: boolean
   auth_mode: 'local_credentials' | 'github_token' | 'github_app_user'

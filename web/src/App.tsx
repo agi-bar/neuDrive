@@ -1,29 +1,30 @@
-import { useState, useEffect, useCallback } from 'react'
+import { Suspense, lazy, useState, useEffect, useCallback } from 'react'
 import { Routes, Route, NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { api } from './api'
 import LanguageToggle from './components/LanguageToggle'
 import { useI18n } from './i18n'
-import LoginPage from './pages/LoginPage'
-import DashboardPage from './pages/DashboardPage'
-import ConnectionsPage from './pages/ConnectionsPage'
-import InfoPage from './pages/InfoPage'
-import ProjectsPage from './pages/ProjectsPage'
-import SetupPage from './pages/SetupPage'
-import OAuthAuthorizePage from './pages/OAuthAuthorizePage'
-import SetupWebAppsPage from './pages/setup/SetupWebAppsPage'
-import SetupCloudPage from './pages/setup/SetupCloudPage'
-import SetupLocalPage from './pages/setup/SetupLocalPage'
-import SetupAdvancedPage from './pages/setup/SetupAdvancedPage'
-import SetupGptActionsPage from './pages/setup/SetupGptActionsPage'
-import SetupTokensPage from './pages/setup/SetupTokensPage'
-import FilesBrowserPage from './pages/data/FilesBrowserPage'
-import DataFileEditorPage from './pages/data/DataFileEditorPage'
-import DataSkillsPage from './pages/data/DataSkillsPage'
-import DataMemoryPage from './pages/data/DataMemoryPage'
-import SystemSettingsPage from './pages/SystemSettingsPage'
-import SyncLoginPage from './pages/SyncLoginPage'
-import SkillsImportPage from './pages/SkillsImportPage'
-import GitMirrorPage from './pages/GitMirrorPage'
+
+const LoginPage = lazy(() => import('./pages/LoginPage'))
+const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'))
+const InfoPage = lazy(() => import('./pages/InfoPage'))
+const ProjectsPage = lazy(() => import('./pages/ProjectsPage'))
+const SetupPage = lazy(() => import('./pages/SetupPage'))
+const OAuthAuthorizePage = lazy(() => import('./pages/OAuthAuthorizePage'))
+const SetupWebAppsPage = lazy(() => import('./pages/setup/SetupWebAppsPage'))
+const SetupCloudPage = lazy(() => import('./pages/setup/SetupCloudPage'))
+const SetupLocalPage = lazy(() => import('./pages/setup/SetupLocalPage'))
+const SetupAdvancedPage = lazy(() => import('./pages/setup/SetupAdvancedPage'))
+const SetupGptActionsPage = lazy(() => import('./pages/setup/SetupGptActionsPage'))
+const SetupTokensPage = lazy(() => import('./pages/setup/SetupTokensPage'))
+const FilesBrowserPage = lazy(() => import('./pages/data/FilesBrowserPage'))
+const DataFileEditorPage = lazy(() => import('./pages/data/DataFileEditorPage'))
+const DataSkillsPage = lazy(() => import('./pages/data/DataSkillsPage'))
+const DataMemoryPage = lazy(() => import('./pages/data/DataMemoryPage'))
+const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'))
+const SyncLoginPage = lazy(() => import('./pages/SyncLoginPage'))
+const SkillsImportPage = lazy(() => import('./pages/SkillsImportPage'))
+const GitMirrorPage = lazy(() => import('./pages/GitMirrorPage'))
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -119,6 +120,12 @@ function App() {
     location.pathname === '/data/sync' &&
     new URLSearchParams(location.search).get('cli_login') === '1'
   const systemSettingsEnabled = !!publicConfig?.system_settings_enabled
+  const routeFallback = (
+    <div className="loading-screen">
+      <div className="loading-spinner" />
+      <p>{tx('页面加载中...', 'Loading page...')}</p>
+    </div>
+  )
 
   useEffect(() => {
     setIsDataNavOpen(isDataRoute)
@@ -135,11 +142,11 @@ function App() {
 
   // OAuth authorize is a standalone page (no sidebar), regardless of login state
   if (location.pathname === '/oauth/authorize') {
-    return <OAuthAuthorizePage />
+    return <Suspense fallback={routeFallback}><OAuthAuthorizePage /></Suspense>
   }
 
   if (isSkillsImportRoute) {
-    return <SkillsImportPage />
+    return <Suspense fallback={routeFallback}><SkillsImportPage /></Suspense>
   }
 
   if (!user) {
@@ -147,10 +154,12 @@ function App() {
       return <Navigate to={`/login?redirect=${encodeURIComponent(window.location.href)}`} replace />
     }
     return (
-      <Routes>
-        <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+      <Suspense fallback={routeFallback}>
+        <Routes>
+          <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </Suspense>
     )
   }
 
@@ -159,7 +168,7 @@ function App() {
   }
 
   if (isSyncLoginRoute) {
-    return <SyncLoginPage systemSettingsEnabled={systemSettingsEnabled} />
+    return <Suspense fallback={routeFallback}><SyncLoginPage systemSettingsEnabled={systemSettingsEnabled} /></Suspense>
   }
 
   return (
@@ -242,42 +251,44 @@ function App() {
       </aside>
 
       <main className="main-content">
-        <Routes>
-          <Route path="/" element={<DashboardPage systemSettingsEnabled={systemSettingsEnabled} />} />
-          <Route path="/setup" element={<SetupPage />}>
-            <Route index element={<Navigate to="web-apps" replace />} />
-            <Route path="web-apps" element={<SetupWebAppsPage />} />
-            <Route path="cloud" element={<SetupCloudPage />} />
-            <Route path="adapters" element={<Navigate to="/setup/web-apps" replace />} />
-            <Route path="local" element={<SetupLocalPage />} />
-            <Route path="advanced" element={<SetupAdvancedPage />} />
-            <Route path="gpt-actions" element={<SetupGptActionsPage />} />
-            <Route path="tokens" element={<SetupTokensPage />} />
-          </Route>
-          <Route path="/git-mirror" element={<GitMirrorPage />} />
-          <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
-          <Route path="/data" element={<Outlet />}>
-            <Route index element={<Navigate to="files/browse" replace />} />
-            <Route path="files/edit/*" element={<DataFileEditorPage />} />
-            <Route path="files/browse/*" element={<FilesBrowserPage />} />
-            <Route path="files/recent" element={<Navigate to="/data/files" replace />} />
-            <Route path="files/*" element={<FilesBrowserPage />} />
-            <Route path="projects" element={<ProjectsPage />} />
-            <Route path="skills/*" element={<DataSkillsPage />} />
-            <Route path="memory" element={<DataMemoryPage />} />
-            <Route path="profile" element={<InfoPage title={tx('我的资料', 'My Profile')} />} />
-            <Route path="devices" element={<Navigate to="/data/files" replace />} />
-            <Route path="roles" element={<Navigate to="/data/files" replace />} />
-            <Route path="inbox" element={<Navigate to="/data/files" replace />} />
-            <Route path="settings" element={<Navigate to={systemSettingsEnabled ? '/settings' : '/'} replace />} />
-            <Route path="sync" element={<Navigate to="/git-mirror" replace />} />
-          </Route>
-          <Route path="/connections" element={<ConnectionsPage />} />
-          <Route path="/info" element={<Navigate to="/data/profile" replace />} />
-          <Route path="/projects" element={<Navigate to="/data/projects" replace />} />
-          <Route path="/collaborations" element={<Navigate to="/" replace />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+        <Suspense fallback={routeFallback}>
+          <Routes>
+            <Route path="/" element={<DashboardPage systemSettingsEnabled={systemSettingsEnabled} />} />
+            <Route path="/setup" element={<SetupPage />}>
+              <Route index element={<Navigate to="web-apps" replace />} />
+              <Route path="web-apps" element={<SetupWebAppsPage />} />
+              <Route path="cloud" element={<SetupCloudPage />} />
+              <Route path="adapters" element={<Navigate to="/setup/web-apps" replace />} />
+              <Route path="local" element={<SetupLocalPage />} />
+              <Route path="advanced" element={<SetupAdvancedPage />} />
+              <Route path="gpt-actions" element={<SetupGptActionsPage />} />
+              <Route path="tokens" element={<SetupTokensPage />} />
+            </Route>
+            <Route path="/git-mirror" element={<GitMirrorPage />} />
+            <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
+            <Route path="/data" element={<Outlet />}>
+              <Route index element={<Navigate to="files/browse" replace />} />
+              <Route path="files/edit/*" element={<DataFileEditorPage />} />
+              <Route path="files/browse/*" element={<FilesBrowserPage />} />
+              <Route path="files/recent" element={<Navigate to="/data/files" replace />} />
+              <Route path="files/*" element={<FilesBrowserPage />} />
+              <Route path="projects" element={<ProjectsPage />} />
+              <Route path="skills/*" element={<DataSkillsPage />} />
+              <Route path="memory" element={<DataMemoryPage />} />
+              <Route path="profile" element={<InfoPage title={tx('我的资料', 'My Profile')} />} />
+              <Route path="devices" element={<Navigate to="/data/files" replace />} />
+              <Route path="roles" element={<Navigate to="/data/files" replace />} />
+              <Route path="inbox" element={<Navigate to="/data/files" replace />} />
+              <Route path="settings" element={<Navigate to={systemSettingsEnabled ? '/settings' : '/'} replace />} />
+              <Route path="sync" element={<Navigate to="/git-mirror" replace />} />
+            </Route>
+            <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/info" element={<Navigate to="/data/profile" replace />} />
+            <Route path="/projects" element={<Navigate to="/data/projects" replace />} />
+            <Route path="/collaborations" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </Suspense>
       </main>
     </div>
   )

@@ -98,6 +98,10 @@ type SyncInfo struct {
 	Path              string `json:"path,omitempty"`
 	ExecutionMode     string `json:"execution_mode,omitempty"`
 	SyncState         string `json:"sync_state,omitempty"`
+	SyncRequestedAt   string `json:"sync_requested_at,omitempty"`
+	SyncStartedAt     string `json:"sync_started_at,omitempty"`
+	SyncNextAttemptAt string `json:"sync_next_attempt_at,omitempty"`
+	SyncAttemptCount  int    `json:"sync_attempt_count,omitempty"`
 	Synced            bool   `json:"synced"`
 	LastSyncedAt      string `json:"last_synced_at,omitempty"`
 	Message           string `json:"message,omitempty"`
@@ -121,6 +125,10 @@ type MirrorSettings struct {
 	Path                          string `json:"path,omitempty"`
 	ExecutionMode                 string `json:"execution_mode,omitempty"`
 	SyncState                     string `json:"sync_state,omitempty"`
+	SyncRequestedAt               string `json:"sync_requested_at,omitempty"`
+	SyncStartedAt                 string `json:"sync_started_at,omitempty"`
+	SyncNextAttemptAt             string `json:"sync_next_attempt_at,omitempty"`
+	SyncAttemptCount              int    `json:"sync_attempt_count,omitempty"`
 	AutoCommitEnabled             bool   `json:"auto_commit_enabled"`
 	AutoPushEnabled               bool   `json:"auto_push_enabled"`
 	AuthMode                      string `json:"auth_mode"`
@@ -208,6 +216,15 @@ type repoSyncResult struct {
 	commitCreated    bool
 	pushAttempted    bool
 	pushSucceeded    bool
+}
+
+type gitHubRepoAccessResult struct {
+	OK                  bool
+	Login               string
+	Repo                string
+	NormalizedRemoteURL string
+	Permission          string
+	Message             string
 }
 
 func normalizeMirror(mirror *models.LocalGitMirror) models.LocalGitMirror {

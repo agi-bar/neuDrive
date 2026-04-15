@@ -212,6 +212,31 @@ func (r *PostgresRepo) ListQueuedLocalGitMirrors(ctx context.Context, executionM
 	return mirrors, nil
 }
 
+func (r *PostgresRepo) ClaimQueuedLocalGitMirror(ctx context.Context, userID uuid.UUID, executionMode string, startedAt time.Time) (bool, error) {
+	if r == nil || r.db == nil {
+		return false, fmt.Errorf("local git mirror repo not configured")
+	}
+	tag, err := r.db.Exec(ctx,
+		`UPDATE local_git_mirrors
+		    SET sync_state = 'running',
+		        sync_started_at = $1,
+		        sync_next_attempt_at = NULL,
+		        updated_at = $1
+		  WHERE user_id = $2
+		    AND is_active = true
+		    AND COALESCE(execution_mode, 'local') = $3
+		    AND COALESCE(sync_state, 'idle') = 'queued'
+		    AND (sync_next_attempt_at IS NULL OR sync_next_attempt_at <= $1)`,
+		startedAt.UTC(),
+		userID,
+		executionMode,
+	)
+	if err != nil {
+		return false, err
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 func (r *PostgresRepo) UpdateLocalGitMirrorState(
 	ctx context.Context,
 	userID uuid.UUID,

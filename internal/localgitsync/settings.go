@@ -77,6 +77,10 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 	if err != nil {
 		return nil, err
 	}
+	appConnected, err := s.hasStoredGitHubAppRefreshToken(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	if mirror.AutoPushEnabled && !mirror.AutoCommitEnabled {
 		return nil, fmt.Errorf("auto push requires auto commit to be enabled")
 	}
@@ -92,10 +96,6 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 		if strings.TrimSpace(mirror.RemoteURL) == "" {
 			return nil, fmt.Errorf("a GitHub repo URL is required before enabling auto push")
 		}
-		appConnected, err := s.hasStoredGitHubAppRefreshToken(ctx, userID)
-		if err != nil {
-			return nil, err
-		}
 		if !appConnected {
 			return nil, fmt.Errorf("connect the GitHub App account before enabling auto push")
 		}
@@ -105,9 +105,16 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 		strings.TrimSpace(mirror.RemoteURL) != "" &&
 		tokenConfigured &&
 		(tokenChanged || settingsRemoteChanged(active, mirror) || mirror.AutoPushEnabled)
+	appVerificationNeeded := mirror.AuthMode == AuthModeGitHubAppUser &&
+		strings.TrimSpace(mirror.RemoteURL) != "" &&
+		appConnected &&
+		(settingsRemoteChanged(active, mirror) || settingsAuthModeChanged(active, mirror) || mirror.AutoPushEnabled || strings.TrimSpace(mirror.GitHubRepoPermission) == "")
 
 	if mirror.AuthMode != AuthModeGitHubToken || !tokenConfigured || strings.TrimSpace(mirror.RemoteURL) == "" {
-		clearGitHubVerification(&mirror)
+		clearGitHubTokenVerification(&mirror)
+	}
+	if strings.TrimSpace(mirror.RemoteURL) == "" || (mirror.AuthMode != AuthModeGitHubToken && mirror.AuthMode != AuthModeGitHubAppUser) {
+		clearGitHubRepoPermission(&mirror)
 	}
 	if verificationNeeded {
 		result, err := s.testGitHubToken(ctx, mirror.RemoteURL, tokenValue)
@@ -115,7 +122,8 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 			return nil, err
 		}
 		if !result.OK {
-			clearGitHubVerification(&mirror)
+			clearGitHubTokenVerification(&mirror)
+			clearGitHubRepoPermission(&mirror)
 			if mirror.AutoPushEnabled {
 				return nil, fmt.Errorf("%s", result.Message)
 			}
@@ -127,8 +135,30 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 			mirror.GitHubRepoPermission = result.Permission
 		}
 	}
+	if mirror.AuthMode == AuthModeGitHubAppUser && strings.TrimSpace(mirror.RemoteURL) != "" && !appConnected &&
+		(settingsRemoteChanged(active, mirror) || settingsAuthModeChanged(active, mirror) || mirror.AutoPushEnabled) {
+		return nil, fmt.Errorf("connect the GitHub App account before selecting a GitHub repository")
+	}
+	if appVerificationNeeded {
+		result, err := s.testGitHubAppRepoAccess(ctx, userID, mirror.RemoteURL)
+		if err != nil {
+			return nil, err
+		}
+		mirror.RemoteURL = result.NormalizedRemoteURL
+		if !result.OK {
+			clearGitHubRepoPermission(&mirror)
+			if strings.Contains(strings.ToLower(result.Message), "cannot access") || mirror.AutoPushEnabled {
+				return nil, fmt.Errorf("%s", result.Message)
+			}
+		} else {
+			mirror.GitHubRepoPermission = result.Permission
+		}
+	}
 	if mirror.AuthMode == AuthModeGitHubToken && mirror.AutoPushEnabled && !canPushPermission(mirror.GitHubRepoPermission) {
 		return nil, fmt.Errorf("the configured GitHub token does not have push access to this repository")
+	}
+	if mirror.AuthMode == AuthModeGitHubAppUser && mirror.AutoPushEnabled && !canPushPermission(mirror.GitHubRepoPermission) {
+		return nil, fmt.Errorf("the connected GitHub App account does not have push access to this repository")
 	}
 
 	if tokenChanged && mirror.AuthMode != AuthModeGitHubToken {
@@ -139,7 +169,10 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 			return nil, err
 		}
 		tokenConfigured = false
-		clearGitHubVerification(&mirror)
+		clearGitHubTokenVerification(&mirror)
+		if mirror.AuthMode != AuthModeGitHubAppUser {
+			clearGitHubRepoPermission(&mirror)
+		}
 	} else if tokenChanged {
 		if err := s.writeStoredGitHubToken(ctx, userID, tokenValue); err != nil {
 			return nil, err
@@ -157,10 +190,6 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 		return nil, err
 	}
 
-	appConnected, err := s.hasStoredGitHubAppRefreshToken(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
 	return buildMirrorSettings(mirror, tokenConfigured, appConnected, s.configuredExecutionMode()), nil
 }
 
@@ -275,6 +304,10 @@ func buildMirrorSettings(mirror models.LocalGitMirror, tokenConfigured, appConne
 		Path:                          path,
 		ExecutionMode:                 executionMode,
 		SyncState:                     normalized.SyncState,
+		SyncRequestedAt:               formatOptionalTime(normalized.SyncRequestedAt),
+		SyncStartedAt:                 formatOptionalTime(normalized.SyncStartedAt),
+		SyncNextAttemptAt:             formatOptionalTime(normalized.SyncNextAttemptAt),
+		SyncAttemptCount:              normalized.SyncAttemptCount,
 		AutoCommitEnabled:             normalized.AutoCommitEnabled,
 		AutoPushEnabled:               normalized.AutoPushEnabled,
 		AuthMode:                      normalized.AuthMode,
@@ -385,12 +418,18 @@ func (s *Service) deleteStoredGitHubToken(ctx context.Context, userID uuid.UUID)
 	return s.vault.Delete(ctx, userID, gitMirrorGitHubTokenScope)
 }
 
-func clearGitHubVerification(mirror *models.LocalGitMirror) {
+func clearGitHubTokenVerification(mirror *models.LocalGitMirror) {
 	if mirror == nil {
 		return
 	}
 	mirror.GitHubTokenVerifiedAt = nil
 	mirror.GitHubTokenLogin = ""
+}
+
+func clearGitHubRepoPermission(mirror *models.LocalGitMirror) {
+	if mirror == nil {
+		return
+	}
 	mirror.GitHubRepoPermission = ""
 }
 
@@ -401,6 +440,13 @@ func settingsRemoteChanged(existing *models.LocalGitMirror, next models.LocalGit
 	return strings.TrimSpace(existing.RemoteURL) != strings.TrimSpace(next.RemoteURL)
 }
 
+func settingsAuthModeChanged(existing *models.LocalGitMirror, next models.LocalGitMirror) bool {
+	if existing == nil {
+		return strings.TrimSpace(next.AuthMode) != ""
+	}
+	return strings.TrimSpace(existing.AuthMode) != strings.TrimSpace(next.AuthMode)
+}
+
 func formatOptionalTime(value *time.Time) string {
 	if value == nil || value.IsZero() {
 		return ""
@@ -408,17 +454,21 @@ func formatOptionalTime(value *time.Time) string {
 	return value.UTC().Format(time.RFC3339)
 }
 
-func githubPermissionFromRepo(repo gitHubRepoResponse) string {
+func githubPermissionFromFlags(admin, push, pull bool) string {
 	switch {
-	case repo.Permissions.Admin:
+	case admin:
 		return "admin"
-	case repo.Permissions.Push:
+	case push:
 		return "write"
-	case repo.Permissions.Pull:
+	case pull:
 		return "read"
 	default:
 		return "none"
 	}
+}
+
+func githubPermissionFromRepo(repo gitHubRepoResponse) string {
+	return githubPermissionFromFlags(repo.Permissions.Admin, repo.Permissions.Push, repo.Permissions.Pull)
 }
 
 func normalizeGitHubRemoteURL(remoteURL string) (normalizedURL, owner, repo string, err error) {
@@ -437,7 +487,7 @@ func normalizeGitHubRemoteURL(remoteURL string) (normalizedURL, owner, repo stri
 		return "", "", "", err
 	}
 	if host := strings.ToLower(strings.TrimSpace(parsed.Host)); host != "github.com" {
-		return "", "", "", fmt.Errorf("GitHub token mode only supports github.com repositories")
+		return "", "", "", fmt.Errorf("GitHub repo auth only supports github.com repositories")
 	}
 	path := strings.Trim(strings.TrimSuffix(parsed.Path, ".git"), "/")
 	segments := strings.Split(path, "/")
@@ -450,7 +500,26 @@ func normalizeGitHubRemoteURL(remoteURL string) (normalizedURL, owner, repo stri
 }
 
 func mirrorSummaryMessage(mirror models.LocalGitMirror, commitCreated, pushAttempted, pushSucceeded bool) string {
-	base := fmt.Sprintf("已同步到本地 Git 目录: %s。", mirror.RootPath)
+	if mirror.ExecutionMode == ExecutionModeHosted {
+		switch mirror.SyncState {
+		case SyncStateQueued:
+			if mirror.SyncNextAttemptAt != nil && !mirror.SyncNextAttemptAt.IsZero() {
+				return fmt.Sprintf("Git Mirror 已排队，将在 %s 重试。", mirror.SyncNextAttemptAt.UTC().Format(time.RFC3339))
+			}
+			return "Git Mirror 已排队，等待后台 worker 处理。"
+		case SyncStateRunning:
+			return "Git Mirror 正在后台同步。"
+		case SyncStateError:
+			if strings.TrimSpace(mirror.LastError) != "" {
+				return fmt.Sprintf("Git Mirror 后台同步失败: %s。", mirror.LastError)
+			}
+			return "Git Mirror 后台同步失败。"
+		}
+	}
+	base := "Git Mirror 已同步。"
+	if strings.TrimSpace(mirror.RootPath) != "" {
+		base = fmt.Sprintf("已同步到本地 Git 目录: %s。", mirror.RootPath)
+	}
 	parts := []string{base}
 	if commitCreated && strings.TrimSpace(mirror.LastCommitHash) != "" {
 		parts = append(parts, fmt.Sprintf("已自动提交 %s。", shortCommitHash(mirror.LastCommitHash)))

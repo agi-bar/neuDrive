@@ -49,13 +49,19 @@ type gitHubOwner struct {
 	Type  string `json:"type"`
 }
 
+type gitHubRepoPermissions struct {
+	Admin bool `json:"admin"`
+	Push  bool `json:"push"`
+	Pull  bool `json:"pull"`
+}
+
 type gitHubRepoItem struct {
-	Name          string      `json:"name"`
-	FullName      string      `json:"full_name"`
-	DefaultBranch string      `json:"default_branch"`
-	CloneURL      string      `json:"clone_url"`
-	Permissions   interface{} `json:"permissions"`
-	Owner         gitHubOwner `json:"owner"`
+	Name          string                `json:"name"`
+	FullName      string                `json:"full_name"`
+	DefaultBranch string                `json:"default_branch"`
+	CloneURL      string                `json:"clone_url"`
+	Permissions   gitHubRepoPermissions `json:"permissions"`
+	Owner         gitHubOwner           `json:"owner"`
 }
 
 type gitHubMembership struct {
@@ -252,7 +258,8 @@ func (s *Service) DisconnectGitHubAppUser(ctx context.Context, userID uuid.UUID)
 	mirror.UpdatedAt = time.Now().UTC()
 	if mirror.AuthMode == AuthModeGitHubAppUser {
 		mirror.AutoPushEnabled = false
-		clearGitHubVerification(&mirror)
+		clearGitHubTokenVerification(&mirror)
+		clearGitHubRepoPermission(&mirror)
 	}
 	return s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror)
 }
@@ -324,6 +331,7 @@ func (s *Service) CreateGitHubAppRepo(ctx context.Context, userID uuid.UUID, req
 		}
 	}
 	mirror.RemoteURL = strings.TrimSpace(created.CloneURL)
+	mirror.GitHubRepoPermission = mapGitHubRepo(created).ViewerPermission
 	now := time.Now().UTC()
 	mirror.CreatedAt = mirrorCreatedAt(active, now)
 	mirror.UpdatedAt = now
@@ -332,6 +340,52 @@ func (s *Service) CreateGitHubAppRepo(ctx context.Context, userID uuid.UUID, req
 	}
 	repo := mapGitHubRepo(created)
 	return &repo, nil
+}
+
+func (s *Service) testGitHubAppRepoAccess(ctx context.Context, userID uuid.UUID, remoteURL string) (*gitHubRepoAccessResult, error) {
+	normalizedRemote, owner, repo, err := normalizeGitHubRemoteURL(remoteURL)
+	if err != nil {
+		return nil, err
+	}
+	token, _, err := s.refreshGitHubAppUserAccessToken(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	viewer, err := s.fetchGitHubAppViewer(ctx, token)
+	if err != nil {
+		return &gitHubRepoAccessResult{
+			OK:                  false,
+			Repo:                owner + "/" + repo,
+			NormalizedRemoteURL: normalizedRemote,
+			Message:             "GitHub App user validation failed. Reconnect GitHub and try again.",
+		}, nil
+	}
+
+	repoResp := gitHubRepoItem{}
+	if err := s.githubRequestWithTokenJSON(ctx, token, http.MethodGet, "/repos/"+owner+"/"+repo, nil, &repoResp); err != nil {
+		return &gitHubRepoAccessResult{
+			OK:                  false,
+			Login:               viewer.Login,
+			Repo:                owner + "/" + repo,
+			NormalizedRemoteURL: normalizedRemote,
+			Message:             "GitHub App user cannot access this repository.",
+		}, nil
+	}
+
+	permission := githubPermissionFromFlags(repoResp.Permissions.Admin, repoResp.Permissions.Push, repoResp.Permissions.Pull)
+	result := &gitHubRepoAccessResult{
+		OK:                  canPushPermission(permission),
+		Login:               viewer.Login,
+		Repo:                strings.TrimSpace(repoResp.FullName),
+		NormalizedRemoteURL: normalizedRemote,
+		Permission:          permission,
+	}
+	if result.OK {
+		result.Message = "GitHub App user is valid and has push access to this repository."
+		return result, nil
+	}
+	result.Message = "GitHub App user is connected, but it does not have push access to this repository."
+	return result, nil
 }
 
 func (s *Service) refreshGitHubAppUserAccessToken(ctx context.Context, userID uuid.UUID) (string, *time.Time, error) {
@@ -588,17 +642,6 @@ func optionalExpiresAt(seconds int) *time.Time {
 }
 
 func mapGitHubRepo(repo gitHubRepoItem) GitHubMirrorRepo {
-	permission := "none"
-	if permissions, ok := repo.Permissions.(map[string]any); ok {
-		switch {
-		case readBool(permissions["admin"]):
-			permission = "admin"
-		case readBool(permissions["push"]):
-			permission = "write"
-		case readBool(permissions["pull"]):
-			permission = "read"
-		}
-	}
 	return GitHubMirrorRepo{
 		OwnerLogin:       strings.TrimSpace(repo.Owner.Login),
 		OwnerType:        strings.ToLower(strings.TrimSpace(repo.Owner.Type)),
@@ -606,11 +649,6 @@ func mapGitHubRepo(repo gitHubRepoItem) GitHubMirrorRepo {
 		FullName:         strings.TrimSpace(repo.FullName),
 		DefaultBranch:    strings.TrimSpace(repo.DefaultBranch),
 		CloneURL:         strings.TrimSpace(repo.CloneURL),
-		ViewerPermission: permission,
+		ViewerPermission: githubPermissionFromFlags(repo.Permissions.Admin, repo.Permissions.Push, repo.Permissions.Pull),
 	}
-}
-
-func readBool(value any) bool {
-	typed, _ := value.(bool)
-	return typed
 }

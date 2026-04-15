@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState, useCallback } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode } from '../../api'
 import { useI18n } from '../../i18n'
 import { displayNameFromPath, fileNamespaceLabel, formatDateTime, sourceLabel } from './DataShared'
-import MDEditor from '@uiw/react-md-editor'
 import '@uiw/react-md-editor/markdown-editor.css'
 import '@uiw/react-markdown-preview/markdown.css'
+
+const MarkdownEditor = lazy(() => import('@uiw/react-md-editor'))
+const MarkdownPreview = lazy(() => import('@uiw/react-markdown-preview'))
 
 export default function DataFileEditorPage() {
   const { locale, tx } = useI18n()
@@ -137,6 +139,8 @@ export default function DataFileEditorPage() {
   }, [isDirty])
 
   const title = displayNameFromPath(path)
+  const editorFallback = <div className="page-loading" style={{ minHeight: 160 }}>{tx('编辑器加载中...', 'Loading editor...')}</div>
+  const previewFallback = <div className="page-loading" style={{ minHeight: 120 }}>{tx('预览加载中...', 'Loading preview...')}</div>
 
   if (loading) return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   if (!node) {
@@ -200,16 +204,20 @@ export default function DataFileEditorPage() {
       </div>
 
       <div className="card" data-color-mode="light">
-        <MDEditor
-          value={content}
-          onChange={(v?: string) => setContent(v || '')}
-          preview="edit"
-          height={520}
-          visibleDragbar={false}
-        />
+        <Suspense fallback={editorFallback}>
+          <MarkdownEditor
+            value={content}
+            onChange={(v?: string) => setContent(v || '')}
+            preview="edit"
+            height={520}
+            visibleDragbar={false}
+          />
+        </Suspense>
       </div>
       <div className="card" data-color-mode="light" style={{ marginTop: 12 }}>
-        <MDEditor.Markdown source={content} style={{ background: 'transparent' }} />
+        <Suspense fallback={previewFallback}>
+          <MarkdownPreview source={content} style={{ background: 'transparent' }} />
+        </Suspense>
       </div>
     </div>
   )

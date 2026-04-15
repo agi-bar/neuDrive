@@ -57,13 +57,18 @@ func (s *Service) RunQueuedGitMirrorSyncs(ctx context.Context, limit int) error 
 		return err
 	}
 	for _, mirror := range queued {
-		if !s.tryAcquireUserRun(mirror.UserID) {
+		startedAt := time.Now().UTC()
+		claimed, err := s.mirrors.ClaimQueuedLocalGitMirror(ctx, mirror.UserID, s.configuredExecutionMode(), startedAt)
+		if err != nil {
+			slog.Warn("git mirror queued sync claim failed", "user_id", mirror.UserID.String(), "error", err)
+			continue
+		}
+		if !claimed {
 			continue
 		}
 		if err := s.runQueuedMirror(ctx, mirror.UserID); err != nil {
 			slog.Warn("git mirror queued sync failed", "user_id", mirror.UserID.String(), "error", err)
 		}
-		s.releaseUserRun(mirror.UserID)
 	}
 	return nil
 }
@@ -74,16 +79,6 @@ func (s *Service) runQueuedMirror(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 	mirror := normalizeMirror(active)
-	now := time.Now().UTC()
-	mirror.ExecutionMode = s.configuredExecutionMode()
-	mirror.SyncState = SyncStateRunning
-	mirror.SyncStartedAt = &now
-	mirror.SyncNextAttemptAt = nil
-	mirror.UpdatedAt = now
-	if err := s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror); err != nil {
-		return err
-	}
-
 	_, syncErr := s.SyncActiveMirror(ctx, userID)
 	current, err := s.mirrors.GetActiveLocalGitMirror(ctx, userID)
 	if err != nil || current == nil {
@@ -116,13 +111,4 @@ func (s *Service) runQueuedMirror(ctx context.Context, userID uuid.UUID) error {
 		mirror.SyncState = SyncStateIdle
 	}
 	return s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror)
-}
-
-func (s *Service) tryAcquireUserRun(userID uuid.UUID) bool {
-	_, loaded := s.runningUsers.LoadOrStore(userID.String(), struct{}{})
-	return !loaded
-}
-
-func (s *Service) releaseUserRun(userID uuid.UUID) {
-	s.runningUsers.Delete(userID.String())
 }

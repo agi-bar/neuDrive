@@ -42,26 +42,40 @@ func (s *Service) finalizeMirrorRepo(ctx context.Context, userID uuid.UUID, mirr
 	}
 
 	pushRemoteURL := strings.TrimSpace(mirror.RemoteURL)
+	pushToken := ""
 	switch mirror.AuthMode {
-	case AuthModeGitHubToken:
+	case AuthModeGitHubToken, AuthModeGitHubAppUser:
 		normalizedURL, _, _, err := normalizeGitHubRemoteURL(pushRemoteURL)
 		if err != nil {
 			return result, err
 		}
 		pushRemoteURL = normalizedURL
 		mirror.RemoteURL = normalizedURL
-		token, configured, err := s.readStoredGitHubToken(ctx, userID)
-		if err != nil {
-			return result, err
-		}
-		if !configured || strings.TrimSpace(token) == "" {
-			return result, fmt.Errorf("auto push is enabled but no GitHub token is configured")
+		switch mirror.AuthMode {
+		case AuthModeGitHubToken:
+			token, configured, err := s.readStoredGitHubToken(ctx, userID)
+			if err != nil {
+				return result, err
+			}
+			if !configured || strings.TrimSpace(token) == "" {
+				return result, fmt.Errorf("auto push is enabled but no GitHub token is configured")
+			}
+			pushToken = token
+		case AuthModeGitHubAppUser:
+			token, _, err := s.refreshGitHubAppUserAccessToken(ctx, userID)
+			if err != nil {
+				return result, err
+			}
+			if strings.TrimSpace(token) == "" {
+				return result, fmt.Errorf("connect the GitHub App account before enabling auto push")
+			}
+			pushToken = token
 		}
 		if err := ensureGitRemote(ctx, mirror.RootPath, mirror.RemoteName, pushRemoteURL); err != nil {
 			return result, err
 		}
 		result.pushAttempted = true
-		if err := gitPushWithToken(ctx, mirror.RootPath, mirror.RemoteName, mirror.RemoteBranch, token); err != nil {
+		if err := gitPushWithToken(ctx, mirror.RootPath, mirror.RemoteName, mirror.RemoteBranch, pushToken); err != nil {
 			mirror.LastPushError = err.Error()
 			return result, nil
 		}

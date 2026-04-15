@@ -26,19 +26,23 @@ import (
 )
 
 type Options struct {
-	Storage            string
-	LocalMode          bool
-	SQLitePath         string
-	DatabaseURL        string
-	JWTSecret          string
-	VaultMasterKey     string
-	PublicBaseURL      string
-	CORSOrigins        []string
-	GithubClientID     string
-	GithubClientSecret string
-	LogLevel           string
-	LogFormat          string
-	RunMigrations      bool
+	Storage               string
+	LocalMode             bool
+	SQLitePath            string
+	DatabaseURL           string
+	JWTSecret             string
+	VaultMasterKey        string
+	PublicBaseURL         string
+	CORSOrigins           []string
+	GithubClientID        string
+	GithubClientSecret    string
+	GitHubAppClientID     string
+	GitHubAppClientSecret string
+	GitHubAppSlug         string
+	GitMirrorHostedRoot   string
+	LogLevel              string
+	LogFormat             string
+	RunMigrations         bool
 }
 
 type App struct {
@@ -48,10 +52,11 @@ type App struct {
 	NewMCPServer func(token string) (mcp.JSONRPCHandler, error)
 	Close        func() error
 
-	MemoryService *services.MemoryService
-	TokenService  any
-	InboxService  *services.InboxService
-	SyncService   *services.SyncService
+	MemoryService    *services.MemoryService
+	TokenService     any
+	InboxService     *services.InboxService
+	SyncService      *services.SyncService
+	GitMirrorService *localgitsync.Service
 }
 
 const (
@@ -126,10 +131,23 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
-	var localGitSyncSvc *localgitsync.Service
+	executionMode := localgitsync.ExecutionModeHosted
 	if opts.LocalMode {
-		localGitSyncSvc = localgitsync.NewWithDeps(store, fileTreeSvc, userSvc, connSvc, projectSvc, vaultSvc)
+		executionMode = localgitsync.ExecutionModeLocal
 	}
+	localGitSyncSvc := localgitsync.NewWithDeps(
+		store,
+		fileTreeSvc,
+		userSvc,
+		connSvc,
+		projectSvc,
+		vaultSvc,
+		localgitsync.WithExecutionMode(executionMode),
+		localgitsync.WithHostedRoot(cfg.GitMirrorHostedRoot),
+		localgitsync.WithGitMirrorPublicBaseURL(cfg.PublicBaseURL),
+		localgitsync.WithGitHubAppConfig(cfg.GitHubAppClientID, cfg.GitHubAppClientSecret, cfg.GitHubAppSlug),
+		localgitsync.WithStateSigningSecret(cfg.JWTSecret),
+	)
 	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
 		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
 	}
@@ -151,39 +169,43 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 	authSvc := services.NewAuthServiceWithRepo(sqlitestorage.NewAuthRepo(store), tokenGen, ghExchange)
 	oauthSvc := services.NewOAuthServiceWithRepo(sqlitestorage.NewOAuthRepo(store), cfg.JWTSecret)
 	httpServer := api.NewServerWithDeps(api.ServerDeps{
-		Storage:            "sqlite",
-		Config:             cfg,
-		LocalOwnerID:       owner.ID,
-		UserService:        userSvc,
-		AuthService:        authSvc,
-		ConnectionService:  connSvc,
-		FileTreeService:    fileTreeSvc,
-		VaultService:       vaultSvc,
-		MemoryService:      memorySvc,
-		ProjectService:     projectSvc,
-		RoleService:        roleSvc,
-		InboxService:       inboxSvc,
-		DeviceService:      deviceSvc,
-		DashboardService:   dashboardSvc,
-		TokenService:       tokenSvc,
-		ImportService:      importSvc,
-		ExportService:      exportSvc,
-		SyncService:        syncSvc,
-		LocalGitSync:       localGitSyncSvc,
-		OAuthService:       oauthSvc,
-		Vault:              v,
-		JWTSecret:          cfg.JWTSecret,
-		GitHubClientID:     cfg.GithubClientID,
-		GitHubClientSecret: cfg.GithubClientSecret,
+		Storage:               "sqlite",
+		Config:                cfg,
+		LocalOwnerID:          owner.ID,
+		UserService:           userSvc,
+		AuthService:           authSvc,
+		ConnectionService:     connSvc,
+		FileTreeService:       fileTreeSvc,
+		VaultService:          vaultSvc,
+		MemoryService:         memorySvc,
+		ProjectService:        projectSvc,
+		RoleService:           roleSvc,
+		InboxService:          inboxSvc,
+		DeviceService:         deviceSvc,
+		DashboardService:      dashboardSvc,
+		TokenService:          tokenSvc,
+		ImportService:         importSvc,
+		ExportService:         exportSvc,
+		SyncService:           syncSvc,
+		LocalGitSync:          localGitSyncSvc,
+		OAuthService:          oauthSvc,
+		Vault:                 v,
+		JWTSecret:             cfg.JWTSecret,
+		GitHubClientID:        cfg.GithubClientID,
+		GitHubClientSecret:    cfg.GithubClientSecret,
+		GitHubAppClientID:     cfg.GitHubAppClientID,
+		GitHubAppClientSecret: cfg.GitHubAppClientSecret,
+		GitHubAppSlug:         cfg.GitHubAppSlug,
 	})
 	app := &App{
-		Storage:       "sqlite",
-		Config:        cfg,
-		HTTPHandler:   httpServer.Router,
-		MemoryService: memorySvc,
-		TokenService:  tokenSvc,
-		InboxService:  inboxSvc,
-		SyncService:   syncSvc,
+		Storage:          "sqlite",
+		Config:           cfg,
+		HTTPHandler:      httpServer.Router,
+		MemoryService:    memorySvc,
+		TokenService:     tokenSvc,
+		InboxService:     inboxSvc,
+		SyncService:      syncSvc,
+		GitMirrorService: localGitSyncSvc,
 		NewMCPServer: func(token string) (mcp.JSONRPCHandler, error) {
 			scopedToken, err := tokenSvc.ValidateToken(ctx, token)
 			if err != nil {
@@ -246,56 +268,66 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 		}
 	}
 
-	var localGitSyncSvc *localgitsync.Service
+	executionMode := localgitsync.ExecutionModeHosted
 	if opts.LocalMode {
-		localGitSyncSvc = localgitsync.NewWithDeps(
-			localgitsync.NewPostgresRepo(db),
-			deps.fileTreeSvc,
-			deps.userSvc,
-			deps.connSvc,
-			deps.projectSvc,
-			deps.vaultSvc,
-		)
+		executionMode = localgitsync.ExecutionModeLocal
 	}
+	localGitSyncSvc := localgitsync.NewWithDeps(
+		localgitsync.NewPostgresRepo(db),
+		deps.fileTreeSvc,
+		deps.userSvc,
+		deps.connSvc,
+		deps.projectSvc,
+		deps.vaultSvc,
+		localgitsync.WithExecutionMode(executionMode),
+		localgitsync.WithHostedRoot(cfg.GitMirrorHostedRoot),
+		localgitsync.WithGitMirrorPublicBaseURL(cfg.PublicBaseURL),
+		localgitsync.WithGitHubAppConfig(cfg.GitHubAppClientID, cfg.GitHubAppClientSecret, cfg.GitHubAppSlug),
+		localgitsync.WithStateSigningSecret(cfg.JWTSecret),
+	)
 
 	httpServer := api.NewServerWithDeps(api.ServerDeps{
-		Storage:              "postgres",
-		Config:               cfg,
-		LocalOwnerID:         localOwnerID,
-		UserService:          deps.userSvc,
-		AuthService:          deps.authSvc,
-		ConnectionService:    deps.connSvc,
-		FileTreeService:      deps.fileTreeSvc,
-		VaultService:         deps.vaultSvc,
-		MemoryService:        deps.memorySvc,
-		ProjectService:       deps.projectSvc,
-		SummaryService:       deps.summarySvc,
-		RoleService:          deps.roleSvc,
-		InboxService:         deps.inboxSvc,
-		DeviceService:        deps.deviceSvc,
-		DashboardService:     deps.dashboardSvc,
-		TokenService:         deps.tokenSvc,
-		ImportService:        deps.importSvc,
-		ExportService:        deps.exportSvc,
-		SyncService:          deps.syncSvc,
-		CollaborationService: deps.collabSvc,
-		WebhookService:       deps.webhookSvc,
-		OAuthService:         deps.oauthSvc,
-		LocalGitSync:         localGitSyncSvc,
-		Vault:                deps.vaultCrypto,
-		JWTSecret:            cfg.JWTSecret,
-		GitHubClientID:       cfg.GithubClientID,
-		GitHubClientSecret:   cfg.GithubClientSecret,
+		Storage:               "postgres",
+		Config:                cfg,
+		LocalOwnerID:          localOwnerID,
+		UserService:           deps.userSvc,
+		AuthService:           deps.authSvc,
+		ConnectionService:     deps.connSvc,
+		FileTreeService:       deps.fileTreeSvc,
+		VaultService:          deps.vaultSvc,
+		MemoryService:         deps.memorySvc,
+		ProjectService:        deps.projectSvc,
+		SummaryService:        deps.summarySvc,
+		RoleService:           deps.roleSvc,
+		InboxService:          deps.inboxSvc,
+		DeviceService:         deps.deviceSvc,
+		DashboardService:      deps.dashboardSvc,
+		TokenService:          deps.tokenSvc,
+		ImportService:         deps.importSvc,
+		ExportService:         deps.exportSvc,
+		SyncService:           deps.syncSvc,
+		CollaborationService:  deps.collabSvc,
+		WebhookService:        deps.webhookSvc,
+		OAuthService:          deps.oauthSvc,
+		LocalGitSync:          localGitSyncSvc,
+		Vault:                 deps.vaultCrypto,
+		JWTSecret:             cfg.JWTSecret,
+		GitHubClientID:        cfg.GithubClientID,
+		GitHubClientSecret:    cfg.GithubClientSecret,
+		GitHubAppClientID:     cfg.GitHubAppClientID,
+		GitHubAppClientSecret: cfg.GitHubAppClientSecret,
+		GitHubAppSlug:         cfg.GitHubAppSlug,
 	})
 
 	app := &App{
-		Storage:       "postgres",
-		Config:        cfg,
-		HTTPHandler:   httpServer.Router,
-		MemoryService: deps.memorySvc,
-		TokenService:  deps.tokenSvc,
-		InboxService:  deps.inboxSvc,
-		SyncService:   deps.syncSvc,
+		Storage:          "postgres",
+		Config:           cfg,
+		HTTPHandler:      httpServer.Router,
+		MemoryService:    deps.memorySvc,
+		TokenService:     deps.tokenSvc,
+		InboxService:     deps.inboxSvc,
+		SyncService:      deps.syncSvc,
+		GitMirrorService: localGitSyncSvc,
 		NewMCPServer: func(token string) (mcp.JSONRPCHandler, error) {
 			scopedToken, err := deps.tokenSvc.ValidateToken(ctx, token)
 			if err != nil {
@@ -472,6 +504,18 @@ func loadConfig(opts Options) (*config.Config, error) {
 	}
 	if opts.GithubClientSecret != "" {
 		overrides["GITHUB_CLIENT_SECRET"] = opts.GithubClientSecret
+	}
+	if opts.GitHubAppClientID != "" {
+		overrides["GITHUB_APP_CLIENT_ID"] = opts.GitHubAppClientID
+	}
+	if opts.GitHubAppClientSecret != "" {
+		overrides["GITHUB_APP_CLIENT_SECRET"] = opts.GitHubAppClientSecret
+	}
+	if opts.GitHubAppSlug != "" {
+		overrides["GITHUB_APP_SLUG"] = opts.GitHubAppSlug
+	}
+	if opts.GitMirrorHostedRoot != "" {
+		overrides["GIT_MIRROR_HOSTED_ROOT"] = opts.GitMirrorHostedRoot
 	}
 	if opts.LogLevel != "" {
 		overrides["LOG_LEVEL"] = opts.LogLevel

@@ -135,6 +135,88 @@ func newTestHTTPServerWithConfig(t *testing.T, cfg *config.Config, gitOpts ...lo
 	return ts, store, admin.Token, readBundle.Token, writeBundle.Token
 }
 
+func newHostedTestHTTPServerWithConfig(t *testing.T, cfg *config.Config, gitOpts ...localgitsync.Option) (*httptest.Server, *sqlitestorage.Store, string) {
+	t.Helper()
+	ctx := context.Background()
+	store, err := sqlitestorage.Open(filepath.Join(t.TempDir(), "hosted.db"))
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	user, err := store.EnsureOwner(ctx)
+	if err != nil {
+		t.Fatalf("EnsureOwner: %v", err)
+	}
+	admin, err := store.CreateToken(ctx, user.ID, "admin", []string{models.ScopeAdmin}, models.TrustLevelFull, time.Hour)
+	if err != nil {
+		t.Fatalf("CreateToken admin: %v", err)
+	}
+
+	v, err := vault.NewVault(cfg.VaultMasterKey)
+	if err != nil {
+		t.Fatalf("NewVault: %v", err)
+	}
+	fileTreeSvc := services.NewFileTreeServiceWithRepo(sqlitestorage.NewFileTreeRepo(store))
+	memorySvc := services.NewMemoryServiceWithRepo(sqlitestorage.NewMemoryRepo(store), nil)
+	userSvc := services.NewUserServiceWithRepo(sqlitestorage.NewUserRepo(store))
+	connSvc := services.NewConnectionServiceWithRepo(sqlitestorage.NewConnectionRepo(store))
+	vaultSvc := services.NewVaultServiceWithRepo(sqlitestorage.NewVaultRepo(store), v)
+	roleSvc := services.NewRoleServiceWithRepo(sqlitestorage.NewRoleRepo(store), fileTreeSvc)
+	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
+	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
+	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
+	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
+	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
+	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
+	hostedRoot := filepath.Join(t.TempDir(), "hosted-root")
+	hostedGitOpts := append([]localgitsync.Option{
+		localgitsync.WithExecutionMode(localgitsync.ExecutionModeHosted),
+		localgitsync.WithHostedRoot(hostedRoot),
+		localgitsync.WithGitMirrorPublicBaseURL("http://127.0.0.1:0"),
+		localgitsync.WithStateSigningSecret(cfg.JWTSecret),
+	}, gitOpts...)
+	localGitSyncSvc := localgitsync.New(store, v, hostedGitOpts...)
+	tokenGen := func(userID uuid.UUID, slug string) (string, error) {
+		return auth.GenerateToken(userID, slug, cfg.JWTSecret)
+	}
+	authSvc := services.NewAuthServiceWithRepo(sqlitestorage.NewAuthRepo(store), tokenGen, nil)
+	oauthSvc := services.NewOAuthServiceWithRepo(sqlitestorage.NewOAuthRepo(store), cfg.JWTSecret)
+
+	s := NewServerWithDeps(ServerDeps{
+		Storage:               "sqlite",
+		Config:                cfg,
+		UserService:           userSvc,
+		AuthService:           authSvc,
+		ConnectionService:     connSvc,
+		FileTreeService:       fileTreeSvc,
+		VaultService:          vaultSvc,
+		MemoryService:         memorySvc,
+		ProjectService:        projectSvc,
+		RoleService:           roleSvc,
+		InboxService:          inboxSvc,
+		DeviceService:         deviceSvc,
+		DashboardService:      dashboardSvc,
+		TokenService:          tokenSvc,
+		ImportService:         importSvc,
+		ExportService:         exportSvc,
+		SyncService:           syncSvc,
+		OAuthService:          oauthSvc,
+		LocalGitSync:          localGitSyncSvc,
+		Vault:                 v,
+		JWTSecret:             cfg.JWTSecret,
+		GitHubClientID:        cfg.GithubClientID,
+		GitHubClientSecret:    cfg.GithubClientSecret,
+		GitHubAppClientID:     cfg.GitHubAppClientID,
+		GitHubAppClientSecret: cfg.GitHubAppClientSecret,
+		GitHubAppSlug:         cfg.GitHubAppSlug,
+	})
+	ts := httptest.NewServer(s.Router)
+	t.Cleanup(ts.Close)
+	return ts, store, admin.Token
+}
+
 func TestSQLiteSharedServerHealthAndAuth(t *testing.T) {
 	ts, _, _, _, _ := newTestHTTPServer(t)
 
@@ -249,6 +331,39 @@ func TestSQLiteSharedServerSystemSettingsDisabledBlocksLocalSettingsAPI(t *testi
 	}
 	if !bytes.Contains(payload.Data, []byte(`"system_settings_enabled":false`)) {
 		t.Fatalf("expected disabled system settings in public config: %s", string(payload.Data))
+	}
+}
+
+func TestHostedGitMirrorAPIRemainsAvailableWhenSystemSettingsDisabled(t *testing.T) {
+	cfg := &config.Config{
+		JWTSecret:            testJWTSecret,
+		VaultMasterKey:       strings.Repeat("0", 64),
+		CORSOrigins:          []string{"http://localhost:3000"},
+		RateLimit:            100,
+		MaxBodySize:          10 * 1024 * 1024,
+		PublicBaseURL:        "http://127.0.0.1:0",
+		EnableSystemSettings: false,
+	}
+	ts, _, adminToken := newHostedTestHTTPServerWithConfig(t, cfg)
+
+	status, mirror := doJSON(t, http.MethodGet, ts.URL+"/api/git-mirror", adminToken, nil)
+	if status != http.StatusOK || !mirror.OK {
+		t.Fatalf("GET /api/git-mirror failed in hosted mode: status=%d body=%+v", status, mirror)
+	}
+	if !bytes.Contains(mirror.Data, []byte(`"execution_mode":"hosted"`)) {
+		t.Fatalf("expected hosted execution mode in git mirror payload: %s", string(mirror.Data))
+	}
+
+	status, updated := doJSON(t, http.MethodPut, ts.URL+"/api/git-mirror", adminToken, []byte(`{
+		"auto_commit_enabled": true,
+		"auto_push_enabled": false,
+		"auth_mode": "local_credentials",
+		"remote_name": "origin",
+		"remote_url": "https://github.com/acme/demo.git",
+		"remote_branch": "main"
+	}`))
+	if status != http.StatusBadRequest || updated.OK {
+		t.Fatalf("expected hosted local_credentials update to fail: status=%d body=%+v", status, updated)
 	}
 }
 

@@ -17,19 +17,23 @@ import (
 )
 
 type Options struct {
-	Storage            string
-	LocalMode          bool
-	SQLitePath         string
-	ListenAddr         string
-	DatabaseURL        string
-	JWTSecret          string
-	VaultMasterKey     string
-	PublicBaseURL      string
-	CORSOrigins        []string
-	GithubClientID     string
-	GithubClientSecret string
-	LogLevel           string
-	LogFormat          string
+	Storage               string
+	LocalMode             bool
+	SQLitePath            string
+	ListenAddr            string
+	DatabaseURL           string
+	JWTSecret             string
+	VaultMasterKey        string
+	PublicBaseURL         string
+	CORSOrigins           []string
+	GithubClientID        string
+	GithubClientSecret    string
+	GitHubAppClientID     string
+	GitHubAppClientSecret string
+	GitHubAppSlug         string
+	GitMirrorHostedRoot   string
+	LogLevel              string
+	LogFormat             string
 }
 
 func Run(ctx context.Context, opts Options) error {
@@ -51,19 +55,23 @@ func Run(ctx context.Context, opts Options) error {
 	}
 
 	app, err := appcore.Build(ctx, appcore.Options{
-		Storage:            storage,
-		LocalMode:          opts.LocalMode,
-		SQLitePath:         opts.SQLitePath,
-		DatabaseURL:        opts.DatabaseURL,
-		JWTSecret:          opts.JWTSecret,
-		VaultMasterKey:     opts.VaultMasterKey,
-		PublicBaseURL:      opts.PublicBaseURL,
-		CORSOrigins:        opts.CORSOrigins,
-		GithubClientID:     opts.GithubClientID,
-		GithubClientSecret: opts.GithubClientSecret,
-		LogLevel:           opts.LogLevel,
-		LogFormat:          opts.LogFormat,
-		RunMigrations:      storage == "postgres",
+		Storage:               storage,
+		LocalMode:             opts.LocalMode,
+		SQLitePath:            opts.SQLitePath,
+		DatabaseURL:           opts.DatabaseURL,
+		JWTSecret:             opts.JWTSecret,
+		VaultMasterKey:        opts.VaultMasterKey,
+		PublicBaseURL:         opts.PublicBaseURL,
+		CORSOrigins:           opts.CORSOrigins,
+		GithubClientID:        opts.GithubClientID,
+		GithubClientSecret:    opts.GithubClientSecret,
+		GitHubAppClientID:     opts.GitHubAppClientID,
+		GitHubAppClientSecret: opts.GitHubAppClientSecret,
+		GitHubAppSlug:         opts.GitHubAppSlug,
+		GitMirrorHostedRoot:   opts.GitMirrorHostedRoot,
+		LogLevel:              opts.LogLevel,
+		LogFormat:             opts.LogFormat,
+		RunMigrations:         storage == "postgres",
 	})
 	if err != nil {
 		return err
@@ -116,7 +124,7 @@ func Run(ctx context.Context, opts Options) error {
 	}()
 
 	if tokenSvc, schedulerCfg, ok := schedulerConfigForApp(app); ok {
-		scheduler := jobs.NewSchedulerWithConfig(app.MemoryService, tokenSvc, app.InboxService, app.SyncService, slog.Default(), schedulerCfg)
+		scheduler := jobs.NewSchedulerWithConfig(app.MemoryService, tokenSvc, app.InboxService, app.SyncService, app.GitMirrorService, slog.Default(), schedulerCfg)
 		scheduler.Start(context.Background())
 		defer scheduler.Stop()
 	}

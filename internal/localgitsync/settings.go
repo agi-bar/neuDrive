@@ -34,34 +34,40 @@ func (s *Service) GetMirrorSettings(ctx context.Context, userID uuid.UUID) (*Mir
 	if err != nil {
 		return nil, err
 	}
-	if active == nil || strings.TrimSpace(active.RootPath) == "" {
-		return &MirrorSettings{
-			Enabled:      false,
-			AuthMode:     AuthModeLocalCredentials,
-			RemoteName:   DefaultRemoteName,
-			RemoteBranch: DefaultRemoteBranch,
-		}, nil
-	}
 	tokenConfigured, err := s.hasStoredGitHubToken(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	return buildMirrorSettings(*active, tokenConfigured), nil
+	appConnected, err := s.hasStoredGitHubAppRefreshToken(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if active == nil || strings.TrimSpace(active.RootPath) == "" {
+		return &MirrorSettings{
+			Enabled:                false,
+			ExecutionMode:          s.configuredExecutionMode(),
+			SyncState:              SyncStateIdle,
+			AuthMode:               defaultAuthModeForExecution(s.configuredExecutionMode()),
+			RemoteName:             DefaultRemoteName,
+			RemoteBranch:           DefaultRemoteBranch,
+			GitHubTokenConfigured:  tokenConfigured,
+			GitHubAppUserConnected: appConnected,
+		}, nil
+	}
+	return buildMirrorSettings(*active, tokenConfigured, appConnected, s.configuredExecutionMode()), nil
 }
 
 func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, update MirrorSettingsUpdate) (*MirrorSettings, error) {
 	if s == nil || s.mirrors == nil {
 		return nil, fmt.Errorf("local git sync not configured")
 	}
-	active, err := s.mirrors.GetActiveLocalGitMirror(ctx, userID)
+	mirror, active, err := s.ensureMirror(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	if active == nil || strings.TrimSpace(active.RootPath) == "" {
+	if s.configuredExecutionMode() == ExecutionModeLocal && (active == nil || strings.TrimSpace(active.RootPath) == "") {
 		return nil, fmt.Errorf("no local Git mirror is configured; run `neudrive git init` first")
 	}
-
-	mirror := normalizeMirror(active)
 	if err := applySettingsUpdate(&mirror, update); err != nil {
 		return nil, err
 	}
@@ -80,6 +86,18 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 		}
 		if !tokenConfigured {
 			return nil, fmt.Errorf("a verified GitHub token is required before enabling auto push")
+		}
+	}
+	if mirror.AuthMode == AuthModeGitHubAppUser && mirror.AutoPushEnabled {
+		if strings.TrimSpace(mirror.RemoteURL) == "" {
+			return nil, fmt.Errorf("a GitHub repo URL is required before enabling auto push")
+		}
+		appConnected, err := s.hasStoredGitHubAppRefreshToken(ctx, userID)
+		if err != nil {
+			return nil, err
+		}
+		if !appConnected {
+			return nil, fmt.Errorf("connect the GitHub App account before enabling auto push")
 		}
 	}
 
@@ -132,13 +150,18 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 	now := time.Now().UTC()
 	mirror.UserID = userID
 	mirror.IsActive = true
+	mirror.ExecutionMode = s.configuredExecutionMode()
 	mirror.CreatedAt = mirrorCreatedAt(active, now)
 	mirror.UpdatedAt = now
 	if err := s.mirrors.UpsertActiveLocalGitMirror(ctx, mirror); err != nil {
 		return nil, err
 	}
 
-	return buildMirrorSettings(mirror, tokenConfigured), nil
+	appConnected, err := s.hasStoredGitHubAppRefreshToken(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return buildMirrorSettings(mirror, tokenConfigured, appConnected, s.configuredExecutionMode()), nil
 }
 
 func (s *Service) TestGitHubToken(ctx context.Context, userID uuid.UUID, remoteURL, token string) (*GitHubTokenTestResult, error) {
@@ -241,28 +264,38 @@ func (s *Service) githubRequestJSON(ctx context.Context, token, apiPath string, 
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
-func buildMirrorSettings(mirror models.LocalGitMirror, tokenConfigured bool) *MirrorSettings {
+func buildMirrorSettings(mirror models.LocalGitMirror, tokenConfigured, appConnected bool, executionMode string) *MirrorSettings {
 	normalized := normalizeMirror(&mirror)
+	path := normalized.RootPath
+	if executionMode == ExecutionModeHosted {
+		path = ""
+	}
 	return &MirrorSettings{
-		Enabled:               true,
-		Path:                  normalized.RootPath,
-		AutoCommitEnabled:     normalized.AutoCommitEnabled,
-		AutoPushEnabled:       normalized.AutoPushEnabled,
-		AuthMode:              normalized.AuthMode,
-		RemoteName:            normalized.RemoteName,
-		RemoteURL:             normalized.RemoteURL,
-		RemoteBranch:          normalized.RemoteBranch,
-		LastSyncedAt:          formatOptionalTime(normalized.LastSyncedAt),
-		LastError:             strings.TrimSpace(normalized.LastError),
-		LastCommitAt:          formatOptionalTime(normalized.LastCommitAt),
-		LastCommitHash:        strings.TrimSpace(normalized.LastCommitHash),
-		LastPushAt:            formatOptionalTime(normalized.LastPushAt),
-		LastPushError:         strings.TrimSpace(normalized.LastPushError),
-		GitHubTokenConfigured: tokenConfigured,
-		GitHubTokenVerifiedAt: formatOptionalTime(normalized.GitHubTokenVerifiedAt),
-		GitHubTokenLogin:      strings.TrimSpace(normalized.GitHubTokenLogin),
-		GitHubRepoPermission:  strings.TrimSpace(normalized.GitHubRepoPermission),
-		Message:               mirrorSummaryMessage(normalized, false, false, false),
+		Enabled:                       true,
+		Path:                          path,
+		ExecutionMode:                 executionMode,
+		SyncState:                     normalized.SyncState,
+		AutoCommitEnabled:             normalized.AutoCommitEnabled,
+		AutoPushEnabled:               normalized.AutoPushEnabled,
+		AuthMode:                      normalized.AuthMode,
+		RemoteName:                    normalized.RemoteName,
+		RemoteURL:                     normalized.RemoteURL,
+		RemoteBranch:                  normalized.RemoteBranch,
+		LastSyncedAt:                  formatOptionalTime(normalized.LastSyncedAt),
+		LastError:                     strings.TrimSpace(normalized.LastError),
+		LastCommitAt:                  formatOptionalTime(normalized.LastCommitAt),
+		LastCommitHash:                strings.TrimSpace(normalized.LastCommitHash),
+		LastPushAt:                    formatOptionalTime(normalized.LastPushAt),
+		LastPushError:                 strings.TrimSpace(normalized.LastPushError),
+		GitHubTokenConfigured:         tokenConfigured,
+		GitHubTokenVerifiedAt:         formatOptionalTime(normalized.GitHubTokenVerifiedAt),
+		GitHubTokenLogin:              strings.TrimSpace(normalized.GitHubTokenLogin),
+		GitHubRepoPermission:          strings.TrimSpace(normalized.GitHubRepoPermission),
+		GitHubAppUserConnected:        appConnected,
+		GitHubAppUserLogin:            strings.TrimSpace(normalized.GitHubAppUserLogin),
+		GitHubAppUserAuthorizedAt:     formatOptionalTime(normalized.GitHubAppAuthorizedAt),
+		GitHubAppUserRefreshExpiresAt: formatOptionalTime(normalized.GitHubAppRefreshExpiresAt),
+		Message:                       mirrorSummaryMessage(normalized, false, false, false),
 	}
 }
 
@@ -275,9 +308,12 @@ func applySettingsUpdate(mirror *models.LocalGitMirror, update MirrorSettingsUpd
 		nextAuthMode = AuthModeLocalCredentials
 	}
 	switch nextAuthMode {
-	case AuthModeLocalCredentials, AuthModeGitHubToken:
+	case AuthModeLocalCredentials, AuthModeGitHubToken, AuthModeGitHubAppUser:
 	default:
 		return fmt.Errorf("unsupported auth mode %q", nextAuthMode)
+	}
+	if mirror.ExecutionMode == ExecutionModeHosted && nextAuthMode == AuthModeLocalCredentials {
+		return fmt.Errorf("local credentials auth is only available in local mode")
 	}
 	mirror.AutoCommitEnabled = update.AutoCommitEnabled
 	mirror.AutoPushEnabled = update.AutoPushEnabled

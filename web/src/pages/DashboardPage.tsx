@@ -270,10 +270,13 @@ export default function DashboardPage({ systemSettingsEnabled = false }: Dashboa
         <h3 className="card-title">{tx('数据管理', 'Data')}</h3>
         <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
           {systemSettingsEnabled
-            ? tx('下载你所有的 Hub 数据，或打开系统设置页集中查看本地 `config.json` 与 Git Mirror 配置。', 'Download all Hub data, or open System Settings to review local `config.json` and Git Mirror configuration.')
-            : tx('下载你所有的 Hub 数据。', 'Download all Hub data.')}
+            ? tx('下载你所有的 Hub 数据，或分别打开 Git Mirror 与系统设置页面。', 'Download all Hub data, or open the Git Mirror and System Settings pages separately.')
+            : tx('下载你所有的 Hub 数据，或打开 Git Mirror 配置同步。', 'Download all Hub data, or open Git Mirror to configure sync.')}
         </p>
         <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <Link to="/git-mirror" className="btn">
+            {tx('打开 Git Mirror', 'Open Git Mirror')}
+          </Link>
           {systemSettingsEnabled && (
             <Link to="/settings" className="btn">
               {tx('打开系统设置', 'Open System Settings')}

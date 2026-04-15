@@ -13,6 +13,10 @@ type Config struct {
 	JWTSecret               string
 	GithubClientID          string
 	GithubClientSecret      string
+	GitHubAppClientID       string
+	GitHubAppClientSecret   string
+	GitHubAppSlug           string
+	GitMirrorHostedRoot     string
 	FeishuAppID             string
 	FeishuAppSecret         string
 	FeishuVerificationToken string
@@ -49,6 +53,10 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		JWTSecret:               envOrOverride("JWT_SECRET", ""),
 		GithubClientID:          envOrOverride("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret:      envOrOverride("GITHUB_CLIENT_SECRET", ""),
+		GitHubAppClientID:       envOrOverride("GITHUB_APP_CLIENT_ID", ""),
+		GitHubAppClientSecret:   envOrOverride("GITHUB_APP_CLIENT_SECRET", ""),
+		GitHubAppSlug:           envOrOverride("GITHUB_APP_SLUG", ""),
+		GitMirrorHostedRoot:     envOrOverride("GIT_MIRROR_HOSTED_ROOT", ""),
 		FeishuAppID:             envOrOverride("FEISHU_APP_ID", ""),
 		FeishuAppSecret:         envOrOverride("FEISHU_APP_SECRET", ""),
 		FeishuVerificationToken: envOrOverride("FEISHU_VERIFICATION_TOKEN", ""),

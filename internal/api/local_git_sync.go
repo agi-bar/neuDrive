@@ -13,9 +13,12 @@ func (s *Server) syncLocalGitMirror(ctx context.Context, userID uuid.UUID) *loca
 	if s == nil || s.LocalGitSync == nil {
 		return nil
 	}
-	info, err := s.LocalGitSync.SyncActiveMirror(ctx, userID)
+	info, err := s.LocalGitSync.QueueOrSyncActiveMirror(ctx, userID, "write")
 	if err != nil {
 		slog.Warn("local git mirror sync failed", "user_id", userID.String(), "error", err)
+	}
+	if !s.isLocalMode() {
+		return nil
 	}
 	return info
 }

@@ -723,9 +723,32 @@ func runGit(args []string) int {
 			return 2
 		}
 		return runGitPull()
+	case "auth":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, usageLine("git auth github-app --device"))
+			return 2
+		}
+		if args[1] != "github-app" {
+			fmt.Fprintf(os.Stderr, "unknown git auth subcommand %q\n", args[1])
+			return 2
+		}
+		fs := flag.NewFlagSet("git auth github-app", flag.ContinueOnError)
+		fs.SetOutput(os.Stderr)
+		device := fs.Bool("device", false, "use the GitHub device flow")
+		if err := fs.Parse(args[2:]); err != nil {
+			if errors.Is(err, flag.ErrHelp) {
+				return 0
+			}
+			return 2
+		}
+		if !*device || fs.NArg() != 0 {
+			fmt.Fprintln(os.Stderr, usageLine("git auth github-app --device"))
+			return 2
+		}
+		return runGitAuthGitHubAppDevice()
 	default:
 		fmt.Fprintf(os.Stderr, "unknown git subcommand %q\n\n", args[0])
-		fmt.Println(renderCLIText("usage: neudrive git init [--output DIR]\n       neudrive git pull"))
+		fmt.Println(renderCLIText("usage: neudrive git init [--output DIR]\n       neudrive git pull\n       neudrive git auth github-app --device"))
 		return 2
 	}
 }
@@ -771,6 +794,79 @@ func runGitPull() int {
 	printLocalGitSyncMessage(info)
 	fmt.Println("如需继续同步到 GitHub，请在该目录执行 git add / git commit / git remote add origin / git push。")
 	return 0
+}
+
+func runGitAuthGitHubAppDevice() int {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
+	defer cancel()
+
+	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "git auth github-app: %v\n", err)
+		return 1
+	}
+
+	var start struct {
+		DeviceCode      string `json:"device_code"`
+		UserCode        string `json:"user_code"`
+		VerificationURI string `json:"verification_uri"`
+		ExpiresAt       string `json:"expires_at"`
+		Interval        int    `json:"interval"`
+	}
+	if err := localAPIPostJSON(ctx, state.APIBase, token, "/api/git-mirror/github-app/device/start", map[string]any{}, &start); err != nil {
+		fmt.Fprintf(os.Stderr, "git auth github-app: %v\n", err)
+		return 1
+	}
+
+	fmt.Println("Open this URL in your browser and enter the code:")
+	fmt.Printf("  %s\n", start.VerificationURI)
+	fmt.Printf("  code: %s\n", start.UserCode)
+	fmt.Println("Waiting for GitHub authorization...")
+
+	interval := time.Duration(start.Interval) * time.Second
+	if interval <= 0 {
+		interval = 5 * time.Second
+	}
+	deadline := time.Now().Add(15 * time.Minute)
+	if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(start.ExpiresAt)); err == nil {
+		deadline = parsed
+	}
+
+	for time.Now().Before(deadline) {
+		select {
+		case <-ctx.Done():
+			fmt.Fprintln(os.Stderr, "git auth github-app: authorization timed out")
+			return 1
+		case <-time.After(interval):
+		}
+
+		var poll struct {
+			Connected          bool   `json:"connected"`
+			Pending            bool   `json:"pending"`
+			Message            string `json:"message"`
+			GitHubAppUserLogin string `json:"github_app_user_login"`
+		}
+		if err := localAPIPostJSON(ctx, state.APIBase, token, "/api/git-mirror/github-app/device/poll", map[string]string{
+			"device_code": start.DeviceCode,
+		}, &poll); err != nil {
+			fmt.Fprintf(os.Stderr, "git auth github-app: %v\n", err)
+			return 1
+		}
+		if poll.Connected {
+			if strings.TrimSpace(poll.GitHubAppUserLogin) != "" {
+				fmt.Printf("Connected GitHub App user: %s\n", poll.GitHubAppUserLogin)
+			} else {
+				fmt.Println("Connected GitHub App account.")
+			}
+			return 0
+		}
+		if strings.EqualFold(strings.TrimSpace(poll.Message), "slow_down") {
+			interval += 5 * time.Second
+		}
+	}
+
+	fmt.Fprintln(os.Stderr, "git auth github-app: device code expired; run the command again")
+	return 1
 }
 
 func runBrowse(args []string) int {

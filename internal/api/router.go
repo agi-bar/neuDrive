@@ -37,66 +37,72 @@ const (
 
 // Server holds the HTTP router and all service dependencies.
 type Server struct {
-	Router               *chi.Mux
-	Storage              string
-	UserService          *services.UserService
-	AuthService          *services.AuthService
-	ConnectionService    *services.ConnectionService
-	FileTreeService      *services.FileTreeService
-	VaultService         *services.VaultService
-	MemoryService        *services.MemoryService
-	DeviceService        *services.DeviceService
-	ProjectService       *services.ProjectService
-	SummaryService       *services.SummaryService
-	RoleService          *services.RoleService
-	InboxService         *services.InboxService
-	DashboardService     *services.DashboardService
-	TokenService         *services.TokenService
-	ImportService        *services.ImportService
-	ExportService        *services.ExportService
-	SyncService          *services.SyncService
-	CollaborationService *services.CollaborationService
-	WebhookService       *services.WebhookService
-	OAuthService         *services.OAuthService
-	LocalGitSync         *localgitsync.Service
-	LocalOwnerID         uuid.UUID
-	Vault                *vaultpkg.Vault
-	AuthHandler          *auth.Handler
-	Config               *config.Config
-	JWTSecret            string
-	GitHubClientID       string
-	GitHubClientSecret   string
-	mcpSessionSources    sync.Map
+	Router                *chi.Mux
+	Storage               string
+	UserService           *services.UserService
+	AuthService           *services.AuthService
+	ConnectionService     *services.ConnectionService
+	FileTreeService       *services.FileTreeService
+	VaultService          *services.VaultService
+	MemoryService         *services.MemoryService
+	DeviceService         *services.DeviceService
+	ProjectService        *services.ProjectService
+	SummaryService        *services.SummaryService
+	RoleService           *services.RoleService
+	InboxService          *services.InboxService
+	DashboardService      *services.DashboardService
+	TokenService          *services.TokenService
+	ImportService         *services.ImportService
+	ExportService         *services.ExportService
+	SyncService           *services.SyncService
+	CollaborationService  *services.CollaborationService
+	WebhookService        *services.WebhookService
+	OAuthService          *services.OAuthService
+	LocalGitSync          *localgitsync.Service
+	LocalOwnerID          uuid.UUID
+	Vault                 *vaultpkg.Vault
+	AuthHandler           *auth.Handler
+	Config                *config.Config
+	JWTSecret             string
+	GitHubClientID        string
+	GitHubClientSecret    string
+	GitHubAppClientID     string
+	GitHubAppClientSecret string
+	GitHubAppSlug         string
+	mcpSessionSources     sync.Map
 }
 
 type ServerDeps struct {
-	Storage              string
-	Config               *config.Config
-	UserService          *services.UserService
-	AuthService          *services.AuthService
-	ConnectionService    *services.ConnectionService
-	FileTreeService      *services.FileTreeService
-	VaultService         *services.VaultService
-	MemoryService        *services.MemoryService
-	ProjectService       *services.ProjectService
-	SummaryService       *services.SummaryService
-	RoleService          *services.RoleService
-	InboxService         *services.InboxService
-	DeviceService        *services.DeviceService
-	DashboardService     *services.DashboardService
-	TokenService         *services.TokenService
-	ImportService        *services.ImportService
-	ExportService        *services.ExportService
-	SyncService          *services.SyncService
-	CollaborationService *services.CollaborationService
-	WebhookService       *services.WebhookService
-	OAuthService         *services.OAuthService
-	LocalGitSync         *localgitsync.Service
-	LocalOwnerID         uuid.UUID
-	Vault                *vaultpkg.Vault
-	JWTSecret            string
-	GitHubClientID       string
-	GitHubClientSecret   string
+	Storage               string
+	Config                *config.Config
+	UserService           *services.UserService
+	AuthService           *services.AuthService
+	ConnectionService     *services.ConnectionService
+	FileTreeService       *services.FileTreeService
+	VaultService          *services.VaultService
+	MemoryService         *services.MemoryService
+	ProjectService        *services.ProjectService
+	SummaryService        *services.SummaryService
+	RoleService           *services.RoleService
+	InboxService          *services.InboxService
+	DeviceService         *services.DeviceService
+	DashboardService      *services.DashboardService
+	TokenService          *services.TokenService
+	ImportService         *services.ImportService
+	ExportService         *services.ExportService
+	SyncService           *services.SyncService
+	CollaborationService  *services.CollaborationService
+	WebhookService        *services.WebhookService
+	OAuthService          *services.OAuthService
+	LocalGitSync          *localgitsync.Service
+	LocalOwnerID          uuid.UUID
+	Vault                 *vaultpkg.Vault
+	JWTSecret             string
+	GitHubClientID        string
+	GitHubClientSecret    string
+	GitHubAppClientID     string
+	GitHubAppClientSecret string
+	GitHubAppSlug         string
 }
 
 // NewServer creates a fully wired Server with routes configured.
@@ -157,34 +163,37 @@ func NewServer(
 
 func NewServerWithDeps(deps ServerDeps) *Server {
 	s := &Server{
-		Router:               chi.NewRouter(),
-		Storage:              deps.Storage,
-		UserService:          deps.UserService,
-		AuthService:          deps.AuthService,
-		ConnectionService:    deps.ConnectionService,
-		FileTreeService:      deps.FileTreeService,
-		VaultService:         deps.VaultService,
-		MemoryService:        deps.MemoryService,
-		ProjectService:       deps.ProjectService,
-		SummaryService:       deps.SummaryService,
-		RoleService:          deps.RoleService,
-		InboxService:         deps.InboxService,
-		DeviceService:        deps.DeviceService,
-		DashboardService:     deps.DashboardService,
-		TokenService:         deps.TokenService,
-		ImportService:        deps.ImportService,
-		SyncService:          deps.SyncService,
-		CollaborationService: deps.CollaborationService,
-		WebhookService:       deps.WebhookService,
-		OAuthService:         deps.OAuthService,
-		LocalGitSync:         deps.LocalGitSync,
-		LocalOwnerID:         deps.LocalOwnerID,
-		ExportService:        deps.ExportService,
-		Vault:                deps.Vault,
-		JWTSecret:            deps.JWTSecret,
-		Config:               deps.Config,
-		GitHubClientID:       deps.GitHubClientID,
-		GitHubClientSecret:   deps.GitHubClientSecret,
+		Router:                chi.NewRouter(),
+		Storage:               deps.Storage,
+		UserService:           deps.UserService,
+		AuthService:           deps.AuthService,
+		ConnectionService:     deps.ConnectionService,
+		FileTreeService:       deps.FileTreeService,
+		VaultService:          deps.VaultService,
+		MemoryService:         deps.MemoryService,
+		ProjectService:        deps.ProjectService,
+		SummaryService:        deps.SummaryService,
+		RoleService:           deps.RoleService,
+		InboxService:          deps.InboxService,
+		DeviceService:         deps.DeviceService,
+		DashboardService:      deps.DashboardService,
+		TokenService:          deps.TokenService,
+		ImportService:         deps.ImportService,
+		SyncService:           deps.SyncService,
+		CollaborationService:  deps.CollaborationService,
+		WebhookService:        deps.WebhookService,
+		OAuthService:          deps.OAuthService,
+		LocalGitSync:          deps.LocalGitSync,
+		LocalOwnerID:          deps.LocalOwnerID,
+		ExportService:         deps.ExportService,
+		Vault:                 deps.Vault,
+		JWTSecret:             deps.JWTSecret,
+		Config:                deps.Config,
+		GitHubClientID:        deps.GitHubClientID,
+		GitHubClientSecret:    deps.GitHubClientSecret,
+		GitHubAppClientID:     deps.GitHubAppClientID,
+		GitHubAppClientSecret: deps.GitHubAppClientSecret,
+		GitHubAppSlug:         deps.GitHubAppSlug,
 	}
 	if deps.UserService != nil && deps.AuthService != nil {
 		s.AuthHandler = auth.NewHandler(deps.UserService, deps.AuthService, deps.JWTSecret, deps.GitHubClientID, deps.GitHubClientSecret)
@@ -236,6 +245,7 @@ func (s *Server) setupRoutes() {
 	r.Get("/api/auth/github/callback", s.handleAuthGitHubCallback)
 	r.Post("/api/auth/github/callback", s.handleAuthGitHubCallback)
 	r.Post("/api/auth/token/dev", s.handleAuthDevToken)
+	r.Get("/api/git-mirror/github-app/callback", s.handleGitMirrorGitHubAppCallback)
 
 	// OAuth 2.0 Provider (public endpoints)
 	// GET /oauth/authorize serves the SPA which renders the consent UI
@@ -302,6 +312,18 @@ func (s *Server) setupRoutes() {
 
 		// Dashboard
 		r.Get("/api/dashboard/stats", s.handleDashboardStats)
+
+		// Git mirror
+		r.Get("/api/git-mirror", s.handleGitMirrorGet)
+		r.Put("/api/git-mirror", s.handleGitMirrorUpdate)
+		r.Post("/api/git-mirror/sync", s.handleGitMirrorSync)
+		r.Post("/api/git-mirror/github/test", s.handleGitMirrorGitHubTest)
+		r.Post("/api/git-mirror/github-app/browser/start", s.handleGitMirrorGitHubAppBrowserStart)
+		r.Post("/api/git-mirror/github-app/device/start", s.handleGitMirrorGitHubAppDeviceStart)
+		r.Post("/api/git-mirror/github-app/device/poll", s.handleGitMirrorGitHubAppDevicePoll)
+		r.Post("/api/git-mirror/github-app/disconnect", s.handleGitMirrorGitHubAppDisconnect)
+		r.Get("/api/git-mirror/github-app/repos", s.handleGitMirrorGitHubAppReposList)
+		r.Post("/api/git-mirror/github-app/repos", s.handleGitMirrorGitHubAppReposCreate)
 
 		// Local Git mirror settings
 		r.Get("/api/local/config", s.handleLocalConfigGet)
@@ -664,11 +686,18 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 	payload := map[string]interface{}{
 		"github_client_id":        s.GitHubClientID,
 		"github_enabled":          s.GitHubClientID != "",
+		"github_app_enabled":      s.GitHubAppClientID != "",
+		"github_app_slug":         s.GitHubAppSlug,
 		"system_settings_enabled": s.systemSettingsEnabled(),
 	}
 	if s.Storage != "" {
 		payload["storage"] = s.Storage
 		payload["local_mode"] = s.isLocalMode()
+		if s.isLocalMode() {
+			payload["git_mirror_execution_mode"] = localgitsync.ExecutionModeLocal
+		} else {
+			payload["git_mirror_execution_mode"] = localgitsync.ExecutionModeHosted
+		}
 	}
 	respondOK(w, payload)
 }

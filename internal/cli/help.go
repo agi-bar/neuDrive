@@ -124,9 +124,9 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"git": {
 		Key:       "git",
 		Summary:   "Mirror local neuDrive data into a local Git repository and keep it refreshed.",
-		Usage:     []string{"neudrive git init [--output DIR]", "neudrive git pull"},
-		Examples:  []string{"neudrive git init --output ./neudrive-export/git-mirror", "neudrive git pull"},
-		Notes:     []string{"`git init` exports all non-secret local Hub data, initializes the repo when needed, and registers it as the active mirror.", "If `--output` is omitted, neuDrive uses `local.git_mirror_path` from `config.json`; if it is missing, neuDrive writes the default `./neudrive-export/git-mirror` into `config.json` first.", "`git pull` refreshes the active mirror from the current local Hub state.", "Secrets are not exported; vault only contributes scope metadata.", "GitHub sync still requires running `git add / git commit / git remote add origin / git push` in that directory."},
+		Usage:     []string{"neudrive git init [--output DIR]", "neudrive git pull", "neudrive git auth github-app --device"},
+		Examples:  []string{"neudrive git init --output ./neudrive-export/git-mirror", "neudrive git pull", "neudrive git auth github-app --device"},
+		Notes:     []string{"`git init` exports all non-secret local Hub data, initializes the repo when needed, and registers it as the active mirror.", "If `--output` is omitted, neuDrive uses `local.git_mirror_path` from `config.json`; if it is missing, neuDrive writes the default `./neudrive-export/git-mirror` into `config.json` first.", "`git pull` refreshes the active mirror from the current local Hub state.", "`git auth github-app --device` connects your GitHub App user account; repository selection still happens in the web dashboard.", "Secrets are not exported; vault only contributes scope metadata.", "GitHub sync still requires running `git add / git commit / git remote add origin / git push` in that directory."},
 		SeeAlso:   []string{"import", "write"},
 		SortOrder: 110,
 	},
@@ -259,25 +259,26 @@ var cliHelpTopics = map[string]cliHelpTopic{
 }
 
 var cliHelpAliases = map[string]string{
-	"root":         "",
-	"overview":     "",
-	"paths":        "roots",
-	"path":         "roots",
-	"profile":      "roots",
-	"profiles":     "roots",
-	"memory":       "roots",
-	"memories":     "roots",
-	"project":      "roots",
-	"projects":     "roots",
-	"skill":        "roots",
-	"skills":       "roots",
-	"secret":       "roots",
-	"secrets":      "roots",
-	"platforms":    "platform",
-	"list":         "ls",
-	"token create": "token",
-	"git init":     "git",
-	"git pull":     "git",
+	"root":                "",
+	"overview":            "",
+	"paths":               "roots",
+	"path":                "roots",
+	"profile":             "roots",
+	"profiles":            "roots",
+	"memory":              "roots",
+	"memories":            "roots",
+	"project":             "roots",
+	"projects":            "roots",
+	"skill":               "roots",
+	"skills":              "roots",
+	"secret":              "roots",
+	"secrets":             "roots",
+	"platforms":           "platform",
+	"list":                "ls",
+	"token create":        "token",
+	"git init":            "git",
+	"git pull":            "git",
+	"git auth github-app": "git",
 }
 
 func runHelp(args []string) int {
@@ -317,6 +318,7 @@ Public commands:
   neudrive stats                                     Show a quick Hub summary
   neudrive git init [--output DIR]                   Create the local Git mirror
   neudrive git pull                                  Refresh the active Git mirror
+  neudrive git auth github-app --device              Connect GitHub App user auth
 
 Operational commands:
   neudrive platform ls

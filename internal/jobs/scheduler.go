@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/agi-bar/neudrive/internal/localgitsync"
 	"github.com/agi-bar/neudrive/internal/services"
 )
 
@@ -22,6 +23,7 @@ type SchedulerConfig struct {
 	CleanExpiredSync       JobConfig
 	ArchiveExpiredMessages JobConfig
 	GenerateDailyScratch   JobConfig
+	RunQueuedGitMirrors    JobConfig
 }
 
 // DefaultSchedulerConfig returns the default configuration for all jobs.
@@ -47,44 +49,51 @@ func DefaultSchedulerConfig() SchedulerConfig {
 			Enabled:  true,
 			Interval: 24 * time.Hour,
 		},
+		RunQueuedGitMirrors: JobConfig{
+			Enabled:  true,
+			Interval: 15 * time.Second,
+		},
 	}
 }
 
 // Scheduler manages periodic background jobs.
 type Scheduler struct {
-	memory *services.MemoryService
-	token  *services.TokenService
-	inbox  *services.InboxService
-	sync   *services.SyncService
-	logger *slog.Logger
-	config SchedulerConfig
-	stop   chan struct{}
-	wg     sync.WaitGroup
+	memory    *services.MemoryService
+	token     *services.TokenService
+	inbox     *services.InboxService
+	sync      *services.SyncService
+	gitMirror *localgitsync.Service
+	logger    *slog.Logger
+	config    SchedulerConfig
+	stop      chan struct{}
+	wg        sync.WaitGroup
 }
 
 // NewScheduler creates a new Scheduler with default configuration.
-func NewScheduler(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, syncSvc *services.SyncService, logger *slog.Logger) *Scheduler {
+func NewScheduler(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, syncSvc *services.SyncService, gitMirrorSvc *localgitsync.Service, logger *slog.Logger) *Scheduler {
 	return &Scheduler{
-		memory: memory,
-		token:  token,
-		inbox:  inbox,
-		sync:   syncSvc,
-		logger: logger,
-		config: DefaultSchedulerConfig(),
-		stop:   make(chan struct{}),
+		memory:    memory,
+		token:     token,
+		inbox:     inbox,
+		sync:      syncSvc,
+		gitMirror: gitMirrorSvc,
+		logger:    logger,
+		config:    DefaultSchedulerConfig(),
+		stop:      make(chan struct{}),
 	}
 }
 
 // NewSchedulerWithConfig creates a new Scheduler with the given configuration.
-func NewSchedulerWithConfig(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, syncSvc *services.SyncService, logger *slog.Logger, config SchedulerConfig) *Scheduler {
+func NewSchedulerWithConfig(memory *services.MemoryService, token *services.TokenService, inbox *services.InboxService, syncSvc *services.SyncService, gitMirrorSvc *localgitsync.Service, logger *slog.Logger, config SchedulerConfig) *Scheduler {
 	return &Scheduler{
-		memory: memory,
-		token:  token,
-		inbox:  inbox,
-		sync:   syncSvc,
-		logger: logger,
-		config: config,
-		stop:   make(chan struct{}),
+		memory:    memory,
+		token:     token,
+		inbox:     inbox,
+		sync:      syncSvc,
+		gitMirror: gitMirrorSvc,
+		logger:    logger,
+		config:    config,
+		stop:      make(chan struct{}),
 	}
 }
 
@@ -106,6 +115,9 @@ func (s *Scheduler) Start(ctx context.Context) {
 	}
 	if s.config.GenerateDailyScratch.Enabled && s.memory != nil {
 		s.startJob(ctx, "GenerateDailyScratch", s.config.GenerateDailyScratch.Interval, s.generateDailyScratch)
+	}
+	if s.config.RunQueuedGitMirrors.Enabled && s.gitMirror != nil {
+		s.startJob(ctx, "RunQueuedGitMirrors", s.config.RunQueuedGitMirrors.Interval, s.runQueuedGitMirrors)
 	}
 
 	s.logger.Info("background job scheduler started")
@@ -238,4 +250,20 @@ func (s *Scheduler) generateDailyScratch(ctx context.Context) {
 	}
 
 	s.logger.Info("job completed", "job", name, "affected", count, "duration", duration.String())
+}
+
+func (s *Scheduler) runQueuedGitMirrors(ctx context.Context) {
+	name := "RunQueuedGitMirrors"
+	start := time.Now()
+	s.logger.Info("job started", "job", name)
+
+	if s.gitMirror == nil {
+		s.logger.Info("job skipped", "job", name, "reason", "git mirror service not configured")
+		return
+	}
+	if err := s.gitMirror.RunQueuedGitMirrorSyncs(ctx, 20); err != nil {
+		s.logger.Error("job failed", "job", name, "error", err, "duration", time.Since(start).String())
+		return
+	}
+	s.logger.Info("job completed", "job", name, "duration", time.Since(start).String())
 }

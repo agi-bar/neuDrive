@@ -20,9 +20,10 @@ import FilesBrowserPage from './pages/data/FilesBrowserPage'
 import DataFileEditorPage from './pages/data/DataFileEditorPage'
 import DataSkillsPage from './pages/data/DataSkillsPage'
 import DataMemoryPage from './pages/data/DataMemoryPage'
-import DataSyncPage from './pages/data/DataSyncPage'
+import SystemSettingsPage from './pages/SystemSettingsPage'
 import SyncLoginPage from './pages/SyncLoginPage'
 import SkillsImportPage from './pages/SkillsImportPage'
+import GitMirrorPage from './pages/GitMirrorPage'
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -217,6 +218,10 @@ function App() {
             <span className="nav-icon">&#9670;</span>
             <span>{tx('Token 管理', 'Token Manager')}</span>
           </NavLink>
+          <NavLink to="/git-mirror" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+            <span className="nav-icon">&#8645;</span>
+            <span>{tx('Git Mirror', 'Git Mirror')}</span>
+          </NavLink>
           {systemSettingsEnabled && (
             <NavLink to="/settings" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <span className="nav-icon">&#9881;</span>
@@ -249,7 +254,8 @@ function App() {
             <Route path="gpt-actions" element={<SetupGptActionsPage />} />
             <Route path="tokens" element={<SetupTokensPage />} />
           </Route>
-          <Route path="/settings" element={systemSettingsEnabled ? <DataSyncPage /> : <Navigate to="/" replace />} />
+          <Route path="/git-mirror" element={<GitMirrorPage />} />
+          <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
           <Route path="/data" element={<Outlet />}>
             <Route index element={<Navigate to="files/browse" replace />} />
             <Route path="files/edit/*" element={<DataFileEditorPage />} />
@@ -264,7 +270,7 @@ function App() {
             <Route path="roles" element={<Navigate to="/data/files" replace />} />
             <Route path="inbox" element={<Navigate to="/data/files" replace />} />
             <Route path="settings" element={<Navigate to={systemSettingsEnabled ? '/settings' : '/'} replace />} />
-            <Route path="sync" element={<Navigate to={systemSettingsEnabled ? '/settings' : '/'} replace />} />
+            <Route path="sync" element={<Navigate to="/git-mirror" replace />} />
           </Route>
           <Route path="/connections" element={<ConnectionsPage />} />
           <Route path="/info" element={<Navigate to="/data/profile" replace />} />

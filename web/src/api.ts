@@ -128,9 +128,12 @@ export interface DashboardPending {
 export interface PublicConfig {
   github_client_id?: string
   github_enabled?: boolean
+  github_app_enabled?: boolean
+  github_app_slug?: string
   storage?: string
   local_mode?: boolean
   system_settings_enabled?: boolean
+  git_mirror_execution_mode?: 'local' | 'hosted'
 }
 
 export interface DashboardStats {
@@ -158,6 +161,8 @@ export interface SkillSummary {
 export interface LocalGitSyncInfo {
   enabled: boolean
   path?: string
+  execution_mode?: 'local' | 'hosted'
+  sync_state?: 'idle' | 'queued' | 'running' | 'error'
   synced: boolean
   last_synced_at?: string
   message?: string
@@ -707,6 +712,48 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(req),
     }),
+
+  getGitMirror: (): Promise<GitMirrorSettings> =>
+    request<GitMirrorSettings>('/git-mirror'),
+
+  updateGitMirror: (req: UpdateGitMirrorRequest): Promise<GitMirrorSettings> =>
+    request<GitMirrorSettings>('/git-mirror', {
+      method: 'PUT',
+      body: JSON.stringify(req),
+    }),
+
+  syncGitMirror: (): Promise<LocalGitSyncInfo> =>
+    request<LocalGitSyncInfo>('/git-mirror/sync', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  testGitMirrorGitHubTokenGeneric: (req: GitMirrorGitHubTestRequest): Promise<GitMirrorGitHubTestResult> =>
+    request<GitMirrorGitHubTestResult>('/git-mirror/github/test', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  startGitMirrorGitHubAppBrowser: (returnTo: string): Promise<GitMirrorGitHubAppBrowserStartResult> =>
+    request<GitMirrorGitHubAppBrowserStartResult>('/git-mirror/github-app/browser/start', {
+      method: 'POST',
+      body: JSON.stringify({ return_to: returnTo }),
+    }),
+
+  disconnectGitMirrorGitHubAppUser: (): Promise<{ status: string }> =>
+    request<{ status: string }>('/git-mirror/github-app/disconnect', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  listGitMirrorGitHubAppRepos: (): Promise<GitMirrorRepo[]> =>
+    request<GitMirrorRepo[]>('/git-mirror/github-app/repos'),
+
+  createGitMirrorGitHubAppRepo: (req: CreateGitMirrorRepoRequest): Promise<GitMirrorRepo> =>
+    request<GitMirrorRepo>('/git-mirror/github-app/repos', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
 }
 
 // ---------------------------------------------------------------------------
@@ -862,9 +909,11 @@ export interface SyncJob {
 export interface GitMirrorSettings {
   enabled: boolean
   path?: string
+  execution_mode?: 'local' | 'hosted'
+  sync_state?: 'idle' | 'queued' | 'running' | 'error'
   auto_commit_enabled: boolean
   auto_push_enabled: boolean
-  auth_mode: 'local_credentials' | 'github_token'
+  auth_mode: 'local_credentials' | 'github_token' | 'github_app_user'
   remote_name: string
   remote_url?: string
   remote_branch: string
@@ -878,6 +927,10 @@ export interface GitMirrorSettings {
   github_token_verified_at?: string
   github_token_login?: string
   github_repo_permission?: string
+  github_app_user_connected: boolean
+  github_app_user_login?: string
+  github_app_user_authorized_at?: string
+  github_app_user_refresh_expires_at?: string
   message?: string
 }
 
@@ -893,12 +946,35 @@ export interface UpdateLocalConfigRequest {
 export interface UpdateGitMirrorRequest {
   auto_commit_enabled: boolean
   auto_push_enabled: boolean
-  auth_mode: 'local_credentials' | 'github_token'
+  auth_mode: 'local_credentials' | 'github_token' | 'github_app_user'
   remote_name?: string
   remote_url?: string
   remote_branch?: string
   github_token?: string
   clear_github_token?: boolean
+}
+
+export interface GitMirrorGitHubAppBrowserStartResult {
+  authorization_url: string
+}
+
+export interface GitMirrorRepo {
+  owner_login: string
+  owner_type: string
+  repo_name: string
+  full_name: string
+  default_branch?: string
+  clone_url: string
+  viewer_permission?: string
+}
+
+export interface CreateGitMirrorRepoRequest {
+  owner_login: string
+  repo_name: string
+  description?: string
+  private: boolean
+  remote_name?: string
+  remote_branch?: string
 }
 
 export interface GitMirrorGitHubTestRequest {

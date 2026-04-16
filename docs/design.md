@@ -10,21 +10,21 @@
 
 从产品表面上，neuDrive 现在收口成两层：
 
-1. **`neudrive` 官方 CLI**
+1. **`neu` 官方 CLI**
    - 默认是本地优先工具
    - 自动托管本地 Hub daemon
    - 管理本地 agent 平台接入、bundle sync、daemon 状态和 local / hosted targets
 2. **neuDrive Server**
    - 可以是官方服务 `https://neudrive.ai`
-   - 也可以是用户自己启动的 `neudrive server`
+   - 也可以是用户自己启动的 `neu server`
 
 当前推荐心智：
 
-- 日常用户先装 `neudrive`
-- `neudrive connect <platform>` 把本地 Claude/Codex/Gemini/Cursor 连到本地 Hub
-- `neudrive import <platform>` / `neudrive export <platform>` 处理平台数据，其中 Codex 和 Claude 默认优先走 agent-mediated 导入
-- `neudrive sync ...` 处理 bundle 迁移、备份、恢复
-- 需要云端工作区时，用 `neudrive login --profile official --api-base https://neudrive.ai`
+- 日常用户先装 `neu`
+- `neu connect <platform>` 把本地 Claude/Codex/Gemini/Cursor 连到本地 Hub
+- `neu import <platform>` / `neu export <platform>` 处理平台数据，其中 Codex 和 Claude 默认优先走 agent-mediated 导入
+- `neu sync ...` 处理 bundle 迁移、备份、恢复
+- 需要云端工作区时，用 `neu login --profile official --api-base https://neudrive.ai`
 
 ### 平台接入的三层模型
 
@@ -47,7 +47,7 @@ neuDrive 平台接入现在固定分三层：
 
 ```mermaid
 flowchart LR
-    CLI["neudrive CLI"] --> Ensure["ensure local daemon"]
+    CLI["neu CLI"] --> Ensure["ensure local daemon"]
     Ensure --> Local["local neuDrive daemon"]
     CLI --> Platforms["Claude / Codex / Gemini / Cursor adapters"]
     CLI --> Sync["bundle sync"]
@@ -59,13 +59,13 @@ flowchart LR
 
 ### 当前实现状态
 
-- `neudrive server`
+- `neu server`
   作为统一服务端入口，取代官方文档里的 `cmd/server` 直接用法
-- `neudrive mcp stdio`
+- `neu mcp stdio`
   作为高级兼容模式保留，不再是主路径
-- `neudrive sync ...`
+- `neu sync ...`
   已并入统一 CLI 表面
-- `neudrive platform ls/show/connect/disconnect/import/export`
+- `neu platform ls/show/connect/disconnect/import/export`
   已提供首批本地 CLI 平台适配器：`claude-code`、`codex`、`gemini-cli`、`cursor-agent`
 - 本地 daemon 默认使用 SQLite
   本地首次启动会自动 bootstrap local owner 和本地数据库路径

@@ -46,15 +46,17 @@ neuDrive 是一个独立的中间层服务。每个人拥有一个 Hub，所有 
 
 ## 本地 CLI 快速开始
 
+下面的示例统一使用 `neu`；兼容别名 `neudrive` 仍然可用。
+
 ```bash
 git clone https://github.com/agi-bar/neudrive.git
 cd neudrive
 ./tools/install-neudrive.sh
 
-neudrive status
-neudrive platform ls
-neudrive connect claude
-neudrive browse
+neu status
+neu platform ls
+neu connect claude
+neu browse
 ```
 
 详细 CLI 使用见：[CLI 使用手册](docs/cli.zh-CN.md)
@@ -64,7 +66,7 @@ neudrive browse
 如果你希望使用 `https://neudrive.ai` 这个官方云 Hub，并把 Claude 等 Web 应用接到同一个云端账号上，可以先登录官方 profile：
 
 ```bash
-neudrive remote login official
+neu remote login official
 ```
 
 这个命令会拉起浏览器登录流程，并把 `official` profile 保存到本地。登录后，再按 [Web / Desktop Apps 接入说明](docs/setup.zh-CN.md#web-and-desktop-apps) 去连接 Claude、ChatGPT、Cursor 或 Windsurf。

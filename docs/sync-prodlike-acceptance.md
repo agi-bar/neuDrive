@@ -37,8 +37,8 @@
 
 ```bash
 curl -fsS "$BASE_URL/api/health"
-neudrive sync --help
-neudrive sync diff --help
+neu sync --help
+neu sync diff --help
 ```
 
 打开 Web 管理后台的数据同步页面，确认：
@@ -61,12 +61,12 @@ neudrive sync diff --help
 命令模板：
 
 ```bash
-neudrive login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
-neudrive sync export --source /path/to/fixture --format archive -o fixture.ndrvz
-neudrive sync preview --bundle fixture.ndrvz
-neudrive sync push --bundle fixture.ndrvz --transport auto
-neudrive sync pull --format archive -o fixture-pulled.ndrvz
-neudrive sync diff --left fixture.ndrvz --right fixture-pulled.ndrvz
+neu login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
+neu sync export --source /path/to/fixture --format archive -o fixture.ndrvz
+neu sync preview --bundle fixture.ndrvz
+neu sync push --bundle fixture.ndrvz --transport auto
+neu sync pull --format archive -o fixture-pulled.ndrvz
+neu sync diff --left fixture.ndrvz --right fixture-pulled.ndrvz
 ```
 
 通过标准：
@@ -102,7 +102,7 @@ neudrive sync diff --left fixture.ndrvz --right fixture-pulled.ndrvz
 CLI 方式：
 
 ```bash
-neudrive sync resume --bundle real.ndrvz
+neu sync resume --bundle real.ndrvz
 ```
 
 通过标准：

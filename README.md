@@ -41,15 +41,17 @@ More docs:
 
 ## Local CLI Quick Start
 
+Examples below use `neu`; the `neudrive` alias still works.
+
 ```bash
 git clone https://github.com/agi-bar/neudrive.git
 cd neudrive
 ./tools/install-neudrive.sh
 
-neudrive status
-neudrive platform ls
-neudrive connect claude
-neudrive browse
+neu status
+neu platform ls
+neu connect claude
+neu browse
 ```
 
 Detailed CLI usage: [CLI Guide](docs/cli.md)
@@ -59,7 +61,7 @@ Detailed CLI usage: [CLI Guide](docs/cli.md)
 Use the hosted `official` profile when you want the cloud hub at `https://neudrive.ai` behind Claude and other web apps, or when you want to move data through the hosted dashboard and sync flows.
 
 ```bash
-neudrive remote login official
+neu remote login official
 ```
 
 This opens a browser login flow and saves the `official` profile locally. After that, follow [Web / Desktop Apps](docs/setup.md#web-and-desktop-apps) to connect Claude, ChatGPT, Cursor, or Windsurf to the hosted MCP endpoint.

@@ -30,7 +30,7 @@ Bundle Sync 支持两种文件格式：
 
 ## CLI 配置与登录
 
-`neudrive` 现在支持统一的本地 / hosted target 配置。默认 target 是 `local`；登录一次 hosted profile 后，根命令和 `sync` 的常用子命令都会默认跟随当前 target，不需要每次重复传 `--token` 和 `--api-base`。
+`neu` 现在支持统一的本地 / hosted target 配置，兼容别名 `neudrive` 仍然可用。默认 target 是 `local`；登录一次 hosted profile 后，根命令和 `sync` 的常用子命令都会默认跟随当前 target，不需要每次重复传 `--token` 和 `--api-base`。
 
 默认配置文件位置：
 
@@ -78,15 +78,15 @@ Bundle Sync 支持两种文件格式：
 首次登录 hosted 推荐直接走浏览器：
 
 ```bash
-neudrive login --api-base https://neudrive.ai
-neudrive profiles
-neudrive whoami
+neu login --api-base https://neudrive.ai
+neu profiles
+neu whoami
 ```
 
 也支持手工粘贴 token：
 
 ```bash
-neudrive login \
+neu login \
   --profile official \
   --api-base https://neudrive.ai \
   --token ndt_xxx
@@ -95,15 +95,15 @@ neudrive login \
 多 profile / target 切换：
 
 ```bash
-neudrive use official
-neudrive use local
-neudrive logout --profile official
+neu use official
+neu use local
+neu logout --profile official
 ```
 
 如果你已经拿到了一个短效 sync token，也可以直接用顶层 `login` 手工写入 profile：
 
 ```bash
-neudrive login --profile prod --api-base https://neudrive.ai --token ndt_xxx
+neu login --profile prod --api-base https://neudrive.ai --token ndt_xxx
 ```
 
 ## `merge` 与 `mirror`
@@ -118,22 +118,22 @@ neudrive login --profile prod --api-base https://neudrive.ai --token ndt_xxx
 ### 1. 本地导出
 
 ```bash
-neudrive sync export --source /path/to/skills -o backup.ndrv
-neudrive sync export --source /path/to/skills --format archive -o backup.ndrvz
+neu sync export --source /path/to/skills -o backup.ndrv
+neu sync export --source /path/to/skills --format archive -o backup.ndrvz
 ```
 
 ### 2. 预览
 
 ```bash
-neudrive sync preview --bundle backup.ndrv
-neudrive sync preview --bundle backup.ndrvz --mode mirror
+neu sync preview --bundle backup.ndrv
+neu sync preview --bundle backup.ndrvz --mode mirror
 ```
 
 ### 3. 导入
 
 ```bash
-neudrive sync push --bundle backup.ndrv --transport json
-neudrive sync push --bundle backup.ndrvz --transport auto
+neu sync push --bundle backup.ndrv --transport json
+neu sync push --bundle backup.ndrvz --transport auto
 ```
 
 `auto` 的规则：
@@ -144,8 +144,8 @@ neudrive sync push --bundle backup.ndrvz --transport auto
 ### 4. 导出回本地
 
 ```bash
-neudrive sync pull -o pulled.ndrv
-neudrive sync pull --format archive -o pulled.ndrvz
+neu sync pull -o pulled.ndrv
+neu sync pull --format archive -o pulled.ndrvz
 ```
 
 ### 5. 继续未完成上传
@@ -157,7 +157,7 @@ neudrive sync pull --format archive -o pulled.ndrvz
 继续时：
 
 ```bash
-neudrive sync resume --bundle backup.ndrvz
+neu sync resume --bundle backup.ndrvz
 ```
 
 前提是你重新选择原始 `.ndrvz` 文件，而不是一个新的 archive。
@@ -165,14 +165,14 @@ neudrive sync resume --bundle backup.ndrvz
 ### 6. 查看历史
 
 ```bash
-neudrive sync history
+neu sync history
 ```
 
 ### 7. 比对结果
 
 ```bash
-neudrive sync diff --left backup.ndrvz --right pulled.ndrvz
-neudrive sync diff --left backup.ndrv --right pulled.ndrvz --format json
+neu sync diff --left backup.ndrvz --right pulled.ndrvz
+neu sync diff --left backup.ndrv --right pulled.ndrvz --format json
 ```
 
 退出码：
@@ -186,7 +186,7 @@ neudrive sync diff --left backup.ndrv --right pulled.ndrvz --format json
 可以按 domain 和 skill 过滤：
 
 ```bash
-neudrive sync export \
+neu sync export \
   --source /path/to/skills \
   --format archive \
   --include-domain skills \

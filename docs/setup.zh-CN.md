@@ -6,8 +6,8 @@
 
 下面的示例统一使用：
 
-- Hub 地址：`https://neudrive.ai`
-- MCP 地址：`https://neudrive.ai/mcp`
+- Hub 地址：`https://www.neudrive.ai`
+- MCP 地址：`https://www.neudrive.ai/mcp`
 - scoped token 环境变量：`NEUDRIVE_TOKEN`
 
 如果你当前跑在本地开发地址（例如 `http://localhost:8080`），那么只有“本地模式”适合直接使用；Web / Desktop Apps 和 CLI Apps 通常需要一个可公开访问的 HTTPS 地址。
@@ -20,7 +20,7 @@
 
 1. 登录 Claude 网页应用，进入 `Settings -> Connectors -> Go to Customize`。
 2. 点击 `Add custom connector`。
-3. 把 `Remote MCP Server URL` 填成 `https://neudrive.ai/mcp`。
+3. 把 `Remote MCP Server URL` 填成 `https://www.neudrive.ai/mcp`。
 4. 保存后点击 `Connect`。
 5. 浏览器会跳转到 neuDrive 的登录与授权页；完成后回到 Claude。
 
@@ -28,7 +28,7 @@
 
 1. 登录 ChatGPT，进入 `Settings -> Apps`。
 2. 在 `Advanced settings` 里点击 `Create app`。
-3. 把 `MCP Server URL` 填成 `https://neudrive.ai/mcp`。
+3. 把 `MCP Server URL` 填成 `https://www.neudrive.ai/mcp`。
 4. 按提示完成 neuDrive 登录和授权。
 
 如果你的账号里暂时看不到 `Apps` 入口，通常意味着当前计划或灰度范围还没有开放这一功能。
@@ -41,7 +41,7 @@
 {
   "mcpServers": {
     "neudrive": {
-      "url": "https://neudrive.ai/mcp"
+      "url": "https://www.neudrive.ai/mcp"
     }
   }
 }
@@ -50,7 +50,7 @@
 推荐步骤：
 
 1. 打开 `Settings -> Tools & MCPs -> Add Custom MCP`。
-2. 把 `Remote MCP Server URL` 设为 `https://neudrive.ai/mcp`。
+2. 把 `Remote MCP Server URL` 设为 `https://www.neudrive.ai/mcp`。
 3. 点击 `Connect` 或 `Authenticate`。
 4. 浏览器会打开 neuDrive 登录与授权页；完成后回到 Cursor。
 
@@ -62,7 +62,7 @@ Windsurf 当前主要通过配置文件接入远程 MCP：
 {
   "mcpServers": {
     "neudrive": {
-      "serverUrl": "https://neudrive.ai/mcp"
+      "serverUrl": "https://www.neudrive.ai/mcp"
     }
   }
 }
@@ -83,7 +83,7 @@ Windsurf 当前主要通过配置文件接入远程 MCP：
 ### Claude Code
 
 ```bash
-claude mcp add -s user --transport http neudrive https://neudrive.ai/mcp
+claude mcp add -s user --transport http neudrive https://www.neudrive.ai/mcp
 ```
 
 然后在 Claude Code 中执行：
@@ -97,7 +97,7 @@ claude mcp add -s user --transport http neudrive https://neudrive.ai/mcp
 ### Codex CLI
 
 ```bash
-codex mcp add neudrive --url https://neudrive.ai/mcp
+codex mcp add neudrive --url https://www.neudrive.ai/mcp
 codex mcp login neudrive
 codex mcp list
 ```
@@ -105,7 +105,7 @@ codex mcp list
 ### Gemini CLI
 
 ```bash
-gemini mcp add --transport http neudrive https://neudrive.ai/mcp
+gemini mcp add --transport http neudrive https://www.neudrive.ai/mcp
 ```
 
 然后在 Gemini 中执行：
@@ -124,7 +124,7 @@ gemini mcp add --transport http neudrive https://neudrive.ai/mcp
 {
   "mcpServers": {
     "neudrive": {
-      "url": "https://neudrive.ai/mcp"
+      "url": "https://www.neudrive.ai/mcp"
     }
   }
 }
@@ -172,7 +172,7 @@ export NEUDRIVE_TOKEN=ndt_xxxxx
 Codex CLI 可直接引用环境变量，不把 secret 写进配置：
 
 ```bash
-codex mcp add neudrive --url https://neudrive.ai/mcp --bearer-token-env-var NEUDRIVE_TOKEN
+codex mcp add neudrive --url https://www.neudrive.ai/mcp --bearer-token-env-var NEUDRIVE_TOKEN
 ```
 
 对于其他客户端，如果暂不支持 env 方式，再使用静态 Bearer 配置。
@@ -183,7 +183,7 @@ codex mcp add neudrive --url https://neudrive.ai/mcp --bearer-token-env-var NEUD
 
 1. 打开 ChatGPT，创建一个 GPT。
 2. 进入 `Configure -> Actions`。
-3. OpenAPI Schema URL 填写 `https://neudrive.ai/gpt/openapi.json`。
+3. OpenAPI Schema URL 填写 `https://www.neudrive.ai/gpt/openapi.json`。
 4. Authentication 选择 `Bearer Token`。
 5. 使用一个 scoped token 作为 Bearer Token。
 
@@ -198,7 +198,7 @@ Adapters 适合飞书、钉钉、Slack 这类工作区平台。目前 README 里
 回调地址格式：
 
 ```text
-https://neudrive.ai/api/adapters/feishu/<your-slug>/events
+https://www.neudrive.ai/api/adapters/feishu/<your-slug>/events
 ```
 
 服务端环境变量：

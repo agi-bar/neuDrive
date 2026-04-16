@@ -2,81 +2,116 @@ English | [简体中文](README.zh-CN.md)
 
 # neuDrive
 
-**Identity and trust infrastructure for the AI era**
+**A personal hub for AI identity, memory, and trust**
 
-> Let every AI agent know who you are, remember your context, and act on your behalf.
+> One place where Claude, ChatGPT, Codex, Cursor, and other agents can share who you are, what you prefer, and what they are allowed to do.
 
-neuDrive is an independent hub layer for people and AI agents. Claude, ChatGPT, Codex, Cursor, Gemini, Feishu, and other agents can share identity, memory, skills, secrets, and communication through one hub.
+neuDrive gives one person one hub. Claude, ChatGPT, Codex, Cursor, Gemini, Feishu, and other agents can share identity, memory, skills, secrets, and communication through that hub instead of rebuilding context on every platform.
 
 Your identity, preferences, secrets, and skills follow the person, not the platform.
 
-The system exposes one canonical virtual tree together with typed APIs, file-tree access, and `snapshot/changes` sync interfaces.
+Why people use it:
 
-- Writing preferences captured in Claude can immediately help GPT later the same day.
-- API keys stored in the vault can be used safely by authorized agents.
+- Writing preferences captured in Claude can help GPT later the same day.
+- Secrets live in one vault and stay available only to authorized agents.
 - Agents can message each other, collaborate, and hand work off without making you the relay.
 - One Hub ID can travel across AI platforms.
 
+Under the hood, neuDrive exposes a canonical virtual tree together with typed APIs, file-tree access, and `snapshot/changes` sync interfaces.
+
 Hosted service examples in this repo use:
 
-- Hub URL: `https://neudrive.ai`
-- MCP URL: `https://neudrive.ai/mcp`
+- Hub URL: `https://www.neudrive.ai`
+- MCP URL: `https://www.neudrive.ai/mcp`
 
-## Connection Modes
+## Start Here
 
-Start with the first mode that matches your situation:
+Choose the first path that matches how you want to connect:
 
-| Order | Mode | Best for | Guide |
-|-------|------|----------|-------|
-| 1 | **Web / Desktop Apps** | The fastest path for Claude, ChatGPT, Cursor, and Windsurf through hosted neuDrive with browser auth | [Open guide](docs/setup.md#web-and-desktop-apps) |
-| 2 | **CLI Apps** | Claude Code, Codex CLI, Gemini CLI, and Cursor Agent with remote HTTP MCP + OAuth | [Open guide](docs/setup.md#cli-apps) |
-| 3 | **Local Mode** | Repo-first local development, LAN setups, or any environment without a public HTTPS URL yet | [Open guide](docs/setup.md#local-mode) |
-| 4 | **Advanced Mode / GPT Actions / Adapters** | Generic HTTP MCP clients, custom GPTs, and webhook-style integrations such as Feishu | [Open guide](docs/setup.md#advanced-mode) |
+1. **Web / Desktop Apps**: fastest path for Claude, ChatGPT, Cursor, and Windsurf through hosted neuDrive with browser auth. [Open guide](docs/setup.md#web-and-desktop-apps)
+2. **CLI Apps**: Claude Code, Codex CLI, Gemini CLI, and Cursor Agent with remote HTTP MCP + OAuth. [Open guide](docs/setup.md#cli-apps)
+3. **Local Mode**: repo-first local development, LAN setups, or any environment without a public HTTPS URL yet. [Open guide](docs/setup.md#local-mode)
+4. **Advanced Mode / GPT Actions / Adapters**: generic HTTP MCP clients, custom GPTs, and webhook-style integrations such as Feishu. [Open guide](docs/setup.md#advanced-mode)
 
-More docs:
+Also useful:
 
 - [Token Management](docs/setup.md#token-management)
 - [Bundle Sync](docs/sync.md)
 - [SDK / HTTP API](docs/reference.md#sdk)
 
+## Web and Desktop Apps
+
+Use this when the connection starts from a graphical interface such as Claude web, ChatGPT, Cursor, or Windsurf.
+
+### Claude Connectors
+
+1. Sign in to the Claude web app and open `Settings -> Connectors -> Go to Customize`.
+2. Click `Add custom connector`.
+3. Set `Remote MCP Server URL` to `https://www.neudrive.ai/mcp`.
+4. Save and click `Connect`.
+5. Your browser will open the neuDrive sign-in and authorization flow; after approval, return to Claude.
+
+### ChatGPT Apps
+
+1. Sign in to ChatGPT and open `Settings -> Apps`.
+2. In `Advanced settings`, click `Create app`.
+3. Set `MCP Server URL` to `https://www.neudrive.ai/mcp`.
+4. Follow the prompts to finish neuDrive sign-in and authorization.
+
+If you do not see the `Apps` entry yet, your plan or rollout cohort probably does not have access to it yet.
+
+For Cursor, Windsurf, and the full setup variants, see [Web / Desktop Apps](docs/setup.md#web-and-desktop-apps).
+
 ## Local CLI Quick Start
 
-Examples below use `neu`; the `neudrive` alias still works.
+Install the CLI locally:
 
 ```bash
 git clone https://github.com/agi-bar/neudrive.git
 cd neudrive
 ./tools/install-neudrive.sh
+```
 
-neu status
-neu platform ls
-neu connect claude
-neu browse
+After install, use `neu`; the `neudrive` compatibility alias still works.
+
+```bash
+neu status         # check daemon, storage, and current target readiness
+neu platform ls    # list installed adapters and connection state
+neu connect claude # install/configure the Claude integration
+neu browse         # open the local Hub in your browser
 ```
 
 Detailed CLI usage: [CLI Guide](docs/cli.md)
 
 ## Login To Hosted Cloud
 
-Use the hosted `official` profile when you want the cloud hub at `https://neudrive.ai` behind Claude and other web apps, or when you want to move data through the hosted dashboard and sync flows.
+Use `neu login` when you want the hosted `official` profile backed by `https://www.neudrive.ai` for CLI work, hosted dashboard access, or cross-app sync flows.
 
 ```bash
-neu remote login official
+neu login
 ```
 
-This opens a browser login flow and saves the `official` profile locally. After that, follow [Web / Desktop Apps](docs/setup.md#web-and-desktop-apps) to connect Claude, ChatGPT, Cursor, or Windsurf to the hosted MCP endpoint.
+This opens a browser login flow, saves the hosted `official` profile locally, and switches the current target to that profile.
 
 ## Documentation
+
+Start here:
 
 - [Setup Guide](docs/setup.md)
 - [CLI Guide](docs/cli.md)
 - [Reference](docs/reference.md)
+
+Chinese docs:
+
+- [Chinese README](README.zh-CN.md)
 - [Chinese Setup Guide](docs/setup.zh-CN.md)
 - [Chinese CLI Guide](docs/cli.zh-CN.md)
 - [Chinese Reference](docs/reference.zh-CN.md)
-- [Chinese README](README.zh-CN.md)
-- [Product design document](docs/design.md) (currently Chinese)
-- [Bundle Sync guide](docs/sync.md) (currently Chinese)
-- [Prod-like acceptance runbook](docs/sync-prodlike-acceptance.md) (currently Chinese)
-- [Security and resource audit](docs/sync-audit.md) (currently Chinese)
-- [CLI test matrix](docs/cli-test-matrix.md) (currently Chinese)
+
+More docs:
+
+- [Product design document](docs/design.md)
+- [Bundle Sync guide](docs/sync.md)
+- [Prod-like acceptance runbook](docs/sync-prodlike-acceptance.md)
+- [Security and resource audit](docs/sync-audit.md)
+- [CLI test matrix](docs/cli-test-matrix.md)

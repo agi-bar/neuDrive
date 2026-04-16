@@ -27,6 +27,11 @@ neu connect claude
 neu browse
 ```
 
+- `neu status` checks whether the local daemon, storage, and current target are ready.
+- `neu platform ls` lists installed adapters and connection state.
+- `neu connect claude` installs/configures the Claude integration for the current environment.
+- `neu browse` opens the local Hub in your browser.
+
 ## Built-In Help
 
 ```bash
@@ -95,29 +100,24 @@ These commands work against the public neuDrive roots such as `profile`, `memory
 | `neu token create --kind sync ...` | Create a short-lived sync token | `neu token create --kind sync --purpose backup --access both` |
 | `neu token create --kind skills-upload ...` | Create a short-lived skills-upload token | `neu token create --kind skills-upload --purpose skills --platform claude-web` |
 
-## Hosted Cloud And Remote Profiles
+## Hosted Cloud Profiles
 
-Use these commands when you want named remote profiles outside the bundle-oriented sync surface.
+Use these commands when you want to sign in to hosted neuDrive and switch between saved profiles.
 
 | Command | What it does | Example |
 |---------|---------------|---------|
-| `neu remote login <profile> [--url URL] [--token TOKEN]` | Log in to a named remote profile; `official` defaults to `https://neudrive.ai` | `neu remote login official` |
-| `neu remote ls` | List saved remote profiles | `neu remote ls` |
-| `neu remote use <profile>` | Switch the current profile | `neu remote use official` |
-| `neu remote whoami <profile>` | Show current auth state for one profile | `neu remote whoami official` |
-| `neu remote logout [profile]` | Clear the saved token for a profile | `neu remote logout official` |
+| `neu login [--profile NAME] [--api-base URL] [--token TOKEN]` | Open browser login for a hosted profile; `official` is the default hosted profile | `neu login` |
+| `neu profiles` | List saved hosted profiles and show which target is active | `neu profiles` |
+| `neu use <local\|profile>` | Switch the current default target | `neu use official` |
+| `neu whoami [--local \| --profile NAME \| --api-base URL --token TOKEN]` | Show the active identity for the resolved target | `neu whoami` |
+| `neu logout [--profile NAME]` | Clear the saved hosted session for one profile | `neu logout --profile official` |
 
 ## Bundle Sync Commands
 
-Use `sync` when you want archive-style import/export flows against a remote neuDrive profile.
+Use `sync` when you want archive-style import/export flows against the current target. Sign in first with `neu login` if you want the hosted cloud as the target.
 
 | Command | What it does | Example |
 |---------|---------------|---------|
-| `neu sync login --profile NAME` | Browser login and save a sync profile | `neu sync login --profile official` |
-| `neu sync profiles` | List configured sync profiles | `neu sync profiles` |
-| `neu sync use [--profile NAME \| NAME]` | Switch the active sync profile | `neu sync use official` |
-| `neu sync whoami [--profile NAME]` | Show identity and scopes for the current sync profile | `neu sync whoami --profile official` |
-| `neu sync logout --profile NAME` | Clear the saved sync token for one profile | `neu sync logout --profile official` |
 | `neu sync export --source DIR [--format json\|archive] [--output FILE]` | Build an export bundle from a local source directory | `neu sync export --source ./skills --output backup.ndrv` |
 | `neu sync preview --source DIR \| --bundle FILE` | Preview an incoming bundle without applying it | `neu sync preview --bundle backup.ndrv` |
 | `neu sync push --source DIR \| --bundle FILE` | Push a source directory or bundle into a remote Hub | `neu sync push --bundle backup.ndrv` |

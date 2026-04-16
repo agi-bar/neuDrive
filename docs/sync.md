@@ -78,7 +78,7 @@ Bundle Sync 支持两种文件格式：
 首次登录 hosted 推荐直接走浏览器：
 
 ```bash
-neu login --api-base https://neudrive.ai
+neu login --api-base https://www.neudrive.ai
 neu profiles
 neu whoami
 ```
@@ -88,7 +88,7 @@ neu whoami
 ```bash
 neu login \
   --profile official \
-  --api-base https://neudrive.ai \
+  --api-base https://www.neudrive.ai \
   --token ndt_xxx
 ```
 
@@ -103,7 +103,7 @@ neu logout --profile official
 如果你已经拿到了一个短效 sync token，也可以直接用顶层 `login` 手工写入 profile：
 
 ```bash
-neu login --profile prod --api-base https://neudrive.ai --token ndt_xxx
+neu login --profile prod --api-base https://www.neudrive.ai --token ndt_xxx
 ```
 
 ## `merge` 与 `mirror`

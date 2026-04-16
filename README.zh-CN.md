@@ -2,43 +2,41 @@
 
 # neuDrive
 
-**AI 时代的身份与信任基础设施**
+**AI Agent 的身份、记忆与信任中枢**
 
-> 让所有 AI Agent 认识你、记住你、代表你行动
+> 一个地方，让 Claude、ChatGPT、Codex、Cursor 等 Agent 共享你是谁、你偏好什么、以及它们被允许做什么。
 
 ---
 
 ## 这是什么
 
-neuDrive 是一个独立的中间层服务。每个人拥有一个 Hub，所有 AI Agent（Claude、ChatGPT、Codex、Cursor、Copilot、飞书、Kimi、智谱……）通过这个 Hub 共享身份、记忆、能力和通信。
+neuDrive 给每个人一个 Hub。Claude、ChatGPT、Codex、Cursor、Copilot、飞书、Kimi、智谱等 Agent 可以通过这个 Hub 共享身份、记忆、能力、秘密和通信，而不是在每个平台里重复建立上下文。
 
 **你的身份、偏好、秘密、技能跟着人走，不跟平台走。**
 
-底层统一为一棵 canonical virtual tree，对外同时提供 typed API、文件树读写和 `snapshot/changes` 同步接口。
+为什么会用它：
 
 - 上午在 Claude 写的文章风格偏好，下午切到 GPT 自动生效
 - 存在保险柜里的 API Key，被授权的 Agent 可以安全调用
 - 你的 Agent 之间可以发邮件、协作、交接任务——你不需要当传话筒
 - 一个 Hub ID，通行所有 AI 平台
 
-类比：Google Login 之于 Web、Apple ID 之于移动设备、Stripe 之于支付——neuDrive 是 AI Agent 世界的信任层。
+底层统一为一棵 canonical virtual tree，对外同时提供 typed API、文件树读写和 `snapshot/changes` 同步接口。
 
 详见 [设计文档](docs/design.md)
 
 ---
 
-## 使用模式
+## 从这里开始
 
-可以按下面这个顺序选入口，直接对应不同的使用场景：
+按你的接入方式选第一个合适的入口：
 
-| 顺序 | 模式 | 适合场景 | 文档 |
-|------|------|----------|------|
-| 1 | **Web / Desktop Apps** | 想最快接入 Claude、ChatGPT、Cursor、Windsurf 等图形界面，并使用官方云服务 + 浏览器授权 | [查看文档](docs/setup.zh-CN.md#web-and-desktop-apps) |
-| 2 | **CLI Apps** | 使用 Claude Code、Codex CLI、Gemini CLI、Cursor Agent，通过 Remote HTTP MCP + OAuth 接入 | [查看文档](docs/setup.zh-CN.md#cli-apps) |
-| 3 | **本地模式** | 仓库内本地开发、局域网环境，或者当前还没有公网 HTTPS 地址 | [查看文档](docs/setup.zh-CN.md#local-mode) |
-| 4 | **高级模式 / GPT Actions / Adapters** | 通用 MCP 客户端、自定义 GPT、Feishu / webhook 等更进阶的接法 | [查看文档](docs/setup.zh-CN.md#advanced-mode) |
+1. **Web / Desktop Apps**：最快接入 Claude、ChatGPT、Cursor、Windsurf 等图形界面，并使用官方云服务 + 浏览器授权。[查看文档](docs/setup.zh-CN.md#web-and-desktop-apps)
+2. **CLI Apps**：使用 Claude Code、Codex CLI、Gemini CLI、Cursor Agent，通过 Remote HTTP MCP + OAuth 接入。[查看文档](docs/setup.zh-CN.md#cli-apps)
+3. **本地模式**：仓库内本地开发、局域网环境，或者当前还没有公网 HTTPS 地址。[查看文档](docs/setup.zh-CN.md#local-mode)
+4. **高级模式 / GPT Actions / Adapters**：通用 MCP 客户端、自定义 GPT、Feishu / webhook 等更进阶的接法。[查看文档](docs/setup.zh-CN.md#advanced-mode)
 
-更多入口：
+也可以直接看：
 
 - [Token 管理](docs/setup.zh-CN.md#token-management)
 - [Bundle Sync](docs/sync.md)
@@ -46,38 +44,52 @@ neuDrive 是一个独立的中间层服务。每个人拥有一个 Hub，所有 
 
 ## 本地 CLI 快速开始
 
-下面的示例统一使用 `neu`；兼容别名 `neudrive` 仍然可用。
+先在本地安装 CLI：
 
 ```bash
 git clone https://github.com/agi-bar/neudrive.git
 cd neudrive
 ./tools/install-neudrive.sh
+```
 
-neu status
-neu platform ls
-neu connect claude
-neu browse
+安装完成后，默认使用 `neu`；兼容别名 `neudrive` 也仍然可用。
+
+```bash
+neu status         # 检查 daemon、本地存储和当前 target 是否就绪
+neu platform ls    # 查看已发现的平台 adapter 和连接状态
+neu connect claude # 安装 / 配置 Claude 集成
+neu browse         # 在浏览器里打开本地 Hub
 ```
 
 详细 CLI 使用见：[CLI 使用手册](docs/cli.zh-CN.md)
 
 ## 登录官方云服务
 
-如果你希望使用 `https://neudrive.ai` 这个官方云 Hub，并把 Claude 等 Web 应用接到同一个云端账号上，可以先登录官方 profile：
+如果你希望登录 hosted `official` profile，并把 Claude 等 Web 应用接到 `https://www.neudrive.ai` 这个官方云 Hub，可以直接运行：
 
 ```bash
-neu remote login official
+neu login
 ```
 
-这个命令会拉起浏览器登录流程，并把 `official` profile 保存到本地。登录后，再按 [Web / Desktop Apps 接入说明](docs/setup.zh-CN.md#web-and-desktop-apps) 去连接 Claude、ChatGPT、Cursor 或 Windsurf。
+这个命令会拉起浏览器登录流程，把 hosted `official` profile 保存到本地，并自动把当前 target 切到这个 profile。
 
 ## 文档索引
 
-- [接入说明：Web / Desktop Apps、CLI Apps、本地模式、高级模式、GPT Actions、Adapters](docs/setup.zh-CN.md)
+先看这些：
+
+- [接入说明](docs/setup.zh-CN.md)
 - [CLI 使用手册](docs/cli.zh-CN.md)
 - [详细参考](docs/reference.zh-CN.md)
+
+英文文档：
+
+- [README](README.md)
+- [Setup Guide](docs/setup.md)
 - [CLI Guide](docs/cli.md)
 - [Reference](docs/reference.md)
+
+更多资料：
+
 - [产品设计文档](docs/design.md)
 - [Bundle Sync 指南](docs/sync.md)
 - [Prod-like 验收 Runbook](docs/sync-prodlike-acceptance.md)

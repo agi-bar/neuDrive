@@ -27,6 +27,11 @@ neu connect claude
 neu browse
 ```
 
+- `neu status` 用来检查本地 daemon、本地存储和当前 target 是否就绪。
+- `neu platform ls` 用来查看已安装的平台 adapter 和连接状态。
+- `neu connect claude` 用来为当前环境安装 / 配置 Claude 集成。
+- `neu browse` 用来在浏览器中打开本地 Hub。
+
 ## 内置帮助
 
 ```bash
@@ -95,29 +100,24 @@ neu help write
 | `neu token create --kind sync ...` | 创建短期 sync token | `neu token create --kind sync --purpose backup --access both` |
 | `neu token create --kind skills-upload ...` | 创建短期 skills-upload token | `neu token create --kind skills-upload --purpose skills --platform claude-web` |
 
-## 官方云服务与 Remote Profile
+## 官方云服务与 Hosted Profile
 
-当你希望在 bundle sync 之外管理命名远端 profile 时，用这一组命令。
+当你希望登录 hosted neuDrive，并在多个已保存 profile 之间切换时，用这一组命令。
 
 | 命令 | 作用 | 示例 |
 |------|------|------|
-| `neu remote login <profile> [--url URL] [--token TOKEN]` | 登录一个命名 remote profile；`official` 默认指向 `https://neudrive.ai` | `neu remote login official` |
-| `neu remote ls` | 列出已保存的 remote profile | `neu remote ls` |
-| `neu remote use <profile>` | 切换当前 profile | `neu remote use official` |
-| `neu remote whoami <profile>` | 查看某个 profile 的当前认证状态 | `neu remote whoami official` |
-| `neu remote logout [profile]` | 清除某个 profile 保存的 token | `neu remote logout official` |
+| `neu login [--profile NAME] [--api-base URL] [--token TOKEN]` | 通过浏览器登录一个 hosted profile；`official` 是默认官方云 profile | `neu login` |
+| `neu profiles` | 列出已保存的 hosted profile，并显示当前 active target | `neu profiles` |
+| `neu use <local\|profile>` | 切换当前默认 target | `neu use official` |
+| `neu whoami [--local \| --profile NAME \| --api-base URL --token TOKEN]` | 查看解析后 target 对应的当前身份 | `neu whoami` |
+| `neu logout [--profile NAME]` | 清除某个 hosted profile 的保存会话 | `neu logout --profile official` |
 
 ## Bundle Sync 命令
 
-当你需要 archive 风格的导入 / 导出 / 迁移流程时，用 `sync` 这一组命令。
+当你需要 archive 风格的导入 / 导出 / 迁移流程时，用 `sync` 这一组命令。如果目标是官方云，先用 `neu login` 登录并选中目标 profile。
 
 | 命令 | 作用 | 示例 |
 |------|------|------|
-| `neu sync login --profile NAME` | 通过浏览器登录并保存一个 sync profile | `neu sync login --profile official` |
-| `neu sync profiles` | 列出已配置的 sync profile | `neu sync profiles` |
-| `neu sync use [--profile NAME \| NAME]` | 切换当前 sync profile | `neu sync use official` |
-| `neu sync whoami [--profile NAME]` | 查看当前 sync profile 的身份和 scopes | `neu sync whoami --profile official` |
-| `neu sync logout --profile NAME` | 清除某个 sync profile 的保存 token | `neu sync logout --profile official` |
 | `neu sync export --source DIR [--format json\|archive] [--output FILE]` | 从本地源目录构建导出 bundle | `neu sync export --source ./skills --output backup.ndrv` |
 | `neu sync preview --source DIR \| --bundle FILE` | 预览一个即将导入的 bundle，但不真正写入 | `neu sync preview --bundle backup.ndrv` |
 | `neu sync push --source DIR \| --bundle FILE` | 把本地源目录或现有 bundle 推到远端 Hub | `neu sync push --bundle backup.ndrv` |

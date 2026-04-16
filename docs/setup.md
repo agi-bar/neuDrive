@@ -6,8 +6,8 @@ This guide mirrors the connection categories shown in the dashboard's setup page
 
 The examples below use:
 
-- Hub URL: `https://neudrive.ai`
-- MCP URL: `https://neudrive.ai/mcp`
+- Hub URL: `https://www.neudrive.ai`
+- MCP URL: `https://www.neudrive.ai/mcp`
 - Scoped token environment variable: `NEUDRIVE_TOKEN`
 
 If you are currently running on a local development address such as `http://localhost:8080`, only **Local Mode** is usually appropriate right away. Web / Desktop Apps and CLI Apps generally need a publicly reachable HTTPS URL.
@@ -20,7 +20,7 @@ These paths are best when the connection is created from a graphical interface, 
 
 1. Sign in to the Claude web app and open `Settings -> Connectors -> Go to Customize`.
 2. Click `Add custom connector`.
-3. Set `Remote MCP Server URL` to `https://neudrive.ai/mcp`.
+3. Set `Remote MCP Server URL` to `https://www.neudrive.ai/mcp`.
 4. Save and click `Connect`.
 5. Your browser will open the neuDrive sign-in and authorization flow; after approval, return to Claude.
 
@@ -28,7 +28,7 @@ These paths are best when the connection is created from a graphical interface, 
 
 1. Sign in to ChatGPT and open `Settings -> Apps`.
 2. In `Advanced settings`, click `Create app`.
-3. Set `MCP Server URL` to `https://neudrive.ai/mcp`.
+3. Set `MCP Server URL` to `https://www.neudrive.ai/mcp`.
 4. Follow the prompts to finish neuDrive sign-in and authorization.
 
 If you do not see the `Apps` entry yet, your plan or rollout cohort probably does not have access to it yet.
@@ -41,7 +41,7 @@ You can add Remote MCP directly in the UI or write the config file manually.
 {
   "mcpServers": {
     "neudrive": {
-      "url": "https://neudrive.ai/mcp"
+      "url": "https://www.neudrive.ai/mcp"
     }
   }
 }
@@ -50,7 +50,7 @@ You can add Remote MCP directly in the UI or write the config file manually.
 Recommended steps:
 
 1. Open `Settings -> Tools & MCPs -> Add Custom MCP`.
-2. Set `Remote MCP Server URL` to `https://neudrive.ai/mcp`.
+2. Set `Remote MCP Server URL` to `https://www.neudrive.ai/mcp`.
 3. Click `Connect` or `Authenticate`.
 4. Your browser will open the neuDrive sign-in and authorization page; when it is complete, return to Cursor.
 
@@ -62,7 +62,7 @@ Windsurf currently connects to remote MCP primarily through its config file:
 {
   "mcpServers": {
     "neudrive": {
-      "serverUrl": "https://neudrive.ai/mcp"
+      "serverUrl": "https://www.neudrive.ai/mcp"
     }
   }
 }
@@ -83,7 +83,7 @@ These paths are best for users who work from the terminal. They connect to neuDr
 ### Claude Code
 
 ```bash
-claude mcp add -s user --transport http neudrive https://neudrive.ai/mcp
+claude mcp add -s user --transport http neudrive https://www.neudrive.ai/mcp
 ```
 
 Then run this inside Claude Code:
@@ -97,7 +97,7 @@ Then follow the browser authorization flow.
 ### Codex CLI
 
 ```bash
-codex mcp add neudrive --url https://neudrive.ai/mcp
+codex mcp add neudrive --url https://www.neudrive.ai/mcp
 codex mcp login neudrive
 codex mcp list
 ```
@@ -105,7 +105,7 @@ codex mcp list
 ### Gemini CLI
 
 ```bash
-gemini mcp add --transport http neudrive https://neudrive.ai/mcp
+gemini mcp add --transport http neudrive https://www.neudrive.ai/mcp
 ```
 
 Then run this inside Gemini:
@@ -124,7 +124,7 @@ First write this into `.cursor/mcp.json` or `~/.cursor/mcp.json`:
 {
   "mcpServers": {
     "neudrive": {
-      "url": "https://neudrive.ai/mcp"
+      "url": "https://www.neudrive.ai/mcp"
     }
   }
 }
@@ -172,7 +172,7 @@ export NEUDRIVE_TOKEN=ndt_xxxxx
 Codex CLI can reference the environment variable directly so the secret does not need to be written into config:
 
 ```bash
-codex mcp add neudrive --url https://neudrive.ai/mcp --bearer-token-env-var NEUDRIVE_TOKEN
+codex mcp add neudrive --url https://www.neudrive.ai/mcp --bearer-token-env-var NEUDRIVE_TOKEN
 ```
 
 For other clients, use a static Bearer configuration only if env-based auth is not supported yet.
@@ -183,7 +183,7 @@ If you want to connect neuDrive to a custom GPT, use GPT Actions:
 
 1. Open ChatGPT and create a GPT.
 2. Go to `Configure -> Actions`.
-3. Set `OpenAPI Schema URL` to `https://neudrive.ai/gpt/openapi.json`.
+3. Set `OpenAPI Schema URL` to `https://www.neudrive.ai/gpt/openapi.json`.
 4. Choose `Bearer Token` for authentication.
 5. Use a scoped token as the Bearer token.
 
@@ -198,7 +198,7 @@ Adapters are meant for workspace platforms such as Feishu, DingTalk, and Slack. 
 Callback URL format:
 
 ```text
-https://neudrive.ai/api/adapters/feishu/<your-slug>/events
+https://www.neudrive.ai/api/adapters/feishu/<your-slug>/events
 ```
 
 Server-side environment variables:

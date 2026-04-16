@@ -12,7 +12,7 @@ and the canonical virtual tree sync primitives (`snapshot` / `changes`).
 import { NeuDrive } from '@neudrive/sdk'
 
 const hub = new NeuDrive({
-  baseURL: 'https://neudrive.ai',
+  baseURL: 'https://www.neudrive.ai',
   token: 'ndt_xxxxx'
 })
 
@@ -32,7 +32,7 @@ const delta = await hub.changes(snapshot.cursor, '/projects/my-project')
 import { NeuDriveAuth } from '@neudrive/sdk'
 
 const auth = new NeuDriveAuth({
-  baseURL: 'https://neudrive.ai',
+  baseURL: 'https://www.neudrive.ai',
   clientId: 'your-client-id',
   clientSecret: 'your-client-secret'
 })
@@ -91,7 +91,7 @@ npm install @neudrive/sdk
 import { NeuDrive } from '@neudrive/sdk'
 
 const hub = new NeuDrive({
-  baseURL: 'https://neudrive.ai',
+  baseURL: 'https://www.neudrive.ai',
   token: 'ndt_xxxxx',
 })
 

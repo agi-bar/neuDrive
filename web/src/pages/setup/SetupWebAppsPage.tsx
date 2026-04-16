@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useI18n } from '../../i18n'
 import { useSetup } from '../SetupPage'
-import { SetupCodeBlock, SetupScreenshotPlaceholder, SetupSection } from './SetupShared'
+import { SetupCodeBlock, SetupSection } from './SetupShared'
 
 type WebAppTab = 'claude' | 'chatgpt' | 'cursor' | 'windsurf'
 
@@ -92,18 +92,6 @@ export default function SetupWebAppsPage() {
               <li>{tx('可选：在 ', 'Optional: in ')}<code>NeuDrive</code>{tx(' configuration 的 ', ' configuration, set ')}<code>Tools Permissions</code>{tx(' 里选择 ', ' to ')}<code>Always allow</code>{tx('，减少每次工具调用前的确认。', ' to reduce confirmation prompts before each tool call.')}</li>
               <li>{tx('回到 Claude chat 后，就可以直接发起工具调用，例如“从 neuDrive 中读取我的 profile”。', 'Back in Claude chat, you can immediately call tools, for example asking it to read your profile from neuDrive.')}</li>
             </ol>
-
-            <div className="setup-screenshot-grid">
-              <SetupScreenshotPlaceholder
-                title={tx('Claude Connectors 列表', 'Claude Connectors list')}
-                caption={tx('占位图：Settings -> Connectors -> Go to Customize -> Add custom connector', 'Placeholder: Settings -> Connectors -> Go to Customize -> Add custom connector')}
-              />
-              <SetupScreenshotPlaceholder
-                title={tx('neuDrive 授权完成', 'neuDrive authorization complete')}
-                caption={tx('占位图：Claude 中的 NeuDrive connector 已显示 Connected', 'Placeholder: the NeuDrive connector shows Connected inside Claude')}
-              />
-            </div>
-
             <p className="setup-note">
               {tx('如果你使用的是团队版或企业版 Claude，Connectors 的入口位置可能由管理员策略决定；看不到自定义 connector 入口时，请先确认当前账号支持 Remote MCP Custom Connectors。', 'If you use Claude Team or Enterprise, the Connectors entry may be controlled by admin policy. If you cannot find custom connectors, confirm that the account supports Remote MCP Custom Connectors first.')}
             </p>
@@ -134,18 +122,6 @@ export default function SetupWebAppsPage() {
               <li>{tx('如果随后出现 ', 'If you then see prompts such as ')}<code>Connect</code>{tx('、', ', ')}<code>Sign in</code>{tx(' 或授权提示，按提示跳转到 neuDrive 登录并完成授权。', ', or authorization, follow them to neuDrive sign-in and finish approval.')}</li>
               <li>{tx('返回 ChatGPT 后，确认这个 app 已处于可用状态，再回到对话里使用对应工具。', 'Back in ChatGPT, confirm the app is available, then return to the conversation and use its tools.')}</li>
             </ol>
-
-            <div className="setup-screenshot-grid">
-              <SetupScreenshotPlaceholder
-                title={tx('ChatGPT Apps 设置', 'ChatGPT Apps settings')}
-                caption={tx('占位图：Settings -> Apps -> Advanced settings -> Create app', 'Placeholder: Settings -> Apps -> Advanced settings -> Create app')}
-              />
-              <SetupScreenshotPlaceholder
-                title={tx('ChatGPT App 已创建', 'ChatGPT app created')}
-                caption={tx('占位图：新建的 NeuDrive app 已出现在 Apps 列表中', 'Placeholder: the new NeuDrive app appears in the Apps list')}
-              />
-            </div>
-
             <p className="setup-note">
               {tx('创建完成后，你可以回到 ChatGPT 对话中直接要求它使用 neuDrive，例如“从 neuDrive 中读取我的 profile”。', 'After creation, you can return to ChatGPT and directly ask it to use neuDrive, for example to read your profile from neuDrive.')}
             </p>

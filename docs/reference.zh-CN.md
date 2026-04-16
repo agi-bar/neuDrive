@@ -212,7 +212,7 @@ ndt_  前缀 + 40 位随机 hex
 import { NeuDrive } from '@neudrive/sdk'
 
 const hub = new NeuDrive({
-  baseURL: 'https://neudrive.ai',
+  baseURL: 'https://www.neudrive.ai',
   token: 'ndt_xxxxx'
 })
 
@@ -227,7 +227,7 @@ await hub.sendMessage('worker:research@hub', '请调研 Q2 政策', '...')
 ```python
 from neudrive import NeuDrive
 
-with NeuDrive("https://neudrive.ai", token="ndt_xxxxx") as hub:
+with NeuDrive("https://www.neudrive.ai", token="ndt_xxxxx") as hub:
     profile = hub.get_profile("preferences")
     results = hub.search_memory("海淀算力券")
     hub.call_device("living-room-light", "off")
@@ -240,7 +240,7 @@ with NeuDrive("https://neudrive.ai", token="ndt_xxxxx") as hub:
 import { NeuDriveAuth } from '@neudrive/sdk'
 
 const auth = new NeuDriveAuth({
-  baseURL: 'https://neudrive.ai',
+  baseURL: 'https://www.neudrive.ai',
   clientId: 'your-client-id',
   clientSecret: 'your-client-secret'
 })

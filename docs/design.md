@@ -15,7 +15,7 @@
    - 自动托管本地 Hub daemon
    - 管理本地 agent 平台接入、bundle sync、daemon 状态和 local / hosted targets
 2. **neuDrive Server**
-   - 可以是官方服务 `https://neudrive.ai`
+   - 可以是官方服务 `https://www.neudrive.ai`
    - 也可以是用户自己启动的 `neu server`
 
 当前推荐心智：
@@ -24,7 +24,7 @@
 - `neu connect <platform>` 把本地 Claude/Codex/Gemini/Cursor 连到本地 Hub
 - `neu import <platform>` / `neu export <platform>` 处理平台数据，其中 Codex 和 Claude 默认优先走 agent-mediated 导入
 - `neu sync ...` 处理 bundle 迁移、备份、恢复
-- 需要云端工作区时，用 `neu login --profile official --api-base https://neudrive.ai`
+- 需要云端工作区时，用 `neu login --profile official --api-base https://www.neudrive.ai`
 
 ### 平台接入的三层模型
 

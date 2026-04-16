@@ -15,7 +15,7 @@ JavaScript example:
 import { NeuDrive } from '@agi-bar/neudrive'
 
 const hub = new NeuDrive({
-  baseURL: 'https://neudrive.ai',
+  baseURL: 'https://www.neudrive.ai',
   token: 'ndt_xxxxx',
 })
 
@@ -28,7 +28,7 @@ Python example:
 ```python
 from neudrive import NeuDrive
 
-with NeuDrive("https://neudrive.ai", token="ndt_xxxxx") as hub:
+with NeuDrive("https://www.neudrive.ai", token="ndt_xxxxx") as hub:
     profile = hub.get_profile("preferences")
     hub.send_message("worker:research@hub", "Research Q2 policy", "...")
 ```

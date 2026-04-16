@@ -70,10 +70,7 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 		summary.Files = result
 		summary.LocalGit = syncInfo
 	case ImportModeAgent:
-		if err := ensureAgentImportReady(cfg, adapter.ID()); err != nil {
-			return nil, err
-		}
-		payload, err := runAgentExport(ctx, adapter.ID())
+		payload, err := PrepareAgentImportPayload(ctx, cfg, adapter.ID())
 		if err != nil {
 			return nil, err
 		}
@@ -84,10 +81,7 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 		summary.Agent = result
 		summary.LocalGit = syncInfo
 	case ImportModeAll:
-		if err := ensureAgentImportReady(cfg, adapter.ID()); err != nil {
-			return nil, err
-		}
-		payload, err := runAgentExport(ctx, adapter.ID())
+		payload, err := PrepareAgentImportPayload(ctx, cfg, adapter.ID())
 		if err != nil {
 			return nil, err
 		}
@@ -100,6 +94,30 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 		summary.LocalGit = syncInfo
 	}
 	return summary, nil
+}
+
+func PrepareAgentImportPayload(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string) (sqlite.AgentExportPayload, error) {
+	if platform != "claude-code" {
+		if err := ensureAgentImportReady(cfg, platform); err != nil {
+			return sqlite.AgentExportPayload{}, err
+		}
+		return runAgentExport(ctx, platform)
+	}
+
+	payload := sqlite.AgentExportPayload{
+		Platform: "claude-code",
+		Command:  "local-scan",
+	}
+	if agentPayload, err := runAgentExport(ctx, platform); err == nil {
+		payload = mergeAgentPayload(payload, agentPayload)
+	} else {
+		payload.Notes = append(payload.Notes, fmt.Sprintf("Agent semantic scan unavailable during import: %v", err))
+	}
+	enriched, _, err := enrichClaudePayload(payload)
+	if err != nil {
+		return sqlite.AgentExportPayload{}, err
+	}
+	return enriched, nil
 }
 
 func ensureAgentImportReady(cfg *runtimecfg.CLIConfig, platform string) error {
@@ -327,12 +345,160 @@ func agentExportSchema() map[string]interface{} {
 			"connections":   exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
 			"archives":      exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
 			"unsupported":   exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
+			"claude":        claudeInventorySchema(),
 			"notes": map[string]interface{}{
 				"type":  "array",
 				"items": map[string]interface{}{"type": "string"},
 			},
 		},
 		"required": []string{"platform", "command", "profile_rules", "memory_items", "projects", "automations", "tools", "connections", "archives", "unsupported", "notes"},
+	}
+}
+
+func claudeInventorySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":                 "object",
+		"additionalProperties": false,
+		"properties": map[string]interface{}{
+			"projects":           claudeProjectSchemaArray(),
+			"bundles":            claudeBundleSchemaArray(),
+			"conversations":      claudeConversationSchemaArray(),
+			"files":              claudeFileSchemaArray(),
+			"sensitive_findings": claudeSensitiveFindingSchemaArray(),
+			"vault_candidates":   claudeVaultCandidateSchemaArray(),
+		},
+	}
+}
+
+func claudeProjectSchemaArray() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "array",
+		"items": map[string]interface{}{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]interface{}{
+				"name":         map[string]interface{}{"type": "string"},
+				"context":      map[string]interface{}{"type": "string"},
+				"exactness":    map[string]interface{}{"type": "string"},
+				"source_paths": stringArraySchema(),
+				"files":        claudeFileSchemaArray(),
+			},
+			"required": []string{"name", "context", "exactness", "source_paths", "files"},
+		},
+	}
+}
+
+func claudeBundleSchemaArray() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "array",
+		"items": map[string]interface{}{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]interface{}{
+				"name":         map[string]interface{}{"type": "string"},
+				"kind":         map[string]interface{}{"type": "string"},
+				"description":  map[string]interface{}{"type": "string"},
+				"exactness":    map[string]interface{}{"type": "string"},
+				"source_paths": stringArraySchema(),
+				"files":        claudeFileSchemaArray(),
+			},
+			"required": []string{"name", "kind", "description", "exactness", "source_paths", "files"},
+		},
+	}
+}
+
+func claudeConversationSchemaArray() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "array",
+		"items": map[string]interface{}{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]interface{}{
+				"name":         map[string]interface{}{"type": "string"},
+				"session_id":   map[string]interface{}{"type": "string"},
+				"project_name": map[string]interface{}{"type": "string"},
+				"summary":      map[string]interface{}{"type": "string"},
+				"started_at":   map[string]interface{}{"type": "string"},
+				"exactness":    map[string]interface{}{"type": "string"},
+				"source_paths": stringArraySchema(),
+				"messages": map[string]interface{}{
+					"type": "array",
+					"items": map[string]interface{}{
+						"type":                 "object",
+						"additionalProperties": false,
+						"properties": map[string]interface{}{
+							"role":      map[string]interface{}{"type": "string"},
+							"content":   map[string]interface{}{"type": "string"},
+							"timestamp": map[string]interface{}{"type": "string"},
+							"kind":      map[string]interface{}{"type": "string"},
+						},
+						"required": []string{"role", "content", "timestamp", "kind"},
+					},
+				},
+			},
+			"required": []string{"name", "session_id", "project_name", "summary", "started_at", "exactness", "source_paths", "messages"},
+		},
+	}
+}
+
+func claudeFileSchemaArray() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "array",
+		"items": map[string]interface{}{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]interface{}{
+				"path":           map[string]interface{}{"type": "string"},
+				"content":        map[string]interface{}{"type": "string"},
+				"content_base64": map[string]interface{}{"type": "string"},
+				"content_type":   map[string]interface{}{"type": "string"},
+				"exactness":      map[string]interface{}{"type": "string"},
+				"source_path":    map[string]interface{}{"type": "string"},
+				"source_paths":   stringArraySchema(),
+			},
+			"required": []string{"path", "content", "content_base64", "content_type", "exactness", "source_path", "source_paths"},
+		},
+	}
+}
+
+func claudeSensitiveFindingSchemaArray() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "array",
+		"items": map[string]interface{}{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]interface{}{
+				"title":            map[string]interface{}{"type": "string"},
+				"detail":           map[string]interface{}{"type": "string"},
+				"severity":         map[string]interface{}{"type": "string"},
+				"source_paths":     stringArraySchema(),
+				"redacted_example": map[string]interface{}{"type": "string"},
+			},
+			"required": []string{"title", "detail", "severity", "source_paths", "redacted_example"},
+		},
+	}
+}
+
+func claudeVaultCandidateSchemaArray() map[string]interface{} {
+	return map[string]interface{}{
+		"type": "array",
+		"items": map[string]interface{}{
+			"type":                 "object",
+			"additionalProperties": false,
+			"properties": map[string]interface{}{
+				"scope":        map[string]interface{}{"type": "string"},
+				"description":  map[string]interface{}{"type": "string"},
+				"source_paths": stringArraySchema(),
+			},
+			"required": []string{"scope", "description", "source_paths"},
+		},
+	}
+}
+
+func stringArraySchema() map[string]interface{} {
+	return map[string]interface{}{
+		"type":  "array",
+		"items": map[string]interface{}{"type": "string"},
 	}
 }
 

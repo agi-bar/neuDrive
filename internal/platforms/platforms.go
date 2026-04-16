@@ -286,13 +286,8 @@ func (a *claudeAdapter) init() *claudeAdapter {
 			claudeCommandEntrypoint,
 			[]string{"claude"},
 			[]string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import platform claude", "/neudrive token create --kind sync --purpose backup", "/neudrive status"},
-			[]string{"connections", "skills", "projects", "prompts", "tools", "archives"},
-			[]Source{
-				{Domain: "connections", Label: "claude.json", Path: expandUser("~/.claude.json")},
-				{Domain: "projects", Label: "projects", Path: expandUser("~/.claude/projects"), IsDir: true},
-				{Domain: "prompts", Label: "plans", Path: expandUser("~/.claude/plans"), IsDir: true},
-				{Domain: "tools", Label: "plugins", Path: expandUser("~/.claude/plugins"), IsDir: true},
-			},
+			[]string{"connections", "profile", "memory", "skills", "projects", "prompts", "tools", "automations", "archives", "secrets"},
+			claudeSources(),
 			"supported",
 		)}
 	}
@@ -303,9 +298,11 @@ func (a *claudeAdapter) ID() string                 { return a.init().baseAdapte
 func (a *claudeAdapter) DisplayName() string        { return a.init().baseAdapter.DisplayName() }
 func (a *claudeAdapter) Aliases() []string          { return a.init().baseAdapter.Aliases() }
 func (a *claudeAdapter) SupportedDomains() []string { return a.init().baseAdapter.SupportedDomains() }
-func (a *claudeAdapter) DiscoverSources() []Source  { return a.init().baseAdapter.DiscoverSources() }
+func (a *claudeAdapter) DiscoverSources() []Source  { return existingSources(claudeSources()) }
 func (a *claudeAdapter) Detect(cfg *runtimecfg.CLIConfig, daemonURL string) Status {
-	return a.init().baseAdapter.Detect(cfg, daemonURL)
+	status := a.init().baseAdapter.Detect(cfg, daemonURL)
+	status.Sources = existingSources(claudeSources())
+	return status
 }
 func (a *claudeAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, executable, daemonURL string, connection runtimecfg.LocalConnection) (runtimecfg.LocalConnection, error) {
 	if _, err := lookPath("claude"); err != nil {
@@ -547,6 +544,31 @@ func (a *cursorAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfi
 		return err
 	}
 	return os.WriteFile(configPath, append(data, '\n'), 0o644)
+}
+
+func claudeSources() []Source {
+	return []Source{
+		{Domain: "connections", Label: "claude.json", Path: expandUser("~/.claude.json")},
+		{Domain: "profile", Label: "CLAUDE.md", Path: expandUser("~/.claude/CLAUDE.md")},
+		{Domain: "profile", Label: "CLAUDE.local.md", Path: expandUser("~/.claude/CLAUDE.local.md")},
+		{Domain: "profile", Label: "settings.json", Path: expandUser("~/.claude/settings.json")},
+		{Domain: "profile", Label: "settings.local.json", Path: expandUser("~/.claude/settings.local.json")},
+		{Domain: "memory", Label: "agent-memory", Path: expandUser("~/.claude/agent-memory"), IsDir: true},
+		{Domain: "memory", Label: "projects", Path: expandUser("~/.claude/projects"), IsDir: true},
+		{Domain: "skills", Label: "skills", Path: expandUser("~/.claude/skills"), IsDir: true},
+		{Domain: "skills", Label: "agents", Path: expandUser("~/.claude/agents"), IsDir: true},
+		{Domain: "skills", Label: "commands", Path: expandUser("~/.claude/commands"), IsDir: true},
+		{Domain: "skills", Label: "rules", Path: expandUser("~/.claude/rules"), IsDir: true},
+		{Domain: "tools", Label: "plugins", Path: expandUser("~/.claude/plugins"), IsDir: true},
+		{Domain: "prompts", Label: "plans", Path: expandUser("~/.claude/plans"), IsDir: true},
+		{Domain: "prompts", Label: "history", Path: expandUser("~/.claude/history.jsonl")},
+		{Domain: "automations", Label: "scheduled-tasks", Path: expandUser("~/.claude/scheduled-tasks"), IsDir: true},
+		{Domain: "archives", Label: "todos", Path: expandUser("~/.claude/todos"), IsDir: true},
+		{Domain: "archives", Label: "channels", Path: expandUser("~/.claude/channels"), IsDir: true},
+		{Domain: "archives", Label: "output-styles", Path: expandUser("~/.claude/output-styles"), IsDir: true},
+		{Domain: "archives", Label: "hooks", Path: expandUser("~/.claude/hooks"), IsDir: true},
+		{Domain: "secrets", Label: "credentials", Path: expandUser("~/.claude/.credentials.json")},
+	}
 }
 
 func run(ctx context.Context, name string, args ...string) error {

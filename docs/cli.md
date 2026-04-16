@@ -79,7 +79,7 @@ These commands work against the public neuDrive roots such as `profile`, `memory
 
 | Command | What it does | Example |
 |---------|---------------|---------|
-| `neu import platform <platform> [--mode ...] [--zip FILE]` | Import platform data such as Codex or Claude captures | `neu import platform codex` |
+| `neu import platform <platform> [--mode ...] [--dry-run] [--zip FILE]` | Import platform data such as Codex or Claude captures | `neu import platform claude --dry-run --mode agent` |
 | `neu import skill <dir> [--name NAME]` | Import one local skill directory | `neu import skill ./demo-skill` |
 | `neu import profile <file> [--category ...]` | Import one profile document | `neu import profile ./preferences.md --category preferences` |
 | `neu import memory <file-or-dir>` | Import scratch or note-style memory content | `neu import memory ./notes` |

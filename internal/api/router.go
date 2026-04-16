@@ -336,6 +336,8 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/local/git-mirror", s.handleLocalGitMirrorGet)
 		r.Put("/api/local/git-mirror", s.handleLocalGitMirrorUpdate)
 		r.Post("/api/local/git-mirror/github/test", s.handleLocalGitMirrorGitHubTest)
+		r.Post("/api/local/platform/preview", s.handleLocalPlatformPreview)
+		r.Post("/api/local/platform/import", s.handleLocalPlatformImport)
 
 		// GPT Setup
 		r.Get("/api/gpt/setup", s.handleGPTSetup)

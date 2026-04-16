@@ -86,7 +86,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		Key:     "import",
 		Summary: "Bring local files or platform exports into neuDrive.",
 		Usage: []string{
-			"neudrive import platform <platform> [--mode agent|files|all] [--zip FILE]",
+			"neudrive import platform <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]",
 			"neudrive import skill <local-dir> [--name NAME]",
 			"neudrive import profile <local-file> [--category preferences|relationships|principles]",
 			"neudrive import memory <local-file-or-dir>",
@@ -94,12 +94,13 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		},
 		Examples: []string{
 			"neudrive import platform codex",
+			"neudrive import platform claude --dry-run --mode agent",
 			"neudrive import skill ./demo-skill",
 			"neudrive import profile ./profile.json",
 			"neudrive import memory ./notes/",
 			"neudrive import project ./demo-project --name imported",
 		},
-		Notes:     []string{"Import categories come after the verb so the command shape matches `ls/read/write`.", "If local Git Mirror is enabled, successful imports keep syncing into that mirror automatically.", "Use `import platform ...` for Claude/Codex platform capture flows and `import skill/profile/memory/project ...` for direct local content."},
+		Notes:     []string{"Import categories come after the verb so the command shape matches `ls/read/write`.", "If local Git Mirror is enabled, successful imports keep syncing into that mirror automatically.", "Use `import platform ...` for Claude/Codex platform capture flows and `import skill/profile/memory/project ...` for direct local content.", "For Claude local migration, start with `import platform claude --dry-run --mode agent` to get a preflight inventory before writing anything."},
 		SeeAlso:   []string{"write", "platform"},
 		SortOrder: 80,
 	},

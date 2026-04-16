@@ -61,6 +61,7 @@ need_cmd() {
 
 need_cmd go
 need_cmd install
+need_cmd npm
 
 is_in_path_now() {
   local dir="$1"
@@ -171,6 +172,16 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -p "$INSTALL_DIR"
+
+echo "Building frontend assets ..."
+(
+  cd "${REPO_ROOT}/web"
+  npm ci
+  npm run build
+)
+
+rm -rf "${REPO_ROOT}/internal/web/dist"
+cp -R "${REPO_ROOT}/web/dist" "${REPO_ROOT}/internal/web/dist"
 
 echo "Building ${BIN_NAMES[*]} from ${REPO_ROOT} ..."
 (

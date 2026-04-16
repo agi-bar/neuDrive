@@ -26,6 +26,7 @@ import (
 	"github.com/agi-bar/neudrive/internal/models"
 	"github.com/agi-bar/neudrive/internal/platforms"
 	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
 	"github.com/agi-bar/neudrive/internal/synccli"
 )
 
@@ -533,17 +534,18 @@ func runDisconnect(args []string) int {
 
 func runLegacyImport(args []string) int {
 	if isHelpArg(args) || len(args) == 0 {
-		fmt.Println(usageLine("import <platform> [--mode agent|files|all] [--zip FILE]"))
+		fmt.Println(usageLine("import <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]"))
 		return 0
 	}
 	platform := strings.TrimSpace(args[0])
 	if platform == "" || strings.HasPrefix(platform, "-") {
-		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--zip FILE]"))
+		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]"))
 		return 2
 	}
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
 	mode := fs.String("mode", "", "import mode: agent, files, all")
+	dryRun := fs.Bool("dry-run", false, "scan and preview the import without writing anything")
 	zipPath := fs.String("zip", "", "Claude skills zip exported from the web app")
 	if err := fs.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -552,20 +554,19 @@ func runLegacyImport(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--zip FILE]"))
+		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]"))
 		return 2
 	}
 	if strings.TrimSpace(*zipPath) != "" && strings.TrimSpace(*mode) != "" && strings.TrimSpace(*mode) != string(platforms.ImportModeFiles) {
 		fmt.Fprintln(os.Stderr, "--zip can only be combined with --mode files")
 		return 2
 	}
+	if *dryRun && strings.TrimSpace(*zipPath) != "" {
+		fmt.Fprintln(os.Stderr, "--dry-run is not supported with --zip")
+		return 2
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	executable, err := os.Executable()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "resolve executable: %v\n", err)
-		return 1
-	}
 	configPath, cfg, err := runtimecfg.LoadConfig("")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "load config: %v\n", err)
@@ -573,6 +574,20 @@ func runLegacyImport(args []string) int {
 	}
 	if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
 		fmt.Fprintf(os.Stderr, "prepare local defaults: %v\n", err)
+		return 1
+	}
+	if *dryRun {
+		preview, err := platforms.PreviewImport(ctx, cfg, platform, *mode)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "preview %s import: %v\n", platform, err)
+			return 1
+		}
+		fmt.Print(renderImportPreview(preview))
+		return 0
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "resolve executable: %v\n", err)
 		return 1
 	}
 	if err := saveConfig(configPath, cfg); err != nil {
@@ -603,25 +618,19 @@ func runLegacyImport(args []string) int {
 			platform,
 		)
 	case result.Agent != nil && result.Files != nil:
-		fmt.Printf("Imported %s using mode=%s: %d profile categories, %d memory items, %d projects, %d agent artifacts, plus %d files (%d bytes) into /platforms/%s.\n",
+		fmt.Printf("Imported %s using mode=%s: %s plus %d raw files (%d bytes) into /platforms/%s.\n",
 			platform,
 			result.Mode,
-			result.Agent.ProfileCategories,
-			result.Agent.MemoryItems,
-			result.Agent.Projects,
-			result.Agent.Artifacts,
+			renderAgentImportSummary(result.Agent),
 			result.Files.Files,
 			result.Files.Bytes,
 			result.Platform,
 		)
 	case result.Agent != nil:
-		fmt.Printf("Imported %s using mode=%s: %d profile categories, %d memory items, %d projects, %d agent artifacts.\n",
+		fmt.Printf("Imported %s using mode=%s: %s.\n",
 			platform,
 			result.Mode,
-			result.Agent.ProfileCategories,
-			result.Agent.MemoryItems,
-			result.Agent.Projects,
-			result.Agent.Artifacts,
+			renderAgentImportSummary(result.Agent),
 		)
 	case result.Files != nil:
 		fmt.Printf("Imported %d files (%d bytes) from %s into /platforms/%s using mode=%s.\n",
@@ -634,6 +643,93 @@ func runLegacyImport(args []string) int {
 	}
 	printLocalGitSyncMessage(result.LocalGit)
 	return 0
+}
+
+func renderImportPreview(preview *platforms.ImportPreview) string {
+	if preview == nil {
+		return ""
+	}
+	var b strings.Builder
+	fmt.Fprintf(&b, "%s migration preview (mode=%s)\n", preview.DisplayName, preview.Mode)
+	if len(preview.Categories) == 0 {
+		b.WriteString("- No Claude-local data categories were discovered.\n")
+	} else {
+		for _, category := range preview.Categories {
+			parts := []string{}
+			if category.Discovered > 0 {
+				parts = append(parts, fmt.Sprintf("%d discovered", category.Discovered))
+			}
+			if category.Importable > 0 {
+				parts = append(parts, fmt.Sprintf("%d importable", category.Importable))
+			}
+			if category.Archived > 0 {
+				parts = append(parts, fmt.Sprintf("%d archived", category.Archived))
+			}
+			if category.Blocked > 0 {
+				parts = append(parts, fmt.Sprintf("%d blocked", category.Blocked))
+			}
+			fmt.Fprintf(&b, "- %s: %s\n", category.Name, strings.Join(parts, ", "))
+		}
+	}
+	fmt.Fprintf(&b, "Sensitive findings: %d\n", len(preview.SensitiveFindings))
+	fmt.Fprintf(&b, "Vault candidates: %d\n", len(preview.VaultCandidates))
+	if len(preview.Notes) > 0 {
+		b.WriteString("Notes:\n")
+		for _, note := range preview.Notes {
+			note = strings.TrimSpace(note)
+			if note == "" {
+				continue
+			}
+			fmt.Fprintf(&b, "- %s\n", note)
+		}
+	}
+	fmt.Fprintf(&b, "Next command: %s\n", renderCLIText(preview.NextCommand))
+	return b.String()
+}
+
+func renderAgentImportSummary(result *sqlitestorage.AgentImportResult) string {
+	if result == nil {
+		return "no agent-imported data"
+	}
+	parts := []string{fmt.Sprintf("%d imported", result.Imported)}
+	if result.Archived > 0 {
+		parts = append(parts, fmt.Sprintf("%d archived", result.Archived))
+	}
+	if result.Blocked > 0 {
+		parts = append(parts, fmt.Sprintf("%d blocked", result.Blocked))
+	}
+	if result.SensitiveFindings > 0 {
+		parts = append(parts, fmt.Sprintf("%d sensitive findings", result.SensitiveFindings))
+	}
+	if result.VaultCandidates > 0 {
+		parts = append(parts, fmt.Sprintf("%d vault candidates", result.VaultCandidates))
+	}
+	details := []string{}
+	if result.ProfileCategories > 0 {
+		details = append(details, fmt.Sprintf("%d profile categories", result.ProfileCategories))
+	}
+	if result.MemoryItems > 0 {
+		details = append(details, fmt.Sprintf("%d memory items", result.MemoryItems))
+	}
+	if result.Projects > 0 {
+		details = append(details, fmt.Sprintf("%d projects", result.Projects))
+	}
+	if result.ProjectFiles > 0 {
+		details = append(details, fmt.Sprintf("%d project files", result.ProjectFiles))
+	}
+	if result.Bundles > 0 {
+		details = append(details, fmt.Sprintf("%d bundles", result.Bundles))
+	}
+	if result.Conversations > 0 {
+		details = append(details, fmt.Sprintf("%d conversations", result.Conversations))
+	}
+	if result.Artifacts > 0 {
+		details = append(details, fmt.Sprintf("%d artifacts", result.Artifacts))
+	}
+	if len(details) == 0 {
+		return strings.Join(parts, ", ")
+	}
+	return fmt.Sprintf("%s; first-class: %s", strings.Join(parts, ", "), strings.Join(details, ", "))
 }
 
 func runExport(args []string) int {

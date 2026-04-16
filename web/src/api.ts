@@ -738,6 +738,18 @@ export const api = {
       body: JSON.stringify(req),
     }),
 
+  previewLocalPlatformImport: (req: { platform: string; mode: 'agent' | 'files' | 'all' }): Promise<LocalPlatformImportPreview> =>
+    request<LocalPlatformImportPreview>('/local/platform/preview', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
+  importLocalPlatform: (req: { platform: string; mode: 'agent' | 'files' | 'all' }): Promise<RequestEnvelope<LocalPlatformImportSummary>> =>
+    requestEnvelope<LocalPlatformImportSummary>('/local/platform/import', {
+      method: 'POST',
+      body: JSON.stringify(req),
+    }),
+
   testGitMirrorGitHubToken: (req: GitMirrorGitHubTestRequest): Promise<GitMirrorGitHubTestResult> =>
     request<GitMirrorGitHubTestResult>('/local/git-mirror/github/test', {
       method: 'POST',
@@ -837,6 +849,70 @@ export interface ImportResult {
   skipped: number
   errors?: string[]
   skills?: string[]
+}
+
+export interface LocalPlatformPreviewCategory {
+  name: string
+  discovered: number
+  importable: number
+  archived: number
+  blocked: number
+}
+
+export interface LocalPlatformSensitiveFinding {
+  title: string
+  detail: string
+  severity: string
+  source_paths?: string[]
+  redacted_example?: string
+}
+
+export interface LocalPlatformVaultCandidate {
+  scope: string
+  description: string
+  source_paths?: string[]
+}
+
+export interface LocalPlatformImportPreview {
+  platform: string
+  display_name: string
+  mode: 'agent' | 'files' | 'all'
+  categories: LocalPlatformPreviewCategory[]
+  sensitive_findings: LocalPlatformSensitiveFinding[]
+  vault_candidates: LocalPlatformVaultCandidate[]
+  notes: string[]
+  next_command: string
+}
+
+export interface LocalPlatformFilesImportResult {
+  platform: string
+  files: number
+  bytes: number
+  paths: string[]
+}
+
+export interface LocalPlatformAgentImportResult {
+  platform: string
+  profile_categories: number
+  memory_items: number
+  projects: number
+  project_files: number
+  bundles: number
+  conversations: number
+  artifacts: number
+  imported: number
+  archived: number
+  blocked: number
+  sensitive_findings: number
+  vault_candidates: number
+  paths: string[]
+}
+
+export interface LocalPlatformImportSummary {
+  platform: string
+  mode: 'agent' | 'files' | 'all'
+  files?: LocalPlatformFilesImportResult
+  agent?: LocalPlatformAgentImportResult
 }
 
 // ---------------------------------------------------------------------------

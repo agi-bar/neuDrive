@@ -24,6 +24,7 @@ type AgentExportPayload struct {
 	Connections  []AgentRecord        `json:"connections,omitempty"`
 	Archives     []AgentRecord        `json:"archives,omitempty"`
 	Unsupported  []AgentRecord        `json:"unsupported,omitempty"`
+	Claude       *ClaudeInventory     `json:"claude,omitempty"`
 	Notes        []string             `json:"notes,omitempty"`
 }
 
@@ -59,12 +60,88 @@ type AgentRecord struct {
 	Metadata    map[string]interface{} `json:"metadata,omitempty"`
 }
 
+type ClaudeInventory struct {
+	Projects          []ClaudeProjectSnapshot `json:"projects,omitempty"`
+	Bundles           []ClaudeBundle          `json:"bundles,omitempty"`
+	Conversations     []ClaudeConversation    `json:"conversations,omitempty"`
+	Files             []ClaudeFileRecord      `json:"files,omitempty"`
+	SensitiveFindings []AgentSensitiveFinding `json:"sensitive_findings,omitempty"`
+	VaultCandidates   []AgentVaultCandidate   `json:"vault_candidates,omitempty"`
+}
+
+type ClaudeProjectSnapshot struct {
+	Name        string             `json:"name,omitempty"`
+	Context     string             `json:"context,omitempty"`
+	Exactness   string             `json:"exactness,omitempty"`
+	SourcePaths []string           `json:"source_paths,omitempty"`
+	Files       []ClaudeFileRecord `json:"files,omitempty"`
+}
+
+type ClaudeBundle struct {
+	Name        string             `json:"name,omitempty"`
+	Kind        string             `json:"kind,omitempty"`
+	Description string             `json:"description,omitempty"`
+	Exactness   string             `json:"exactness,omitempty"`
+	SourcePaths []string           `json:"source_paths,omitempty"`
+	Files       []ClaudeFileRecord `json:"files,omitempty"`
+}
+
+type ClaudeConversation struct {
+	Name        string                      `json:"name,omitempty"`
+	SessionID   string                      `json:"session_id,omitempty"`
+	ProjectName string                      `json:"project_name,omitempty"`
+	Summary     string                      `json:"summary,omitempty"`
+	StartedAt   string                      `json:"started_at,omitempty"`
+	Exactness   string                      `json:"exactness,omitempty"`
+	SourcePaths []string                    `json:"source_paths,omitempty"`
+	Messages    []ClaudeConversationMessage `json:"messages,omitempty"`
+}
+
+type ClaudeConversationMessage struct {
+	Role      string `json:"role,omitempty"`
+	Content   string `json:"content,omitempty"`
+	Timestamp string `json:"timestamp,omitempty"`
+	Kind      string `json:"kind,omitempty"`
+}
+
+type ClaudeFileRecord struct {
+	Path          string   `json:"path,omitempty"`
+	Content       string   `json:"content,omitempty"`
+	ContentBase64 string   `json:"content_base64,omitempty"`
+	ContentType   string   `json:"content_type,omitempty"`
+	Exactness     string   `json:"exactness,omitempty"`
+	SourcePath    string   `json:"source_path,omitempty"`
+	SourcePaths   []string `json:"source_paths,omitempty"`
+}
+
+type AgentSensitiveFinding struct {
+	Title           string   `json:"title,omitempty"`
+	Detail          string   `json:"detail,omitempty"`
+	Severity        string   `json:"severity,omitempty"`
+	SourcePaths     []string `json:"source_paths,omitempty"`
+	RedactedExample string   `json:"redacted_example,omitempty"`
+}
+
+type AgentVaultCandidate struct {
+	Scope       string   `json:"scope,omitempty"`
+	Description string   `json:"description,omitempty"`
+	SourcePaths []string `json:"source_paths,omitempty"`
+}
+
 type AgentImportResult struct {
 	Platform          string   `json:"platform"`
 	ProfileCategories int      `json:"profile_categories"`
 	MemoryItems       int      `json:"memory_items"`
 	Projects          int      `json:"projects"`
+	ProjectFiles      int      `json:"project_files"`
+	Bundles           int      `json:"bundles"`
+	Conversations     int      `json:"conversations"`
 	Artifacts         int      `json:"artifacts"`
+	Imported          int      `json:"imported"`
+	Archived          int      `json:"archived"`
+	Blocked           int      `json:"blocked"`
+	SensitiveFindings int      `json:"sensitive_findings"`
+	VaultCandidates   int      `json:"vault_candidates"`
 	Paths             []string `json:"paths"`
 }
 
@@ -78,6 +155,7 @@ func (c *Client) ImportAgentExport(ctx context.Context, platform string, payload
 			return nil, err
 		}
 		result.ProfileCategories++
+		result.Imported++
 		result.Paths = append(result.Paths, hubpath.ProfilePath(category))
 	}
 
@@ -91,6 +169,7 @@ func (c *Client) ImportAgentExport(ctx context.Context, platform string, payload
 			return nil, err
 		}
 		result.MemoryItems++
+		result.Imported++
 		result.Paths = append(result.Paths, entry.Path)
 	}
 
@@ -117,37 +196,50 @@ func (c *Client) ImportAgentExport(ctx context.Context, platform string, payload
 			return nil, err
 		}
 		result.Projects++
+		result.Imported++
 		result.Paths = append(result.Paths, hubpath.ProjectContextPath(name))
+	}
+
+	if payload.Claude != nil {
+		if err := c.importClaudeInventory(ctx, platform, *payload.Claude, result); err != nil {
+			return nil, err
+		}
 	}
 
 	if written, err := c.writeAgentArtifact(ctx, platform, "automations.json", payload.Automations); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Automations)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := c.writeAgentArtifact(ctx, platform, "tools.json", payload.Tools); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Tools)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := c.writeAgentArtifact(ctx, platform, "connections.json", payload.Connections); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Connections)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := c.writeAgentArtifact(ctx, platform, "archives.json", payload.Archives); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Archives)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := c.writeAgentArtifact(ctx, platform, "unsupported.json", payload.Unsupported); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Unsupported)
+		result.Blocked += len(payload.Unsupported)
 		result.Paths = append(result.Paths, written)
 	}
 	if content := renderNotes(payload.Notes); strings.TrimSpace(content) != "" {
@@ -164,6 +256,7 @@ func (c *Client) ImportAgentExport(ctx context.Context, platform string, payload
 			return nil, err
 		}
 		result.Artifacts++
+		result.Archived++
 		result.Paths = append(result.Paths, target)
 	}
 
@@ -197,6 +290,10 @@ func (c *Client) writeAgentArtifact(ctx context.Context, platform, filename stri
 func isEmptyPayload(payload any) bool {
 	switch typed := payload.(type) {
 	case []AgentRecord:
+		return len(typed) == 0
+	case []AgentSensitiveFinding:
+		return len(typed) == 0
+	case []AgentVaultCandidate:
 		return len(typed) == 0
 	default:
 		return payload == nil

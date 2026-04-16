@@ -22,9 +22,10 @@ interface UserProfileData {
 
 interface DashboardPageProps {
   systemSettingsEnabled?: boolean
+  localMode?: boolean
 }
 
-export default function DashboardPage({ systemSettingsEnabled = false }: DashboardPageProps) {
+export default function DashboardPage({ systemSettingsEnabled = false, localMode = false }: DashboardPageProps) {
   const { locale, tx } = useI18n()
   const [stats, setStats] = useState<DashboardStats>({
     connections: 0,
@@ -262,6 +263,26 @@ export default function DashboardPage({ systemSettingsEnabled = false }: Dashboa
                 <span className="activity-count">{item.count}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {localMode && (
+        <div className="card">
+          <h3 className="card-title">{tx('Claude Code 迁移', 'Claude Code Migration')}</h3>
+          <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
+            {tx(
+              '先扫描本机 Claude Code 数据，再把 projects、memory、skills、会话和结构化归档迁移到 neuDrive。',
+              'Scan local Claude Code data first, then migrate projects, memory, skills, conversations, and structured archives into neuDrive.',
+            )}
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Link to="/migrations/claude" className="btn btn-primary">
+              {tx('打开迁移报告', 'Open migration report')}
+            </Link>
+            <Link to="/connections" className="btn">
+              {tx('查看平台连接', 'View connections')}
+            </Link>
           </div>
         </div>
       )}

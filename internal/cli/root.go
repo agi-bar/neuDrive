@@ -49,6 +49,16 @@ func Run(args []string) int {
 		return runSync(args[1:])
 	case "remote":
 		return runRemote(args[1:])
+	case "login":
+		return runLogin(args[1:])
+	case "logout":
+		return runLogout(args[1:])
+	case "use":
+		return runUse(args[1:])
+	case "whoami":
+		return runWhoAmICommand(args[1:])
+	case "profiles":
+		return runProfilesCommand(args[1:])
 	case "browse":
 		return runBrowse(args[1:])
 	case "status":
@@ -224,10 +234,21 @@ func runStatus(args []string) int {
 	if cfg.Local.Storage != "sqlite" && cfg.Local.DatabaseURL != "" {
 		fmt.Printf("Local database: %s\n", cfg.Local.DatabaseURL)
 	}
-	if cfg.CurrentProfile != "" {
-		fmt.Printf("Current remote profile: %s\n", cfg.CurrentProfile)
+	currentTarget := runtimecfg.SelectedTarget(cfg)
+	fmt.Printf("Current target: %s\n", currentTarget)
+	if profileName := runtimecfg.TargetProfileName(currentTarget); profileName != "" {
+		fmt.Printf("Current hosted profile: %s\n", profileName)
+		if profile, ok := cfg.Profiles[profileName]; ok {
+			if strings.TrimSpace(profile.APIBase) != "" {
+				fmt.Printf("Hosted API base: %s\n", strings.TrimRight(profile.APIBase, "/"))
+			}
+			fmt.Printf("Hosted auth mode: %s\n", defaultText(profile.AuthMode, runtimecfg.AuthModeScopedToken))
+			if strings.TrimSpace(profile.ExpiresAt) != "" {
+				fmt.Printf("Hosted token expires at: %s\n", profile.ExpiresAt)
+			}
+		}
 	} else {
-		fmt.Println("Current remote profile: none")
+		fmt.Println("Current hosted profile: none")
 	}
 	fmt.Println()
 	fmt.Println("Platforms:")
@@ -1144,23 +1165,9 @@ func runRemote(args []string) int {
 	}
 	switch args[0] {
 	case "ls":
-		_, cfg, err := runtimecfg.LoadConfig("")
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "load config: %v\n", err)
-			return 1
-		}
-		if len(cfg.Profiles) == 0 {
-			fmt.Println("No remote profiles configured.")
-			return 0
-		}
-		for name, profile := range cfg.Profiles {
-			marker := " "
-			if name == cfg.CurrentProfile {
-				marker = "*"
-			}
-			fmt.Printf("%s %s\t%s\n", marker, name, profile.APIBase)
-		}
-		return 0
+		return runProfilesCommand(nil)
+	case "profiles":
+		return runProfilesCommand(args[1:])
 	case "login":
 		if len(args) > 1 && isHelpArg(args[1:]) {
 			fmt.Println(usageLine("remote login <profile> [--url URL] [--token TOKEN]"))
@@ -1171,12 +1178,12 @@ func runRemote(args []string) int {
 			return 2
 		}
 		profileName := args[1]
-		loginArgs := []string{"login", "--profile", profileName}
+		loginArgs := []string{"--profile", profileName}
 		if !containsFlag(args[2:], "--api-base") && !containsFlag(args[2:], "--url") {
 			loginArgs = append(loginArgs, "--api-base", runtimecfg.DefaultRemoteOfficial)
 		}
 		loginArgs = append(loginArgs, normalizeRemoteArgs(args[2:])...)
-		return runSync(loginArgs)
+		return runLogin(loginArgs)
 	case "use":
 		if len(args) > 1 && isHelpArg(args[1:]) {
 			fmt.Println(usageLine("remote use <profile>"))
@@ -1186,27 +1193,27 @@ func runRemote(args []string) int {
 			fmt.Fprintln(os.Stderr, usageLine("remote use <profile>"))
 			return 2
 		}
-		return runSync([]string{"use", "--profile", args[1]})
+		return runUse([]string{args[1]})
 	case "logout":
 		if len(args) > 1 && isHelpArg(args[1:]) {
 			fmt.Println(usageLine("remote logout [profile]"))
 			return 0
 		}
-		logoutArgs := []string{"logout"}
+		logoutArgs := []string{}
 		if len(args) == 2 {
 			logoutArgs = append(logoutArgs, "--profile", args[1])
 		}
-		return runSync(logoutArgs)
+		return runLogout(logoutArgs)
 	case "whoami":
 		if len(args) > 1 && isHelpArg(args[1:]) {
 			fmt.Println(usageLine("remote whoami [profile]"))
 			return 0
 		}
-		whoamiArgs := []string{"whoami"}
+		whoamiArgs := []string{}
 		if len(args) == 2 {
 			whoamiArgs = append(whoamiArgs, "--profile", args[1])
 		}
-		return runSync(whoamiArgs)
+		return runWhoAmICommand(whoamiArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown remote subcommand %q\n", args[0])
 		return 2
@@ -1380,9 +1387,23 @@ func shouldUseLocalSyncDefaults(args []string) bool {
 	case "login", "profiles", "use", "logout":
 		return false
 	case "whoami":
-		return !containsFlag(args[1:], "--profile")
+		if containsFlag(args[1:], "--local") {
+			return true
+		}
+		if containsFlag(args[1:], "--profile") || containsFlag(args[1:], "--token") || containsFlag(args[1:], "--api-base") {
+			return false
+		}
+		_, cfg, err := runtimecfg.LoadConfig("")
+		return err == nil && runtimecfg.SelectedTarget(cfg) == runtimecfg.TargetLocal
 	case "export", "preview", "push", "pull", "resume", "history", "diff":
-		return !containsFlag(args[1:], "--profile") && !containsFlag(args[1:], "--token") && !containsFlag(args[1:], "--api-base")
+		if containsFlag(args[1:], "--local") {
+			return true
+		}
+		if containsFlag(args[1:], "--profile") || containsFlag(args[1:], "--token") || containsFlag(args[1:], "--api-base") {
+			return false
+		}
+		_, cfg, err := runtimecfg.LoadConfig("")
+		return err == nil && runtimecfg.SelectedTarget(cfg) == runtimecfg.TargetLocal
 	default:
 		return false
 	}

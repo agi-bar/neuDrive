@@ -207,17 +207,17 @@ func TestAgenthubRemoteCommands_LocalSQLiteProfile(t *testing.T) {
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "remote", "ls")
-	if !strings.Contains(stdout, "* local\t"+state.APIBase) {
+	if !strings.Contains(stdout, "Current target: profile:local") || !strings.Contains(stdout, "* local") || !strings.Contains(stdout, state.APIBase) {
 		t.Fatalf("unexpected remote ls output: %s", stdout)
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "remote", "use", "local")
-	if !strings.Contains(stdout, "Current profile: local") {
+	if !strings.Contains(stdout, "Current target: profile:local") {
 		t.Fatalf("unexpected remote use output: %s", stdout)
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "remote", "whoami", "local")
-	if !strings.Contains(stdout, "Current profile: local") || !strings.Contains(stdout, "Auth mode: scoped_token") {
+	if !strings.Contains(stdout, "Current target: profile:local") || !strings.Contains(stdout, "Current profile: local") || !strings.Contains(stdout, "Auth mode: scoped_token") {
 		t.Fatalf("unexpected remote whoami output: %s", stdout)
 	}
 
@@ -225,6 +225,62 @@ func TestAgenthubRemoteCommands_LocalSQLiteProfile(t *testing.T) {
 	updated := loadCLIConfigForTest(t, configPath)
 	if updated.Profiles["local"].Token != "" {
 		t.Fatal("expected remote logout to clear saved token")
+	}
+	mustRunAgenthub(t, binary, env, "daemon", "stop")
+}
+
+func TestAgenthubHostedCommands_LocalSQLiteProfile(t *testing.T) {
+	binary := buildAgenthubBinary(t)
+	env, configPath, statePath, _, _ := isolatedAgenthubEnv(t)
+
+	mustRunAgenthub(t, binary, env, "sync", "history")
+	cfg := loadCLIConfigForTest(t, configPath)
+	state := loadRuntimeStateForTest(t, statePath)
+	if strings.TrimSpace(cfg.Local.OwnerToken) == "" {
+		t.Fatal("expected local owner token after bootstrap")
+	}
+
+	stdout, _ := mustRunAgenthub(t, binary, env,
+		"login",
+		"--profile", "official",
+		"--api-base", state.APIBase,
+		"--token", cfg.Local.OwnerToken,
+	)
+	if !strings.Contains(stdout, "Logged in to") || !strings.Contains(stdout, "Current target: profile:official") {
+		t.Fatalf("unexpected login output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "profiles")
+	if !strings.Contains(stdout, "Current target: profile:official") || !strings.Contains(stdout, "* official") || !strings.Contains(stdout, state.APIBase) {
+		t.Fatalf("unexpected profiles output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "whoami")
+	if !strings.Contains(stdout, "Current target: profile:official") || !strings.Contains(stdout, "Current profile: official") || !strings.Contains(stdout, "Auth mode: scoped_token") {
+		t.Fatalf("unexpected whoami output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "use", "local")
+	if !strings.Contains(stdout, "Current target: local") {
+		t.Fatalf("unexpected use local output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "use", "official")
+	if !strings.Contains(stdout, "Current target: profile:official") {
+		t.Fatalf("unexpected use official output: %s", stdout)
+	}
+
+	stdout, _ = mustRunAgenthub(t, binary, env, "logout", "--profile", "official")
+	if !strings.Contains(stdout, "Logged out profile official") || !strings.Contains(stdout, "Current target: local") {
+		t.Fatalf("unexpected logout output: %s", stdout)
+	}
+
+	updated := loadCLIConfigForTest(t, configPath)
+	if updated.Profiles["official"].Token != "" {
+		t.Fatal("expected logout to clear saved token")
+	}
+	if runtimecfg.SelectedTarget(updated) != runtimecfg.TargetLocal {
+		t.Fatalf("expected current target to fall back to local, got %q", runtimecfg.SelectedTarget(updated))
 	}
 	mustRunAgenthub(t, binary, env, "daemon", "stop")
 }

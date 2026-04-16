@@ -15,7 +15,7 @@ func TestSaveAndLoadConfigRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadConfig: %v", err)
 	}
-	cfg.CurrentProfile = "official"
+	cfg.CurrentTarget = ProfileTarget("official")
 	cfg.Profiles["official"] = SyncProfile{APIBase: "https://neudrive.ai", Token: "ndt_test"}
 	cfg.Local.DatabaseURL = "postgres://neudrive:test@localhost:5432/neudrive?sslmode=disable"
 	cfg.Local.GitMirrorPath = "~/neudrive-mirror"
@@ -28,6 +28,9 @@ func TestSaveAndLoadConfigRoundTrip(t *testing.T) {
 	}
 	if loadedPath != path {
 		t.Fatalf("path mismatch: got %q want %q", loadedPath, path)
+	}
+	if loaded.CurrentTarget != ProfileTarget("official") {
+		t.Fatalf("current_target mismatch: got %q", loaded.CurrentTarget)
 	}
 	if loaded.CurrentProfile != "official" {
 		t.Fatalf("current_profile mismatch: got %q", loaded.CurrentProfile)
@@ -134,7 +137,7 @@ func TestLoadRawConfigReturnsDefaultObjectWhenMissing(t *testing.T) {
 	if path == "" {
 		t.Fatal("expected config path")
 	}
-	for _, expected := range []string{`"version": 2`, `"local": {}`} {
+	for _, expected := range []string{`"version": 3`, `"current_target": "local"`, `"local": {}`} {
 		if !strings.Contains(raw, expected) {
 			t.Fatalf("expected %q in raw config: %s", expected, raw)
 		}

@@ -33,6 +33,8 @@ const (
 	ctxKeyTrustLevel  contextKey = "trust_level"
 	ctxKeyScopedToken contextKey = "scoped_token"
 	ctxKeyScopes      contextKey = "scopes"
+	ctxKeyAuthMode    contextKey = "auth_mode"
+	ctxKeyAuthExpiry  contextKey = "auth_expiry"
 )
 
 // Server holds the HTTP router and all service dependencies.
@@ -459,9 +461,7 @@ func (s *Server) optionalAuthMiddleware(next http.Handler) http.Handler {
 		if err == nil {
 			claims, err := auth.ValidateToken(tokenStr, s.JWTSecret)
 			if err == nil {
-				ctx := context.WithValue(r.Context(), ctxKeyUserID, claims.UserID)
-				ctx = context.WithValue(ctx, ctxKeyUserSlug, claims.Slug)
-				ctx = context.WithValue(ctx, ctxKeyTrustLevel, models.TrustLevelFull)
+				ctx := s.withJWTAuthContext(r.Context(), claims)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -484,9 +484,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 			}
 			claims, err := auth.ValidateToken(tokenStr, s.JWTSecret)
 			if err == nil {
-				ctx := context.WithValue(r.Context(), ctxKeyUserID, claims.UserID)
-				ctx = context.WithValue(ctx, ctxKeyUserSlug, claims.Slug)
-				ctx = context.WithValue(ctx, ctxKeyTrustLevel, models.TrustLevelFull)
+				ctx := s.withJWTAuthContext(r.Context(), claims)
 				next.ServeHTTP(w, r.WithContext(ctx))
 				return
 			}
@@ -504,6 +502,7 @@ func (s *Server) authMiddleware(next http.Handler) http.Handler {
 				ctx := context.WithValue(r.Context(), ctxKeyUserID, conn.UserID)
 				ctx = context.WithValue(ctx, ctxKeyConnection, conn)
 				ctx = context.WithValue(ctx, ctxKeyTrustLevel, conn.TrustLevel)
+				ctx = context.WithValue(ctx, ctxKeyAuthMode, "connection")
 				ctx = s.withAuthenticatedSource(ctx, conn, nil)
 				// Fire-and-forget last_used_at update.
 				go func() {
@@ -536,6 +535,16 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 				s.handleScopedTokenAuth(w, r, next, bearerToken)
 				return
 			}
+			claims, claimsErr := auth.ValidateToken(bearerToken, s.JWTSecret)
+			if claimsErr == nil {
+				ctx := s.withJWTAuthContext(r.Context(), claims)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+			if auth.ExtractAPIKey(r) == "" {
+				respondError(w, http.StatusUnauthorized, ErrCodeUnauthorized, "invalid or expired token")
+				return
+			}
 		}
 
 		// Step 2: Check X-API-Key header.
@@ -561,6 +570,7 @@ func (s *Server) apiKeyMiddleware(next http.Handler) http.Handler {
 		ctx := context.WithValue(r.Context(), ctxKeyUserID, conn.UserID)
 		ctx = context.WithValue(ctx, ctxKeyConnection, conn)
 		ctx = context.WithValue(ctx, ctxKeyTrustLevel, conn.TrustLevel)
+		ctx = context.WithValue(ctx, ctxKeyAuthMode, "connection")
 		ctx = s.withAuthenticatedSource(ctx, conn, nil)
 
 		// Fire-and-forget last_used_at update.
@@ -593,8 +603,24 @@ func (s *Server) handleScopedTokenAuth(w http.ResponseWriter, r *http.Request, n
 	ctx = context.WithValue(ctx, ctxKeyScopedToken, token)
 	ctx = context.WithValue(ctx, ctxKeyTrustLevel, token.MaxTrustLevel)
 	ctx = context.WithValue(ctx, ctxKeyScopes, token.Scopes)
+	ctx = context.WithValue(ctx, ctxKeyAuthMode, "scoped_token")
+	ctx = context.WithValue(ctx, ctxKeyAuthExpiry, token.ExpiresAt)
 	ctx = s.withAuthenticatedSource(ctx, nil, token)
 	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (s *Server) withJWTAuthContext(ctx context.Context, claims *auth.Claims) context.Context {
+	if claims == nil {
+		return ctx
+	}
+	ctx = context.WithValue(ctx, ctxKeyUserID, claims.UserID)
+	ctx = context.WithValue(ctx, ctxKeyUserSlug, claims.Slug)
+	ctx = context.WithValue(ctx, ctxKeyTrustLevel, models.TrustLevelFull)
+	ctx = context.WithValue(ctx, ctxKeyAuthMode, "oauth_session")
+	if claims.ExpiresAt != nil {
+		ctx = context.WithValue(ctx, ctxKeyAuthExpiry, claims.ExpiresAt.Time.UTC())
+	}
+	return ctx
 }
 
 // requireScope returns a middleware that checks whether the current request
@@ -658,6 +684,27 @@ func scopedTokenFromCtx(ctx context.Context) *models.ScopedToken {
 func scopesFromCtx(ctx context.Context) []string {
 	s, _ := ctx.Value(ctxKeyScopes).([]string)
 	return s
+}
+
+func authModeFromCtx(ctx context.Context) string {
+	mode, _ := ctx.Value(ctxKeyAuthMode).(string)
+	return mode
+}
+
+func authExpiryFromCtx(ctx context.Context) (*time.Time, bool) {
+	switch value := ctx.Value(ctxKeyAuthExpiry).(type) {
+	case time.Time:
+		expiresAt := value
+		return &expiresAt, true
+	case *time.Time:
+		if value == nil {
+			return nil, false
+		}
+		expiresAt := value.UTC()
+		return &expiresAt, true
+	default:
+		return nil, false
+	}
 }
 
 // ---------------------------------------------------------------------------

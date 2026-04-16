@@ -105,14 +105,13 @@ func (s *OAuthService) RegisterApp(ctx context.Context, userID uuid.UUID, name s
 
 // RegisterAppWithClientID creates an OAuth app with a specific client_id (for MCP Client ID Metadata Documents).
 func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.UUID, clientID, name string, redirectURIs, scopes []string) (*models.OAuthApp, error) {
-	// Check if already registered
 	existing, err := s.GetAppByClientID(ctx, clientID)
-	if err == nil {
-		return existing, nil
-	}
-
 	redirectURIs = normalizeOAuthStringSlice(redirectURIs)
 	scopes = normalizeOAuthStringSlice(scopes)
+	if existing != nil {
+		redirectURIs = mergeOAuthStringSlices(existing.RedirectURIs, redirectURIs)
+		scopes = mergeOAuthStringSlices(existing.Scopes, scopes)
+	}
 
 	clientSecret, err := generateClientSecret()
 	if err != nil {
@@ -122,6 +121,27 @@ func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.
 
 	id := uuid.New()
 	now := time.Now().UTC()
+	description := "Auto-registered MCP client"
+	isActive := true
+	logoURL := ""
+	if existing != nil {
+		id = existing.ID
+		if existing.UserID != uuid.Nil {
+			userID = existing.UserID
+		}
+		if strings.TrimSpace(existing.Name) != "" {
+			name = existing.Name
+		}
+		if strings.TrimSpace(existing.ClientSecretHash) != "" {
+			secretHash = existing.ClientSecretHash
+		}
+		if strings.TrimSpace(existing.Description) != "" {
+			description = existing.Description
+		}
+		logoURL = existing.LogoURL
+		isActive = true
+		now = existing.CreatedAt
+	}
 
 	if s.repo != nil {
 		err = s.repo.CreateApp(ctx, models.OAuthApp{
@@ -132,19 +152,26 @@ func (s *OAuthService) RegisterAppWithClientID(ctx context.Context, userID uuid.
 			ClientSecretHash: secretHash,
 			RedirectURIs:     redirectURIs,
 			Scopes:           scopes,
-			Description:      "Auto-registered MCP client",
-			IsActive:         true,
+			Description:      description,
+			LogoURL:          logoURL,
+			IsActive:         isActive,
 			CreatedAt:        now,
 		})
-		if err != nil && !strings.Contains(strings.ToLower(err.Error()), "unique") {
+		if err != nil {
 			return nil, fmt.Errorf("oauth.RegisterAppWithClientID: %w", err)
 		}
 	} else {
 		_, err = s.db.Exec(ctx,
 			`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris, scopes, description, logo_url, created_at)
 			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, '', $9)
-			 ON CONFLICT (client_id) DO NOTHING`,
-			id, userID, name, clientID, secretHash, redirectURIs, scopes, "Auto-registered MCP client", now)
+			 ON CONFLICT (client_id) DO UPDATE
+			     SET user_id = EXCLUDED.user_id,
+			         name = EXCLUDED.name,
+			         redirect_uris = EXCLUDED.redirect_uris,
+			         scopes = EXCLUDED.scopes,
+			         description = EXCLUDED.description,
+			         is_active = TRUE`,
+			id, userID, name, clientID, secretHash, redirectURIs, scopes, description, now)
 		if err != nil {
 			return nil, fmt.Errorf("oauth.RegisterAppWithClientID: %w", err)
 		}
@@ -706,4 +733,22 @@ func normalizeOAuthStringSlice(values []string) []string {
 		return []string{}
 	}
 	return normalized
+}
+
+func mergeOAuthStringSlices(values ...[]string) []string {
+	merged := make([]string, 0)
+	seen := map[string]struct{}{}
+	for _, group := range values {
+		for _, value := range normalizeOAuthStringSlice(group) {
+			if _, ok := seen[value]; ok {
+				continue
+			}
+			seen[value] = struct{}{}
+			merged = append(merged, value)
+		}
+	}
+	if len(merged) == 0 {
+		return []string{}
+	}
+	return merged
 }

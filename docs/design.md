@@ -13,9 +13,9 @@
 1. **`neudrive` 官方 CLI**
    - 默认是本地优先工具
    - 自动托管本地 Hub daemon
-   - 管理本地 agent 平台接入、bundle sync、daemon 状态和 remote profiles
+   - 管理本地 agent 平台接入、bundle sync、daemon 状态和 local / hosted targets
 2. **neuDrive Server**
-   - 可以是官方服务 `https://neudrive.ai`
+   - 可以是官方服务 `https://agenthub.agi.bar`
    - 也可以是用户自己启动的 `neudrive server`
 
 当前推荐心智：
@@ -24,7 +24,7 @@
 - `neudrive connect <platform>` 把本地 Claude/Codex/Gemini/Cursor 连到本地 Hub
 - `neudrive import <platform>` / `neudrive export <platform>` 处理平台数据，其中 Codex 和 Claude 默认优先走 agent-mediated 导入
 - `neudrive sync ...` 处理 bundle 迁移、备份、恢复
-- 只有在明确需要时，才去 `neudrive remote login official --url https://neudrive.ai`
+- 需要云端工作区时，用 `neudrive login --profile official --api-base https://agenthub.agi.bar`
 
 ### 平台接入的三层模型
 
@@ -52,8 +52,8 @@ flowchart LR
     CLI --> Platforms["Claude / Codex / Gemini / Cursor adapters"]
     CLI --> Sync["bundle sync"]
     Sync --> Local
-    CLI --> Remote["optional remote profiles"]
-    Remote --> Hosted["neudrive.ai or self-hosted server"]
+    CLI --> Remote["optional hosted profiles"]
+    Remote --> Hosted["agenthub.agi.bar or self-hosted server"]
     Platforms --> Local
 ```
 
@@ -68,7 +68,7 @@ flowchart LR
 - `neudrive platform ls/show/connect/disconnect/import/export`
   已提供首批本地 CLI 平台适配器：`claude-code`、`codex`、`gemini-cli`、`cursor-agent`
 - `neudrive remote ...`
-  用于显式登录和切换远端 Hub profile
+  作为兼容别名保留，对应顶层 `login/logout/use/whoami/profiles`
 - 本地 daemon 默认使用 SQLite
   本地首次启动会自动 bootstrap local owner 和本地数据库路径
 - 远端 / 官方服务模式继续以 Postgres 为主

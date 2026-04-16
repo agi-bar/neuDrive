@@ -26,17 +26,19 @@ const (
 	DefaultDatabaseURL    = "postgres://neudrive:neudrive_dev@localhost:5432/neudrive?sslmode=disable"
 	DefaultStorage        = "sqlite"
 	DefaultGitMirrorPath  = "./neudrive-export/git-mirror"
-	DefaultRemoteOfficial = "https://neudrive.ai"
+	DefaultRemoteOfficial = "https://agenthub.agi.bar"
 	ConfigEnv             = "NEUDRIVE_CONFIG"
 )
 
 type SyncProfile struct {
-	APIBase   string   `json:"api_base,omitempty"`
-	Token     string   `json:"token,omitempty"`
-	ExpiresAt string   `json:"expires_at,omitempty"`
-	Scopes    []string `json:"scopes,omitempty"`
-	UpdatedAt string   `json:"updated_at,omitempty"`
-	Source    string   `json:"source,omitempty"`
+	APIBase      string   `json:"api_base,omitempty"`
+	Token        string   `json:"token,omitempty"`
+	RefreshToken string   `json:"refresh_token,omitempty"`
+	ExpiresAt    string   `json:"expires_at,omitempty"`
+	Scopes       []string `json:"scopes,omitempty"`
+	UpdatedAt    string   `json:"updated_at,omitempty"`
+	Source       string   `json:"source,omitempty"`
+	AuthMode     string   `json:"auth_mode,omitempty"`
 }
 
 type LocalConnection struct {
@@ -72,6 +74,7 @@ type LocalConfig struct {
 
 type CLIConfig struct {
 	Version        int                    `json:"version"`
+	CurrentTarget  string                 `json:"current_target,omitempty"`
 	CurrentProfile string                 `json:"current_profile,omitempty"`
 	Profiles       map[string]SyncProfile `json:"profiles,omitempty"`
 	Local          LocalConfig            `json:"local,omitempty"`
@@ -183,7 +186,7 @@ func LoadConfig(path string) (string, *CLIConfig, error) {
 		legacyPath = legacyDarwinConfigPath()
 	}
 	cfg := &CLIConfig{
-		Version:  2,
+		Version:  3,
 		Profiles: map[string]SyncProfile{},
 		Local: LocalConfig{
 			Connections: map[string]LocalConnection{},
@@ -199,26 +202,19 @@ func LoadConfig(path string) (string, *CLIConfig, error) {
 	if err := json.Unmarshal(data, cfg); err != nil {
 		return path, nil, err
 	}
-	if cfg.Version == 0 {
-		cfg.Version = 2
-	}
-	if cfg.Profiles == nil {
-		cfg.Profiles = map[string]SyncProfile{}
-	}
-	if cfg.Local.Connections == nil {
-		cfg.Local.Connections = map[string]LocalConnection{}
-	}
+	normalizeCLIConfig(cfg)
 	return path, cfg, nil
 }
 
 func defaultRawConfig() (string, error) {
 	cfg := &CLIConfig{
-		Version:  2,
+		Version:  3,
 		Profiles: map[string]SyncProfile{},
 		Local: LocalConfig{
 			Connections: map[string]LocalConnection{},
 		},
 	}
+	normalizeCLIConfig(cfg)
 	content, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return "", err
@@ -271,12 +267,7 @@ func SaveConfig(path string, cfg *CLIConfig) error {
 	if path == "" {
 		path = DefaultConfigPath()
 	}
-	if cfg.Profiles == nil {
-		cfg.Profiles = map[string]SyncProfile{}
-	}
-	if cfg.Local.Connections == nil {
-		cfg.Local.Connections = map[string]LocalConnection{}
-	}
+	normalizeCLIConfig(cfg)
 	content, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err

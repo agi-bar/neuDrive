@@ -11,7 +11,7 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		if code != 0 {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 		}
-		if !strings.Contains(stdout, "Root-directory command surface for local and remote neuDrive data.") {
+		if !strings.Contains(stdout, "Root-directory command surface for local and hosted neuDrive data.") {
 			t.Fatalf("expected root usage in stdout, got %q", stdout)
 		}
 		if !strings.Contains(stdout, "neudrive help [topic]") {
@@ -61,6 +61,11 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		{"browse", "--help"},
 		{"status", "--help"},
 		{"doctor", "--help"},
+		{"login", "--help"},
+		{"logout", "--help"},
+		{"use", "--help"},
+		{"whoami", "--help"},
+		{"profiles", "--help"},
 		{"platform", "--help"},
 		{"platform", "ls", "--help"},
 		{"platform", "show", "--help"},
@@ -153,6 +158,7 @@ func TestRootCommandsUsageAndExitCodes(t *testing.T) {
 		{name: "export missing", args: []string{"export"}, want: 2, substr: "usage: neudrive export <platform> [--output DIR]", stream: "stderr"},
 		{name: "browse extra", args: []string{"browse", "/one", "/two"}, want: 2, substr: "usage: neudrive browse [--print-url] [/route]", stream: "stderr"},
 		{name: "daemon unknown", args: []string{"daemon", "wat"}, want: 2, substr: "unknown daemon subcommand", stream: "stderr"},
+		{name: "use missing", args: []string{"use"}, want: 2, substr: "usage: neudrive use <local|profile>", stream: "stderr"},
 		{name: "sync unknown", args: []string{"sync", "wat"}, want: 2, substr: "unknown sync subcommand", stream: "stderr"},
 		{name: "remote unknown", args: []string{"remote", "wat"}, want: 2, substr: "unknown remote subcommand", stream: "stderr"},
 		{name: "remote login missing", args: []string{"remote", "login"}, want: 2, substr: "usage: neudrive remote login <profile>", stream: "stderr"},

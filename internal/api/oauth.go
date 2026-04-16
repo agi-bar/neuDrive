@@ -57,10 +57,10 @@ func (s *Server) handleOAuthAuthorizeGet(w http.ResponseWriter, r *http.Request)
 	}
 
 	// Look up the app. If client_id is a URL (MCP Client ID Metadata Document),
-	// auto-register it on first use.
+	// auto-register or refresh the client metadata on each authorize request so
+	// loopback redirects stay whitelisted for browser-based CLI logins.
 	app, err := s.OAuthService.GetAppByClientID(r.Context(), clientID)
-	if err != nil && strings.HasPrefix(clientID, "https://") {
-		// MCP Client ID Metadata Document: auto-register the client
+	if strings.HasPrefix(clientID, "https://") {
 		app, err = s.autoRegisterOAuthClient(r.Context(), clientID, redirectURI)
 	}
 	if err != nil {
@@ -537,9 +537,9 @@ func (s *Server) handleOAuthAuthorizeInfo(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	// Look up the app. Auto-register URL-based client_ids.
+	// Look up the app. Auto-register or refresh URL-based client_ids.
 	app, err := s.OAuthService.GetAppByClientID(r.Context(), clientID)
-	if err != nil && strings.HasPrefix(clientID, "https://") {
+	if strings.HasPrefix(clientID, "https://") {
 		app, err = s.autoRegisterOAuthClient(r.Context(), clientID, redirectURI)
 	}
 	if err != nil {
@@ -607,7 +607,7 @@ func (s *Server) autoRegisterOAuthClient(ctx context.Context, clientIDURL, redir
 	systemUserID := uuid.MustParse("a0000000-0000-0000-0000-000000000001")
 
 	return s.OAuthService.RegisterAppWithClientID(ctx, systemUserID,
-		clientIDURL, appName, redirectURIs, []string{"admin"})
+		clientIDURL, appName, redirectURIs, []string{"admin", "offline_access"})
 }
 
 func effectiveOAuthScopes(app *models.OAuthApp, requestedScope string) ([]string, string) {

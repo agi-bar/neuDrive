@@ -20,10 +20,10 @@ import (
 	"github.com/agi-bar/neudrive/internal/api"
 	"github.com/agi-bar/neudrive/internal/localgitsync"
 	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
 )
 
 type hubCommandOptions struct {
+	Local   bool
 	Profile string
 	APIBase string
 	Token   string
@@ -105,7 +105,7 @@ func runHubLS(args []string) int {
 		return 2
 	}
 	if fs.NArg() > 1 {
-		fmt.Fprintln(os.Stderr, usageLine("ls [path] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("ls [path] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	targetPath := ""
@@ -150,7 +150,7 @@ func runHubRead(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, usageLine("read <path> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("read <path> [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -191,7 +191,7 @@ func runHubWrite(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 2 {
-		fmt.Fprintln(os.Stderr, usageLine("write <path> <content-or-file> [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("write <path> <content-or-file> [--literal] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -239,7 +239,7 @@ func runHubSearch(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) < 1 || len(positionals) > 2 {
-		fmt.Fprintln(os.Stderr, usageLine("search <query> [path] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("search <query> [path] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -288,7 +288,7 @@ func runHubCreate(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 2 {
-		fmt.Fprintln(os.Stderr, usageLine("create <category> <name> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("create <category> <name> [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	if normalizeExternalCategory(positionals[0]) != "project" {
@@ -339,7 +339,7 @@ func runHubLog(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, usageLine("log <path> --action ACTION --summary <text-or-file> [--tags a,b] [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("log <path> --action ACTION --summary <text-or-file> [--tags a,b] [--literal] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	if strings.TrimSpace(*action) == "" || strings.TrimSpace(*summary) == "" {
@@ -441,7 +441,7 @@ func runHubImportSkill(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, usageLine("import skill <local-dir> [--name NAME] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("import skill <local-dir> [--name NAME] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	srcDir, err := resolveExistingLocalDir(positionals[0])
@@ -500,7 +500,7 @@ func runHubImportProfile(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, usageLine("import profile <local-file> [--category preferences|relationships|principles] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("import profile <local-file> [--category preferences|relationships|principles] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	content, err := readCLIContentArg(positionals[0], false)
@@ -553,7 +553,7 @@ func runHubImportMemory(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, usageLine("import memory <local-file-or-dir> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("import memory <local-file-or-dir> [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	src := positionals[0]
@@ -638,7 +638,7 @@ func runHubImportProject(args []string) int {
 	}
 	positionals := append(leading, fs.Args()...)
 	if len(positionals) != 1 {
-		fmt.Fprintln(os.Stderr, usageLine("import project <local-file-or-dir> [--name NAME] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("import project <local-file-or-dir> [--name NAME] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 	src := positionals[0]
@@ -796,7 +796,7 @@ func runHubStats(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, usageLine("stats [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"))
+		fmt.Fprintln(os.Stderr, usageLine("stats [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"))
 		return 2
 	}
 
@@ -822,6 +822,7 @@ func runHubStats(args []string) int {
 
 func bindHubCommandFlags(fs *flag.FlagSet, includeLiteral bool) *hubCommandOptions {
 	opts := &hubCommandOptions{}
+	fs.BoolVar(&opts.Local, "local", false, "force the local neuDrive target")
 	fs.StringVar(&opts.Profile, "profile", "", "explicit remote profile name")
 	fs.StringVar(&opts.APIBase, "api-base", "", "explicit neuDrive API base")
 	fs.StringVar(&opts.Token, "token", "", "explicit scoped token")
@@ -837,31 +838,19 @@ func resolveHubTarget(ctx context.Context, opts *hubCommandOptions) (*hubTarget,
 	if opts == nil {
 		opts = &hubCommandOptions{}
 	}
-	if strings.TrimSpace(opts.Profile) != "" {
-		_, cfg, err := runtimecfg.LoadConfig("")
-		if err != nil {
-			return nil, err
-		}
-		profile, ok := cfg.Profiles[strings.TrimSpace(opts.Profile)]
-		if !ok {
-			return nil, fmt.Errorf("unknown profile %q", opts.Profile)
-		}
-		if strings.TrimSpace(profile.APIBase) == "" || strings.TrimSpace(profile.Token) == "" {
-			return nil, fmt.Errorf("profile %q is missing api_base or token", opts.Profile)
-		}
-		return &hubTarget{APIBase: strings.TrimSpace(profile.APIBase), Token: strings.TrimSpace(profile.Token)}, nil
-	}
-	if strings.TrimSpace(opts.APIBase) != "" || strings.TrimSpace(opts.Token) != "" {
-		if strings.TrimSpace(opts.APIBase) == "" || strings.TrimSpace(opts.Token) == "" {
-			return nil, errors.New("--api-base and --token must be provided together")
-		}
-		return &hubTarget{APIBase: strings.TrimSpace(opts.APIBase), Token: strings.TrimSpace(opts.Token)}, nil
-	}
-	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
+	target, err := resolveCommandTarget(ctx, commandTargetOptions{
+		Local:   opts.Local,
+		Profile: opts.Profile,
+		APIBase: opts.APIBase,
+		Token:   opts.Token,
+	})
 	if err != nil {
 		return nil, err
 	}
-	return &hubTarget{APIBase: state.APIBase, Token: token}, nil
+	return &hubTarget{
+		APIBase: strings.TrimRight(strings.TrimSpace(target.APIBase), "/"),
+		Token:   strings.TrimSpace(target.Token),
+	}, nil
 }
 
 func hubListNode(ctx context.Context, target *hubTarget, rawPath string) (*api.FileNode, error) {

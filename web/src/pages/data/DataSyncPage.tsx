@@ -12,7 +12,7 @@ import { formatDateTime } from './DataShared'
 type ConfigViewMode = 'settings' | 'raw'
 
 type LocalSettingsDraft = {
-  currentProfile: string
+  currentTarget: string
   profilesJson: string
   listenAddr: string
   storage: string
@@ -27,10 +27,12 @@ type LocalSettingsDraft = {
 
 const REMOTE_PROFILES_EXAMPLE = `${JSON.stringify({
   official: {
-    api_base: 'https://neudrive.ai',
-    token: 'ndt_xxxxxxxx',
+    api_base: 'https://agenthub.agi.bar',
+    token: 'eyJhbGciOi...',
+    refresh_token: 'ndr_refresh_xxxxxxxx',
     expires_at: '2026-12-31T23:59:59Z',
-    scopes: ['sync:pull', 'sync:push'],
+    scopes: ['admin', 'offline_access'],
+    auth_mode: 'oauth_session',
   },
 }, null, 2)}\n`
 
@@ -69,7 +71,8 @@ function isRecord(value: unknown): value is Record<string, any> {
 
 function defaultLocalConfigObject() {
   return {
-    version: 2,
+    version: 3,
+    current_target: 'local',
     local: {},
   } as Record<string, any>
 }
@@ -104,12 +107,30 @@ function readPrettyObject(value: unknown) {
   return JSON.stringify(value, null, 2)
 }
 
+function normalizeTargetInput(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === 'local') {
+    return { target: trimmed || 'local', profile: '' }
+  }
+  if (trimmed.startsWith('profile:')) {
+    return {
+      target: trimmed,
+      profile: trimmed.slice('profile:'.length).trim(),
+    }
+  }
+  return {
+    target: `profile:${trimmed}`,
+    profile: trimmed,
+  }
+}
+
 function draftFromRaw(raw: string): LocalSettingsDraft {
   const parsed = parseLocalConfigObject(raw)
   const root = parsed.value
   const local = isRecord(root.local) ? root.local : {}
+  const currentTarget = normalizeTargetInput(readString(root.current_target) || readString(root.current_profile)).target
   return {
-    currentProfile: readString(root.current_profile),
+    currentTarget,
     profilesJson: readPrettyObject(root.profiles),
     listenAddr: readString(local.listen_addr),
     storage: readString(local.storage),
@@ -166,8 +187,9 @@ function buildConfigFromDraft(baseRaw: string, draft: LocalSettingsDraft): { val
 
   const next = JSON.parse(JSON.stringify(parsedBase.value || defaultLocalConfigObject())) as Record<string, any>
   const local = isRecord(next.local) ? next.local : {}
-
-  setOptionalString(next, 'current_profile', draft.currentProfile)
+  const currentTarget = normalizeTargetInput(draft.currentTarget)
+  setOptionalString(next, 'current_target', currentTarget.target)
+  setOptionalString(next, 'current_profile', currentTarget.profile)
   next.profiles = profiles.value
 
   setOptionalString(local, 'listen_addr', draft.listenAddr)
@@ -515,13 +537,13 @@ export default function DataSyncPage() {
                   <h4 className="data-sync-section-title">{tx('基础配置', 'Basics')}</h4>
                   <div className="data-sync-settings-grid">
                     <div className="form-group">
-                      <label htmlFor="config-current-profile">{tx('当前 profile', 'Current profile')}</label>
-                      <div className="data-sync-field-note">{tx('CLI 默认使用的远端 profile 名称；留空时会按命令或环境变量决定。', 'The default remote profile used by the CLI. Leave empty to rely on command-line flags or environment variables.')}</div>
+                      <label htmlFor="config-current-target">{tx('当前 target', 'Current target')}</label>
+                      <div className="data-sync-field-note">{tx('CLI 默认使用的 target。填 `local` 或 `profile:official`；也可以直接填 profile 名称。', 'The default CLI target. Use `local` or `profile:official`; a bare profile name also works.')}</div>
                       <input
-                        id="config-current-profile"
-                        value={settingsDraft.currentProfile}
-                        onChange={(e) => updateSettingsDraft({ currentProfile: e.target.value })}
-                        placeholder={tx('例如 official', 'For example official')}
+                        id="config-current-target"
+                        value={settingsDraft.currentTarget}
+                        onChange={(e) => updateSettingsDraft({ currentTarget: e.target.value })}
+                        placeholder={tx('例如 local 或 profile:official', 'For example local or profile:official')}
                       />
                     </div>
                     <div className="form-group">
@@ -627,7 +649,7 @@ export default function DataSyncPage() {
                   <div className="data-sync-settings-grid data-sync-settings-grid-wide">
                     <div className="form-group">
                       <label htmlFor="config-profiles-json">{tx('远端 profiles', 'Remote profiles')}</label>
-                      <div className="data-sync-field-note">{tx('这里保存远端 profile 的 API 地址、token 和过期时间。保持 JSON object 结构。', 'Stores API base URLs, tokens, and expiry times for remote profiles. Keep this as a JSON object.')}</div>
+                      <div className="data-sync-field-note">{tx('这里保存 hosted profiles 的 API 地址、token、refresh token、auth mode 和过期时间。保持 JSON object 结构。', 'Stores hosted profile API bases, tokens, refresh tokens, auth modes, and expiry times. Keep this as a JSON object.')}</div>
                       <textarea
                         id="config-profiles-json"
                         className="data-sync-json-editor"

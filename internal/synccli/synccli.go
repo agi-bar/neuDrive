@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/profileauth"
 	"github.com/agi-bar/neudrive/internal/runtimecfg"
 )
 
@@ -61,6 +62,7 @@ type commonOptions struct {
 	APIBase    string
 	Profile    string
 	ConfigPath string
+	Local      bool
 }
 
 type sessionState struct {
@@ -199,7 +201,6 @@ func runLogin(args []string) error {
 		profileEntry.ExpiresAt = info.ExpiresAt.UTC().Format(time.RFC3339)
 	}
 	cfg.Profiles[profileName] = profileEntry
-	cfg.CurrentProfile = profileName
 	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
 		return err
 	}
@@ -250,11 +251,11 @@ func runUse(args []string) error {
 	if _, ok := cfg.Profiles[profileName]; !ok {
 		return fmt.Errorf("profile %s does not exist", profileName)
 	}
-	cfg.CurrentProfile = profileName
+	cfg.CurrentTarget = runtimecfg.ProfileTarget(profileName)
 	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
 		return err
 	}
-	fmt.Printf("Current profile: %s\n", profileName)
+	fmt.Printf("Current target: %s\n", cfg.CurrentTarget)
 	return nil
 }
 
@@ -324,10 +325,14 @@ func runLogout(args []string) error {
 		return fmt.Errorf("profile %s does not exist", profileName)
 	}
 	entry.Token = ""
+	entry.RefreshToken = ""
 	entry.ExpiresAt = ""
 	entry.Scopes = nil
 	entry.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	cfg.Profiles[profileName] = entry
+	if runtimecfg.TargetProfileName(cfg.CurrentTarget) == profileName {
+		cfg.CurrentTarget = runtimecfg.TargetLocal
+	}
 	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
 		return err
 	}
@@ -830,6 +835,7 @@ func addCommonFlags(fs *flag.FlagSet, opts *commonOptions) {
 	fs.StringVar(&opts.APIBase, "api-base", "", "override neuDrive base URL")
 	fs.StringVar(&opts.Profile, "profile", "", "profile name")
 	fs.StringVar(&opts.ConfigPath, "config", "", "override config path")
+	fs.BoolVar(&opts.Local, "local", false, "force the local neuDrive target")
 }
 
 func addFilterFlags(fs *flag.FlagSet) (filterFlags, error) {
@@ -905,10 +911,17 @@ func resolveRuntimeAuth(opts commonOptions, state *sessionState) (string, *runti
 	if !ok {
 		return "", nil, "", "", "", "", errors.New("no sync token found; run `neudrive sync login` or pass --token")
 	}
+	if strings.TrimSpace(profile.AuthMode) == runtimecfg.AuthModeOAuthSession {
+		refreshed, err := profileauth.EnsureProfileToken(context.Background(), configPath, cfg, profileName)
+		if err != nil {
+			return "", nil, "", "", "", "", fmt.Errorf("profile %s needs a fresh hosted login; run `neudrive login --profile %s`", profileName, profileName)
+		}
+		profile = refreshed
+	}
 	if strings.TrimSpace(profile.Token) == "" {
 		return "", nil, "", "", "", "", fmt.Errorf("profile %s has no saved token; run `neudrive sync login --profile %s`", profileName, profileName)
 	}
-	if profileExpired(profile) {
+	if strings.TrimSpace(profile.AuthMode) != runtimecfg.AuthModeOAuthSession && profileExpired(profile) {
 		return "", nil, "", "", "", "", fmt.Errorf("stored token for profile %s expired at %s; run `neudrive sync login --profile %s`", profileName, profile.ExpiresAt, profileName)
 	}
 	return configPath, cfg, apiBaseValue, profile.Token, profileName, "profile:" + profileName, nil
@@ -919,6 +932,9 @@ func selectedProfileName(requested string, cfg *runtimecfg.CLIConfig) string {
 		return value
 	}
 	if value := strings.TrimSpace(os.Getenv(syncProfileEnv)); value != "" {
+		return value
+	}
+	if value := runtimecfg.TargetProfileName(cfg.CurrentTarget); value != "" {
 		return value
 	}
 	if value := strings.TrimSpace(cfg.CurrentProfile); value != "" {
@@ -957,6 +973,11 @@ func pickProfileName(cfg *runtimecfg.CLIConfig, requested, apiBaseValue string) 
 		return strings.TrimSpace(requested)
 	}
 	if current := strings.TrimSpace(cfg.CurrentProfile); current != "" {
+		if profile, ok := cfg.Profiles[current]; ok && strings.TrimRight(profile.APIBase, "/") == strings.TrimRight(apiBaseValue, "/") {
+			return current
+		}
+	}
+	if current := runtimecfg.TargetProfileName(cfg.CurrentTarget); current != "" {
 		if profile, ok := cfg.Profiles[current]; ok && strings.TrimRight(profile.APIBase, "/") == strings.TrimRight(apiBaseValue, "/") {
 			return current
 		}
@@ -1001,12 +1022,18 @@ func renderProfiles(cfg *runtimecfg.CLIConfig) string {
 	for _, name := range names {
 		profile := cfg.Profiles[name]
 		prefix := " "
-		if name == cfg.CurrentProfile {
+		if runtimecfg.TargetProfileName(runtimecfg.SelectedTarget(cfg)) == name {
 			prefix = "*"
 		}
 		authStatus := "logged-out"
 		if strings.TrimSpace(profile.Token) != "" {
-			if profileExpired(profile) {
+			if strings.TrimSpace(profile.AuthMode) == runtimecfg.AuthModeOAuthSession {
+				if profileauth.TokenExpired(profile.ExpiresAt) {
+					authStatus = "refresh-needed"
+				} else {
+					authStatus = "ready"
+				}
+			} else if profileExpired(profile) {
 				authStatus = "expired"
 			} else {
 				authStatus = "ready"

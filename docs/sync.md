@@ -30,7 +30,7 @@ Bundle Sync 支持两种文件格式：
 
 ## CLI 配置与登录
 
-`neudrive sync` 现在支持本地 profile 配置。登录一次后，后续 `preview / push / pull / resume / history / whoami` 默认都会读取当前 profile，不需要每次重复传 `--token` 和 `--api-base`。
+`neudrive` 现在支持统一的本地 / hosted target 配置。默认 target 是 `local`；登录一次 hosted profile 后，根命令和 `sync` 的常用子命令都会默认跟随当前 target，不需要每次重复传 `--token` 和 `--api-base`。
 
 默认配置文件位置：
 
@@ -40,17 +40,21 @@ Bundle Sync 支持两种文件格式：
 
 配置里会保存：
 
-- `current_profile`
+- `current_target`
+- `current_profile`（兼容旧版本字段）
 - `profiles.<name>.api_base`
 - `profiles.<name>.token`
+- `profiles.<name>.refresh_token`
 - `profiles.<name>.expires_at`
 - `profiles.<name>.scopes`
+- `profiles.<name>.auth_mode`
 - `local.git_mirror_path`（给 `neudrive git init` 提供默认镜像目录；如果缺失，首次 `git init` 会自动写入 `./neudrive-export/git-mirror`）
 
 例如：
 
 ```json
 {
+  "current_target": "local",
   "local": {
     "git_mirror_path": "~/neudrive/git-mirror"
   }
@@ -61,7 +65,7 @@ Bundle Sync 支持两种文件格式：
 
 1. CLI 显式参数
 2. 环境变量
-3. 当前 profile 配置
+3. 当前 target / profile 配置
 4. 内建默认值
 
 相关环境变量：
@@ -71,28 +75,35 @@ Bundle Sync 支持两种文件格式：
 - `NEUDRIVE_SYNC_API_BASE` 或 `NEUDRIVE_API_BASE`
 - `NEUDRIVE_SYNC_TOKEN` 或 `NEUDRIVE_TOKEN`
 
-首次登录推荐直接走浏览器：
+首次登录 hosted 推荐直接走浏览器：
 
 ```bash
-neudrive sync login --api-base https://neudrive.ai
-neudrive sync profiles
-neudrive sync whoami
+neudrive login --api-base https://agenthub.agi.bar
+neudrive profiles
+neudrive whoami
 ```
 
 也支持手工粘贴 token：
 
 ```bash
-neudrive sync login \
-  --profile prod \
-  --api-base https://neudrive.ai \
+neudrive login \
+  --profile official \
+  --api-base https://agenthub.agi.bar \
   --token ndt_xxx
 ```
 
-多 profile 切换：
+多 profile / target 切换：
 
 ```bash
-neudrive sync use prod
-neudrive sync logout --profile staging
+neudrive use official
+neudrive use local
+neudrive logout --profile official
+```
+
+`sync login` 仍然保留，但它现在主要用于 sync-scoped token 工作流，不再是主 hosted 登录入口：
+
+```bash
+neudrive sync login --profile prod --api-base https://agenthub.agi.bar --token ndt_xxx
 ```
 
 ## `merge` 与 `mirror`

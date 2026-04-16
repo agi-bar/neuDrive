@@ -654,7 +654,15 @@ func NewOAuthRepo(store *Store) services.OAuthRepo {
 func (r *OAuthRepo) CreateApp(ctx context.Context, app models.OAuthApp) error {
 	_, err := r.Store.DB().ExecContext(ctx,
 		`INSERT INTO oauth_apps (id, user_id, name, client_id, client_secret_hash, redirect_uris_json, scopes_json, description, logo_url, is_active, created_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON CONFLICT(client_id) DO UPDATE SET
+		     user_id = excluded.user_id,
+		     name = excluded.name,
+		     redirect_uris_json = excluded.redirect_uris_json,
+		     scopes_json = excluded.scopes_json,
+		     description = excluded.description,
+		     logo_url = excluded.logo_url,
+		     is_active = excluded.is_active`,
 		app.ID.String(), app.UserID.String(), app.Name, app.ClientID, app.ClientSecretHash,
 		encodeStringSlice(app.RedirectURIs), encodeStringSlice(app.Scopes), app.Description, app.LogoURL, boolInt(app.IsActive), timeText(app.CreatedAt),
 	)

@@ -744,7 +744,7 @@ func TestSQLiteSharedServerLocalConfigRoundTrip(t *testing.T) {
 	if initial.Path != configPath {
 		t.Fatalf("config path = %q, want %q", initial.Path, configPath)
 	}
-	if !strings.Contains(initial.Raw, `"version": 2`) {
+	if !strings.Contains(initial.Raw, `"version": 3`) || !strings.Contains(initial.Raw, `"current_target": "local"`) {
 		t.Fatalf("expected default config payload, got %s", initial.Raw)
 	}
 

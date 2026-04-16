@@ -5,7 +5,7 @@ import { useI18n } from '../i18n'
 type ConfigViewMode = 'settings' | 'raw'
 
 type LocalSettingsDraft = {
-  currentProfile: string
+  currentTarget: string
   profilesJson: string
   listenAddr: string
   storage: string
@@ -20,10 +20,12 @@ type LocalSettingsDraft = {
 
 const REMOTE_PROFILES_EXAMPLE = `${JSON.stringify({
   official: {
-    api_base: 'https://neudrive.ai',
-    token: 'ndt_xxxxxxxx',
+    api_base: 'https://agenthub.agi.bar',
+    token: 'eyJhbGciOi...',
+    refresh_token: 'ndr_refresh_xxxxxxxx',
     expires_at: '2026-12-31T23:59:59Z',
-    scopes: ['sync:pull', 'sync:push'],
+    scopes: ['admin', 'offline_access'],
+    auth_mode: 'oauth_session',
   },
 }, null, 2)}\n`
 
@@ -62,7 +64,8 @@ function isRecord(value: unknown): value is Record<string, any> {
 
 function defaultLocalConfigObject() {
   return {
-    version: 2,
+    version: 3,
+    current_target: 'local',
     local: {},
   } as Record<string, any>
 }
@@ -97,12 +100,30 @@ function readPrettyObject(value: unknown) {
   return JSON.stringify(value, null, 2)
 }
 
+function normalizeTargetInput(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed || trimmed === 'local') {
+    return { target: trimmed || 'local', profile: '' }
+  }
+  if (trimmed.startsWith('profile:')) {
+    return {
+      target: trimmed,
+      profile: trimmed.slice('profile:'.length).trim(),
+    }
+  }
+  return {
+    target: `profile:${trimmed}`,
+    profile: trimmed,
+  }
+}
+
 function draftFromRaw(raw: string): LocalSettingsDraft {
   const parsed = parseLocalConfigObject(raw)
   const root = parsed.value
   const local = isRecord(root.local) ? root.local : {}
+  const currentTarget = normalizeTargetInput(readString(root.current_target) || readString(root.current_profile)).target
   return {
-    currentProfile: readString(root.current_profile),
+    currentTarget,
     profilesJson: readPrettyObject(root.profiles),
     listenAddr: readString(local.listen_addr),
     storage: readString(local.storage),
@@ -159,8 +180,9 @@ function buildConfigFromDraft(baseRaw: string, draft: LocalSettingsDraft): { val
 
   const next = JSON.parse(JSON.stringify(parsedBase.value || defaultLocalConfigObject())) as Record<string, any>
   const local = isRecord(next.local) ? next.local : {}
-
-  setOptionalString(next, 'current_profile', draft.currentProfile)
+  const currentTarget = normalizeTargetInput(draft.currentTarget)
+  setOptionalString(next, 'current_target', currentTarget.target)
+  setOptionalString(next, 'current_profile', currentTarget.profile)
   next.profiles = profiles.value
 
   setOptionalString(local, 'listen_addr', draft.listenAddr)
@@ -363,9 +385,9 @@ export default function SystemSettingsPage() {
                   <h4 className="data-sync-section-title">{tx('基础配置', 'Basics')}</h4>
                   <div className="data-sync-settings-grid">
                     <div className="form-group">
-                      <label htmlFor="config-current-profile">{tx('当前 profile', 'Current profile')}</label>
-                      <div className="data-sync-field-note">{tx('CLI 默认使用的远端 profile 名称；留空时会按命令或环境变量决定。', 'The default remote profile used by the CLI. Leave empty to rely on command-line flags or environment variables.')}</div>
-                      <input id="config-current-profile" value={settingsDraft.currentProfile} onChange={(e) => updateSettingsDraft({ currentProfile: e.target.value })} />
+                      <label htmlFor="config-current-target">{tx('当前 target', 'Current target')}</label>
+                      <div className="data-sync-field-note">{tx('CLI 默认使用的 target。填 `local` 或 `profile:official`；也可以直接填 profile 名称。', 'The default CLI target. Use `local` or `profile:official`; a bare profile name also works.')}</div>
+                      <input id="config-current-target" value={settingsDraft.currentTarget} onChange={(e) => updateSettingsDraft({ currentTarget: e.target.value })} />
                     </div>
                     <div className="form-group">
                       <label htmlFor="config-listen-addr">{tx('本地监听地址', 'Local listen address')}</label>
@@ -421,7 +443,7 @@ export default function SystemSettingsPage() {
                   <div className="data-sync-settings-grid data-sync-settings-grid-wide">
                     <div className="form-group data-sync-settings-span-wide">
                       <label htmlFor="config-profiles-json">profiles</label>
-                      <div className="data-sync-field-note">{tx('远端 profile 集合。适合维护多个云端或自托管环境。', 'The set of remote profiles. Useful when you maintain multiple cloud or self-hosted environments.')}</div>
+                      <div className="data-sync-field-note">{tx('hosted profile 集合。适合维护多个官方云端或自托管环境。', 'The set of hosted profiles. Useful when you maintain multiple official-cloud or self-hosted environments.')}</div>
                       <textarea id="config-profiles-json" className="data-sync-config-editor data-sync-json-editor" value={settingsDraft.profilesJson} onChange={(e) => updateSettingsDraft({ profilesJson: e.target.value })} />
                       <div className="data-sync-example">
                         <div className="data-sync-example-title">Example</div>

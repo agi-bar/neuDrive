@@ -25,10 +25,18 @@ func (s *Server) handleAgentAuthWhoAmI(w http.ResponseWriter, r *http.Request) {
 		APIBase:    requestBaseURL(r),
 	}
 
+	if mode := strings.TrimSpace(authModeFromCtx(r.Context())); mode != "" {
+		resp.AuthMode = mode
+	}
 	if token := scopedTokenFromCtx(r.Context()); token != nil {
 		resp.AuthMode = "scoped_token"
 		resp.Scopes = append([]string{}, token.Scopes...)
 		resp.ExpiresAt = &token.ExpiresAt
+	}
+	if resp.ExpiresAt == nil {
+		if expiresAt, ok := authExpiryFromCtx(r.Context()); ok {
+			resp.ExpiresAt = expiresAt
+		}
 	}
 	if s.UserService != nil {
 		if user, err := s.UserService.GetByID(r.Context(), userID); err == nil && user != nil {

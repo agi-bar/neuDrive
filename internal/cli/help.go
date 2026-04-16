@@ -40,7 +40,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"read": {
 		Key:       "read",
 		Summary:   "Read one neuDrive path as text, a summary view, or a secret value.",
-		Usage:     []string{"neudrive read <path> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"},
+		Usage:     []string{"neudrive read <path> [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"},
 		Examples:  []string{"neudrive read profile/preferences", "neudrive read project/demo", "neudrive read project/demo/docs/notes.md", "neudrive read skill/writer/SKILL.md", "neudrive read secret/auth.github"},
 		Notes:     []string{"`project/<name>` returns the project summary and recent logs.", "Binary files are rejected instead of printing empty output.", "Use `--output FILE` when you want the final rendered result written locally."},
 		SeeAlso:   []string{"ls", "write", "roots"},
@@ -49,7 +49,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"write": {
 		Key:       "write",
 		Summary:   "Create or update Hub content from literal text, stdin, or a local file path.",
-		Usage:     []string{"neudrive write <path> <content-or-file> [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"},
+		Usage:     []string{"neudrive write <path> <content-or-file> [--literal] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"},
 		Examples:  []string{"neudrive write profile/preferences ./preferences.md", "neudrive write memory \"Remember this\"", "neudrive write project/demo/docs/notes.md ./notes.md", "neudrive write skill/writer/SKILL.md -"},
 		Notes:     []string{"The second argument may be literal text, `-` for stdin, or a local file path.", "Use `--literal` when an argument that looks like a path should stay plain text.", "`memory` writes a new scratch memory item instead of overwriting a fixed file.", "`secret` is intentionally read-only in the current public CLI."},
 		SeeAlso:   []string{"read", "log", "import"},
@@ -58,7 +58,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"search": {
 		Key:       "search",
 		Summary:   "Search Hub content globally or under one public path scope.",
-		Usage:     []string{"neudrive search <query> [path] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"},
+		Usage:     []string{"neudrive search <query> [path] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"},
 		Examples:  []string{"neudrive search migration", "neudrive search \"memory marker\" memory", "neudrive search \"launch checklist\" project/demo"},
 		Notes:     []string{"When the optional path is omitted, search runs across the public Hub roots.", "`secret` search is not part of the public command surface.", "Search results are expected to be non-empty when you use them as a verification step."},
 		SeeAlso:   []string{"ls", "read", "roots"},
@@ -67,7 +67,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"create": {
 		Key:       "create",
 		Summary:   "Create a first-class Hub object.",
-		Usage:     []string{"neudrive create project <name> [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"},
+		Usage:     []string{"neudrive create project <name> [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"},
 		Examples:  []string{"neudrive create project demo", "neudrive create project migration-notes"},
 		Notes:     []string{"The category comes after the verb to match the root-directory mental model.", "The current public create surface is `project`."},
 		SeeAlso:   []string{"project", "log", "read"},
@@ -76,7 +76,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"log": {
 		Key:       "log",
 		Summary:   "Append a structured log entry to a project.",
-		Usage:     []string{"neudrive log <path> --action ACTION --summary <text-or-file> [--tags a,b] [--literal] [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"},
+		Usage:     []string{"neudrive log <path> --action ACTION --summary <text-or-file> [--tags a,b] [--literal] [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"},
 		Examples:  []string{"neudrive log project/demo --action note --summary ./summary.md", "neudrive log project/demo --action review --summary \"Regression check complete\" --tags release,qa"},
 		Notes:     []string{"`log` currently targets `project/<name>` paths.", "The summary may be literal text, stdin, or a local file path.", "Read the project again afterward to verify the log entry is present and non-empty."},
 		SeeAlso:   []string{"create", "read", "write"},
@@ -115,7 +115,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"stats": {
 		Key:       "stats",
 		Summary:   "Show a quick summary of current Hub contents.",
-		Usage:     []string{"neudrive stats [--json] [--output FILE] [--profile NAME | --api-base URL --token TOKEN]"},
+		Usage:     []string{"neudrive stats [--json] [--output FILE] [--local | --profile NAME | --api-base URL --token TOKEN]"},
 		Examples:  []string{"neudrive stats", "neudrive stats --json"},
 		Notes:     []string{"Use this to confirm the Hub is non-empty after imports or writes.", "The human-readable view reports file, memory, profile, project, and skill counts."},
 		SeeAlso:   []string{"status", "ls"},
@@ -186,12 +186,57 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	},
 	"status": {
 		Key:       "status",
-		Summary:   "Show whether the local daemon and configured local storage are ready to use.",
+		Summary:   "Show whether the local daemon, current target, and configured storage are ready to use.",
 		Usage:     []string{"neudrive status"},
 		Examples:  []string{"neudrive status"},
-		Notes:     []string{"This is the quickest operational readiness check.", "The output reports local daemon state, local storage backend, and current remote profile selection."},
+		Notes:     []string{"This is the quickest operational readiness check.", "The output reports local daemon state, local storage backend, current target, and hosted profile details when selected."},
 		SeeAlso:   []string{"doctor", "stats"},
 		SortOrder: 160,
+	},
+	"login": {
+		Key:       "login",
+		Summary:   "Open the browser and sign in to a hosted neuDrive profile.",
+		Usage:     []string{"neudrive login [--profile NAME] [--api-base URL]", "neudrive login --profile official --api-base https://agenthub.agi.bar"},
+		Examples:  []string{"neudrive login", "neudrive login --profile official", "neudrive login --profile staging --api-base https://agenthub.agi.bar"},
+		Notes:     []string{"This is the primary hosted login entrypoint.", "The CLI opens a browser, completes OAuth, stores an access token plus refresh token, and switches the current target to that profile.", "Use `--token` only when you already have a bearer token and want to save it manually."},
+		SeeAlso:   []string{"profiles", "use", "whoami", "remote"},
+		SortOrder: 171,
+	},
+	"logout": {
+		Key:       "logout",
+		Summary:   "Clear the saved hosted session for one profile.",
+		Usage:     []string{"neudrive logout [--profile NAME]"},
+		Examples:  []string{"neudrive logout", "neudrive logout --profile official"},
+		Notes:     []string{"If you log out the currently selected hosted profile, the CLI falls back to the local target."},
+		SeeAlso:   []string{"login", "profiles", "use"},
+		SortOrder: 172,
+	},
+	"use": {
+		Key:       "use",
+		Summary:   "Switch the default target between local and a saved hosted profile.",
+		Usage:     []string{"neudrive use <local|profile>"},
+		Examples:  []string{"neudrive use local", "neudrive use official"},
+		Notes:     []string{"Hub commands and hosted-aware sync commands follow the current target unless you pass `--local`, `--profile`, or explicit `--api-base --token` overrides."},
+		SeeAlso:   []string{"login", "profiles", "whoami", "status"},
+		SortOrder: 173,
+	},
+	"whoami": {
+		Key:       "whoami",
+		Summary:   "Show the active authentication identity for the resolved target.",
+		Usage:     []string{"neudrive whoami [--local | --profile NAME | --api-base URL --token TOKEN]"},
+		Examples:  []string{"neudrive whoami", "neudrive whoami --local", "neudrive whoami --profile official"},
+		Notes:     []string{"Use this to confirm which target, user, auth mode, and scopes the CLI will use before running writes or sync operations."},
+		SeeAlso:   []string{"status", "profiles", "use"},
+		SortOrder: 174,
+	},
+	"profiles": {
+		Key:       "profiles",
+		Summary:   "List saved hosted profiles and show which target is active.",
+		Usage:     []string{"neudrive profiles"},
+		Examples:  []string{"neudrive profiles"},
+		Notes:     []string{"The list includes `local` plus all saved hosted profiles, along with auth mode, scope summary, and expiry status."},
+		SeeAlso:   []string{"login", "logout", "use", "whoami"},
+		SortOrder: 175,
 	},
 	"browse": {
 		Key:       "browse",
@@ -225,17 +270,17 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		Summary:   "Manage bundle-style sync workflows against a remote neuDrive profile or archive transport.",
 		Usage:     []string{"neudrive sync <subcommand>"},
 		Examples:  []string{"neudrive sync profiles", "neudrive sync login --profile official", "neudrive sync push --bundle backup.ndrv"},
-		Notes:     []string{"`sync` is an operational workflow surface and is separate from the root-directory Hub commands.", "Use `neudrive token create --kind sync` when you need an ephemeral sync token."},
-		SeeAlso:   []string{"token", "remote"},
+		Notes:     []string{"`sync` is an operational workflow surface and is separate from the root-directory Hub commands.", "`neudrive login` is the main hosted login entrypoint; `sync login` remains available for sync-scoped token workflows.", "Use `neudrive token create --kind sync` when you need an ephemeral sync token."},
+		SeeAlso:   []string{"login", "token", "remote"},
 		SortOrder: 200,
 	},
 	"remote": {
 		Key:       "remote",
-		Summary:   "Manage named remote profiles outside the bundle-oriented sync flow.",
+		Summary:   "Compatibility alias for hosted profile management commands.",
 		Usage:     []string{"neudrive remote <subcommand>"},
-		Examples:  []string{"neudrive remote login local --url http://127.0.0.1:42690 --token ...", "neudrive remote use local", "neudrive remote whoami local"},
-		Notes:     []string{"Use this when you need a named remote API base and token pairing."},
-		SeeAlso:   []string{"sync"},
+		Examples:  []string{"neudrive remote login official", "neudrive remote use official", "neudrive remote whoami official"},
+		Notes:     []string{"Prefer the top-level `login`, `logout`, `use`, `whoami`, and `profiles` commands for new workflows."},
+		SeeAlso:   []string{"login", "profiles", "use", "whoami", "sync"},
 		SortOrder: 210,
 	},
 	"server": {
@@ -264,7 +309,6 @@ var cliHelpAliases = map[string]string{
 	"paths":               "roots",
 	"path":                "roots",
 	"profile":             "roots",
-	"profiles":            "roots",
 	"memory":              "roots",
 	"memories":            "roots",
 	"project":             "roots",
@@ -298,7 +342,7 @@ func runHelp(args []string) int {
 func printRootUsage() {
 	fmt.Print(renderCLIText(`neuDrive
 
-Root-directory command surface for local and remote neuDrive data.
+Root-directory command surface for local and hosted neuDrive data.
 
 Mental model:
   - Start at the Hub root with neudrive ls
@@ -329,9 +373,14 @@ Operational commands:
   neudrive browse [/route]
   neudrive status
   neudrive doctor
+  neudrive login [--profile NAME]
+  neudrive logout [--profile NAME]
+  neudrive use <local|profile>
+  neudrive whoami
+  neudrive profiles
   neudrive daemon status|stop|logs
   neudrive sync <subcommand>
-  neudrive remote <subcommand>
+  neudrive remote <subcommand>                       Compatibility alias
   neudrive server [flags]
   neudrive mcp stdio [flags]
 

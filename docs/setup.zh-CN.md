@@ -76,6 +76,17 @@ Windsurf 当前主要通过配置文件接入远程 MCP：
 4. 写入上面的 `neudrive` 配置并保存。
 5. 点击 `Open`，完成 neuDrive 登录和授权。
 
+### 连接完成后下一步做什么
+
+当 MCP 配置和浏览器授权都完成后，建议你先在 Claude、ChatGPT、Cursor 或 Windsurf 里打开一个**新的对话**，再发起第一条导入指令。很多客户端里，新加的工具在新对话中最稳定、最容易被正确调用。
+
+推荐直接这样说：
+
+- `请将我的 skills、projects 和 profile 导入到 neuDrive。`
+- `请读取我在 neuDrive 中已有的 profile、skills 和最近的项目上下文，并告诉我里面已经有什么内容。`
+
+如果客户端当前已经打开了某个工作区、仓库或对话，它通常可以直接利用这些本地上下文，把内容写进 neuDrive。遇到大文件集合或二进制资源时，建议完成首次接入后改用 [Bundle Sync](./sync.md)。
+
 ## CLI Apps
 
 这一类适合日常在终端里工作的用户。它们通过远程 HTTP MCP + OAuth 接入 neuDrive。
@@ -137,6 +148,18 @@ cursor-agent mcp login neudrive
 cursor-agent mcp list
 ```
 
+### CLI 接好后下一步做什么
+
+当 MCP 入口已经加好、登录 / 授权也完成后，尽量在这个 CLI 客户端里开启一个**新的会话**，再发第一条导入指令。终端类客户端通常在会话开始前就已经挂好工具时最稳定。
+
+推荐直接这样说：
+
+- `请把这个工作区里有用的 skills、项目上下文和 profile/preferences 导入到 neuDrive。`
+- `请把当前仓库作为一个项目写入 neuDrive，然后告诉我实际保存了哪些内容。`
+- `请扫描这个工作区，把可复用的 skills 和 profile 提示保存到 neuDrive。`
+
+如果 CLI 客户端当前就是在某个 repo 或工作区里启动的，它通常可以直接利用这些本地上下文。如果你发现工具还没有生效，先重启客户端或新开一个会话再试。
+
 ## Local Mode
 
 本地模式适合本地开发、内网环境，或者当前还没有公网 HTTPS 地址的情况。它通过本地 `neudrive-mcp` binary 和 scoped token 接入。
@@ -161,6 +184,17 @@ codex mcp add neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 
 如果你只是想查看接法而不想立刻生成 token，建议直接打开管理后台“连接设置 -> 本地模式”，在那里可以创建和复制当前模式专用 token。
 
+### 本地模式接好后下一步做什么
+
+当本地 MCP binary 和 token 都配置好后，建议在连接好的客户端里打开一个**新的会话**，然后让它直接从当前机器上下文开始导入。
+
+推荐直接这样说：
+
+- `请把当前本地工作区导入到 neuDrive，包括项目上下文、有用的 skills 和 profile/preferences。`
+- `请把当前仓库保存成 neuDrive 里的一个项目，并告诉我导入了哪些文件或笔记。`
+
+本地模式尤其适合 Agent 已经能直接读取本地文件的场景。遇到大批量或二进制资源时，建议先完成首次连通性验证，再改用 [Bundle Sync](./sync.md)。
+
 ## Advanced Mode
 
 高级模式面向支持 HTTP MCP 的通用客户端。推荐优先使用环境变量，只有客户端不支持 env 方式时，再回退到静态 Bearer header。
@@ -177,6 +211,17 @@ codex mcp add neudrive --url https://www.neudrive.ai/mcp --bearer-token-env-var 
 
 对于其他客户端，如果暂不支持 env 方式，再使用静态 Bearer 配置。
 
+### 高级模式接好后下一步做什么
+
+当认证接通后，建议先验证这个客户端是否真的能调用 neuDrive，再让它执行更大的导入任务。
+
+推荐直接这样说：
+
+- `请先确认你可以访问 neuDrive，然后写入一条测试记录，并告诉我保存到了哪里。`
+- `请先读取我的 neuDrive profile；如果你能访问当前工作区，再把当前项目上下文导入到 neuDrive。`
+
+如果这个客户端只是一个通用聊天入口，看不到本地文件或当前 repo，就直接把要保存的内容贴进去，并明确要求它写入 `profile`、`project` 或 `memory`。
+
 ## ChatGPT GPT Actions
 
 如果你想在自定义 GPT 中接入 neuDrive，可以用 GPT Actions：
@@ -188,6 +233,18 @@ codex mcp add neudrive --url https://www.neudrive.ai/mcp --bearer-token-env-var 
 5. 使用一个 scoped token 作为 Bearer Token。
 
 推荐先在管理后台“连接设置 -> Token 管理”中创建一个专用 token。
+
+### GPT Actions 接好后下一步做什么
+
+当 GPT 配置完成后，建议你和这个 GPT 开一个**新的对话**，并明确告诉它要把什么内容写入 neuDrive。和桌面端 / CLI 这类工作区感知型客户端不同，GPT Actions 通常看不到你的本地仓库或编辑器上下文。
+
+推荐直接这样说：
+
+- `请把下面这些偏好写入我的 neuDrive profile/preferences：...`
+- `请在 neuDrive 中创建一个名为 launch-plan 的项目，并把下面这些笔记保存进去：...`
+- `请把这段可复用的提示词或 skill 草稿存到 neuDrive，并告诉我保存到了哪里。`
+
+如果你需要“自动读取当前工作区并整体导入”，更适合使用上面的 [Web and Desktop Apps](#web-and-desktop-apps) 或 [CLI Apps](#cli-apps)。
 
 ## Adapters
 
@@ -218,6 +275,18 @@ FEISHU_ENCRYPT_KEY=replace-with-your-encrypt-key
 4. 请求网址填写上面的 callback URL。
 5. 在服务端配置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_VERIFICATION_TOKEN`。
 6. 推荐同时配置 `FEISHU_ENCRYPT_KEY`，启用签名校验与事件解密。
+
+### Adapter 接好后下一步做什么
+
+当 Adapter 已经可用后，先给它发一条测试消息，并让它把内容写进 neuDrive，这样最容易验证整条链路已经打通。
+
+推荐直接这样说：
+
+- `请把这条消息保存到 neuDrive memory：...`
+- `请在 neuDrive 里创建或更新一个名为 launch-plan 的项目，并写入这段摘要：...`
+- `请把这条偏好写入我的 neuDrive profile：...`
+
+Adapters 更适合消息驱动的轻量记录和更新；如果你想做仓库级、工作区级的大批量导入，还是更推荐上面的 MCP 接法。
 
 ## Token Management
 

@@ -12,7 +12,7 @@ This document holds the longer reference material that was removed from the READ
 JavaScript example:
 
 ```ts
-import { NeuDrive } from '@agi-bar/neudrive'
+import { NeuDrive } from '@neudrive/sdk'
 
 const hub = new NeuDrive({
   baseURL: 'https://www.neudrive.ai',

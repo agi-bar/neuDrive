@@ -76,6 +76,17 @@ Recommended steps:
 4. Add the `neudrive` config shown above and save it.
 5. Click `Open`, then complete neuDrive sign-in and authorization.
 
+### What To Do After Connection
+
+After the MCP connection and browser authorization are finished, start a **new chat** in Claude, ChatGPT, Cursor, or Windsurf before giving the first import request. In many clients, newly added tools are most reliable in a fresh conversation.
+
+Good first prompts:
+
+- `Please import my skills, projects, and profile into neuDrive.`
+- `Please read my neuDrive profile, skills, and recent project context, then summarize what is already there.`
+
+If the client is already looking at a specific workspace, repo, or conversation, it can use that local context while writing into neuDrive. For large file sets or binary assets, prefer [Bundle Sync](./sync.md) after the first setup.
+
 ## CLI Apps
 
 These paths are best for users who work from the terminal. They connect to neuDrive through remote HTTP MCP plus OAuth.
@@ -137,6 +148,18 @@ cursor-agent mcp login neudrive
 cursor-agent mcp list
 ```
 
+### What To Do After CLI Setup
+
+After the MCP entry is added and login/auth is complete, start a **new session** in the CLI client if possible, then give it a direct import task. Terminal clients usually work best when the tool is already present before the conversation begins.
+
+Good first prompts:
+
+- `Please import this workspace's useful skills, project context, and profile/preferences into neuDrive.`
+- `Please save the current repo context into neuDrive as a project, then tell me what was written.`
+- `Please scan this workspace and store the reusable skills and profile hints you find in neuDrive.`
+
+If the CLI client is already opened inside a repo or workspace, it can usually use that local context directly. If the tool does not seem available yet, restart the client or open a fresh session before trying again.
+
 ## Local Mode
 
 Local mode is best for local development, internal-network environments, or any setup that does not yet have a public HTTPS URL. It connects through the local `neudrive-mcp` binary and a scoped token.
@@ -161,6 +184,17 @@ codex mcp add neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 
 If you only want to inspect the setup and do not want to mint a token yet, open `Connection Setup -> Local Mode` in the dashboard. You can create and copy a mode-specific token there when you are ready.
 
+### What To Do After Local Mode Setup
+
+Once the local MCP binary and token are configured, open a **new session** in the connected client and ask it to import from the current machine context.
+
+Good first prompts:
+
+- `Please import this local workspace into neuDrive, including project context, useful skills, and profile/preferences.`
+- `Please save the current repo into neuDrive as a project and tell me which files or notes were imported.`
+
+Local Mode is especially good when the agent can already read local files directly. For bulk or binary-heavy imports, use [Bundle Sync](./sync.md) after the first connection test.
+
 ## Advanced Mode
 
 Advanced mode targets generic clients that support HTTP MCP. Prefer environment variables whenever possible, and only fall back to a static Bearer header when the client cannot read tokens from env.
@@ -177,6 +211,17 @@ codex mcp add neudrive --url https://www.neudrive.ai/mcp --bearer-token-env-var 
 
 For other clients, use a static Bearer configuration only if env-based auth is not supported yet.
 
+### What To Do After Advanced Setup
+
+After auth is wired up, verify the client can actually call neuDrive before asking it to do a larger import.
+
+Good first prompts:
+
+- `Please confirm you can access neuDrive, then save a short test note and tell me where it was written.`
+- `Please read my neuDrive profile, then import the current project context into neuDrive if this client can access the workspace.`
+
+If the client is chat-only and cannot see local files or the current repo, paste the content you want stored and ask it to write that content into `profile`, `project`, or `memory` explicitly.
+
 ## ChatGPT GPT Actions
 
 If you want to connect neuDrive to a custom GPT, use GPT Actions:
@@ -188,6 +233,18 @@ If you want to connect neuDrive to a custom GPT, use GPT Actions:
 5. Use a scoped token as the Bearer token.
 
 The recommended path is to create a dedicated token first in `Connection Setup -> Token Management`.
+
+### What To Do After GPT Actions Setup
+
+After the GPT is configured, start a **new chat with that GPT** and explicitly tell it what to save. Unlike workspace-aware desktop or CLI clients, GPT Actions usually do not automatically see your local repo or editor context.
+
+Good first prompts:
+
+- `Please save the following preferences into my neuDrive profile/preferences: ...`
+- `Please create a project called launch-plan in neuDrive and save the following notes there: ...`
+- `Please store this reusable prompt or skill draft in neuDrive and tell me where you saved it.`
+
+If you want automatic workspace-scale import, prefer [Web and Desktop Apps](#web-and-desktop-apps) or [CLI Apps](#cli-apps) instead of GPT Actions.
 
 ## Adapters
 
@@ -218,6 +275,18 @@ Recommended steps:
 4. Use the callback URL above as the request URL.
 5. Configure `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `FEISHU_VERIFICATION_TOKEN` on the server.
 6. It is strongly recommended to also configure `FEISHU_ENCRYPT_KEY` so signature validation and event decryption are enabled.
+
+### What To Do After Adapter Setup
+
+After the adapter is live, send it a test message and ask it to store something in neuDrive so you can verify the end-to-end path.
+
+Good first prompts:
+
+- `Save this note to neuDrive memory: ...`
+- `Create or update a project in neuDrive called launch-plan with this summary: ...`
+- `Store this preference in my neuDrive profile: ...`
+
+Adapters are best for message-driven updates and lightweight capture. For larger repo or workspace imports, use one of the MCP-based modes above.
 
 ## Token Management
 

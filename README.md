@@ -33,12 +33,6 @@ Choose the first path that matches how you want to connect:
 3. **Local Mode**: repo-first local development, LAN setups, or any environment without a public HTTPS URL yet. [Open guide](docs/setup.md#local-mode)
 4. **Advanced Mode / GPT Actions / Adapters**: generic HTTP MCP clients, custom GPTs, and webhook-style integrations such as Feishu. [Open guide](docs/setup.md#advanced-mode)
 
-Also useful:
-
-- [Token Management](docs/setup.md#token-management)
-- [Bundle Sync](docs/sync.md)
-- [SDK / HTTP API](docs/reference.md#sdk)
-
 ## Web and Desktop Apps
 
 Use this when the connection starts from a graphical interface such as Claude web, ChatGPT, Cursor, or Windsurf.
@@ -60,6 +54,11 @@ Use this when the connection starts from a graphical interface such as Claude we
 
 If you do not see the `Apps` entry yet, your plan or rollout cohort probably does not have access to it yet.
 
+After the connection is authorized, start a **new chat** and give it a direct import instruction such as:
+
+- `Please import my skills, projects, and profile into neuDrive.`
+- `Please read my neuDrive profile, skills, and recent project context, then summarize what is already there.`
+
 For Cursor, Windsurf, and the full setup variants, see [Web / Desktop Apps](docs/setup.md#web-and-desktop-apps).
 
 ## Local CLI Quick Start
@@ -80,6 +79,8 @@ neu platform ls    # list installed adapters and connection state
 neu connect claude # install/configure the Claude integration
 neu browse         # open the local Hub in your browser
 ```
+
+Then open a **new chat** in the connected client and say something like `Please import this workspace's useful skills, project context, and profile/preferences into neuDrive.`
 
 Detailed CLI usage: [CLI Guide](docs/cli.md)
 
@@ -110,8 +111,10 @@ Chinese docs:
 
 More docs:
 
-- [Product design document](docs/design.md)
+- [Token Management](docs/setup.md#token-management)
 - [Bundle Sync guide](docs/sync.md)
+- [SDK / HTTP API](docs/reference.md#sdk)
+- [Product design document](docs/design.md)
 - [Prod-like acceptance runbook](docs/sync-prodlike-acceptance.md)
 - [Security and resource audit](docs/sync-audit.md)
 - [CLI test matrix](docs/cli-test-matrix.md)

@@ -20,12 +20,18 @@ type User struct {
 }
 
 type AuthBinding struct {
-	ID           uuid.UUID              `json:"id" db:"id"`
-	UserID       uuid.UUID              `json:"user_id" db:"user_id"`
-	Provider     string                 `json:"provider" db:"provider"`
-	ProviderID   string                 `json:"provider_id" db:"provider_id"`
-	ProviderData map[string]interface{} `json:"provider_data" db:"provider_data"`
-	CreatedAt    time.Time              `json:"created_at" db:"created_at"`
+	ID            uuid.UUID              `json:"id" db:"id"`
+	UserID        uuid.UUID              `json:"user_id" db:"user_id"`
+	Provider      string                 `json:"provider" db:"provider"`
+	ProviderID    string                 `json:"provider_id" db:"provider_id"`
+	ProviderKey   string                 `json:"provider_key" db:"provider_key"`
+	Issuer        string                 `json:"issuer" db:"issuer"`
+	Subject       string                 `json:"subject" db:"subject"`
+	Email         string                 `json:"email" db:"email"`
+	EmailVerified bool                   `json:"email_verified" db:"email_verified"`
+	ProviderData  map[string]interface{} `json:"provider_data" db:"provider_data"`
+	LastLoginAt   *time.Time             `json:"last_login_at,omitempty" db:"last_login_at"`
+	CreatedAt     time.Time              `json:"created_at" db:"created_at"`
 }
 
 type Credentials struct {

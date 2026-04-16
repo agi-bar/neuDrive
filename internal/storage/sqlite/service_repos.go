@@ -30,20 +30,22 @@ func (r *UserRepo) GetBySlug(ctx context.Context, slug string) (*models.User, er
 
 func (r *UserRepo) GetAuthBinding(ctx context.Context, provider string, providerID string) (*models.AuthBinding, error) {
 	row := r.Store.DB().QueryRowContext(ctx,
-		`SELECT id, user_id, provider, provider_id, provider_data_json, created_at
+		`SELECT id, user_id, provider, provider_id, provider_key, issuer, subject, email, email_verified, provider_data_json, last_login_at, created_at
 		   FROM auth_bindings
-		  WHERE provider = ? AND provider_id = ?`,
+		  WHERE COALESCE(NULLIF(provider_key, ''), provider) = ? AND COALESCE(NULLIF(subject, ''), provider_id) = ?`,
 		strings.TrimSpace(provider),
 		strings.TrimSpace(providerID),
 	)
 	var (
-		id        string
-		userID    string
-		dataJSON  string
-		createdAt string
-		binding   models.AuthBinding
+		id          string
+		userID      string
+		dataJSON    string
+		createdAt   string
+		emailVerify int
+		lastLoginAt sql.NullString
+		binding     models.AuthBinding
 	)
-	if err := row.Scan(&id, &userID, &binding.Provider, &binding.ProviderID, &dataJSON, &createdAt); err != nil {
+	if err := row.Scan(&id, &userID, &binding.Provider, &binding.ProviderID, &binding.ProviderKey, &binding.Issuer, &binding.Subject, &binding.Email, &emailVerify, &dataJSON, &lastLoginAt, &createdAt); err != nil {
 		return nil, err
 	}
 	parsedID, err := uuid.Parse(id)
@@ -56,8 +58,13 @@ func (r *UserRepo) GetAuthBinding(ctx context.Context, provider string, provider
 	}
 	binding.ID = parsedID
 	binding.UserID = parsedUserID
+	binding.EmailVerified = emailVerify != 0
 	binding.ProviderData = decodeJSONMap(dataJSON)
 	binding.CreatedAt = mustParseTime(createdAt)
+	if lastLoginAt.Valid {
+		ts := mustParseTime(lastLoginAt.String)
+		binding.LastLoginAt = &ts
+	}
 	return &binding, nil
 }
 

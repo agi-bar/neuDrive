@@ -43,6 +43,7 @@ type Server struct {
 	Storage               string
 	UserService           *services.UserService
 	AuthService           *services.AuthService
+	ExternalAuthService   *services.ExternalAuthService
 	ConnectionService     *services.ConnectionService
 	FileTreeService       *services.FileTreeService
 	VaultService          *services.VaultService
@@ -78,6 +79,7 @@ type ServerDeps struct {
 	Config                *config.Config
 	UserService           *services.UserService
 	AuthService           *services.AuthService
+	ExternalAuthService   *services.ExternalAuthService
 	ConnectionService     *services.ConnectionService
 	FileTreeService       *services.FileTreeService
 	VaultService          *services.VaultService
@@ -165,6 +167,7 @@ func NewServerWithDeps(deps ServerDeps) *Server {
 		Storage:               deps.Storage,
 		UserService:           deps.UserService,
 		AuthService:           deps.AuthService,
+		ExternalAuthService:   deps.ExternalAuthService,
 		ConnectionService:     deps.ConnectionService,
 		FileTreeService:       deps.FileTreeService,
 		VaultService:          deps.VaultService,
@@ -235,12 +238,15 @@ func (s *Server) setupRoutes() {
 	r.Post("/api/adapters/feishu/{slug}/events", s.handleFeishuEventCallback)
 
 	// Auth (public)
-	r.Post("/api/auth/register", s.handleAuthRegister)
-	r.Post("/api/auth/login", s.handleAuthLogin)
+	if s.isLocalMode() {
+		r.Post("/api/auth/register", s.handleAuthRegister)
+		r.Post("/api/auth/login", s.handleAuthLogin)
+	}
+	r.Get("/api/auth/providers", s.handleAuthProviders)
+	r.Post("/api/auth/providers/{provider}/start", s.handleAuthProviderStart)
+	r.Get("/api/auth/providers/{provider}/callback", s.handleAuthProviderCallback)
 	r.Post("/api/auth/refresh", s.handleAuthRefresh)
 	r.Post("/api/auth/logout", s.handleAuthLogout)
-	r.Get("/api/auth/github/callback", s.handleAuthGitHubCallback)
-	r.Post("/api/auth/github/callback", s.handleAuthGitHubCallback)
 	r.Post("/api/auth/token/dev", s.handleAuthDevToken)
 	r.Get("/api/git-mirror/github-app/callback", s.handleGitMirrorGitHubAppCallback)
 
@@ -263,7 +269,9 @@ func (s *Server) setupRoutes() {
 
 		r.Get("/api/auth/me", s.handleAuthMe)
 		r.Put("/api/auth/me", s.handleAuthUpdateMe)
-		r.Post("/api/auth/change-password", s.handleAuthChangePassword)
+		if s.isLocalMode() {
+			r.Post("/api/auth/change-password", s.handleAuthChangePassword)
+		}
 		r.Get("/api/auth/sessions", s.handleAuthListSessions)
 		r.Delete("/api/auth/sessions/{id}", s.handleAuthRevokeSession)
 

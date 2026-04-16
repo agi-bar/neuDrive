@@ -36,41 +36,85 @@ function App() {
   const [isDataNavOpen, setIsDataNavOpen] = useState(false)
 
   const checkAuth = useCallback(async () => {
-    // Check for GitHub OAuth redirect tokens in URL
+    const clearAuthParamsFromURL = () => {
+      const nextURL = new URL(window.location.href)
+      nextURL.searchParams.delete('auth_token')
+      nextURL.searchParams.delete('auth_refresh')
+      nextURL.searchParams.delete('local_token')
+      const next = `${nextURL.pathname}${nextURL.search}${nextURL.hash}`
+      window.history.replaceState({}, '', next || nextURL.pathname)
+    }
+
     const params = new URLSearchParams(window.location.search)
-    const ghToken = params.get('github_token')
-    const ghRefresh = params.get('github_refresh')
+    const authToken = params.get('auth_token')
+    const authRefresh = params.get('auth_refresh')
     const localToken = params.get('local_token')
-    if (ghToken) {
-      localStorage.setItem('token', ghToken)
-      if (ghRefresh) localStorage.setItem('refresh_token', ghRefresh)
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname)
+    if (authToken) {
+      localStorage.setItem('token', authToken)
+      if (authRefresh) {
+        localStorage.setItem('refresh_token', authRefresh)
+      } else {
+        localStorage.removeItem('refresh_token')
+      }
+      clearAuthParamsFromURL()
     }
     if (localToken) {
       localStorage.setItem('token', localToken)
       localStorage.removeItem('refresh_token')
-      window.history.replaceState({}, '', window.location.pathname)
+      clearAuthParamsFromURL()
     }
 
+    let cfg: any = {}
     try {
-      const cfg = await api.getPublicConfig()
+      cfg = await api.getPublicConfig()
       setPublicConfig(cfg || {})
     } catch {
       setPublicConfig({})
     }
 
-    const token = localStorage.getItem('token')
+    const bootstrapLocalOwner = async (): Promise<string | null> => {
+      if (!cfg?.local_mode) return null
+      try {
+        const created = await api.bootstrapLocalOwnerToken()
+        if (!created?.token) return null
+        localStorage.setItem('token', created.token)
+        localStorage.removeItem('refresh_token')
+        return created.token
+      } catch {
+        return null
+      }
+    }
+
+    let token = localStorage.getItem('token')
     if (!token) {
+      token = await bootstrapLocalOwner() || ''
+    }
+    if (!token) {
+      setUser(null)
       setLoading(false)
       return
     }
+
     try {
       const me = await api.getMe()
       setUser(me)
     } catch {
       localStorage.removeItem('token')
       localStorage.removeItem('refresh_token')
+      const fallbackToken = await bootstrapLocalOwner()
+      if (!fallbackToken) {
+        setUser(null)
+        setLoading(false)
+        return
+      }
+      try {
+        const me = await api.getMe()
+        setUser(me)
+      } catch {
+        localStorage.removeItem('token')
+        localStorage.removeItem('refresh_token')
+        setUser(null)
+      }
     }
     setLoading(false)
   }, [])

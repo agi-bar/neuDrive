@@ -95,6 +95,12 @@ type AuthRepo interface {
 	UpdateProfile(ctx context.Context, userID uuid.UUID, displayName, bio, timezone, language string, now time.Time) (*models.User, error)
 }
 
+type ExternalAuthRepo interface {
+	CreateAuthTransaction(ctx context.Context, txn models.AuthTransaction) error
+	ConsumeAuthTransaction(ctx context.Context, providerKey, state string, now time.Time) (*models.AuthTransaction, error)
+	UpsertExternalIdentity(ctx context.Context, input models.ExternalIdentityUpsert, now time.Time) (*models.User, *models.AuthBinding, error)
+}
+
 type ConnectionRepo interface {
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]models.Connection, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*models.Connection, error)

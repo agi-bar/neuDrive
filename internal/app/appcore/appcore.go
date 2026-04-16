@@ -166,6 +166,7 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 		}
 	}
 	authSvc := services.NewAuthServiceWithRepo(sqlitestorage.NewAuthRepo(store), tokenGen, ghExchange)
+	externalAuthSvc := services.NewExternalAuthServiceWithRepo(sqlitestorage.NewExternalAuthRepo(store), authSvc, cfg)
 	oauthSvc := services.NewOAuthServiceWithRepo(sqlitestorage.NewOAuthRepo(store), cfg.JWTSecret)
 	httpServer := api.NewServerWithDeps(api.ServerDeps{
 		Storage:               "sqlite",
@@ -173,6 +174,7 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 		LocalOwnerID:          owner.ID,
 		UserService:           userSvc,
 		AuthService:           authSvc,
+		ExternalAuthService:   externalAuthSvc,
 		ConnectionService:     connSvc,
 		FileTreeService:       fileTreeSvc,
 		VaultService:          vaultSvc,
@@ -289,6 +291,7 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 		LocalOwnerID:          localOwnerID,
 		UserService:           deps.userSvc,
 		AuthService:           deps.authSvc,
+		ExternalAuthService:   deps.externalAuthSvc,
 		ConnectionService:     deps.connSvc,
 		FileTreeService:       deps.fileTreeSvc,
 		VaultService:          deps.vaultSvc,
@@ -358,25 +361,26 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 }
 
 type postgresDeps struct {
-	userSvc      *services.UserService
-	authSvc      *services.AuthService
-	connSvc      *services.ConnectionService
-	fileTreeSvc  *services.FileTreeService
-	vaultSvc     *services.VaultService
-	memorySvc    *services.MemoryService
-	projectSvc   *services.ProjectService
-	summarySvc   *services.SummaryService
-	roleSvc      *services.RoleService
-	inboxSvc     *services.InboxService
-	dashboardSvc *services.DashboardService
-	tokenSvc     *services.TokenService
-	importSvc    *services.ImportService
-	exportSvc    *services.ExportService
-	syncSvc      *services.SyncService
-	collabSvc    *services.CollaborationService
-	webhookSvc   *services.WebhookService
-	oauthSvc     *services.OAuthService
-	vaultCrypto  *vault.Vault
+	userSvc         *services.UserService
+	authSvc         *services.AuthService
+	externalAuthSvc *services.ExternalAuthService
+	connSvc         *services.ConnectionService
+	fileTreeSvc     *services.FileTreeService
+	vaultSvc        *services.VaultService
+	memorySvc       *services.MemoryService
+	projectSvc      *services.ProjectService
+	summarySvc      *services.SummaryService
+	roleSvc         *services.RoleService
+	inboxSvc        *services.InboxService
+	dashboardSvc    *services.DashboardService
+	tokenSvc        *services.TokenService
+	importSvc       *services.ImportService
+	exportSvc       *services.ExportService
+	syncSvc         *services.SyncService
+	collabSvc       *services.CollaborationService
+	webhookSvc      *services.WebhookService
+	oauthSvc        *services.OAuthService
+	vaultCrypto     *vault.Vault
 }
 
 func buildPostgresDeps(_ context.Context, db *pgxpool.Pool, cfg *config.Config) (*postgresDeps, error) {
@@ -407,6 +411,7 @@ func buildPostgresDeps(_ context.Context, db *pgxpool.Pool, cfg *config.Config) 
 	}
 
 	authSvc := services.NewAuthService(db, tokenGen, ghExchange)
+	externalAuthSvc := services.NewExternalAuthService(db, authSvc, cfg)
 	connSvc := services.NewConnectionService(db)
 	fileTreeSvc := services.NewFileTreeService(db)
 	vaultSvc := services.NewVaultService(db, v)
@@ -429,25 +434,26 @@ func buildPostgresDeps(_ context.Context, db *pgxpool.Pool, cfg *config.Config) 
 	seedDefaultUser(db, userSvc)
 
 	return &postgresDeps{
-		userSvc:      userSvc,
-		authSvc:      authSvc,
-		connSvc:      connSvc,
-		fileTreeSvc:  fileTreeSvc,
-		vaultSvc:     vaultSvc,
-		memorySvc:    memorySvc,
-		projectSvc:   projectSvc,
-		summarySvc:   summarySvc,
-		roleSvc:      roleSvc,
-		inboxSvc:     inboxSvc,
-		dashboardSvc: dashboardSvc,
-		tokenSvc:     tokenSvc,
-		importSvc:    importSvc,
-		exportSvc:    exportSvc,
-		syncSvc:      syncSvc,
-		collabSvc:    collabSvc,
-		webhookSvc:   webhookSvc,
-		oauthSvc:     oauthSvc,
-		vaultCrypto:  v,
+		userSvc:         userSvc,
+		authSvc:         authSvc,
+		externalAuthSvc: externalAuthSvc,
+		connSvc:         connSvc,
+		fileTreeSvc:     fileTreeSvc,
+		vaultSvc:        vaultSvc,
+		memorySvc:       memorySvc,
+		projectSvc:      projectSvc,
+		summarySvc:      summarySvc,
+		roleSvc:         roleSvc,
+		inboxSvc:        inboxSvc,
+		dashboardSvc:    dashboardSvc,
+		tokenSvc:        tokenSvc,
+		importSvc:       importSvc,
+		exportSvc:       exportSvc,
+		syncSvc:         syncSvc,
+		collabSvc:       collabSvc,
+		webhookSvc:      webhookSvc,
+		oauthSvc:        oauthSvc,
+		vaultCrypto:     v,
 	}, nil
 }
 

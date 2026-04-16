@@ -44,6 +44,17 @@ export interface LoginRequest {
   password: string
 }
 
+export interface AuthProvider {
+  id: string
+  kind: string
+  display_name: string
+  enabled: boolean
+}
+
+export interface StartAuthProviderResponse {
+  authorization_url: string
+}
+
 export interface AuthResponse {
   access_token: string
   refresh_token: string
@@ -366,16 +377,13 @@ async function agentRequestBytes(path: string, token: string): Promise<Blob> {
 
 export const api = {
   // Auth
-  register: (req: RegisterRequest): Promise<AuthResponse> =>
-    request<AuthResponse>('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(req),
-    }),
+  getAuthProviders: (): Promise<AuthProvider[]> =>
+    request<AuthProvider[]>('/auth/providers'),
 
-  login: (req: LoginRequest): Promise<AuthResponse> =>
-    request<AuthResponse>('/auth/login', {
+  startAuthProvider: (provider: string, redirectUrl?: string): Promise<StartAuthProviderResponse> =>
+    request<StartAuthProviderResponse>(`/auth/providers/${encodeURIComponent(provider)}/start`, {
       method: 'POST',
-      body: JSON.stringify(req),
+      body: JSON.stringify({ redirect_url: redirectUrl || '' }),
     }),
 
   refreshToken: (refreshToken: string): Promise<AuthResponse> =>
@@ -400,14 +408,13 @@ export const api = {
     localStorage.removeItem('refresh_token')
   },
 
-  githubLogin: (code: string): Promise<AuthResponse> =>
-    request<AuthResponse>('/auth/github/callback', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    }),
-
   getPublicConfig: (): Promise<PublicConfig> =>
     request<PublicConfig>('/config'),
+
+  bootstrapLocalOwnerToken: (): Promise<CreateTokenResponse> =>
+    request<CreateTokenResponse>('/local/owner-token', {
+      method: 'POST',
+    }),
 
   getSessions: (): Promise<Session[]> =>
     request<Session[]>('/auth/sessions'),
@@ -427,12 +434,6 @@ export const api = {
     request<any>('/auth/me', {
       method: 'PUT',
       body: JSON.stringify(data),
-    }),
-
-  changePassword: (oldPassword: string, newPassword: string) =>
-    request<{ status: string }>('/auth/change-password', {
-      method: 'POST',
-      body: JSON.stringify({ old_password: oldPassword, new_password: newPassword }),
     }),
 
   // Dashboard

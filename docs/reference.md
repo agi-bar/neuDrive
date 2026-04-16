@@ -78,6 +78,9 @@ The service starts on `http://localhost:8080`.
 ### Local Development
 
 ```bash
+cp neudrive.env.example neudrive.env
+set -a; source neudrive.env; set +a
+
 # Backend
 go run ./cmd/neudrive server --listen :8080
 

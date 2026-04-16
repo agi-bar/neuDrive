@@ -459,6 +459,14 @@ func (s *AuthService) RevokeSession(ctx context.Context, userID uuid.UUID, sessi
 	return nil
 }
 
+// IssueSession creates a fresh local session for an already-authenticated user.
+func (s *AuthService) IssueSession(ctx context.Context, user *models.User, userAgent, ipAddress string) (*models.AuthResponse, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user is required")
+	}
+	return s.generateAuthResponse(ctx, user, userAgent, ipAddress)
+}
+
 // generateAuthResponse creates access+refresh tokens and persists the session.
 func (s *AuthService) generateAuthResponse(ctx context.Context, user *models.User, userAgent, ipAddress string) (*models.AuthResponse, error) {
 	// Generate access token (JWT)

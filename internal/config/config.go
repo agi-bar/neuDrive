@@ -13,6 +13,12 @@ type Config struct {
 	JWTSecret               string
 	GithubClientID          string
 	GithubClientSecret      string
+	PocketProviderID        string
+	PocketIssuer            string
+	PocketDiscoveryURL      string
+	PocketClientID          string
+	PocketClientSecret      string
+	PocketScopes            []string
 	GitHubAppClientID       string
 	GitHubAppClientSecret   string
 	GitHubAppSlug           string
@@ -53,6 +59,12 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		JWTSecret:               envOrOverride("JWT_SECRET", ""),
 		GithubClientID:          envOrOverride("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret:      envOrOverride("GITHUB_CLIENT_SECRET", ""),
+		PocketProviderID:        envOrOverride("POCKET_ID_PROVIDER_ID", "pocket"),
+		PocketIssuer:            strings.TrimRight(envOrOverride("POCKET_ID_ISSUER", ""), "/"),
+		PocketDiscoveryURL:      strings.TrimSpace(envOrOverride("POCKET_ID_DISCOVERY_URL", "")),
+		PocketClientID:          envOrOverride("POCKET_ID_CLIENT_ID", ""),
+		PocketClientSecret:      envOrOverride("POCKET_ID_CLIENT_SECRET", ""),
+		PocketScopes:            splitScopes(envOrOverride("POCKET_ID_SCOPES", "openid profile email")),
 		GitHubAppClientID:       envOrOverride("GITHUB_APP_CLIENT_ID", ""),
 		GitHubAppClientSecret:   envOrOverride("GITHUB_APP_CLIENT_SECRET", ""),
 		GitHubAppSlug:           envOrOverride("GITHUB_APP_SLUG", ""),
@@ -116,4 +128,12 @@ func getEnvBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func splitScopes(value string) []string {
+	parts := strings.Fields(strings.TrimSpace(value))
+	if len(parts) == 0 {
+		return []string{}
+	}
+	return parts
 }

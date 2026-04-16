@@ -147,12 +147,6 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 
 	app, appErr := s.OAuthService.GetAppByClientID(r.Context(), clientID)
 	scopes, scope := effectiveOAuthScopes(app, scope)
-	appName := clientID
-	appLogoURL := ""
-	if app != nil {
-		appName = app.Name
-		appLogoURL = app.LogoURL
-	}
 
 	// If denied, redirect with error.
 	if action != "approve" {
@@ -178,47 +172,25 @@ func (s *Server) handleOAuthAuthorizePost(w http.ResponseWriter, r *http.Request
 	}
 
 	if !ok {
-		// No JWT — try form-based login (email + password in the form)
-		email := r.FormValue("email")
-		password := r.FormValue("password")
-		if email == "" || password == "" {
-			auth.RenderConsentPage(w, auth.ConsentPageData{
-				Error:               "Please enter your email and password to authorize.",
-				AppName:             appName,
-				AppLogoURL:          appLogoURL,
-				Scopes:              scopes,
-				ClientID:            clientID,
-				RedirectURI:         redirectURI,
-				Scope:               scope,
-				State:               state,
-				CodeChallenge:       codeChallenge,
-				CodeChallengeMethod: codeChallengeMethod,
-				ShowLogin:           true,
-			})
-			return
+		authorizeQuery := url.Values{}
+		authorizeQuery.Set("client_id", clientID)
+		authorizeQuery.Set("redirect_uri", redirectURI)
+		authorizeQuery.Set("response_type", "code")
+		if scope != "" {
+			authorizeQuery.Set("scope", scope)
 		}
-		// Authenticate via AuthService
-		loginResp, err := s.AuthService.Login(r.Context(), models.LoginRequest{Email: email, Password: password}, r.UserAgent(), r.RemoteAddr)
-		if err != nil {
-			auth.RenderConsentPage(w, auth.ConsentPageData{
-				Error:               "Login failed: " + err.Error(),
-				AppName:             appName,
-				AppLogoURL:          appLogoURL,
-				Scopes:              scopes,
-				ClientID:            clientID,
-				RedirectURI:         redirectURI,
-				Scope:               scope,
-				State:               state,
-				CodeChallenge:       codeChallenge,
-				CodeChallengeMethod: codeChallengeMethod,
-				ShowLogin:           true,
-			})
-			return
+		if state != "" {
+			authorizeQuery.Set("state", state)
 		}
-		userID = loginResp.User.ID
-		ok = true
+		if codeChallenge != "" {
+			authorizeQuery.Set("code_challenge", codeChallenge)
+		}
+		if codeChallengeMethod != "" {
+			authorizeQuery.Set("code_challenge_method", codeChallengeMethod)
+		}
+		http.Redirect(w, r, "/login?redirect="+url.QueryEscape("/oauth/authorize?"+authorizeQuery.Encode()), http.StatusFound)
+		return
 	}
-	_ = ok
 
 	// Look up the app.
 	if appErr != nil {

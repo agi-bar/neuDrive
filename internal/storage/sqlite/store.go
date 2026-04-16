@@ -94,11 +94,25 @@ func (s *Store) init(ctx context.Context) error {
 			user_id TEXT NOT NULL,
 			provider TEXT NOT NULL,
 			provider_id TEXT NOT NULL,
+			provider_key TEXT NOT NULL DEFAULT '',
+			issuer TEXT NOT NULL DEFAULT '',
+			subject TEXT NOT NULL DEFAULT '',
+			email TEXT NOT NULL DEFAULT '',
+			email_verified INTEGER NOT NULL DEFAULT 0,
 			provider_data_json TEXT NOT NULL DEFAULT '{}',
+			last_login_at TEXT,
 			created_at TEXT NOT NULL,
 			UNIQUE(provider, provider_id),
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
+		`ALTER TABLE auth_bindings ADD COLUMN provider_key TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth_bindings ADD COLUMN issuer TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth_bindings ADD COLUMN subject TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth_bindings ADD COLUMN email TEXT NOT NULL DEFAULT ''`,
+		`ALTER TABLE auth_bindings ADD COLUMN email_verified INTEGER NOT NULL DEFAULT 0`,
+		`ALTER TABLE auth_bindings ADD COLUMN last_login_at TEXT`,
+		`UPDATE auth_bindings SET provider_key = provider WHERE provider_key = ''`,
+		`UPDATE auth_bindings SET subject = provider_id WHERE subject = ''`,
 		`CREATE TABLE IF NOT EXISTS credentials (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL UNIQUE,
@@ -123,6 +137,18 @@ func (s *Store) init(ctx context.Context) error {
 			expires_at TEXT NOT NULL,
 			created_at TEXT NOT NULL,
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+		)`,
+		`CREATE TABLE IF NOT EXISTS auth_transactions (
+			id TEXT PRIMARY KEY,
+			provider_key TEXT NOT NULL,
+			state TEXT NOT NULL,
+			nonce TEXT NOT NULL DEFAULT '',
+			code_verifier TEXT NOT NULL,
+			redirect_url TEXT NOT NULL DEFAULT '',
+			expires_at TEXT NOT NULL,
+			consumed_at TEXT,
+			created_at TEXT NOT NULL,
+			UNIQUE(provider_key, state)
 		)`,
 		`CREATE TABLE IF NOT EXISTS connections (
 			id TEXT PRIMARY KEY,
@@ -375,6 +401,8 @@ func (s *Store) init(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_file_tree_user_path ON file_tree(user_id, path)`,
 		`CREATE INDEX IF NOT EXISTS idx_file_tree_user_updated ON file_tree(user_id, updated_at)`,
 		`CREATE INDEX IF NOT EXISTS idx_credentials_email ON credentials(email)`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_bindings_provider_key_subject ON auth_bindings(provider_key, subject) WHERE provider_key <> '' AND subject <> ''`,
+		`CREATE INDEX IF NOT EXISTS idx_auth_transactions_provider_state ON auth_transactions(provider_key, state)`,
 		`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`,
 		`CREATE INDEX IF NOT EXISTS idx_connections_user_created ON connections(user_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_vault_entries_user_scope ON vault_entries(user_id, scope)`,
@@ -391,6 +419,7 @@ func (s *Store) init(ctx context.Context) error {
 	for _, stmt := range stmts {
 		if _, err := s.db.ExecContext(ctx, stmt); err != nil {
 			if strings.Contains(err.Error(), "duplicate column name") && (strings.Contains(stmt, "ALTER TABLE users ADD COLUMN") ||
+				strings.Contains(stmt, "ALTER TABLE auth_bindings ADD COLUMN") ||
 				strings.Contains(stmt, "ALTER TABLE local_git_mirrors ADD COLUMN")) {
 				continue
 			}

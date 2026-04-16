@@ -19,6 +19,9 @@ docker compose --env-file neudrive.env up
 ### 本地开发
 
 ```bash
+cp neudrive.env.example neudrive.env
+set -a; source neudrive.env; set +a
+
 # 后端
 go run ./cmd/neudrive server --listen :8080
 

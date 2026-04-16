@@ -5,8 +5,8 @@ type LanguageToggleProps = {
 }
 
 const LOCALES: Array<{ value: AppLocale; label: string }> = [
-  { value: 'zh-CN', label: '中文' },
   { value: 'en', label: 'EN' },
+  { value: 'zh-CN', label: '中文' },
 ]
 
 export default function LanguageToggle({ compact = false }: LanguageToggleProps) {

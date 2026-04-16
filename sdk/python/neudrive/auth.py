@@ -16,7 +16,7 @@ class NeuDriveAuth:
     Typical flow::
 
         auth = NeuDriveAuth(
-            base_url="https://hub.example.com",
+            base_url="https://neudrive.ai",
             client_id="my-app",
             client_secret="secret",
         )

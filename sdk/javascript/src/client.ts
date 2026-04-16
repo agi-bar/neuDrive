@@ -45,7 +45,7 @@ export class NeuDriveError extends Error {
  *
  * @example
  * ```ts
- * const hub = new NeuDrive({ baseURL: 'https://hub.example.com', token: 'ndt_xxxxx' })
+ * const hub = new NeuDrive({ baseURL: 'https://neudrive.ai', token: 'ndt_xxxxx' })
  * const profile = await hub.getProfile('preferences')
  * ```
  */

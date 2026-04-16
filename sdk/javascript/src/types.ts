@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 
 export interface NeuDriveConfig {
-  /** Base URL of the neuDrive instance (e.g. "https://hub.example.com") */
+  /** Base URL of the neuDrive instance (e.g. "https://neudrive.ai") */
   baseURL: string
   /** Scoped token (ndt_xxxxx) for agent/MCP authentication */
   token?: string

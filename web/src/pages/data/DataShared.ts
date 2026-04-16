@@ -146,7 +146,7 @@ function normalizeSource(value?: string) {
   }
 }
 
-export function sourceLabel(source: string | undefined, locale: AppLocale = 'zh-CN') {
+export function sourceLabel(source: string | undefined, locale: AppLocale = 'en') {
   switch (normalizeSource(source) || 'unknown') {
     case 'manual':
       return text(locale, '手工填写', 'Manual')
@@ -221,7 +221,7 @@ export function sourceLabel(source: string | undefined, locale: AppLocale = 'zh-
   }
 }
 
-export function sourceFilterLabel(source: string, locale: AppLocale = 'zh-CN') {
+export function sourceFilterLabel(source: string, locale: AppLocale = 'en') {
   return source === 'all' ? text(locale, '全部来源', 'All sources') : sourceLabel(source, locale)
 }
 
@@ -266,7 +266,7 @@ export type SourceFilterOption = {
 export function buildSourceFilterOptions<T>(
   items: T[],
   getSource: (item: T) => string,
-  locale: AppLocale = 'zh-CN',
+  locale: AppLocale = 'en',
 ): SourceFilterOption[] {
   const counts = new Map<string, number>()
   items.forEach((item) => {
@@ -301,7 +301,7 @@ export function normalizeHubPath(path: string) {
   return `/${normalized.replace(/^\/+/, '').replace(/\/+$/, '')}`
 }
 
-export function formatDateTime(value?: string, locale: AppLocale = 'zh-CN') {
+export function formatDateTime(value?: string, locale: AppLocale = 'en') {
   if (!value) return '-'
   try {
     return new Date(value).toLocaleString(getLocaleTag(locale))
@@ -310,7 +310,7 @@ export function formatDateTime(value?: string, locale: AppLocale = 'zh-CN') {
   }
 }
 
-export function summarizeText(value?: string, maxLength = 140, locale: AppLocale = 'zh-CN') {
+export function summarizeText(value?: string, maxLength = 140, locale: AppLocale = 'en') {
   if (!value) return text(locale, '暂无内容', 'No content yet')
   const normalized = value.replace(/\s+/g, ' ').trim()
   if (!normalized) return text(locale, '暂无内容', 'No content yet')
@@ -318,7 +318,7 @@ export function summarizeText(value?: string, maxLength = 140, locale: AppLocale
   return `${normalized.slice(0, maxLength).trimEnd()}...`
 }
 
-export function summarizeNodeContent(node: FileNode, maxLength = 140, locale: AppLocale = 'zh-CN') {
+export function summarizeNodeContent(node: FileNode, maxLength = 140, locale: AppLocale = 'en') {
   return summarizeText(node.content, maxLength, locale)
 }
 
@@ -340,7 +340,7 @@ export function getMaterialsSortOptions(locale: AppLocale): Array<{ value: Mater
   ]
 }
 
-export const MATERIALS_SORT_OPTIONS: Array<{ value: MaterialsSortKey; label: string }> = getMaterialsSortOptions('zh-CN')
+export const MATERIALS_SORT_OPTIONS: Array<{ value: MaterialsSortKey; label: string }> = getMaterialsSortOptions('en')
 
 type SortMaterialsItemsOptions<T> = {
   items: T[]
@@ -560,7 +560,7 @@ export function bundleStatusLabel(bundle: BundleInfo, locale: AppLocale) {
   }
 }
 
-export function bundleCapabilityLabel(capability: string, locale: AppLocale = 'zh-CN') {
+export function bundleCapabilityLabel(capability: string, locale: AppLocale = 'en') {
   switch ((capability || '').trim().toLowerCase()) {
     case 'context':
       return 'Context'
@@ -602,7 +602,7 @@ export function buildFileTileModel({
   variant,
   currentLabel,
   bundleLabel,
-  locale = 'zh-CN',
+  locale = 'en',
 }: BuildFileTileModelOptions): FileTileModel {
   const bundle = bundleInfoFromNode(node)
   const bundleCard = variant === 'browser' && Boolean(bundle)
@@ -663,7 +663,7 @@ export function buildFileTileModel({
   }
 }
 
-export function buildSkillBundleTileModel(skill: SkillSummary, locale: AppLocale = 'zh-CN'): FileTileModel {
+export function buildSkillBundleTileModel(skill: SkillSummary, locale: AppLocale = 'en'): FileTileModel {
   const bundlePath = normalizeHubPath(skill.bundle_path || skillBundlePathFromSkillPath(skill.path))
   return {
     node: {
@@ -702,7 +702,7 @@ export function isSkillDocument(node: FileNode) {
   return hasVisibleContent(node) && node.path.startsWith('/skills/') && node.path.endsWith('/SKILL.md')
 }
 
-export function profileLabelFromPath(path: string, locale: AppLocale = 'zh-CN') {
+export function profileLabelFromPath(path: string, locale: AppLocale = 'en') {
   const key = stripMarkdownSuffix(path.split('/').pop() || path)
   if (locale === 'zh-CN') {
     return PROFILE_LABELS[key] || key.replace(/[_-]+/g, ' ')
@@ -769,7 +769,7 @@ export function dataProjectBundleRoute(projectName: string, relativeDir?: string
   return relative ? `${base}?dir=${encodeURIComponent(relative)}` : base
 }
 
-export function fileNamespaceLabel(path: string, locale: AppLocale = 'zh-CN') {
+export function fileNamespaceLabel(path: string, locale: AppLocale = 'en') {
   switch (topLevelSegment(path)) {
     case 'projects':
       return text(locale, '项目', 'Projects')

@@ -23,7 +23,7 @@ pip install -e .
 ```python
 from neudrive import NeuDrive
 
-with NeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
+with NeuDrive("https://neudrive.ai", token="ndt_xxx") as hub:
     # Read your profile
     profiles = hub.get_profile("preferences")
     for p in profiles:
@@ -44,7 +44,7 @@ import asyncio
 from neudrive import AsyncNeuDrive
 
 async def main():
-    async with AsyncNeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
+    async with AsyncNeuDrive("https://neudrive.ai", token="ndt_xxx") as hub:
         projects = await hub.list_projects()
         stats = await hub.get_stats()
 
@@ -125,7 +125,7 @@ data = hub.export_all()
 ```python
 from neudrive import NeuDrive
 
-with NeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
+with NeuDrive("https://neudrive.ai", token="ndt_xxx") as hub:
     auth = hub.get_auth_info()
     print(auth["user_slug"], auth["scopes"])
 
@@ -163,7 +163,7 @@ print(stats)  # {"connections": 3, "skills": 12, "projects": 4, ...}
 from neudrive import NeuDriveAuth
 
 auth = NeuDriveAuth(
-    base_url="https://hub.example.com",
+    base_url="https://neudrive.ai",
     client_id="my-app",
     client_secret="secret",
 )

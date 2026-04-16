@@ -31,7 +31,7 @@ function detectInitialLocale(): AppLocale {
   const stored = window.localStorage.getItem(STORAGE_KEY)
   if (stored) return normalizeLocale(stored)
 
-  return normalizeLocale(window.navigator.language)
+  return 'en'
 }
 
 export function I18nProvider({ children }: { children: ReactNode }) {

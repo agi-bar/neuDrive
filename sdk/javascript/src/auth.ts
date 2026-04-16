@@ -15,7 +15,7 @@ export interface NeuDriveAuthConfig {
  * @example
  * ```ts
  * const auth = new NeuDriveAuth({
- *   baseURL: 'https://hub.example.com',
+ *   baseURL: 'https://neudrive.ai',
  *   clientId: 'your-client-id',
  *   clientSecret: 'your-client-secret',
  * })

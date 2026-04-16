@@ -1,101 +1,103 @@
+English | [简体中文](setup.zh-CN.md)
+
 # neuDrive Setup Guide
 
-这份文档对应管理后台“连接设置”页面里的各类入口，适合在你已经部署好 neuDrive 之后，用来选择具体接法。
+This guide mirrors the connection categories shown in the dashboard's setup page. Use it after your neuDrive deployment is already running and you want concrete commands or config templates for a specific platform.
 
-下面的示例统一使用：
+The examples below use:
 
-- Hub 地址：`https://hub.example.com`
-- MCP 地址：`https://hub.example.com/mcp`
-- scoped token 环境变量：`NEUDRIVE_TOKEN`
+- Hub URL: `https://neudrive.ai`
+- MCP URL: `https://neudrive.ai/mcp`
+- Scoped token environment variable: `NEUDRIVE_TOKEN`
 
-如果你当前跑在本地开发地址（例如 `http://localhost:8080`），那么只有“本地模式”适合直接使用；Web / Desktop Apps 和 CLI Apps 通常需要一个可公开访问的 HTTPS 地址。
+If you are currently running on a local development address such as `http://localhost:8080`, only **Local Mode** is usually appropriate right away. Web / Desktop Apps and CLI Apps generally need a publicly reachable HTTPS URL.
 
 ## Web and Desktop Apps
 
-这一类适合通过图形界面完成连接的场景，包括浏览器里的 Apps / Connectors，以及像 Cursor、Windsurf 这样的桌面应用。
+These paths are best when the connection is created from a graphical interface, including browser-based Apps / Connectors and desktop applications such as Cursor and Windsurf.
 
 ### Claude Connectors
 
-1. 登录 Claude 网页应用，进入 `Settings -> Connectors -> Go to Customize`。
-2. 点击 `Add custom connector`。
-3. 把 `Remote MCP Server URL` 填成 `https://hub.example.com/mcp`。
-4. 保存后点击 `Connect`。
-5. 浏览器会跳转到 neuDrive 的登录与授权页；完成后回到 Claude。
+1. Sign in to the Claude web app and open `Settings -> Connectors -> Go to Customize`.
+2. Click `Add custom connector`.
+3. Set `Remote MCP Server URL` to `https://neudrive.ai/mcp`.
+4. Save and click `Connect`.
+5. Your browser will open the neuDrive sign-in and authorization flow; after approval, return to Claude.
 
 ### ChatGPT Apps
 
-1. 登录 ChatGPT，进入 `Settings -> Apps`。
-2. 在 `Advanced settings` 里点击 `Create app`。
-3. 把 `MCP Server URL` 填成 `https://hub.example.com/mcp`。
-4. 按提示完成 neuDrive 登录和授权。
+1. Sign in to ChatGPT and open `Settings -> Apps`.
+2. In `Advanced settings`, click `Create app`.
+3. Set `MCP Server URL` to `https://neudrive.ai/mcp`.
+4. Follow the prompts to finish neuDrive sign-in and authorization.
 
-如果你的账号里暂时看不到 `Apps` 入口，通常意味着当前计划或灰度范围还没有开放这一功能。
+If you do not see the `Apps` entry yet, your plan or rollout cohort probably does not have access to it yet.
 
 ### Cursor Desktop
 
-你可以直接在图形界面里添加 Remote MCP，也可以写配置文件。
+You can add Remote MCP directly in the UI or write the config file manually.
 
 ```json
 {
   "mcpServers": {
     "neudrive": {
-      "url": "https://hub.example.com/mcp"
+      "url": "https://neudrive.ai/mcp"
     }
   }
 }
 ```
 
-推荐步骤：
+Recommended steps:
 
-1. 打开 `Settings -> Tools & MCPs -> Add Custom MCP`。
-2. 把 `Remote MCP Server URL` 设为 `https://hub.example.com/mcp`。
-3. 点击 `Connect` 或 `Authenticate`。
-4. 浏览器会打开 neuDrive 登录与授权页；完成后回到 Cursor。
+1. Open `Settings -> Tools & MCPs -> Add Custom MCP`.
+2. Set `Remote MCP Server URL` to `https://neudrive.ai/mcp`.
+3. Click `Connect` or `Authenticate`.
+4. Your browser will open the neuDrive sign-in and authorization page; when it is complete, return to Cursor.
 
 ### Windsurf Desktop
 
-Windsurf 当前主要通过配置文件接入远程 MCP：
+Windsurf currently connects to remote MCP primarily through its config file:
 
 ```json
 {
   "mcpServers": {
     "neudrive": {
-      "serverUrl": "https://hub.example.com/mcp"
+      "serverUrl": "https://neudrive.ai/mcp"
     }
   }
 }
 ```
 
-推荐步骤：
+Recommended steps:
 
-1. 打开 `Windsurf Settings -> Cascade`。
-2. 在 `MCP Servers` 区域点击 `Open MCP Marketplace`。
-3. 点击 config 图标，打开 `~/.codeium/windsurf/mcp_config.json`。
-4. 写入上面的 `neudrive` 配置并保存。
-5. 点击 `Open`，完成 neuDrive 登录和授权。
+1. Open `Windsurf Settings -> Cascade`.
+2. In the `MCP Servers` section, click `Open MCP Marketplace`.
+3. Click the config icon and open `~/.codeium/windsurf/mcp_config.json`.
+4. Add the `neudrive` config shown above and save it.
+5. Click `Open`, then complete neuDrive sign-in and authorization.
 
 ## CLI Apps
 
-这一类适合日常在终端里工作的用户。它们通过远程 HTTP MCP + OAuth 接入 neuDrive。
+These paths are best for users who work from the terminal. They connect to neuDrive through remote HTTP MCP plus OAuth.
 
 ### Claude Code
 
 ```bash
-claude mcp add -s user --transport http neudrive https://hub.example.com/mcp
+claude mcp add -s user --transport http neudrive https://neudrive.ai/mcp
 ```
 
-然后在 Claude Code 中执行：
+Then run this inside Claude Code:
 
 ```text
 /mcp
 ```
 
-再按提示完成浏览器授权。
+Then follow the browser authorization flow.
 
 ### Codex CLI
 
 ```bash
-codex mcp add neudrive --url https://hub.example.com/mcp
+codex mcp add neudrive --url https://neudrive.ai/mcp
 codex mcp login neudrive
 codex mcp list
 ```
@@ -103,32 +105,32 @@ codex mcp list
 ### Gemini CLI
 
 ```bash
-gemini mcp add --transport http neudrive https://hub.example.com/mcp
+gemini mcp add --transport http neudrive https://neudrive.ai/mcp
 ```
 
-然后在 Gemini 中执行：
+Then run this inside Gemini:
 
 ```text
 /mcp auth neudrive
 ```
 
-注意：`gemini mcp add` 必须带 `--transport http`，否则 Gemini 可能会把 URL 当成本地 command，而不是远程 MCP server。
+Important: `gemini mcp add` must include `--transport http`, or Gemini may treat the URL as a local command instead of a remote MCP server.
 
 ### Cursor Agent
 
-先在 `.cursor/mcp.json` 或 `~/.cursor/mcp.json` 中写入：
+First write this into `.cursor/mcp.json` or `~/.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
     "neudrive": {
-      "url": "https://hub.example.com/mcp"
+      "url": "https://neudrive.ai/mcp"
     }
   }
 }
 ```
 
-然后执行：
+Then run:
 
 ```bash
 cursor-agent mcp login neudrive
@@ -137,9 +139,9 @@ cursor-agent mcp list
 
 ## Local Mode
 
-本地模式适合本地开发、内网环境，或者当前还没有公网 HTTPS 地址的情况。它通过本地 `neudrive-mcp` binary 和 scoped token 接入。
+Local mode is best for local development, internal-network environments, or any setup that does not yet have a public HTTPS URL. It connects through the local `neudrive-mcp` binary and a scoped token.
 
-先准备 token：
+First prepare a token:
 
 ```bash
 export NEUDRIVE_TOKEN=ndt_xxxxx
@@ -157,49 +159,49 @@ claude mcp add -s user neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 codex mcp add neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 ```
 
-如果你只是想查看接法而不想立刻生成 token，建议直接打开管理后台“连接设置 -> 本地模式”，在那里可以创建和复制当前模式专用 token。
+If you only want to inspect the setup and do not want to mint a token yet, open `Connection Setup -> Local Mode` in the dashboard. You can create and copy a mode-specific token there when you are ready.
 
 ## Advanced Mode
 
-高级模式面向支持 HTTP MCP 的通用客户端。推荐优先使用环境变量，只有客户端不支持 env 方式时，再回退到静态 Bearer header。
+Advanced mode targets generic clients that support HTTP MCP. Prefer environment variables whenever possible, and only fall back to a static Bearer header when the client cannot read tokens from env.
 
 ```bash
 export NEUDRIVE_TOKEN=ndt_xxxxx
 ```
 
-Codex CLI 可直接引用环境变量，不把 secret 写进配置：
+Codex CLI can reference the environment variable directly so the secret does not need to be written into config:
 
 ```bash
-codex mcp add neudrive --url https://hub.example.com/mcp --bearer-token-env-var NEUDRIVE_TOKEN
+codex mcp add neudrive --url https://neudrive.ai/mcp --bearer-token-env-var NEUDRIVE_TOKEN
 ```
 
-对于其他客户端，如果暂不支持 env 方式，再使用静态 Bearer 配置。
+For other clients, use a static Bearer configuration only if env-based auth is not supported yet.
 
 ## ChatGPT GPT Actions
 
-如果你想在自定义 GPT 中接入 neuDrive，可以用 GPT Actions：
+If you want to connect neuDrive to a custom GPT, use GPT Actions:
 
-1. 打开 ChatGPT，创建一个 GPT。
-2. 进入 `Configure -> Actions`。
-3. OpenAPI Schema URL 填写 `https://hub.example.com/gpt/openapi.json`。
-4. Authentication 选择 `Bearer Token`。
-5. 使用一个 scoped token 作为 Bearer Token。
+1. Open ChatGPT and create a GPT.
+2. Go to `Configure -> Actions`.
+3. Set `OpenAPI Schema URL` to `https://neudrive.ai/gpt/openapi.json`.
+4. Choose `Bearer Token` for authentication.
+5. Use a scoped token as the Bearer token.
 
-推荐先在管理后台“连接设置 -> Token 管理”中创建一个专用 token。
+The recommended path is to create a dedicated token first in `Connection Setup -> Token Management`.
 
 ## Adapters
 
-Adapters 适合飞书、钉钉、Slack 这类工作区平台。目前 README 里的可用示例主要是 Feishu Bot Adapter。
+Adapters are meant for workspace platforms such as Feishu, DingTalk, and Slack. The currently documented example in this repo is the Feishu Bot Adapter.
 
 ### Feishu Bot Adapter
 
-回调地址格式：
+Callback URL format:
 
 ```text
-https://hub.example.com/api/adapters/feishu/<your-slug>/events
+https://neudrive.ai/api/adapters/feishu/<your-slug>/events
 ```
 
-服务端环境变量：
+Server-side environment variables:
 
 ```bash
 FEISHU_APP_ID=replace-with-your-app-id
@@ -208,30 +210,30 @@ FEISHU_VERIFICATION_TOKEN=replace-with-your-verification-token
 FEISHU_ENCRYPT_KEY=replace-with-your-encrypt-key
 ```
 
-推荐步骤：
+Recommended steps:
 
-1. 在飞书开放平台创建自建应用，并开启机器人能力。
-2. 订阅 `消息与群组 -> 接收消息 v2.0`。
-3. 选择 `将事件发送至开发者服务器`。
-4. 请求网址填写上面的 callback URL。
-5. 在服务端配置 `FEISHU_APP_ID`、`FEISHU_APP_SECRET`、`FEISHU_VERIFICATION_TOKEN`。
-6. 推荐同时配置 `FEISHU_ENCRYPT_KEY`，启用签名校验与事件解密。
+1. Create a custom app in the Feishu developer console and enable bot capability.
+2. Subscribe to `Messages and Groups -> Receive Messages v2.0`.
+3. Choose `Send events to developer server`.
+4. Use the callback URL above as the request URL.
+5. Configure `FEISHU_APP_ID`, `FEISHU_APP_SECRET`, and `FEISHU_VERIFICATION_TOKEN` on the server.
+6. It is strongly recommended to also configure `FEISHU_ENCRYPT_KEY` so signature validation and event decryption are enabled.
 
 ## Token Management
 
-Token 管理不是一种独立接入方式，但几乎所有非 OAuth 路径都依赖它。
+Token management is not a separate connection mode, but almost every non-OAuth path depends on it.
 
-你可以在管理后台里：
+From the dashboard you can:
 
-- 创建 scoped token
-- 选择 read-only / agent full / sync 等预设
-- 手动勾选 scope
-- 改名、吊销、轮换 token
+- Create scoped tokens
+- Choose presets such as read-only, agent full, or sync
+- Select scopes manually
+- Rename, revoke, or rotate tokens
 
 ## Bundle Sync
 
-对于大 skill、长文档、PNG / PDF 等二进制资源，推荐走 Bundle Sync，而不是让 AI 逐文件通过 MCP tool 写入。
+For large skills, long-form documents, PNG / PDF assets, and other binary resources, prefer Bundle Sync instead of having AI write files one by one through MCP tools.
 
-- [Bundle Sync 指南](./sync.md)
-- [Prod-like 验收 Runbook](./sync-prodlike-acceptance.md)
-- [安全与资源审计](./sync-audit.md)
+- [Bundle Sync guide](./sync.md)
+- [Prod-like acceptance runbook](./sync-prodlike-acceptance.md)
+- [Security and resource audit](./sync-audit.md)

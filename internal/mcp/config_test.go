@@ -25,7 +25,7 @@ func TestGenerateStdioEnvConfig(t *testing.T) {
 }
 
 func TestGenerateHTTPOAuthConfig(t *testing.T) {
-	cfg := GenerateHTTPOAuthConfig("https://hub.example.com")
+	cfg := GenerateHTTPOAuthConfig("https://neudrive.ai")
 
 	mcpServers, ok := cfg["mcpServers"].(map[string]interface{})
 	if !ok {
@@ -40,7 +40,7 @@ func TestGenerateHTTPOAuthConfig(t *testing.T) {
 	if server["type"] != "http" {
 		t.Fatalf("expected type=http, got %v", server["type"])
 	}
-	if server["url"] != "https://hub.example.com/mcp" {
+	if server["url"] != "https://neudrive.ai/mcp" {
 		t.Fatalf("unexpected url: %v", server["url"])
 	}
 	if _, exists := server["headers"]; exists {
@@ -49,7 +49,7 @@ func TestGenerateHTTPOAuthConfig(t *testing.T) {
 }
 
 func TestGenerateHTTPBearerConfig(t *testing.T) {
-	cfg := GenerateHTTPBearerConfig("https://hub.example.com", "ndt_test")
+	cfg := GenerateHTTPBearerConfig("https://neudrive.ai", "ndt_test")
 
 	mcpServers, ok := cfg["mcpServers"].(map[string]interface{})
 	if !ok {
@@ -72,7 +72,7 @@ func TestGenerateHTTPBearerConfig(t *testing.T) {
 }
 
 func TestGenerateHTTPConfigAlias(t *testing.T) {
-	cfg := GenerateHTTPConfig("https://hub.example.com", "ndt_alias")
+	cfg := GenerateHTTPConfig("https://neudrive.ai", "ndt_alias")
 
 	mcpServers := cfg["mcpServers"].(map[string]interface{})
 	server := mcpServers["neudrive"].(map[string]interface{})

@@ -2,6 +2,10 @@
 
 # neuDrive
 
+<p align="center">
+  <img src="docs/assets/neudrive-logo.png" alt="neuDrive logo" width="280" />
+</p>
+
 **AI Agent 的身份、记忆与信任中枢**
 
 > 一个地方，让 Claude、ChatGPT、Codex、Cursor 等 Agent 共享你是谁、你偏好什么、以及它们被允许做什么。

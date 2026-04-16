@@ -126,9 +126,8 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
 	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
 	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
-	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
 	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
-	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
 	executionMode := localgitsync.ExecutionModeHosted
@@ -181,7 +180,6 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 		ProjectService:        projectSvc,
 		RoleService:           roleSvc,
 		InboxService:          inboxSvc,
-		DeviceService:         deviceSvc,
 		DashboardService:      dashboardSvc,
 		TokenService:          tokenSvc,
 		ImportService:         importSvc,
@@ -225,7 +223,6 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 				Memory:       memorySvc,
 				Project:      projectSvc,
 				Inbox:        inboxSvc,
-				Device:       deviceSvc,
 				Dashboard:    dashboardSvc,
 				Import:       importSvc,
 				Token:        tokenSvc,
@@ -300,7 +297,6 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 		SummaryService:        deps.summarySvc,
 		RoleService:           deps.roleSvc,
 		InboxService:          deps.inboxSvc,
-		DeviceService:         deps.deviceSvc,
 		DashboardService:      deps.dashboardSvc,
 		TokenService:          deps.tokenSvc,
 		ImportService:         deps.importSvc,
@@ -347,7 +343,6 @@ func buildPostgres(ctx context.Context, opts Options) (*App, error) {
 				Memory:       deps.memorySvc,
 				Project:      deps.projectSvc,
 				Inbox:        deps.inboxSvc,
-				Device:       deps.deviceSvc,
 				Dashboard:    deps.dashboardSvc,
 				Import:       deps.importSvc,
 				Token:        deps.tokenSvc,
@@ -373,7 +368,6 @@ type postgresDeps struct {
 	summarySvc   *services.SummaryService
 	roleSvc      *services.RoleService
 	inboxSvc     *services.InboxService
-	deviceSvc    *services.DeviceService
 	dashboardSvc *services.DashboardService
 	tokenSvc     *services.TokenService
 	importSvc    *services.ImportService
@@ -421,11 +415,10 @@ func buildPostgresDeps(_ context.Context, db *pgxpool.Pool, cfg *config.Config) 
 	projectSvc := services.NewProjectService(db, roleSvc, fileTreeSvc)
 	summarySvc := services.NewSummaryService(db, projectSvc)
 	inboxSvc := services.NewInboxService(db, fileTreeSvc)
-	deviceSvc := services.NewDeviceService(db, fileTreeSvc)
 	dashboardSvc := services.NewDashboardService(db)
 	tokenSvc := services.NewTokenService(db)
 	importSvc := services.NewImportService(db, fileTreeSvc, memorySvc, vaultSvc)
-	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncService(db, importSvc, exportSvc, fileTreeSvc, memorySvc)
 	collabSvc := services.NewCollaborationService(db)
 	webhookSvc := services.NewWebhookService(db)
@@ -446,7 +439,6 @@ func buildPostgresDeps(_ context.Context, db *pgxpool.Pool, cfg *config.Config) 
 		summarySvc:   summarySvc,
 		roleSvc:      roleSvc,
 		inboxSvc:     inboxSvc,
-		deviceSvc:    deviceSvc,
 		dashboardSvc: dashboardSvc,
 		tokenSvc:     tokenSvc,
 		importSvc:    importSvc,

@@ -11,7 +11,6 @@ const (
 	EventInboxNew      = "inbox.new"
 	EventProjectUpdate = "project.update"
 	EventConflictNew   = "conflict.new"
-	EventDeviceStatus  = "device.status_change"
 	EventVaultAccess   = "vault.access"
 	EventCollabNew     = "collaboration.new"
 )
@@ -21,7 +20,6 @@ var ValidWebhookEvents = map[string]bool{
 	EventInboxNew:      true,
 	EventProjectUpdate: true,
 	EventConflictNew:   true,
-	EventDeviceStatus:  true,
 	EventVaultAccess:   true,
 	EventCollabNew:     true,
 }

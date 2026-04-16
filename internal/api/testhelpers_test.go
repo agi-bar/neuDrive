@@ -191,11 +191,6 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 		r.Put("/api/connections/{id}", s.handleConnectionsUpdate)
 		r.Delete("/api/connections/{id}", s.handleConnectionsDelete)
 
-		// Devices
-		r.Get("/api/devices", s.handleDevicesList)
-		r.Post("/api/devices", s.handleRegisterDevice)
-		r.Post("/api/devices/{name}/call", s.handleDeviceCall)
-
 		// Roles
 		r.Get("/api/roles", s.handleRolesList)
 		r.Post("/api/roles", s.handleRolesCreate)
@@ -220,7 +215,6 @@ func (s *Server) setupTestRoutes(store *inMemoryTokenStore) {
 			respondOK(w, map[string]interface{}{
 				"connections":     0,
 				"skills":          0,
-				"devices":         0,
 				"projects":        0,
 				"weekly_activity": []interface{}{},
 				"pending":         []interface{}{},

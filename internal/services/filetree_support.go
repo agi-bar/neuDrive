@@ -156,7 +156,7 @@ func InferSourceFromTokenName(name string) string {
 
 func IsGenericSource(source string) bool {
 	switch NormalizeSource(source) {
-	case "", "manual", "upload", "import", "mcp", "agent", "summary", "scheduler", "system", "neudrive", "devices", "roles", "inbox":
+	case "", "manual", "upload", "import", "mcp", "agent", "summary", "scheduler", "system", "neudrive", "roles", "inbox":
 		return true
 	default:
 		return false
@@ -270,10 +270,6 @@ func classifyEntryKind(rawPath string, isDirectory bool) string {
 		return "project_log"
 	case strings.HasPrefix(publicPath, "/inbox/") && strings.HasSuffix(publicPath, ".json"):
 		return "inbox_message"
-	case strings.HasPrefix(publicPath, "/devices/") && strings.HasSuffix(publicPath, "/SKILL.md"):
-		return "device_skill"
-	case strings.HasPrefix(publicPath, "/devices/") && strings.HasSuffix(publicPath, "/config.json"):
-		return "device_config"
 	case strings.HasPrefix(publicPath, "/roles/") && strings.HasSuffix(publicPath, "/SKILL.md"):
 		return "role_skill"
 	case strings.HasSuffix(publicPath, "/SKILL.md"):

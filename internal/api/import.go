@@ -73,24 +73,6 @@ type VaultSecretImport struct {
 	MinTrustLevel int    `json:"min_trust_level,omitempty"` // default: 4
 }
 
-// ImportDevicesRequest represents a bulk device registration.
-type ImportDevicesRequest struct {
-	Source         string         `json:"source,omitempty"`
-	SourcePlatform string         `json:"source_platform,omitempty"`
-	Devices        []DeviceImport `json:"devices"`
-}
-
-// DeviceImport represents a single device to register.
-type DeviceImport struct {
-	Name       string                 `json:"name"`
-	DeviceType string                 `json:"device_type"`
-	Brand      string                 `json:"brand,omitempty"`
-	Protocol   string                 `json:"protocol"`
-	Endpoint   string                 `json:"endpoint"`
-	SkillMD    string                 `json:"skill_md,omitempty"`
-	Config     map[string]interface{} `json:"config,omitempty"`
-}
-
 // FullHubExport represents a complete Hub data export for backup/restore.
 type FullHubExport struct {
 	Source         string            `json:"source,omitempty"`
@@ -100,7 +82,6 @@ type FullHubExport struct {
 	User           models.User       `json:"user"`
 	Profile        map[string]string `json:"profile"` // category -> content
 	Skills         []SkillFile       `json:"skills"`
-	Devices        []DeviceImport    `json:"devices"`
 	Projects       []ProjectExport   `json:"projects"`
 	VaultScopes    []string          `json:"vault_scopes"` // scope names only, not values
 }
@@ -410,59 +391,6 @@ func (s *Server) HandleImportVault(w http.ResponseWriter, r *http.Request) {
 }
 
 // ---------------------------------------------------------------------------
-// POST /api/import/devices
-// ---------------------------------------------------------------------------
-
-// HandleImportDevices performs a bulk registration of devices.
-func (s *Server) HandleImportDevices(w http.ResponseWriter, r *http.Request) {
-	userID, ok := userIDFromCtx(r.Context())
-	if !ok {
-		respondUnauthorized(w)
-		return
-	}
-
-	var req ImportDevicesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid JSON body")
-		return
-	}
-	ctx := s.requestSourceContext(r, "import")
-	ctx, _ = applyExplicitSourceHints(ctx, nil, req.Source, req.SourcePlatform)
-
-	if s.DeviceService == nil {
-		respondError(w, http.StatusInternalServerError, ErrCodeInternal, "device service not configured")
-		return
-	}
-
-	result := ImportResult{}
-	for _, dev := range req.Devices {
-		if dev.Name == "" || dev.Protocol == "" || dev.Endpoint == "" {
-			result.Skipped++
-			continue
-		}
-
-		device := models.Device{
-			Name:       dev.Name,
-			DeviceType: dev.DeviceType,
-			Brand:      dev.Brand,
-			Protocol:   dev.Protocol,
-			Endpoint:   dev.Endpoint,
-			SkillMD:    dev.SkillMD,
-			Config:     dev.Config,
-		}
-
-		_, err := s.DeviceService.Register(ctx, userID, device)
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("device %s: %v", dev.Name, err))
-			continue
-		}
-		result.Imported++
-	}
-
-	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
-}
-
-// ---------------------------------------------------------------------------
 // POST /api/import/full
 // ---------------------------------------------------------------------------
 
@@ -526,31 +454,6 @@ func (s *Server) HandleImportFull(w http.ResponseWriter, r *http.Request) {
 			})
 			if err != nil {
 				result.Errors = append(result.Errors, fmt.Sprintf("skill %s: %v", skill.Path, err))
-				continue
-			}
-			result.Imported++
-		}
-	}
-
-	// Import devices.
-	if s.DeviceService != nil {
-		for _, dev := range export.Devices {
-			if dev.Name == "" {
-				result.Skipped++
-				continue
-			}
-			device := models.Device{
-				Name:       dev.Name,
-				DeviceType: dev.DeviceType,
-				Brand:      dev.Brand,
-				Protocol:   dev.Protocol,
-				Endpoint:   dev.Endpoint,
-				SkillMD:    dev.SkillMD,
-				Config:     dev.Config,
-			}
-			_, err := s.DeviceService.Register(ctx, userID, device)
-			if err != nil {
-				result.Errors = append(result.Errors, fmt.Sprintf("device %s: %v", dev.Name, err))
 				continue
 			}
 			result.Imported++
@@ -622,24 +525,6 @@ func (s *Server) HandleExportFull(w http.ResponseWriter, r *http.Request) {
 	// Export skills from file tree (everything under /skills/).
 	if s.FileTreeService != nil {
 		_ = s.collectSkillExportFiles(r.Context(), userID, "/skills/", &export.Skills)
-	}
-
-	// Export devices.
-	if s.DeviceService != nil {
-		devices, err := s.DeviceService.List(r.Context(), userID)
-		if err == nil {
-			for _, d := range devices {
-				export.Devices = append(export.Devices, DeviceImport{
-					Name:       d.Name,
-					DeviceType: d.DeviceType,
-					Brand:      d.Brand,
-					Protocol:   d.Protocol,
-					Endpoint:   d.Endpoint,
-					SkillMD:    d.SkillMD,
-					Config:     d.Config,
-				})
-			}
-		}
 	}
 
 	// Export projects.

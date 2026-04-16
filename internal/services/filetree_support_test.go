@@ -43,7 +43,6 @@ func TestClassifyEntryKind(t *testing.T) {
 		"/projects/demo/context.md":          "project_context",
 		"/projects/demo/log.jsonl":           "project_log",
 		"/inbox/assistant/incoming/id.json":  "inbox_message",
-		"/devices/light/SKILL.md":            "device_skill",
 		"/roles/researcher/SKILL.md":         "role_skill",
 		"/skills/write/SKILL.md":             "skill",
 	}

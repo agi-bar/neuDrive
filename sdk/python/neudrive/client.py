@@ -7,7 +7,6 @@ from typing import Any, Optional
 
 from .types import (
     BundleFilters,
-    Device,
     ImportResult,
     InboxMessage,
     Profile,
@@ -224,33 +223,6 @@ class NeuDrive:
         """Read the primary skill markdown file."""
         data = self._request("GET", f"/agent/tree/skills/{name}/SKILL.md")
         return data.get("content", "")
-
-    # ------------------------------------------------------------------
-    # Devices
-    # ------------------------------------------------------------------
-
-    def list_devices(self) -> list[Device]:
-        """List all registered devices."""
-        data = self._request("GET", "/agent/devices")
-        return [
-            Device(
-                name=d.get("name", ""),
-                device_type=d.get("type", d.get("device_type", "")),
-                brand=d.get("brand", ""),
-                protocol=d.get("protocol", ""),
-                status=d.get("status", "online"),
-            )
-            for d in data.get("devices") or []
-        ]
-
-    def call_device(
-        self, device: str, action: str, params: Optional[dict] = None
-    ) -> dict:
-        """Invoke an action on a registered device."""
-        payload: dict[str, Any] = {"action": action}
-        if params:
-            payload["params"] = params
-        return self._request("POST", f"/agent/devices/{device}/call", json=payload)
 
     # ------------------------------------------------------------------
     # Inbox
@@ -641,33 +613,6 @@ class AsyncNeuDrive:
     async def read_skill(self, name: str) -> str:
         data = await self._request("GET", f"/agent/tree/skills/{name}/SKILL.md")
         return data.get("content", "")
-
-    # ------------------------------------------------------------------
-    # Devices
-    # ------------------------------------------------------------------
-
-    async def list_devices(self) -> list[Device]:
-        data = await self._request("GET", "/agent/devices")
-        return [
-            Device(
-                name=d.get("name", ""),
-                device_type=d.get("type", d.get("device_type", "")),
-                brand=d.get("brand", ""),
-                protocol=d.get("protocol", ""),
-                status=d.get("status", "online"),
-            )
-            for d in data.get("devices") or []
-        ]
-
-    async def call_device(
-        self, device: str, action: str, params: Optional[dict] = None
-    ) -> dict:
-        payload: dict[str, Any] = {"action": action}
-        if params:
-            payload["params"] = params
-        return await self._request(
-            "POST", f"/agent/devices/{device}/call", json=payload
-        )
 
     # ------------------------------------------------------------------
     # Inbox

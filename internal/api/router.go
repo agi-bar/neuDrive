@@ -45,7 +45,6 @@ type Server struct {
 	FileTreeService       *services.FileTreeService
 	VaultService          *services.VaultService
 	MemoryService         *services.MemoryService
-	DeviceService         *services.DeviceService
 	ProjectService        *services.ProjectService
 	SummaryService        *services.SummaryService
 	RoleService           *services.RoleService
@@ -85,7 +84,6 @@ type ServerDeps struct {
 	SummaryService        *services.SummaryService
 	RoleService           *services.RoleService
 	InboxService          *services.InboxService
-	DeviceService         *services.DeviceService
 	DashboardService      *services.DashboardService
 	TokenService          *services.TokenService
 	ImportService         *services.ImportService
@@ -118,7 +116,6 @@ func NewServer(
 	summarySvc *services.SummaryService,
 	roleSvc *services.RoleService,
 	inboxSvc *services.InboxService,
-	deviceSvc *services.DeviceService,
 	dashboardSvc *services.DashboardService,
 	tokenSvc *services.TokenService,
 	importSvc *services.ImportService,
@@ -145,7 +142,6 @@ func NewServer(
 		SummaryService:       summarySvc,
 		RoleService:          roleSvc,
 		InboxService:         inboxSvc,
-		DeviceService:        deviceSvc,
 		DashboardService:     dashboardSvc,
 		TokenService:         tokenSvc,
 		ImportService:        importSvc,
@@ -175,7 +171,6 @@ func NewServerWithDeps(deps ServerDeps) *Server {
 		SummaryService:        deps.SummaryService,
 		RoleService:           deps.RoleService,
 		InboxService:          deps.InboxService,
-		DeviceService:         deps.DeviceService,
 		DashboardService:      deps.DashboardService,
 		TokenService:          deps.TokenService,
 		ImportService:         deps.ImportService,
@@ -1251,35 +1246,6 @@ func (s *Server) handleAgentSendMessage(w http.ResponseWriter, r *http.Request) 
 	}
 
 	respondCreatedWithLocalGitSync(w, sent, s.syncLocalGitMirror(r.Context(), userID))
-}
-
-func (s *Server) handleAgentCallDevice(w http.ResponseWriter, r *http.Request) {
-	if !s.agentCheckAuth(w, r, models.TrustLevelWork, models.ScopeCallDevices) {
-		return
-	}
-	if s.DeviceService == nil {
-		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "device service not configured")
-		return
-	}
-	userID, _ := userIDFromCtx(r.Context())
-	name := chi.URLParam(r, "name")
-
-	var req struct {
-		Action string                 `json:"action"`
-		Params map[string]interface{} `json:"params,omitempty"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
-		return
-	}
-
-	result, err := s.DeviceService.Call(r.Context(), userID, name, req.Action, req.Params)
-	if err != nil {
-		respondDeviceCallError(w, err)
-		return
-	}
-
-	respondOK(w, result)
 }
 
 func (s *Server) handleAgentGetProfile(w http.ResponseWriter, r *http.Request) {

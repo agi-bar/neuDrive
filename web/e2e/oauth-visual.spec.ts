@@ -131,8 +131,6 @@ test.describe('OAuth Consent Page (SPA)', () => {
       'write:skills',
       'read:vault',
       'write:vault',
-      'read:devices',
-      'call:devices',
       'read:inbox',
       'write:inbox',
       'read:projects',

@@ -172,7 +172,7 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 			t.Fatalf("expected 200, got %d: %v", status, body)
 		}
 		// Should have numeric keys
-		for _, key := range []string{"connections", "files", "memory", "profile", "skills", "devices", "projects", "inbox"} {
+		for _, key := range []string{"connections", "files", "memory", "profile", "skills", "projects", "inbox"} {
 			if _, ok := body[key]; !ok {
 				t.Errorf("missing key %q", key)
 			}
@@ -487,47 +487,6 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 		// Messages may or may not match our query pattern; just check it doesn't error
 	})
 
-	// -----------------------------------------------------------------------
-	// 11. Devices (register + list + call)
-	// -----------------------------------------------------------------------
-	t.Run("Devices_Register", func(t *testing.T) {
-		status, body := apiCall(t, "POST", "/api/devices", jwt, map[string]any{
-			"name": "living-room-light", "device_type": "light", "brand": "yeelight",
-			"protocol": "http", "endpoint": "http://192.168.1.100/api",
-		})
-		if status != 201 {
-			t.Fatalf("expected 201, got %d: %v", status, body)
-		}
-	})
-
-	t.Run("Devices_List", func(t *testing.T) {
-		status, body := apiCall(t, "GET", "/api/devices", jwt, nil)
-		if status != 200 {
-			t.Fatalf("expected 200, got %d: %v", status, body)
-		}
-		devices, _ := body["devices"].([]any)
-		if len(devices) != 1 {
-			t.Errorf("expected 1 device, got %d", len(devices))
-		}
-	})
-
-	t.Run("Devices_Call", func(t *testing.T) {
-		status, body := apiCall(t, "POST", "/api/devices/living-room-light/call", jwt, map[string]any{
-			"action": "on", "params": map[string]any{"brightness": 80},
-		})
-		if status != 200 {
-			t.Fatalf("expected 200, got %d: %v", status, body)
-		}
-		// Mock response should include device name and action
-		if body["device"] != "living-room-light" {
-			t.Errorf("device: got %v", body["device"])
-		}
-		if body["action"] != "on" {
-			t.Errorf("action: got %v", body["action"])
-		}
-	})
-
-	// -----------------------------------------------------------------------
 	// 12. Roles CRUD
 	// -----------------------------------------------------------------------
 	t.Run("Roles_List", func(t *testing.T) {
@@ -681,15 +640,6 @@ func TestIntegration_FullLifecycle(t *testing.T) {
 
 	t.Run("AgentAPI_GetInbox", func(t *testing.T) {
 		status, body := apiCall(t, "GET", "/agent/inbox/assistant", agentToken, nil)
-		if status != 200 {
-			t.Fatalf("expected 200, got %d: %v", status, body)
-		}
-	})
-
-	t.Run("AgentAPI_CallDevice", func(t *testing.T) {
-		status, body := apiCall(t, "POST", "/agent/devices/living-room-light/call", agentToken, map[string]any{
-			"action": "off",
-		})
 		if status != 200 {
 			t.Fatalf("expected 200, got %d: %v", status, body)
 		}

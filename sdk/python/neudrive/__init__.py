@@ -2,7 +2,6 @@ from .client import NeuDrive, AsyncNeuDrive
 from .auth import NeuDriveAuth
 from .types import (
     BundleFilters,
-    Device,
     ImportResult,
     InboxMessage,
     Profile,
@@ -18,7 +17,6 @@ __all__ = [
     "AsyncNeuDrive",
     "NeuDriveAuth",
     "BundleFilters",
-    "Device",
     "ImportResult",
     "InboxMessage",
     "Profile",

@@ -53,7 +53,7 @@ func setupSyncIntegration(t *testing.T) (context.Context, uuid.UUID, *SyncServic
 	fileTree := NewFileTreeService(pool)
 	memory := NewMemoryService(pool, fileTree)
 	importSvc := NewImportService(pool, fileTree, memory, nil)
-	exportSvc := NewExportService(fileTree, memory, nil, nil, nil, nil, nil, nil)
+	exportSvc := NewExportService(fileTree, memory, nil, nil, nil, nil, nil)
 	syncSvc := NewSyncService(pool, importSvc, exportSvc, fileTree, memory)
 	return ctx, userID, syncSvc, fileTree, memory
 }

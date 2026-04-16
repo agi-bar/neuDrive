@@ -33,7 +33,6 @@ type DashboardStats struct {
 	TotalMemory      int                 `json:"memory"`
 	TotalProfile     int                 `json:"profile"`
 	TotalSkills      int                 `json:"skills"`
-	TotalDevices     int                 `json:"devices"`
 	TotalProjects    int                 `json:"projects"`
 	TotalInbox       int                 `json:"inbox"`
 	WeeklyActivity   []DashboardActivity `json:"weekly_activity"`

@@ -93,21 +93,6 @@ export interface InboxMessage {
   archived_at?: string
 }
 
-export interface Device {
-  id: string
-  user_id: string
-  name: string
-  device_type: string
-  brand: string
-  protocol: string
-  endpoint: string
-  skill_md: string
-  config?: Record<string, unknown>
-  status: string
-  created_at: string
-  updated_at: string
-}
-
 export interface ImportResult {
   imported_count: number
   paths?: string[]
@@ -179,7 +164,6 @@ export interface TreeChanges {
 export interface DashboardStats {
   connections: number
   skills: number
-  devices: number
   projects: number
   weekly_activity: { platform: string; count: number }[]
   pending: { type: string; count: number; message: string }[]

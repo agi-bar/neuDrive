@@ -45,7 +45,7 @@ func newTestServiceFixture(store *sqlite.Store) *testServiceFixture {
 	memory := services.NewMemoryServiceWithRepo(sqlite.NewMemoryRepo(store), nil)
 	project := services.NewProjectServiceWithRepo(sqlite.NewProjectRepo(store), nil, nil)
 	importSvc := services.NewImportService(nil, fileTree, memory, nil)
-	exportSvc := services.NewExportService(fileTree, memory, project, nil, nil, nil, nil, nil)
+	exportSvc := services.NewExportService(fileTree, memory, project, nil, nil, nil, nil)
 	syncSvc := services.NewSyncServiceWithRepo(sqlite.NewSyncRepo(store), importSvc, exportSvc, fileTree, memory)
 	return &testServiceFixture{
 		importSvc: importSvc,

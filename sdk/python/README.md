@@ -29,9 +29,6 @@ with NeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
     for p in profiles:
         print(p.category, p.content)
 
-    # Control a device
-    hub.call_device("living-room-light", "off")
-
     # Sync a subtree
     snapshot = hub.snapshot("/projects/my-project")
     delta = hub.changes(snapshot.cursor, "/projects/my-project")
@@ -49,7 +46,6 @@ from neudrive import AsyncNeuDrive
 async def main():
     async with AsyncNeuDrive("https://hub.example.com", token="ndt_xxx") as hub:
         projects = await hub.list_projects()
-        devices = await hub.list_devices()
         stats = await hub.get_stats()
 
 asyncio.run(main())
@@ -107,14 +103,6 @@ hub.read_skill("cyberzen-write")
 # list_skills() returns indexed metadata such as description / when_to_use / tags
 ```
 
-### Devices
-
-```python
-hub.list_devices()
-hub.call_device("living-room-light", "on")
-hub.call_device("thermostat", "set", params={"temperature": 22})
-```
-
 ### Inbox
 
 ```python
@@ -166,7 +154,7 @@ For CLI login/profile workflows and acceptance steps, see [`docs/sync.md`](../..
 
 ```python
 stats = hub.get_stats()
-print(stats)  # {"connections": 3, "skills": 12, "devices": 2, "projects": 4, ...}
+print(stats)  # {"connections": 3, "skills": 12, "projects": 4, ...}
 ```
 
 ## OAuth for Third-Party Apps

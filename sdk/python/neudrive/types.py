@@ -47,15 +47,6 @@ class InboxMessage:
 
 
 @dataclass
-class Device:
-    name: str
-    device_type: str
-    brand: str = ""
-    protocol: str = ""
-    status: str = "online"
-
-
-@dataclass
 class ImportResult:
     imported: int
     errors: list[str] = field(default_factory=list)

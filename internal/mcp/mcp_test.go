@@ -99,7 +99,6 @@ func newTestMCPServer() *MCPServer {
 		Project:    &services.ProjectService{},
 		Vault:      &services.VaultService{},
 		Inbox:      &services.InboxService{},
-		Device:     &services.DeviceService{},
 		Dashboard:  &services.DashboardService{},
 		Import:     &services.ImportService{},
 		Token:      &services.TokenService{},

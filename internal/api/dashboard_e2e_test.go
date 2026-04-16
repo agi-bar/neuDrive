@@ -45,7 +45,7 @@ func TestE2E_DashboardPage_Stats(t *testing.T) {
 	}
 	body := parseJSON(resp)
 	// Dashboard should return publish-facing stats
-	for _, key := range []string{"connections", "skills", "devices", "projects", "weekly_activity", "pending"} {
+	for _, key := range []string{"connections", "skills", "projects", "weekly_activity", "pending"} {
 		if _, ok := body[key]; !ok {
 			t.Errorf("missing key %q in dashboard stats", key)
 		}
@@ -381,37 +381,6 @@ func TestE2E_Inbox_SendValidation(t *testing.T) {
 	resp.Body.Close()
 }
 
-// --- Devices ---
-
-func TestE2E_Devices_List(t *testing.T) {
-	ts, _ := newTestServer()
-	defer ts.Close()
-
-	resp, err := authGet(ts, "/api/devices")
-	if err != nil {
-		t.Fatalf("GET /api/devices: %v", err)
-	}
-	if resp.StatusCode != http.StatusNotImplemented {
-		t.Fatalf("expected 501 (nil service), got %d", resp.StatusCode)
-	}
-	resp.Body.Close()
-}
-
-func TestE2E_Devices_CallValidation(t *testing.T) {
-	ts, _ := newTestServer()
-	defer ts.Close()
-
-	// Missing action field
-	resp, err := authPost(ts, "/api/devices/test-light/call", map[string]interface{}{})
-	if err != nil {
-		t.Fatalf("POST /api/devices/test-light/call: %v", err)
-	}
-	if resp.StatusCode != 422 {
-		t.Fatalf("expected 422 for missing action, got %d", resp.StatusCode)
-	}
-	resp.Body.Close()
-}
-
 // --- Roles ---
 
 func TestE2E_Roles_List(t *testing.T) {
@@ -459,7 +428,6 @@ func TestE2E_Auth_WithoutToken(t *testing.T) {
 		"/api/projects",
 		"/api/tokens",
 		"/api/collaborations",
-		"/api/devices",
 		"/api/roles",
 		"/api/vault/scopes",
 		"/api/inbox/assistant",

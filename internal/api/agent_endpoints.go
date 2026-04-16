@@ -275,24 +275,6 @@ func (s *Server) handleAgentAppendProjectLog(w http.ResponseWriter, r *http.Requ
 	respondCreatedWithLocalGitSync(w, map[string]string{"status": "appended", "project": name}, s.syncLocalGitMirror(r.Context(), userID))
 }
 
-func (s *Server) handleAgentDevicesList(w http.ResponseWriter, r *http.Request) {
-	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeReadDevices) {
-		return
-	}
-	if s.DeviceService == nil {
-		respondError(w, http.StatusNotImplemented, ErrCodeUnsupported, "device service not configured")
-		return
-	}
-
-	userID, _ := userIDFromCtx(r.Context())
-	devices, err := s.DeviceService.List(r.Context(), userID)
-	if err != nil {
-		respondInternalError(w, err)
-		return
-	}
-	respondOK(w, map[string]interface{}{"devices": devices})
-}
-
 func (s *Server) handleAgentArchiveInbox(w http.ResponseWriter, r *http.Request) {
 	if !s.agentCheckAuth(w, r, models.TrustLevelCollaborate, models.ScopeWriteInbox) {
 		return

@@ -37,14 +37,6 @@ func SkillDocPath(name string) string {
 	return fmt.Sprintf("/skills/%s/SKILL.md", sanitizeSegment(name, "skill"))
 }
 
-func DeviceSkillPath(name string) string {
-	return fmt.Sprintf("/devices/%s/SKILL.md", sanitizeSegment(name, "device"))
-}
-
-func DeviceConfigPath(name string) string {
-	return fmt.Sprintf("/devices/%s/config.json", sanitizeSegment(name, "device"))
-}
-
 func RoleSkillPath(name string) string {
 	return fmt.Sprintf("/roles/%s/SKILL.md", sanitizeSegment(name, "role"))
 }

@@ -144,7 +144,6 @@ func (s *Server) handleMCPPost(w http.ResponseWriter, r *http.Request) {
 		Memory:      s.MemoryService,
 		Project:     s.ProjectService,
 		Inbox:       s.InboxService,
-		Device:      s.DeviceService,
 		Dashboard:   s.DashboardService,
 		Import:      s.ImportService,
 		Token:       s.TokenService,

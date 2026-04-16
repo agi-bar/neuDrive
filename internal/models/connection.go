@@ -9,7 +9,7 @@ import (
 const (
 	TrustLevelGuest       = 1 // L1: Only public profile
 	TrustLevelCollaborate = 2 // L2: Shared projects only
-	TrustLevelWork        = 3 // L3: Skills, memory, devices, non-personal vault
+	TrustLevelWork        = 3 // L3: Skills, memory, non-personal vault
 	TrustLevelFull        = 4 // L4: Everything including all vault
 )
 

@@ -11,7 +11,7 @@ export function buildNeuDriveMock(): FileNode[] {
   const rows: FileNode[] = []
 
   // Ensure top-level namespaces are visible
-  const tops = ['projects', 'skills', 'memory', 'devices', 'roles', 'inbox', 'notes']
+  const tops = ['projects', 'skills', 'memory', 'roles', 'inbox', 'notes']
   for (let i = 0; i < tops.length; i++) {
     const seg = tops[i]
     rows.push({

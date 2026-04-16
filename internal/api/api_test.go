@@ -945,7 +945,7 @@ func TestDashboardStats(t *testing.T) {
 		t.Fatalf("expected 200, got %d", resp.StatusCode)
 	}
 	body := parseJSON(resp)
-	expectedFields := []string{"connections", "skills", "devices", "projects", "weekly_activity", "pending"}
+	expectedFields := []string{"connections", "skills", "projects", "weekly_activity", "pending"}
 	for _, f := range expectedFields {
 		if _, ok := body[f]; !ok {
 			t.Errorf("expected field %s in dashboard stats", f)

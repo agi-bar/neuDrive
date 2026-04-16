@@ -104,7 +104,7 @@ func prepareSkillsUploadConnectivityHelp(baseURL string) string {
 
 func isHiddenMCPPath(rawPath string) bool {
 	publicPath := hubpath.NormalizePublic(rawPath)
-	for _, prefix := range []string{"/devices", "/roles", "/inbox"} {
+	for _, prefix := range []string{"/roles", "/inbox"} {
 		if publicPath == prefix || strings.HasPrefix(publicPath, prefix+"/") {
 			return true
 		}
@@ -128,7 +128,6 @@ type MCPServer struct {
 	Memory       *services.MemoryService
 	Project      *services.ProjectService
 	Inbox        *services.InboxService
-	Device       *services.DeviceService
 	Dashboard    *services.DashboardService
 	Import       *services.ImportService
 	Token        *services.TokenService

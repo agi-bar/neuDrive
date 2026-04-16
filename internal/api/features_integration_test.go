@@ -797,15 +797,6 @@ func TestFeature_ScopeLimitedToken(t *testing.T) {
 		}
 	})
 
-	t.Run("ReadOnly_CannotCallDevice", func(t *testing.T) {
-		status, _ := apiCall(t, "POST", "/agent/devices/fake/call", readToken, map[string]any{
-			"action": "on",
-		})
-		if status != 403 {
-			t.Fatalf("call device with read-only: expected 403, got %d", status)
-		}
-	})
-
 	t.Run("ReadOnly_CannotSendMessage", func(t *testing.T) {
 		status, _ := apiCall(t, "POST", "/agent/inbox/send", readToken, map[string]any{
 			"to": "assistant", "subject": "test", "body": "should fail",
@@ -1059,79 +1050,6 @@ func TestFeature_ConflictAutoDetection(t *testing.T) {
 			if status == 200 {
 				t.Errorf("resolution %q on fake ID should fail", res)
 			}
-		}
-	})
-}
-
-// =========================================================================
-// 16. Device HTTP Call (real dispatch)
-// =========================================================================
-
-func TestFeature_DeviceHTTPCall(t *testing.T) {
-	skipIfNoServer(t)
-	jwt, _, _, _ := setupTestUser(t, "devicehttp")
-
-	// Register HTTP device pointing to httpbin
-	t.Run("RegisterHTTPDevice", func(t *testing.T) {
-		status, _ := apiCall(t, "POST", "/api/devices", jwt, map[string]any{
-			"name": "http-test-light", "device_type": "light",
-			"protocol": "http", "endpoint": "https://httpbin.org/post",
-		})
-		if status != 201 {
-			t.Fatalf("register: expected 201, got %d", status)
-		}
-	})
-
-	// Call HTTP device — should get real httpbin response
-	t.Run("CallHTTPDevice", func(t *testing.T) {
-		status, body := apiCall(t, "POST", "/api/devices/http-test-light/call", jwt, map[string]any{
-			"action": "on", "params": map[string]any{"brightness": 80},
-		})
-		if status != 200 {
-			t.Fatalf("call HTTP: expected 200, got %d: %v", status, body)
-		}
-		// httpbin echoes back — should have "origin" or "url" field
-		if body["url"] == nil && body["origin"] == nil {
-			t.Logf("response: %v", body)
-			// Not a hard failure — httpbin response may be wrapped differently
-		}
-	})
-
-	// Register mock device (no protocol)
-	t.Run("RegisterMockDevice", func(t *testing.T) {
-		status, _ := apiCall(t, "POST", "/api/devices", jwt, map[string]any{
-			"name": "mock-sensor", "device_type": "sensor", "protocol": "",
-		})
-		if status != 201 {
-			t.Fatalf("register mock: expected 201, got %d", status)
-		}
-	})
-
-	// Call mock device — should get mock response
-	t.Run("CallMockDevice", func(t *testing.T) {
-		status, body := apiCall(t, "POST", "/api/devices/mock-sensor/call", jwt, map[string]any{
-			"action": "read",
-		})
-		if status != 200 {
-			t.Fatalf("call mock: expected 200, got %d: %v", status, body)
-		}
-		msg, _ := body["message"].(string)
-		if !strings.Contains(msg, "mock") && !strings.Contains(msg, "not configured") {
-			t.Errorf("expected mock response, got: %v", body)
-		}
-	})
-
-	// Register MQTT device — should return error on call
-	t.Run("MQTTNotSupported", func(t *testing.T) {
-		apiCall(t, "POST", "/api/devices", jwt, map[string]any{
-			"name": "mqtt-device", "device_type": "thermostat", "protocol": "mqtt",
-		})
-		status, _ := apiCall(t, "POST", "/api/devices/mqtt-device/call", jwt, map[string]any{
-			"action": "set_temp",
-		})
-		// Should fail — MQTT not supported
-		if status == 200 {
-			t.Log("MQTT call succeeded unexpectedly (may return error in body)")
 		}
 	})
 }

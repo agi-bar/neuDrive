@@ -108,7 +108,7 @@ func setupBundleIntegration(t *testing.T) (context.Context, uuid.UUID, *FileTree
 	fileTree := NewFileTreeService(pool)
 	memory := NewMemoryService(pool, fileTree)
 	importSvc := NewImportService(pool, fileTree, memory, nil)
-	exportSvc := NewExportService(fileTree, memory, nil, nil, nil, nil, nil, nil)
+	exportSvc := NewExportService(fileTree, memory, nil, nil, nil, nil, nil)
 	return ctx, userID, fileTree, memory, importSvc, exportSvc
 }
 

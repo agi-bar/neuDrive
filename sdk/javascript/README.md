@@ -25,9 +25,6 @@ const results = await hub.searchMemory('海淀算力券')
 // Sync a subtree
 const snapshot = await hub.snapshot('/projects/my-project')
 const delta = await hub.changes(snapshot.cursor, '/projects/my-project')
-
-// Control a device
-await hub.callDevice('living-room-light', 'off')
 ```
 
 ### With OAuth (Third-party app)
@@ -74,8 +71,6 @@ npm install @neudrive/sdk
 | `readSecret(scope)` | Read a vault secret |
 | `listSkills()` | List indexed skill summaries from `SKILL.md` metadata |
 | `readSkill(name)` | Read skill content |
-| `listDevices()` | List registered devices |
-| `callDevice(device, action, params?)` | Call a device action |
 | `sendMessage(to, subject, body, opts?)` | Send an inbox message |
 | `readInbox(role?, status?)` | Read inbox messages |
 | `importSkill(name, files)` | Import a skill |

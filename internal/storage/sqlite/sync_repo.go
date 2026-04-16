@@ -30,7 +30,7 @@ func (r *SyncRepo) newBundleServices() (*services.FileTreeService, *services.Mem
 	memory := services.NewMemoryServiceWithRepo(NewMemoryRepo(r.Store), fileTree)
 	project := services.NewProjectServiceWithRepo(NewProjectRepo(r.Store), nil, fileTree)
 	importSvc := services.NewImportService(nil, fileTree, memory, nil)
-	exportSvc := services.NewExportService(fileTree, memory, project, nil, nil, nil, nil, nil)
+	exportSvc := services.NewExportService(fileTree, memory, project, nil, nil, nil, nil)
 	syncSvc := services.NewSyncService(nil, importSvc, exportSvc, fileTree, memory)
 	return fileTree, memory, importSvc, exportSvc, syncSvc
 }

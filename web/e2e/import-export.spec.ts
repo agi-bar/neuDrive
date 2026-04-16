@@ -29,22 +29,14 @@ test.describe('Import & Export', () => {
       },
     })
 
-    // Import device via API
-    await request.post('/api/devices', {
-      headers: { Authorization: `Bearer ${user.token}` },
-      data: { name: 'pw-test-light', device_type: 'light', brand: 'yeelight', protocol: 'http' },
-    })
-
     // Login and check dashboard
     await loginViaUI(page, user.email, user.password)
     await page.goto('/')
     await page.waitForLoadState('networkidle')
 
-    // Dashboard should show non-zero stats for devices
-    // (Skills might not show if they're stored as file tree entries)
+    // Dashboard should show non-zero stats after import
     const statsText = await page.locator('.stat-value').allTextContents()
     const hasNonZero = statsText.some(v => parseInt(v) > 0)
-    // At least devices should be 1
     expect(hasNonZero).toBeTruthy()
   })
 

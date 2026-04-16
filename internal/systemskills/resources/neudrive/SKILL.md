@@ -18,7 +18,7 @@ Use this umbrella skill when the user wants to work with neuDrive from inside a 
 - This local `neudrive` skill is the entry layer that routes platform-native commands to the right MCP tools and local platform actions.
 - Treat neuDrive as the canonical destination for imported data.
 - Current public surface focuses on profile, memory, projects, skills, tree, token, and sync workflows.
-- Devices, roles, inbox, and collaboration remain deferred product concepts. Do not treat them as currently supported public neuDrive tools.
+- Roles, inbox, and collaboration remain deferred product concepts. Do not treat them as currently supported public neuDrive tools.
 
 ## Commands
 

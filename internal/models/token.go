@@ -22,9 +22,6 @@ const (
 	ScopeReadSkills  = "read:skills"
 	ScopeWriteSkills = "write:skills"
 
-	ScopeReadDevices = "read:devices"
-	ScopeCallDevices = "call:devices"
-
 	ScopeReadInbox  = "read:inbox"
 	ScopeWriteInbox = "write:inbox"
 
@@ -48,7 +45,6 @@ var AllScopes = []string{
 	ScopeReadMemory, ScopeWriteMemory,
 	ScopeReadVault, ScopeReadVaultAuth, ScopeWriteVault,
 	ScopeReadSkills, ScopeWriteSkills,
-	ScopeReadDevices, ScopeCallDevices,
 	ScopeReadInbox, ScopeWriteInbox,
 	ScopeReadProjects, ScopeWriteProjects,
 	ScopeReadTree, ScopeWriteTree,

@@ -19,7 +19,6 @@ type ExportService struct {
 	Memory   *MemoryService
 	Project  *ProjectService
 	Vault    *VaultService
-	Device   *DeviceService
 	Inbox    *InboxService
 	Role     *RoleService
 	User     *UserService
@@ -31,7 +30,6 @@ func NewExportService(
 	memory *MemoryService,
 	project *ProjectService,
 	vault *VaultService,
-	device *DeviceService,
 	inbox *InboxService,
 	role *RoleService,
 	user *UserService,
@@ -41,7 +39,6 @@ func NewExportService(
 		Memory:   memory,
 		Project:  project,
 		Vault:    vault,
-		Device:   device,
 		Inbox:    inbox,
 		Role:     role,
 		User:     user,
@@ -115,13 +112,6 @@ func (s *ExportService) ExportToZip(ctx context.Context, userID uuid.UUID, w io.
 		}
 	}
 
-	// devices/
-	for _, dev := range data.Devices {
-		if err := writeZipJSON(zw, "export/devices/"+dev.Name+".json", dev); err != nil {
-			return err
-		}
-	}
-
 	// roles/roles.json
 	if len(data.Roles) > 0 {
 		if err := writeZipJSON(zw, "export/roles/roles.json", data.Roles); err != nil {
@@ -153,7 +143,6 @@ func (s *ExportService) ExportToZip(ctx context.Context, userID uuid.UUID, w io.
 		"user_id":     userID.String(),
 		"stats": map[string]int{
 			"skills":       len(data.SkillFiles),
-			"devices":      len(data.Devices),
 			"projects":     len(data.Projects),
 			"roles":        len(data.Roles),
 			"messages":     len(data.InboxMessages),
@@ -219,10 +208,6 @@ func (s *ExportService) ExportToJSON(ctx context.Context, userID uuid.UUID) (map
 		result["scratch"] = scratch
 	}
 
-	if len(data.Devices) > 0 {
-		result["devices"] = data.Devices
-	}
-
 	if len(data.Roles) > 0 {
 		result["roles"] = data.Roles
 	}
@@ -242,7 +227,6 @@ type exportData struct {
 	ProfileMemory  map[string]string // category -> content
 	Projects       []models.Project
 	ScratchEntries []models.MemoryScratch
-	Devices        []models.Device
 	Roles          []models.Role
 	InboxMessages  []models.InboxMessage
 }
@@ -316,14 +300,6 @@ func (s *ExportService) gatherExportData(ctx context.Context, userID uuid.UUID) 
 		projects, err := s.Project.List(ctx, userID)
 		if err == nil {
 			data.Projects = projects
-		}
-	}
-
-	// Devices.
-	if s.Device != nil {
-		devices, err := s.Device.List(ctx, userID)
-		if err == nil {
-			data.Devices = devices
 		}
 	}
 

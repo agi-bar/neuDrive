@@ -116,9 +116,8 @@ func startPlatformTestServer(t *testing.T, dbPath string) (string, string, strin
 	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
 	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
 	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
-	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
 	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
-	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
 	localGitSyncSvc := localgitsync.NewWithDeps(store, fileTreeSvc, userSvc, connSvc, projectSvc, vaultSvc)
@@ -141,7 +140,6 @@ func startPlatformTestServer(t *testing.T, dbPath string) (string, string, strin
 		ProjectService:     projectSvc,
 		RoleService:        roleSvc,
 		InboxService:       inboxSvc,
-		DeviceService:      deviceSvc,
 		DashboardService:   dashboardSvc,
 		TokenService:       tokenSvc,
 		ImportService:      importSvc,

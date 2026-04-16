@@ -128,12 +128,6 @@ type InboxRepo interface {
 	SearchMessages(ctx context.Context, userID uuid.UUID, query, scope string) ([]models.InboxMessage, error)
 }
 
-type DeviceRepo interface {
-	List(ctx context.Context, userID uuid.UUID) ([]models.Device, error)
-	Create(ctx context.Context, device models.Device) error
-	GetByName(ctx context.Context, userID uuid.UUID, name string) (*models.Device, error)
-}
-
 type OAuthRepo interface {
 	CreateApp(ctx context.Context, app models.OAuthApp) error
 	GetAppByID(ctx context.Context, id uuid.UUID) (*models.OAuthApp, error)

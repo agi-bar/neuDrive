@@ -55,7 +55,7 @@
     <main class="main">
       <div class="page">
         <div class="h1">文件（交互原型 · 内置假数据）</div>
-        <div class="sub">像 OneDrive 一样浏览/搜索/预览；已融合 Projects/Skills/Memory/Devices/Roles/Inbox/Notes/Root</div>
+        <div class="sub">像 OneDrive 一样浏览/搜索/预览；已融合 Projects/Skills/Memory/Roles/Inbox/Notes/Root</div>
         <div class="toolbar">
           <div class="crumbs" id="crumbs"></div>
           <div class="spacer"></div>
@@ -98,7 +98,7 @@
   DATA.push({path:'/notes/todo-1.md',name:'todo-1.md',is_dir:false,ns:'notes',size:280,t:daysAgo(0),content:'- [ ] 任务 1'})
   ;(['readme.md','roadmap.md']).forEach((f,idx)=>{DATA.push({path:`/${f}`,name:f,is_dir:false,ns:'root',size:800+idx*200,t:daysAgo(7+idx),content:`# ${f}`})})
   // 顶层命名空间目录
-  ;(['projects','skills','memory','devices','roles','inbox','notes']).forEach((seg,i)=>{if(!DATA.find(n=>n.path===`/${seg}`)) DATA.push({path:`/${seg}`,name:seg,is_dir:true,ns:seg,t:daysAgo(1+i)})})
+  ;(['projects','skills','memory','roles','inbox','notes']).forEach((seg,i)=>{if(!DATA.find(n=>n.path===`/${seg}`)) DATA.push({path:`/${seg}`,name:seg,is_dir:true,ns:seg,t:daysAgo(1+i)})})
 
   const store=new Map(DATA.map(n=>[n.path,{...n}]));
   function list(path){const base=path.endsWith('/')?path.slice(0,-1):path;const out=[];for(const n of store.values()){const parent=n.path.slice(0,n.path.lastIndexOf('/'))||'/';if(parent===base) out.push(n)}return out}
@@ -108,7 +108,7 @@
 
   let cur='/' , filter='all' , q=''
 
-  function renderChips(){const el=document.getElementById('chips');el.innerHTML='';[['all','全部'],['projects','Projects'],['skills','Skills'],['memory','Memory'],['devices','Devices'],['roles','Roles'],['inbox','Inbox'],['notes','Notes'],['root','Root']].forEach(([k,lab])=>{const d=document.createElement('div');d.className='chip'+(filter===k?' active':'');d.textContent=lab;d.onclick=()=>{filter=k;renderList()};el.appendChild(d)})}
+  function renderChips(){const el=document.getElementById('chips');el.innerHTML='';[['all','全部'],['projects','Projects'],['skills','Skills'],['memory','Memory'],['roles','Roles'],['inbox','Inbox'],['notes','Notes'],['root','Root']].forEach(([k,lab])=>{const d=document.createElement('div');d.className='chip'+(filter===k?' active':'');d.textContent=lab;d.onclick=()=>{filter=k;renderList()};el.appendChild(d)})}
   function renderCrumbs(){const el=document.getElementById('crumbs');el.innerHTML='';const parts=cur.replace(/^\/+/, '').split('/').filter(Boolean);const segs=['/',...parts.map((_,i)=>'/'+parts.slice(0,i+1).join('/'))];const labels=['根目录',...parts];segs.forEach((seg,i)=>{if(i>0) el.appendChild(document.createTextNode(' / ')); const a=document.createElement('a'); a.textContent=labels[i]; a.onclick=()=>{cur=seg;renderAll()}; el.appendChild(a)})}
   function visible(){let rows=[]; if(q.trim()){const qq=q.trim().toLowerCase(); for(const n of store.values()){if(n.is_dir) continue; if(filter!=='all' && n.ns!==filter) continue; const hay=(n.name+' '+n.path+' '+(n.kind||'')).toLowerCase(); if(hay.includes(qq)) rows.push(n)} } else { rows=list(cur).filter(n=> filter==='all' || n.ns===filter) } return rows.sort((a,b)=> a.is_dir===b.is_dir ? a.name.localeCompare(b.name) : (a.is_dir?-1:1)) }
   function renderList(){document.getElementById('listTitle').textContent = cur==='/'? '根目录' : cur.split('/').pop(); document.getElementById('listPath').textContent = cur; const host=document.querySelector('.panel.table'); host.querySelectorAll('.row:not(.h)').forEach(n=>n.remove()); const rows=visible(); if(rows.length===0){const r=document.createElement('div'); r.className='row'; r.innerHTML='<div class="muted">该目录暂无内容</div><div></div><div></div><div></div>'; host.appendChild(r); return } rows.forEach(n=>{ const r=document.createElement('div'); r.className='row'; r.onclick=()=>{ if(n.is_dir) {cur=n.path; renderAll()} else {document.getElementById('meta').textContent = `${n.path} · ${fmtSize(n.size)} · ${fmtTime(n.t)} · ${n.kind||'file'}`; document.getElementById('preview').innerHTML = /\.md$/i.test(n.name)? (n.content||'').replace(/^# (.*)$/gm,'<h3>$1</h3>').replace(/\n/g,'<br/>') : `<pre>${(n.content||'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]))}</pre>` } } ; r.innerHTML = `<div class="name">${n.is_dir?'📁':(/\.md$/i.test(n.name)?'📝':'📄')} ${n.name}${n.kind==='skill'?' <span class=badge>bundle</span>':''}${n.ro?' <span class=muted>🔒</span>':''}</div><div>${n.is_dir?'-':fmtSize(n.size)}</div><div>${nsLabel(n.ns)}</div><div>${fmtTime(n.t)}</div>`; host.appendChild(r) }) }
@@ -118,4 +118,3 @@
   </script>
 </body>
 </html>
-

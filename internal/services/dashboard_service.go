@@ -87,14 +87,6 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 	}
 	stats.TotalSkills += len(systemskills.SkillSummaries())
 
-	// Count devices.
-	err = s.db.QueryRow(ctx,
-		`SELECT COUNT(*) FROM devices WHERE user_id = $1`, userID).
-		Scan(&stats.TotalDevices)
-	if err != nil {
-		return nil, fmt.Errorf("dashboard.GetStats: devices count: %w", err)
-	}
-
 	// Count projects.
 	err = s.db.QueryRow(ctx,
 		`SELECT COUNT(*) FROM projects WHERE user_id = $1`, userID).

@@ -92,9 +92,8 @@ func newTestHTTPServerWithConfig(t *testing.T, cfg *config.Config, gitOpts ...lo
 	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
 	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
 	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
-	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
 	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
-	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
 	localGitSyncSvc := localgitsync.New(store, v, gitOpts...)
@@ -117,7 +116,6 @@ func newTestHTTPServerWithConfig(t *testing.T, cfg *config.Config, gitOpts ...lo
 		ProjectService:     projectSvc,
 		RoleService:        roleSvc,
 		InboxService:       inboxSvc,
-		DeviceService:      deviceSvc,
 		DashboardService:   dashboardSvc,
 		TokenService:       tokenSvc,
 		ImportService:      importSvc,
@@ -165,9 +163,8 @@ func newHostedTestHTTPServerWithConfig(t *testing.T, cfg *config.Config, gitOpts
 	inboxSvc := services.NewInboxServiceWithRepo(sqlitestorage.NewInboxRepo(store), fileTreeSvc)
 	projectSvc := services.NewProjectServiceWithRepo(sqlitestorage.NewProjectRepo(store), roleSvc, fileTreeSvc)
 	tokenSvc := services.NewTokenServiceWithRepo(sqlitestorage.NewTokenRepo(store))
-	deviceSvc := services.NewDeviceServiceWithRepo(sqlitestorage.NewDeviceRepo(store), fileTreeSvc)
 	importSvc := services.NewImportService(nil, fileTreeSvc, memorySvc, vaultSvc)
-	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, deviceSvc, inboxSvc, roleSvc, userSvc)
+	exportSvc := services.NewExportService(fileTreeSvc, memorySvc, projectSvc, vaultSvc, inboxSvc, roleSvc, userSvc)
 	syncSvc := services.NewSyncServiceWithRepo(sqlitestorage.NewSyncRepo(store), importSvc, exportSvc, fileTreeSvc, memorySvc)
 	dashboardSvc := services.NewDashboardServiceWithRepo(sqlitestorage.NewDashboardRepo(store))
 	hostedRoot := filepath.Join(t.TempDir(), "hosted-root")
@@ -196,7 +193,6 @@ func newHostedTestHTTPServerWithConfig(t *testing.T, cfg *config.Config, gitOpts
 		ProjectService:        projectSvc,
 		RoleService:           roleSvc,
 		InboxService:          inboxSvc,
-		DeviceService:         deviceSvc,
 		DashboardService:      dashboardSvc,
 		TokenService:          tokenSvc,
 		ImportService:         importSvc,
@@ -896,7 +892,7 @@ func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 		}
 	}
 
-	for _, hiddenPath := range []string{"/api/devices", "/api/roles", "/api/inbox/assistant?status=incoming"} {
+	for _, hiddenPath := range []string{"/api/roles", "/api/inbox/assistant?status=incoming"} {
 		status, hidden := doJSON(t, http.MethodGet, ts.URL+hiddenPath, adminToken, nil)
 		if status != http.StatusNotFound || hidden.OK {
 			t.Fatalf("expected %s to be hidden: status=%d body=%+v", hiddenPath, status, hidden)
@@ -912,7 +908,7 @@ func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 			t.Fatalf("expected %q in root tree payload: %s", expected, string(root.Data))
 		}
 	}
-	for _, unexpected := range []string{`"/devices"`, `"/roles"`, `"/inbox"`} {
+	for _, unexpected := range []string{`"/roles"`, `"/inbox"`} {
 		if bytes.Contains(root.Data, []byte(unexpected)) {
 			t.Fatalf("did not expect %q in root tree payload: %s", unexpected, string(root.Data))
 		}

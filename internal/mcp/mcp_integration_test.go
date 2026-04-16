@@ -87,7 +87,6 @@ func setupIntegrationMCP(t *testing.T) *MCPServer {
 	roleSvc := services.NewRoleService(pool, fileTreeSvc)
 	projectSvc := services.NewProjectService(pool, roleSvc, fileTreeSvc)
 	inboxSvc := services.NewInboxService(pool, fileTreeSvc)
-	deviceSvc := services.NewDeviceService(pool, fileTreeSvc)
 	dashboardSvc := services.NewDashboardService(pool)
 	importSvc := services.NewImportService(pool, fileTreeSvc, memorySvc, vaultSvc)
 	tokenSvc := services.NewTokenService(pool)
@@ -102,7 +101,6 @@ func setupIntegrationMCP(t *testing.T) *MCPServer {
 		Memory:      memorySvc,
 		Project:     projectSvc,
 		Inbox:       inboxSvc,
-		Device:      deviceSvc,
 		Dashboard:   dashboardSvc,
 		Import:      importSvc,
 		Token:       tokenSvc,
@@ -199,7 +197,7 @@ func TestMCPInteg_ToolsList(t *testing.T) {
 			t.Errorf("expected tool %q not found in tools/list", expected)
 		}
 	}
-	for _, hidden := range []string{"list_devices", "call_device", "send_message", "read_inbox"} {
+	for _, hidden := range []string{"send_message", "read_inbox"} {
 		if toolNames[hidden] {
 			t.Errorf("tool %q should not be exposed in tools/list", hidden)
 		}
@@ -361,28 +359,6 @@ func TestMCPInteg_Vault_WriteReadDelete(t *testing.T) {
 		"scope": "auth.test-mcp",
 	})
 	t.Logf("read_secret: text=%q isErr=%v", text, isErr)
-}
-
-func TestMCPInteg_DevicesAreNotExposed(t *testing.T) {
-	s := setupIntegrationMCP(t)
-
-	text, isErr := mcpToolCall(t, s, "list_devices", map[string]interface{}{})
-	if !isErr {
-		t.Fatalf("expected list_devices to be unavailable, got success: %s", text)
-	}
-	if !strings.Contains(text, "unknown tool: list_devices") {
-		t.Fatalf("expected list_devices to be hidden, got %q", text)
-	}
-
-	text, isErr = mcpToolCall(t, s, "call_device", map[string]interface{}{
-		"device": "test-light", "action": "on",
-	})
-	if !isErr {
-		t.Fatalf("expected call_device to be unavailable, got success: %s", text)
-	}
-	if !strings.Contains(text, "unknown tool: call_device") {
-		t.Fatalf("expected call_device to be hidden, got %q", text)
-	}
 }
 
 func TestMCPInteg_InboxToolsAreNotExposed(t *testing.T) {
@@ -597,7 +573,6 @@ func TestMCPInteg_ScopeFiltering(t *testing.T) {
 		Memory:      s.Memory,
 		Project:     s.Project,
 		Inbox:       s.Inbox,
-		Device:      s.Device,
 		Dashboard:   s.Dashboard,
 		Import:      s.Import,
 	}

@@ -276,7 +276,6 @@ function App() {
               <Route path="skills/*" element={<DataSkillsPage />} />
               <Route path="memory" element={<DataMemoryPage />} />
               <Route path="profile" element={<InfoPage title={tx('我的资料', 'My Profile')} />} />
-              <Route path="devices" element={<Navigate to="/data/files" replace />} />
               <Route path="roles" element={<Navigate to="/data/files" replace />} />
               <Route path="inbox" element={<Navigate to="/data/files" replace />} />
               <Route path="settings" element={<Navigate to={systemSettingsEnabled ? '/settings' : '/'} replace />} />

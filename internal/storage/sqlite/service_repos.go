@@ -643,63 +643,6 @@ func (r *RoleRepo) HasRole(ctx context.Context, userID uuid.UUID, name string) (
 	return exists == 1, nil
 }
 
-type DeviceRepo struct {
-	Store *Store
-}
-
-func NewDeviceRepo(store *Store) services.DeviceRepo {
-	return &DeviceRepo{Store: store}
-}
-
-func (r *DeviceRepo) List(ctx context.Context, userID uuid.UUID) ([]models.Device, error) {
-	rows, err := r.Store.DB().QueryContext(ctx,
-		`SELECT id, user_id, name, device_type, brand, protocol, endpoint, skill_md, config_json, status, created_at, updated_at
-		   FROM devices
-		  WHERE user_id = ?
-		  ORDER BY name ASC`,
-		userID.String(),
-	)
-	if err != nil {
-		return nil, fmt.Errorf("sqlite.DeviceRepo.List: %w", err)
-	}
-	defer rows.Close()
-	var devices []models.Device
-	for rows.Next() {
-		device, scanErr := scanDeviceRow(rows)
-		if scanErr != nil {
-			return nil, scanErr
-		}
-		devices = append(devices, *device)
-	}
-	if devices == nil {
-		devices = []models.Device{}
-	}
-	return devices, rows.Err()
-}
-
-func (r *DeviceRepo) Create(ctx context.Context, device models.Device) error {
-	_, err := r.Store.DB().ExecContext(ctx,
-		`INSERT INTO devices (id, user_id, name, device_type, brand, protocol, endpoint, skill_md, config_json, status, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		device.ID.String(), device.UserID.String(), device.Name, device.DeviceType, device.Brand, device.Protocol,
-		device.Endpoint, device.SkillMD, encodeJSON(device.Config), device.Status, timeText(device.CreatedAt), timeText(device.UpdatedAt),
-	)
-	if err != nil {
-		return fmt.Errorf("sqlite.DeviceRepo.Create: %w", err)
-	}
-	return nil
-}
-
-func (r *DeviceRepo) GetByName(ctx context.Context, userID uuid.UUID, name string) (*models.Device, error) {
-	row := r.Store.DB().QueryRowContext(ctx,
-		`SELECT id, user_id, name, device_type, brand, protocol, endpoint, skill_md, config_json, status, created_at, updated_at
-		   FROM devices
-		  WHERE user_id = ? AND name = ?`,
-		userID.String(), name,
-	)
-	return scanDeviceRow(row)
-}
-
 type OAuthRepo struct {
 	Store *Store
 }
@@ -1054,29 +997,6 @@ func scanRoleRow(row interface{ Scan(dest ...any) error }) (*models.Role, error)
 		AllowedVaultScopes: decodeJSONStringSlice(allowedVaultScopesJSON),
 		Lifecycle:          lifecycle,
 		CreatedAt:          mustParseTime(createdAt),
-	}, nil
-}
-
-func scanDeviceRow(row interface{ Scan(dest ...any) error }) (*models.Device, error) {
-	var (
-		id, userID, name, deviceType, brand, protocol, endpoint, skillMD, configJSON, status, createdAt, updatedAt string
-	)
-	if err := row.Scan(&id, &userID, &name, &deviceType, &brand, &protocol, &endpoint, &skillMD, &configJSON, &status, &createdAt, &updatedAt); err != nil {
-		return nil, err
-	}
-	return &models.Device{
-		ID:         uuid.MustParse(id),
-		UserID:     uuid.MustParse(userID),
-		Name:       name,
-		DeviceType: deviceType,
-		Brand:      brand,
-		Protocol:   protocol,
-		Endpoint:   endpoint,
-		SkillMD:    skillMD,
-		Config:     decodeJSONMap(configJSON),
-		Status:     status,
-		CreatedAt:  mustParseTime(createdAt),
-		UpdatedAt:  mustParseTime(updatedAt),
 	}, nil
 }
 

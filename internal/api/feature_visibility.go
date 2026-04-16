@@ -8,7 +8,6 @@ import (
 )
 
 var hiddenPublicFeaturePrefixes = []string{
-	"/devices",
 	"/roles",
 	"/inbox",
 }

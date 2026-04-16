@@ -6,5 +6,5 @@
     "Content-Type": "application/json",
     "User-Agent": "Go-http-client/2.0"
   },
-  "body": "{\"client_name\":\"Windsurf\",\"client_uri\":\"https://windsurf.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:8765/auth/callback\"],\"response_types\":[\"code\"],\"scope\":\"read:profile write:profile read:memory write:memory read:skills write:skills read:vault write:vault read:devices call:devices read:inbox write:inbox read:projects write:projects read:tree write:tree search admin offline_access\",\"token_endpoint_auth_method\":\"none\"}"
+  "body": "{\"client_name\":\"Windsurf\",\"client_uri\":\"https://windsurf.ai\",\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"redirect_uris\":[\"http://127.0.0.1:8765/auth/callback\"],\"response_types\":[\"code\"],\"scope\":\"read:profile write:profile read:memory write:memory read:skills write:skills read:vault write:vault read:inbox write:inbox read:projects write:projects read:tree write:tree search admin offline_access\",\"token_endpoint_auth_method\":\"none\"}"
 }

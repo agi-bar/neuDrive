@@ -5,7 +5,6 @@ import type {
   ProjectLog,
   VaultScope,
   InboxMessage,
-  Device,
   ImportResult,
   FileTreeEntry,
   SearchResult,
@@ -309,32 +308,6 @@ export class NeuDrive {
       `/agent/tree/skills/${encodeURIComponent(name)}/SKILL.md`,
     )
     return res.content ?? ''
-  }
-
-  // -------------------------------------------------------------------------
-  // Devices
-  // -------------------------------------------------------------------------
-
-  /**
-   * List registered devices.
-   */
-  async listDevices(): Promise<Device[]> {
-    const res = await this.get<{ devices: Device[] }>('/agent/devices')
-    return res.devices ?? []
-  }
-
-  /**
-   * Call an action on a registered device.
-   */
-  async callDevice(
-    device: string,
-    action: string,
-    params?: Record<string, unknown>,
-  ): Promise<unknown> {
-    return this.post(
-      `/agent/devices/${encodeURIComponent(device)}/call`,
-      { action, params },
-    )
   }
 
   // -------------------------------------------------------------------------

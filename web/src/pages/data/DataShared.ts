@@ -5,7 +5,6 @@ const ORDINARY_FILE_EXCLUDED_PREFIXES = [
   '/projects/',
   '/skills/',
   '/memory/',
-  '/devices/',
   '/roles/',
   '/inbox/',
 ]
@@ -17,7 +16,6 @@ const PROFILE_LABELS: Record<string, string> = {
 }
 
 const SYSTEM_CONTAINER_PATHS = new Set([
-  '/devices',
   '/inbox',
   '/memory',
   '/memory/profile',
@@ -60,7 +58,6 @@ const SOURCE_PRIORITY = [
   'import',
   'agent',
   'neudrive',
-  'devices',
   'roles',
   'unknown',
 ] as const
@@ -209,8 +206,6 @@ export function sourceLabel(source: string | undefined, locale: AppLocale = 'zh-
       return 'Agent'
     case 'neudrive':
       return 'neuDrive'
-    case 'devices':
-      return text(locale, '设备', 'Devices')
     case 'roles':
       return 'Roles'
     case 'unknown':
@@ -600,8 +595,6 @@ export function fileNamespaceLabel(path: string, locale: AppLocale = 'zh-CN') {
       return path.startsWith('/memory/profile/')
         ? text(locale, '我的资料', 'My Profile')
         : 'Memory'
-    case 'devices':
-      return text(locale, '设备', 'Devices')
     case 'roles':
       return 'Roles'
     case 'inbox':

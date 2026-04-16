@@ -132,16 +132,6 @@ func TestAgent_FullLifecycle(t *testing.T) {
 	})
 
 	// -----------------------------------------------------------------------
-	// Devices
-	// -----------------------------------------------------------------------
-	t.Run("ListDevices", func(t *testing.T) {
-		status, body := apiCall(t, "GET", "/agent/devices", scopedToken, nil)
-		if status != 200 {
-			t.Fatalf("expected 200, got %d: %v", status, body)
-		}
-	})
-
-	// -----------------------------------------------------------------------
 	// Messaging
 	// -----------------------------------------------------------------------
 	t.Run("SendMessage", func(t *testing.T) {
@@ -191,7 +181,6 @@ func TestAgent_FullLifecycle(t *testing.T) {
 			{"GET", "/agent/memory/profile"},
 			{"GET", "/agent/projects"},
 			{"GET", "/agent/skills"},
-			{"GET", "/agent/devices"},
 			{"GET", "/agent/inbox"},
 			{"GET", "/agent/vault/scopes"},
 		}

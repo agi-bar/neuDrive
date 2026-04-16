@@ -15,9 +15,6 @@ func TestCanonicalPaths(t *testing.T) {
 	if got := ProjectContextPath("demo"); got != "/projects/demo/context.md" {
 		t.Fatalf("ProjectContextPath() = %q", got)
 	}
-	if got := DeviceConfigPath("desk-light"); got != "/devices/desk-light/config.json" {
-		t.Fatalf("DeviceConfigPath() = %q", got)
-	}
 	if got := InboxMessagePath("worker:policy@de.hub", "incoming", "abc123"); !strings.Contains(got, "/incoming/abc123.json") {
 		t.Fatalf("InboxMessagePath() = %q", got)
 	}

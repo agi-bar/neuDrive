@@ -6,5 +6,5 @@
     "Content-Type": "application/json",
     "User-Agent": "node"
   },
-  "body": "{\"client_name\":\"Gemini CLI MCP Client\",\"redirect_uris\":[\"http://localhost:65290/oauth/callback\"],\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\",\"scope\":\"read:profile write:profile read:memory write:memory read:skills write:skills read:vault write:vault read:devices call:devices read:inbox write:inbox read:projects write:projects read:tree write:tree search admin offline_access\"}"
+  "body": "{\"client_name\":\"Gemini CLI MCP Client\",\"redirect_uris\":[\"http://localhost:65290/oauth/callback\"],\"grant_types\":[\"authorization_code\",\"refresh_token\"],\"response_types\":[\"code\"],\"token_endpoint_auth_method\":\"none\",\"scope\":\"read:profile write:profile read:memory write:memory read:skills write:skills read:vault write:vault read:inbox write:inbox read:projects write:projects read:tree write:tree search admin offline_access\"}"
 }

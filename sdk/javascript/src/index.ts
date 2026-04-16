@@ -9,7 +9,6 @@ export type {
   ProjectLog,
   VaultScope,
   InboxMessage,
-  Device,
   ImportResult,
   FileTreeEntry,
   SearchResult,

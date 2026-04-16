@@ -219,22 +219,6 @@ func (s *Store) init(ctx context.Context) error {
 			UNIQUE(user_id, name),
 			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 		)`,
-		`CREATE TABLE IF NOT EXISTS devices (
-			id TEXT PRIMARY KEY,
-			user_id TEXT NOT NULL,
-			name TEXT NOT NULL,
-			device_type TEXT NOT NULL,
-			brand TEXT NOT NULL DEFAULT '',
-			protocol TEXT NOT NULL DEFAULT '',
-			endpoint TEXT NOT NULL DEFAULT '',
-			skill_md TEXT NOT NULL DEFAULT '',
-			config_json TEXT NOT NULL DEFAULT '{}',
-			status TEXT NOT NULL DEFAULT 'online',
-			created_at TEXT NOT NULL,
-			updated_at TEXT NOT NULL,
-			UNIQUE(user_id, name),
-			FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-		)`,
 		`CREATE TABLE IF NOT EXISTS inbox_messages (
 			id TEXT PRIMARY KEY,
 			user_id TEXT NOT NULL,
@@ -395,7 +379,6 @@ func (s *Store) init(ctx context.Context) error {
 		`CREATE INDEX IF NOT EXISTS idx_connections_user_created ON connections(user_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_vault_entries_user_scope ON vault_entries(user_id, scope)`,
 		`CREATE INDEX IF NOT EXISTS idx_roles_user_name ON roles(user_id, name)`,
-		`CREATE INDEX IF NOT EXISTS idx_devices_user_name ON devices(user_id, name)`,
 		`CREATE INDEX IF NOT EXISTS idx_inbox_messages_user_created ON inbox_messages(user_id, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_inbox_messages_user_status ON inbox_messages(user_id, status, created_at DESC)`,
 		`CREATE INDEX IF NOT EXISTS idx_inbox_messages_user_role_status ON inbox_messages(user_id, to_address, status, created_at DESC)`,

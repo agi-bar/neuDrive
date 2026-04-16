@@ -2,6 +2,10 @@ English | [简体中文](README.zh-CN.md)
 
 # neuDrive
 
+<p align="center">
+  <img src="docs/assets/neudrive-logo.png" alt="neuDrive logo" width="320" />
+</p>
+
 **A personal hub for AI identity, memory, and trust**
 
 > One place where Claude, ChatGPT, Codex, Cursor, and other agents can share who you are, what you prefer, and what they are allowed to do.

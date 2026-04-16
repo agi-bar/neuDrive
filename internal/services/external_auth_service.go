@@ -131,14 +131,56 @@ func (s *ExternalAuthService) ListProviders() []models.AuthProvider {
 	return providers
 }
 
-func (s *ExternalAuthService) Start(ctx context.Context, providerKey, callbackURL, redirectURL string) (*models.StartAuthProviderResponse, error) {
+func normalizeExternalAuthAction(action models.AuthProviderAction) (models.AuthProviderAction, error) {
+	switch models.AuthProviderAction(strings.ToLower(strings.TrimSpace(string(action)))) {
+	case "":
+		return models.AuthProviderActionLogin, nil
+	case models.AuthProviderActionLogin:
+		return models.AuthProviderActionLogin, nil
+	case models.AuthProviderActionSignup:
+		return models.AuthProviderActionSignup, nil
+	default:
+		return "", fmt.Errorf("unsupported auth action %q", action)
+	}
+}
+
+func (s *ExternalAuthService) pocketLoginRedirectURL(authorizationURL string) (string, error) {
+	issuer := strings.TrimRight(strings.TrimSpace(s.cfg.PocketIssuer), "/")
+	if issuer == "" {
+		return "", fmt.Errorf("pocket id issuer is not configured")
+	}
+	values := url.Values{}
+	values.Set("redirect", authorizationURL)
+	return issuer + "/login?" + values.Encode(), nil
+}
+
+func (s *ExternalAuthService) pocketSignupURL() (string, error) {
+	issuer := strings.TrimRight(strings.TrimSpace(s.cfg.PocketIssuer), "/")
+	if issuer == "" {
+		return "", fmt.Errorf("pocket id issuer is not configured")
+	}
+	return issuer + "/signup", nil
+}
+
+func (s *ExternalAuthService) Start(
+	ctx context.Context,
+	providerKey, callbackURL, redirectURL string,
+	action models.AuthProviderAction,
+) (*models.StartAuthProviderResponse, error) {
 	if s.authService == nil {
 		return nil, fmt.Errorf("auth service not configured")
+	}
+	normalizedAction, err := normalizeExternalAuthAction(action)
+	if err != nil {
+		return nil, err
 	}
 	switch providerKey {
 	case "github":
 		if !s.githubEnabled() {
 			return nil, fmt.Errorf("provider %q is not enabled", providerKey)
+		}
+		if normalizedAction == models.AuthProviderActionSignup {
+			return nil, fmt.Errorf("provider %q does not support signup", providerKey)
 		}
 	case s.pocketProviderKey():
 		if !s.pocketEnabled() {
@@ -146,6 +188,13 @@ func (s *ExternalAuthService) Start(ctx context.Context, providerKey, callbackUR
 		}
 	default:
 		return nil, fmt.Errorf("unsupported provider %q", providerKey)
+	}
+	if providerKey == s.pocketProviderKey() && normalizedAction == models.AuthProviderActionSignup {
+		authorizationURL, err := s.pocketSignupURL()
+		if err != nil {
+			return nil, err
+		}
+		return &models.StartAuthProviderResponse{AuthorizationURL: authorizationURL}, nil
 	}
 
 	state, err := randomURLSafeString(32)
@@ -183,6 +232,10 @@ func (s *ExternalAuthService) Start(ctx context.Context, providerKey, callbackUR
 		authorizationURL = s.githubAuthorizationURL(state, verifier, callbackURL)
 	case s.pocketProviderKey():
 		authorizationURL, err = s.pocketAuthorizationURL(ctx, state, verifier, nonce, callbackURL)
+		if err != nil {
+			return nil, err
+		}
+		authorizationURL, err = s.pocketLoginRedirectURL(authorizationURL)
 		if err != nil {
 			return nil, err
 		}

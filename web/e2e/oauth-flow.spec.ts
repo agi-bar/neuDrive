@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { registerOAuthApp } from './helpers'
+import { loginViaUI, mockPublicConfig, registerOAuthApp } from './helpers'
 
 const CF_URL = process.env.CF_URL || 'http://localhost:8080'
 
 test.describe('OAuth Authorization Flow', () => {
   test('no form flash — redirects to login immediately', async ({ page }) => {
+    await mockPublicConfig(page)
     const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=https%3A%2F%2Fclaude.ai%2Foauth%2Fmcp-test&redirect_uri=https%3A%2F%2Fclaude.ai%2Fapi%2Fmcp%2Fauth_callback&scope=admin&state=test123`
 
     // Visit OAuth authorize page
@@ -20,6 +21,7 @@ test.describe('OAuth Authorization Flow', () => {
   })
 
   test('login then shows consent page with Authorize button', async ({ page, request }) => {
+    await mockPublicConfig(page)
     // Register a user via API
     const slug = `oauth-test-${Date.now()}`
     const email = `${slug}@test.local`
@@ -46,9 +48,7 @@ test.describe('OAuth Authorization Flow', () => {
     await page.waitForURL(/\/login/, { timeout: 10000 })
 
     // Login
-    await page.getByPlaceholder('your@email.com').fill(email)
-    await page.getByPlaceholder('输入密码').fill(password)
-    await page.locator('button[type="submit"]').click()
+    await loginViaUI(page, email, password)
 
     await page.waitForURL(/\/oauth\/authorize/, { timeout: 15000 })
     await expect(page.locator('.oauth-card')).toBeVisible()

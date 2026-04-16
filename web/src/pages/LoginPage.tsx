@@ -3,15 +3,11 @@ import { api, type AuthProvider } from '../api'
 import LanguageToggle from '../components/LanguageToggle'
 import { useI18n } from '../i18n'
 
-interface LoginPageProps {
-  onLogin: (token: string, user: any) => void
-}
-
-export default function LoginPage(_: LoginPageProps) {
+export default function LoginPage() {
   const { tx } = useI18n()
   const [providers, setProviders] = useState<AuthProvider[]>([])
   const [error, setError] = useState('')
-  const [loadingProvider, setLoadingProvider] = useState('')
+  const [loadingAction, setLoadingAction] = useState('')
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
@@ -19,61 +15,110 @@ export default function LoginPage(_: LoginPageProps) {
 
     api.getAuthProviders()
       .then((items) => {
-        setProviders((items || []).filter((provider) => provider.enabled))
+        setProviders(items || [])
       })
       .catch((err: Error) => {
         setError(err.message || tx('加载登录方式失败', 'Failed to load sign-in options'))
       })
   }, [tx])
 
-  const handleProviderLogin = async (provider: AuthProvider) => {
+  const githubProvider = providers.find((provider) => provider.id === 'github')
+  const pocketProvider = providers.find((provider) => provider.kind === 'oidc')
+  const pocketEnabled = !!pocketProvider?.enabled
+  const githubEnabled = !!githubProvider?.enabled
+  const busy = loadingAction !== ''
+  const providerHints = [
+    !pocketEnabled ? tx('Pocket ID 登录和注册当前不可用。', 'Pocket ID login and signup are unavailable right now.') : '',
+    !githubEnabled ? tx('GitHub 登录当前不可用。', 'GitHub login is unavailable right now.') : '',
+  ].filter(Boolean)
+
+  const handleProviderAction = async (
+    provider: AuthProvider | undefined,
+    action: 'login' | 'signup',
+    loadingKey: string,
+  ) => {
+    if (!provider?.enabled) return
+
     try {
-      setLoadingProvider(provider.id)
+      setLoadingAction(loadingKey)
       setError('')
       const params = new URLSearchParams(window.location.search)
       const redirect = params.get('redirect') || '/'
-      const resp = await api.startAuthProvider(provider.id, redirect)
-      window.location.href = resp.authorization_url
+      const resp = await api.startAuthProvider(provider.id, redirect, action)
+      window.location.assign(resp.authorization_url)
     } catch (err: any) {
       setError(err.message || tx('启动登录失败', 'Failed to start sign-in'))
-      setLoadingProvider('')
+      setLoadingAction('')
     }
   }
 
   return (
     <div className="login-page">
-      <div className="login-card">
-        <div className="login-card-header">
-          <LanguageToggle />
-        </div>
-        <h1 className="login-title">neuDrive</h1>
-        <p className="login-desc">
-          {tx('使用统一 OIDC / OAuth 登录', 'Continue with your configured identity provider')}
-        </p>
+      <div className="login-shell">
+        <section className="login-hero">
+          <div className="login-hero-copy">
+            <h1 className="login-hero-title">neuDrive</h1>
+            <p className="login-hero-slogan">
+              {tx('一个 Hub，连接你所有的 AI Agent', 'One hub for all your AI agents')}
+            </p>
+            <p className="login-hero-subtitle">
+              {tx('统一身份、记忆、技能与连接。', 'Identity, memory, skills, and connections in one place.')}
+            </p>
+          </div>
+        </section>
 
-        <div className="login-form">
-          {error && <div className="form-error">{error}</div>}
-
-          {providers.length === 0 ? (
-            <div className="oauth-error">
-              {tx('当前没有可用的登录方式，请先配置认证 Provider。', 'No sign-in providers are configured yet.')}
+        <section className="login-panel">
+          <div className="login-panel-card">
+            <div className="login-panel-header">
+              <LanguageToggle />
             </div>
-          ) : (
-            providers.map((provider) => (
+
+            {error && <div className="form-error login-panel-error">{error}</div>}
+
+            <div className="login-actions">
               <button
-                key={provider.id}
                 type="button"
-                className={`btn btn-block ${provider.id === 'github' ? 'btn-outline btn-github' : 'btn-primary'}`}
-                onClick={() => handleProviderLogin(provider)}
-                disabled={loadingProvider !== '' && loadingProvider !== provider.id}
+                className="btn btn-primary btn-block"
+                onClick={() => handleProviderAction(pocketProvider, 'login', 'pocket-login')}
+                disabled={busy || !pocketEnabled}
               >
-                {loadingProvider === provider.id
-                  ? tx('跳转中...', 'Redirecting...')
-                  : tx(`继续使用 ${provider.display_name}`, `Continue with ${provider.display_name}`)}
+                {loadingAction === 'pocket-login' ? tx('跳转中...', 'Redirecting...') : tx('登录', 'Login')}
               </button>
-            ))
-          )}
-        </div>
+
+              <button
+                type="button"
+                className="btn btn-outline btn-block"
+                onClick={() => handleProviderAction(pocketProvider, 'signup', 'pocket-signup')}
+                disabled={busy || !pocketEnabled}
+              >
+                {loadingAction === 'pocket-signup' ? tx('跳转中...', 'Redirecting...') : tx('注册', 'Sign up')}
+              </button>
+
+              <div className="auth-divider">
+                <span>{tx('或', 'or')}</span>
+              </div>
+
+              <button
+                type="button"
+                className="btn btn-block btn-github"
+                onClick={() => handleProviderAction(githubProvider, 'login', 'github-login')}
+                disabled={busy || !githubEnabled}
+              >
+                {loadingAction === 'github-login'
+                  ? tx('跳转中...', 'Redirecting...')
+                  : tx('使用 GitHub 登录', 'Login with GitHub')}
+              </button>
+            </div>
+
+            {providerHints.length > 0 && (
+              <div className="login-provider-status">
+                {providerHints.map((hint) => (
+                  <p key={hint} className="login-provider-note">{hint}</p>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
       </div>
     </div>
   )

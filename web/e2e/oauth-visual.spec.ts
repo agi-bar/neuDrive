@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test'
-import { registerOAuthApp, registerUser } from './helpers'
+import { loginViaUI, mockPublicConfig, registerOAuthApp, registerUser } from './helpers'
 
 const CF_URL = process.env.CF_URL || 'http://localhost:8080'
 
 test.describe('OAuth Consent Page (SPA)', () => {
   test('logged-in user sees app info + Authorize button, no auto-submit', async ({ page, request }) => {
+    await mockPublicConfig(page)
     const user = await registerUser(request)
     const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
       name: 'OAuth Visual Test App',
@@ -12,12 +13,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
     expect(response.ok()).toBeTruthy()
 
     // Login via SPA
-    await page.goto(CF_URL + '/login')
-    await page.waitForLoadState('networkidle')
-    await page.getByPlaceholder('your@email.com').fill(user.email)
-    await page.getByPlaceholder('输入密码').fill(user.password)
-    await page.locator('button[type="submit"]').click()
-    await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
+    await loginViaUI(page, user.email, user.password)
 
     // Visit OAuth authorize page
     const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientID)}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=admin&state=visual-test`
@@ -51,6 +47,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
   })
 
   test('not-logged-in user gets redirected to login', async ({ page }) => {
+    await mockPublicConfig(page)
     // Clear any existing session
     await page.goto(CF_URL)
     await page.evaluate(() => {
@@ -73,6 +70,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
   })
 
   test('clicking Authorize submits and redirects to callback', async ({ page, request }) => {
+    await mockPublicConfig(page)
     const user = await registerUser(request)
     const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
       name: 'OAuth Click Test App',
@@ -80,12 +78,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
     expect(response.ok()).toBeTruthy()
 
     // Login first
-    await page.goto(CF_URL + '/login')
-    await page.waitForLoadState('networkidle')
-    await page.getByPlaceholder('your@email.com').fill(user.email)
-    await page.getByPlaceholder('输入密码').fill(user.password)
-    await page.locator('button[type="submit"]').click()
-    await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
+    await loginViaUI(page, user.email, user.password)
 
     // Visit OAuth authorize page
     const authorizeURL = `${CF_URL}/oauth/authorize?response_type=code&client_id=${encodeURIComponent(clientID)}&redirect_uri=${encodeURIComponent(redirectURI)}&scope=admin&state=click-test`
@@ -108,6 +101,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
   })
 
   test('long scope list keeps authorize actions above the permissions list', async ({ page, request }) => {
+    await mockPublicConfig(page)
     const user = await registerUser(request)
     const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
       name: 'OAuth Long Scope Test App',
@@ -115,12 +109,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
     })
     expect(response.ok()).toBeTruthy()
 
-    await page.goto(CF_URL + '/login')
-    await page.waitForLoadState('networkidle')
-    await page.getByPlaceholder('your@email.com').fill(user.email)
-    await page.getByPlaceholder('输入密码').fill(user.password)
-    await page.locator('button[type="submit"]').click()
-    await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
+    await loginViaUI(page, user.email, user.password)
 
     const longScope = [
       'read:profile',
@@ -165,6 +154,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
   })
 
   test('login flow: login → redirects back to OAuth → shows consent', async ({ page, request }) => {
+    await mockPublicConfig(page)
     const user = await registerUser(request)
     const { response, clientID, redirectURI } = await registerOAuthApp(request, user.token, {
       name: 'OAuth Login Flow Test App',
@@ -184,9 +174,7 @@ test.describe('OAuth Consent Page (SPA)', () => {
     await page.waitForURL(/\/login/, { timeout: 10000 })
 
     // Login
-    await page.getByPlaceholder('your@email.com').fill(user.email)
-    await page.getByPlaceholder('输入密码').fill(user.password)
-    await page.locator('button[type="submit"]').click()
+    await loginViaUI(page, user.email, user.password)
 
     // After login, should go back to OAuth authorize (NOT dashboard)
     await page.waitForURL(/\/oauth\/authorize/, { timeout: 15000 })

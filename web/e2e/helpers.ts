@@ -1,5 +1,28 @@
 import { Page } from '@playwright/test'
 
+export async function mockPublicConfig(page: Page, overrides: Record<string, any> = {}) {
+  await page.route('**/api/config', async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        ok: true,
+        data: {
+          git_mirror_execution_mode: 'local',
+          github_app_enabled: false,
+          github_app_slug: '',
+          github_client_id: '',
+          github_enabled: false,
+          local_mode: false,
+          storage: 'sqlite',
+          system_settings_enabled: true,
+          ...overrides,
+        },
+      }),
+    })
+  })
+}
+
 // Register a unique user via API and return credentials.
 export async function registerUser(request: any) {
   const slug = `pw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -15,18 +38,47 @@ export async function registerUser(request: any) {
     email,
     password,
     token: body.access_token,
+    refreshToken: body.refresh_token,
     userId: body.user?.id,
   }
 }
 
-// Login via the UI login form.
+async function installBrowserSession(page: Page, accessToken: string, refreshToken?: string) {
+  await page.evaluate(({ accessToken: token, refreshToken: refresh }) => {
+    localStorage.setItem('token', token)
+    if (refresh) {
+      localStorage.setItem('refresh_token', refresh)
+    } else {
+      localStorage.removeItem('refresh_token')
+    }
+  }, { accessToken, refreshToken })
+}
+
+// Establish a browser session without depending on the login page form fields.
 export async function loginViaUI(page: Page, email: string, password: string) {
-  await page.goto('/login')
-  await page.waitForLoadState('networkidle')
-  await page.getByPlaceholder('your@email.com').fill(email)
-  await page.getByPlaceholder('输入密码').fill(password)
-  await page.locator('button[type="submit"]').click()
+  if (page.url() === 'about:blank' || !page.url().includes('/login')) {
+    await page.goto('/login')
+    await page.waitForLoadState('networkidle')
+  }
+
+  const redirect = new URL(page.url()).searchParams.get('redirect') || '/'
+  const auth = await page.evaluate(async ({ email, password }) => {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+    const body = await res.json().catch(() => null)
+    if (!res.ok) {
+      throw new Error(body?.message || body?.error || res.statusText || 'login failed')
+    }
+    return body && body.ok === true && body.data !== undefined ? body.data : body
+  }, { email, password })
+
+  await installBrowserSession(page, auth.access_token, auth.refresh_token)
+  await page.goto(redirect)
   await page.waitForURL(/^(?!.*\/login)/, { timeout: 15000 })
+  await page.waitForLoadState('networkidle')
 }
 
 // Register + login in one step.

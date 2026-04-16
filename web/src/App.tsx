@@ -123,23 +123,6 @@ function App() {
     checkAuth()
   }, [checkAuth])
 
-  const handleLogin = (token: string, userData: any) => {
-    localStorage.setItem('token', token)
-
-    // Check if there's a redirect URL (from OAuth authorize flow)
-    // Do this BEFORE setUser to avoid flashing dashboard
-    const params = new URLSearchParams(window.location.search)
-    const redirect = params.get('redirect')
-    if (redirect) {
-      // Redirect back to OAuth authorize page (now with token in localStorage)
-      window.location.href = redirect
-      return
-    }
-
-    setUser(userData)
-    navigate('/')
-  }
-
   const handleLogout = async () => {
     await api.logout()
     setUser(null)
@@ -200,7 +183,7 @@ function App() {
     return (
       <Suspense fallback={routeFallback}>
         <Routes>
-          <Route path="/login" element={<LoginPage onLogin={handleLogin} />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </Suspense>

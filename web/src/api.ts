@@ -51,6 +51,8 @@ export interface AuthProvider {
   enabled: boolean
 }
 
+export type AuthProviderAction = 'login' | 'signup'
+
 export interface StartAuthProviderResponse {
   authorization_url: string
 }
@@ -380,10 +382,10 @@ export const api = {
   getAuthProviders: (): Promise<AuthProvider[]> =>
     request<AuthProvider[]>('/auth/providers'),
 
-  startAuthProvider: (provider: string, redirectUrl?: string): Promise<StartAuthProviderResponse> =>
+  startAuthProvider: (provider: string, redirectUrl?: string, action: AuthProviderAction = 'login'): Promise<StartAuthProviderResponse> =>
     request<StartAuthProviderResponse>(`/auth/providers/${encodeURIComponent(provider)}/start`, {
       method: 'POST',
-      body: JSON.stringify({ redirect_url: redirectUrl || '' }),
+      body: JSON.stringify({ redirect_url: redirectUrl || '', action }),
     }),
 
   refreshToken: (refreshToken: string): Promise<AuthResponse> =>

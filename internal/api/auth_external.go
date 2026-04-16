@@ -33,7 +33,7 @@ func (s *Server) handleAuthProviderStart(w http.ResponseWriter, r *http.Request)
 	}
 	callbackURL := s.baseURL(r) + "/api/auth/providers/" + url.PathEscape(providerKey) + "/callback"
 	redirectURL := s.normalizeAuthRedirectURL(r, req.RedirectURL)
-	resp, err := s.ExternalAuthService.Start(r.Context(), providerKey, callbackURL, redirectURL)
+	resp, err := s.ExternalAuthService.Start(r.Context(), providerKey, callbackURL, redirectURL, req.Action)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return

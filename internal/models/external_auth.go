@@ -13,8 +13,16 @@ type AuthProvider struct {
 	Enabled     bool   `json:"enabled"`
 }
 
+type AuthProviderAction string
+
+const (
+	AuthProviderActionLogin  AuthProviderAction = "login"
+	AuthProviderActionSignup AuthProviderAction = "signup"
+)
+
 type StartAuthProviderRequest struct {
-	RedirectURL string `json:"redirect_url"`
+	RedirectURL string             `json:"redirect_url"`
+	Action      AuthProviderAction `json:"action"`
 }
 
 type StartAuthProviderResponse struct {

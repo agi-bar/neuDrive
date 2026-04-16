@@ -99,9 +99,9 @@ test.describe('Bundle Sync', () => {
         cli_state: 'pw-sync-state',
       })
       await page.goto(`/sync/login?${params.toString()}`)
-      await expect(page.getByRole('heading', { name: '授权本次 Sync 登录' })).toBeVisible()
-      await page.getByRole('button', { name: '继续并授权 CLI' }).click()
-      await expect(page.getByText(/已把 Sync Token 发回本地 CLI profile：prod/)).toBeVisible({ timeout: 15000 })
+      await expect(page.getByRole('heading', { name: /授权本次 Sync 登录|Authorize this Sync sign-in/ })).toBeVisible()
+      await page.getByRole('button', { name: /继续并授权 CLI|Continue and authorize CLI/ }).click()
+      await expect(page.getByText(/已把 Sync Token 发回本地 CLI profile：prod|The Sync token was sent back to local CLI profile prod/)).toBeVisible({ timeout: 15000 })
       const payload = await callback.received
       expect(payload.state).toBe('pw-sync-state')
       expect(payload.profile).toBe('prod')

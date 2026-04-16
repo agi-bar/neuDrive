@@ -23,6 +23,11 @@ export async function mockPublicConfig(page: Page, overrides: Record<string, any
   })
 }
 
+const devSlugCandidates = (process.env.NEUDRIVE_TEST_DEV_SLUGS || 'demo,de,admin')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
+
 // Register a unique user via API and return credentials.
 export async function registerUser(request: any) {
   const slug = `pw-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`
@@ -33,13 +38,35 @@ export async function registerUser(request: any) {
     data: { slug, email, password },
   })
   const body = await res.json()
+  if (res.status() === 404) {
+    let devBody: any = null
+    for (const candidate of devSlugCandidates) {
+      const devToken = await request.post('/api/auth/token/dev', {
+        data: { slug: candidate },
+      })
+      if (devToken.status() === 404) continue
+      devBody = await devToken.json()
+      break
+    }
+    if (!devBody?.token) {
+      throw new Error(`expected one of ${devSlugCandidates.join(', ')} to exist for /api/auth/token/dev`)
+    }
+    return {
+      slug: devBody.user?.slug || devSlugCandidates[0],
+      email: '',
+      password: '',
+      token: devBody.token,
+      userId: devBody.user?.id,
+      refreshToken: '',
+    }
+  }
   return {
     slug,
     email,
     password,
     token: body.access_token,
-    refreshToken: body.refresh_token,
     userId: body.user?.id,
+    refreshToken: body.refresh_token || '',
   }
 }
 
@@ -84,7 +111,16 @@ export async function loginViaUI(page: Page, email: string, password: string) {
 // Register + login in one step.
 export async function setupUser(page: Page, request: any) {
   const user = await registerUser(request)
-  await loginViaUI(page, user.email, user.password)
+  await page.addInitScript(([token, refreshToken]) => {
+    localStorage.setItem('token', token)
+    if (refreshToken) {
+      localStorage.setItem('refresh_token', refreshToken)
+    } else {
+      localStorage.removeItem('refresh_token')
+    }
+  }, [user.token, user.refreshToken || ''])
+  await page.goto('/')
+  await page.waitForLoadState('networkidle')
   return user
 }
 

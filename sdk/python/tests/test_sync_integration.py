@@ -18,6 +18,32 @@ from neudrive import NeuDrive  # noqa: E402
 from sync_fixture import export_bundle_with_cli, materialize_source  # noqa: E402
 
 BASE_URL = os.environ.get("NEUDRIVE_TEST_URL", "").rstrip("/")
+DEV_SLUG_CANDIDATES = [
+    candidate.strip()
+    for candidate in (
+        os.environ.get("NEUDRIVE_TEST_DEV_SLUGS") or "demo,de,admin"
+    ).split(",")
+    if candidate.strip()
+]
+
+
+def _issue_dev_token() -> tuple[str, str]:
+    last_error: Exception | None = None
+    for slug in DEV_SLUG_CANDIDATES:
+        response = httpx.post(
+            f"{BASE_URL}/api/auth/token/dev",
+            json={"slug": slug},
+            timeout=30.0,
+        )
+        if response.status_code == 404:
+            last_error = RuntimeError(f"dev token user {slug!r} not found")
+            continue
+        response.raise_for_status()
+        body = response.json()
+        return body["token"], body["user"]["slug"]
+    if last_error is not None:
+        raise last_error
+    raise RuntimeError("no NEUDRIVE_TEST_DEV_SLUGS candidates configured")
 
 def _register_user() -> tuple[str, str]:
     slug = f"py-sync-{int(time.time() * 1000)}"
@@ -28,9 +54,13 @@ def _register_user() -> tuple[str, str]:
         json={"slug": slug, "email": email, "password": password},
         timeout=30.0,
     )
-    response.raise_for_status()
-    body = response.json()
-    return body["access_token"], slug
+    if response.status_code != 404:
+        response.raise_for_status()
+        body = response.json()
+        return body["access_token"], slug
+
+    # Hosted/postgres test environments do not expose /api/auth/register.
+    return _issue_dev_token()
 
 
 def _create_sync_scoped_token(jwt_token: str) -> str:
@@ -132,10 +162,11 @@ class TestPythonSyncIntegration(unittest.TestCase):
         bundle = bundle or {}
 
         with NeuDrive(BASE_URL, self.token) as hub:
+            before_jobs = hub.list_sync_jobs()
             preview = hub.preview_bundle(bundle=bundle)
             self.assertTrue(preview.get("fingerprint"))
-            jobs = hub.list_sync_jobs()
-            self.assertEqual(jobs, [])
+            after_jobs = hub.list_sync_jobs()
+            self.assertEqual([job.id for job in after_jobs], [job.id for job in before_jobs])
 
         read_token = _create_scoped_token(self.jwt_token, ["read:bundle"])
         write_token = _create_scoped_token(self.jwt_token, ["write:bundle"])

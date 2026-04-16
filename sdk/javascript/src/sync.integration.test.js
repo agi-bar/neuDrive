@@ -8,6 +8,10 @@ const { execFileSync } = require('node:child_process')
 const { unzipSync, strFromU8 } = require('fflate')
 
 const BASE_URL = (process.env.NEUDRIVE_TEST_URL || '').replace(/\/+$/, '')
+const DEV_SLUG_CANDIDATES = (process.env.NEUDRIVE_TEST_DEV_SLUGS || 'demo,de,admin')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean)
 const ROOT = path.resolve(__dirname, '../../..')
 const FIXTURE_DIR = path.join(ROOT, 'internal', 'services', 'testdata')
 
@@ -96,9 +100,29 @@ async function registerUser() {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ slug, email, password }),
   })
-  assert.equal(registerRes.status, 201)
-  const registerBody = await registerRes.json()
-  const jwtToken = registerBody.access_token
+  let jwtToken
+  if (registerRes.status !== 404) {
+    assert.equal(registerRes.status, 201)
+    const registerBody = await registerRes.json()
+    jwtToken = registerBody.access_token
+  } else {
+    let devTokenBody
+    let lastStatus = 0
+    for (const candidate of DEV_SLUG_CANDIDATES) {
+      const devTokenRes = await fetch(`${BASE_URL}/api/auth/token/dev`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug: candidate }),
+      })
+      lastStatus = devTokenRes.status
+      if (devTokenRes.status === 404) continue
+      assert.equal(devTokenRes.status, 200)
+      devTokenBody = await devTokenRes.json()
+      break
+    }
+    assert.ok(devTokenBody, `expected one of ${DEV_SLUG_CANDIDATES.join(', ')} to exist, last status ${lastStatus}`)
+    jwtToken = devTokenBody.token
+  }
 
   const tokenRes = await fetch(`${BASE_URL}/api/tokens`, {
     method: 'POST',

@@ -101,6 +101,7 @@ export interface FileNode {
   version?: number
   checksum?: string
   metadata?: Record<string, any>
+  bundle_context?: BundleContext
   children?: FileNode[]
   created_at?: string
   updated_at?: string
@@ -159,6 +160,26 @@ export interface SkillSummary {
   capabilities?: string[]
   tags?: string[]
   min_trust_level?: number
+}
+
+export interface BundleContext {
+  kind: 'skill' | 'project'
+  name: string
+  path: string
+  source?: string
+  read_only?: boolean
+  description?: string
+  when_to_use?: string
+  status?: string
+  primary_path?: string
+  log_path?: string
+  capabilities?: string[]
+  allowed_tools?: string[]
+  tags?: string[]
+  arguments?: Record<string, any>
+  activation?: Record<string, any>
+  min_trust_level?: number
+  relative_path?: string
 }
 
 export interface LocalGitSyncInfo {

@@ -16,21 +16,42 @@ import (
 )
 
 type FileNode struct {
-	Path      string      `json:"path"`
-	Name      string      `json:"name"`
-	IsDir     bool        `json:"is_dir"`
-	Source    string      `json:"source,omitempty"`
-	Kind      string      `json:"kind,omitempty"`
-	Content   string      `json:"content,omitempty"`
-	MimeType  string      `json:"mime_type,omitempty"`
-	Size      int64       `json:"size,omitempty"`
-	Version   int64       `json:"version,omitempty"`
-	Checksum  string      `json:"checksum,omitempty"`
-	Metadata  interface{} `json:"metadata,omitempty"`
-	Children  []*FileNode `json:"children,omitempty"`
-	CreatedAt string      `json:"created_at,omitempty"`
-	UpdatedAt string      `json:"updated_at,omitempty"`
-	DeletedAt string      `json:"deleted_at,omitempty"`
+	Path          string         `json:"path"`
+	Name          string         `json:"name"`
+	IsDir         bool           `json:"is_dir"`
+	Source        string         `json:"source,omitempty"`
+	Kind          string         `json:"kind,omitempty"`
+	Content       string         `json:"content,omitempty"`
+	MimeType      string         `json:"mime_type,omitempty"`
+	Size          int64          `json:"size,omitempty"`
+	Version       int64          `json:"version,omitempty"`
+	Checksum      string         `json:"checksum,omitempty"`
+	Metadata      interface{}    `json:"metadata,omitempty"`
+	BundleContext *BundleContext `json:"bundle_context,omitempty"`
+	Children      []*FileNode    `json:"children,omitempty"`
+	CreatedAt     string         `json:"created_at,omitempty"`
+	UpdatedAt     string         `json:"updated_at,omitempty"`
+	DeletedAt     string         `json:"deleted_at,omitempty"`
+}
+
+type BundleContext struct {
+	Kind          string                 `json:"kind"`
+	Name          string                 `json:"name"`
+	Path          string                 `json:"path"`
+	Source        string                 `json:"source,omitempty"`
+	ReadOnly      bool                   `json:"read_only,omitempty"`
+	Description   string                 `json:"description,omitempty"`
+	WhenToUse     string                 `json:"when_to_use,omitempty"`
+	Status        string                 `json:"status,omitempty"`
+	PrimaryPath   string                 `json:"primary_path,omitempty"`
+	LogPath       string                 `json:"log_path,omitempty"`
+	Capabilities  []string               `json:"capabilities,omitempty"`
+	AllowedTools  []string               `json:"allowed_tools,omitempty"`
+	Tags          []string               `json:"tags,omitempty"`
+	Arguments     map[string]interface{} `json:"arguments,omitempty"`
+	Activation    map[string]interface{} `json:"activation,omitempty"`
+	MinTrustLevel int                    `json:"min_trust_level,omitempty"`
+	RelativePath  string                 `json:"relative_path"`
 }
 
 type WriteFileRequest struct {
@@ -251,7 +272,7 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 			size = int64(typed)
 		}
 	}
-	return &FileNode{
+	node := &FileNode{
 		Path:      publicPath,
 		Name:      hubpath.BaseName(publicPath),
 		IsDir:     e.IsDirectory,
@@ -267,6 +288,12 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 		UpdatedAt: e.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 		DeletedAt: deletedAt,
 	}
+	if e.IsDirectory {
+		if summary := services.BundleSummaryFromMetadata(e.Path, e.Metadata, e.MinTrustLevel); summary != nil {
+			node.BundleContext = apiBundleContext(services.BundleContextFromSummary(*summary, publicPath))
+		}
+	}
+	return node
 }
 
 func (s *Server) handleTreeSnapshot(w http.ResponseWriter, r *http.Request) {
@@ -409,9 +436,60 @@ func (s *Server) listTreeNode(ctx context.Context, userID uuid.UUID, trustLevel 
 	}
 
 	return &FileNode{
-		Path:     publicPath,
-		Name:     hubpath.BaseName(publicPath),
-		IsDir:    true,
-		Children: children,
+		Path:          publicPath,
+		Name:          hubpath.BaseName(publicPath),
+		IsDir:         true,
+		BundleContext: s.bundleContextForDirectory(ctx, userID, trustLevel, publicPath),
+		Children:      children,
 	}, nil
+}
+
+func (s *Server) bundleContextForDirectory(ctx context.Context, userID uuid.UUID, trustLevel int, currentPath string) *BundleContext {
+	if s.FileTreeService == nil {
+		return nil
+	}
+	context := services.BundleContextForPath(currentPath, func(path string) (*models.FileTreeEntry, error) {
+		entry, err := s.FileTreeService.Read(ctx, userID, path, trustLevel)
+		if err != nil {
+			return nil, err
+		}
+		return s.renderSystemSkillEntry(ctx, userID, trustLevel, entry), nil
+	})
+	return apiBundleContext(context)
+}
+
+func apiBundleContext(context *models.BundleContext) *BundleContext {
+	if context == nil {
+		return nil
+	}
+	return &BundleContext{
+		Kind:          context.Kind,
+		Name:          context.Name,
+		Path:          context.Path,
+		Source:        context.Source,
+		ReadOnly:      context.ReadOnly,
+		Description:   context.Description,
+		WhenToUse:     context.WhenToUse,
+		Status:        context.Status,
+		PrimaryPath:   context.PrimaryPath,
+		LogPath:       context.LogPath,
+		Capabilities:  append([]string{}, context.Capabilities...),
+		AllowedTools:  append([]string{}, context.AllowedTools...),
+		Tags:          append([]string{}, context.Tags...),
+		Arguments:     cloneStringMap(context.Arguments),
+		Activation:    cloneStringMap(context.Activation),
+		MinTrustLevel: context.MinTrustLevel,
+		RelativePath:  context.RelativePath,
+	}
+}
+
+func cloneStringMap(input map[string]interface{}) map[string]interface{} {
+	if len(input) == 0 {
+		return nil
+	}
+	out := make(map[string]interface{}, len(input))
+	for key, value := range input {
+		out[key] = value
+	}
+	return out
 }

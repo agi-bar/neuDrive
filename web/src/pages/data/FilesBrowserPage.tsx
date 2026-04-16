@@ -11,7 +11,6 @@ import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
 import { useI18n } from '../../i18n'
 import {
   buildFileTileModel,
-  bundleDetailMode,
   buildSourceFilterOptions,
   dataFileEditorRoute,
   fileNodeSource,
@@ -72,6 +71,7 @@ export default function FilesBrowserPage() {
   const query = useQuery()
   const wildcard = params['*'] || ''
   const currentPath = useMemo(() => (wildcard ? '/' + decodeURIComponent(wildcard) : '/'), [wildcard])
+  const [currentNode, setCurrentNode] = useState<FileNode | null>(null)
   const [items, setItems] = useState<FileNode[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -105,9 +105,11 @@ export default function FilesBrowserPage() {
           content: result.content,
           updated_at: result.updated_at,
         }))
+        setCurrentNode(null)
         setItems(sortNodes(mapped, sortKey, sortDir))
       } else {
         const root = await api.getTree(currentPath)
+        setCurrentNode(root)
         setItems(sortNodes(root.children || [], sortKey, sortDir))
       }
       closeMenu()
@@ -276,10 +278,8 @@ export default function FilesBrowserPage() {
 
   const isSelected = (pathValue: string) => selected.has(pathValue)
   const currentLabel = currentPath === '/' ? tx('根目录', 'Root') : currentPath.split('/').filter(Boolean).slice(-1)[0] || tx('根目录', 'Root')
-  const currentBundleMode = useMemo(
-    () => !searchMode && bundleDetailMode(currentPath, items),
-    [currentPath, items, searchMode],
-  )
+  const currentBundleContext = !searchMode ? currentNode?.bundle_context : undefined
+  const currentBundleMode = !searchMode && Boolean(currentBundleContext)
   const filteredItems = useMemo(
     () => items.filter((item) => matchesSourceFilter(fileNodeSource(item), sourceFilter)),
     [items, sourceFilter],

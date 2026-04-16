@@ -273,7 +273,9 @@ function App() {
               <Route path="files/recent" element={<Navigate to="/data/files" replace />} />
               <Route path="files/*" element={<FilesBrowserPage />} />
               <Route path="projects" element={<ProjectsPage />} />
-              <Route path="skills/*" element={<DataSkillsPage />} />
+              <Route path="projects/:projectName" element={<ProjectsPage />} />
+              <Route path="skills" element={<DataSkillsPage />} />
+              <Route path="skills/:bundleKey" element={<DataSkillsPage />} />
               <Route path="memory" element={<DataMemoryPage />} />
               <Route path="profile" element={<InfoPage title={tx('我的资料', 'My Profile')} />} />
               <Route path="roles" element={<Navigate to="/data/files" replace />} />

@@ -129,6 +129,71 @@ func BundleSummaryFromMetadata(rawPath string, metadata map[string]interface{}, 
 	return summary
 }
 
+func BundleContextFromSummary(summary models.BundleSummary, currentPath string) *models.BundleContext {
+	bundlePath := strings.TrimSuffix(hubpath.NormalizePublic(summary.Path), "/")
+	if bundlePath == "" {
+		return nil
+	}
+	current := strings.TrimSuffix(hubpath.NormalizePublic(currentPath), "/")
+	if current == "" {
+		current = bundlePath
+	}
+	relativePath := ""
+	if current != bundlePath {
+		prefix := bundlePath + "/"
+		if strings.HasPrefix(current, prefix) {
+			relativePath = strings.TrimPrefix(current, prefix)
+		}
+	}
+
+	return &models.BundleContext{
+		Kind:          summary.Kind,
+		Name:          summary.Name,
+		Path:          bundlePath,
+		Source:        summary.Source,
+		ReadOnly:      summary.ReadOnly,
+		Description:   summary.Description,
+		WhenToUse:     summary.WhenToUse,
+		Status:        summary.Status,
+		PrimaryPath:   hubpath.NormalizePublic(summary.PrimaryPath),
+		LogPath:       hubpath.NormalizePublic(summary.LogPath),
+		Capabilities:  uniqueSortedStrings(summary.Capabilities),
+		AllowedTools:  uniqueSortedStrings(summary.AllowedTools),
+		Tags:          uniqueSortedStrings(summary.Tags),
+		Arguments:     cloneStringMap(summary.Arguments),
+		Activation:    cloneStringMap(summary.Activation),
+		MinTrustLevel: summary.MinTrustLevel,
+		RelativePath:  relativePath,
+	}
+}
+
+func BundleContextForPath(currentPath string, readDirectory func(path string) (*models.FileTreeEntry, error)) *models.BundleContext {
+	current := strings.TrimSuffix(hubpath.NormalizePublic(currentPath), "/")
+	if current == "" || current == "/" {
+		return nil
+	}
+	original := current
+
+	for {
+		entry, err := readDirectory(current)
+		if err == nil && entry != nil && entry.IsDirectory {
+			if summary := BundleSummaryFromMetadata(entry.Path, entry.Metadata, entry.MinTrustLevel); summary != nil {
+				return BundleContextFromSummary(*summary, original)
+			}
+		}
+		if current == "/" {
+			break
+		}
+		next := pathpkg.Dir(current)
+		if next == "." || next == "" || next == current {
+			break
+		}
+		current = next
+	}
+
+	return nil
+}
+
 func EnrichBundleDirectoryEntry(entry models.FileTreeEntry, descendants []models.FileTreeEntry) models.FileTreeEntry {
 	if !entry.IsDirectory {
 		return entry

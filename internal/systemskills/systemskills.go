@@ -234,6 +234,9 @@ func ListEntries(rawPath string) ([]models.FileTreeEntry, bool) {
 
 func ReadEntry(rawPath string) (*models.FileTreeEntry, bool, error) {
 	publicPath := hubpath.NormalizePublic(rawPath)
+	if entry, ok := systemDirectoryEntry(publicPath); ok {
+		return &entry, true, nil
+	}
 	manifest, resourcePathValue, ok := resourceForFile(publicPath)
 	if !ok {
 		return nil, false, nil
@@ -280,6 +283,35 @@ func ReadEntry(rawPath string) (*models.FileTreeEntry, bool, error) {
 		UpdatedAt:     systemSkillTimestamp,
 	}
 	return entry, true, nil
+}
+
+func systemDirectoryEntry(rawPath string) (models.FileTreeEntry, bool) {
+	publicPath := strings.TrimSuffix(hubpath.NormalizePublic(rawPath), "/")
+	switch publicPath {
+	case "", "/":
+		return models.FileTreeEntry{}, false
+	case skillsRoot, agentHubRoot, portabilityRoot:
+		return directoryEntry(publicPath + "/"), true
+	}
+	for _, platform := range portabilityPlatforms {
+		if publicPath == portabilityRoot+"/"+platform {
+			return directoryEntry(publicPath + "/"), true
+		}
+	}
+
+	resourceRoot, publicRoot, ok := resourceRootForPath(publicPath)
+	if !ok {
+		return models.FileTreeEntry{}, false
+	}
+	resourcePath := resourceRoot
+	if rel := strings.Trim(strings.TrimPrefix(publicPath, publicRoot), "/"); rel != "" {
+		resourcePath = path.Join(resourceRoot, rel)
+	}
+	info, err := fs.Stat(resourcesFS, resourcePath)
+	if err != nil || !info.IsDir() {
+		return models.FileTreeEntry{}, false
+	}
+	return directoryEntry(publicPath + "/"), true
 }
 
 func BuildSnapshot(ctx context.Context, userID uuid.UUID, trustLevel int, platform string, deps SnapshotDeps) Snapshot {

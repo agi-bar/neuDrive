@@ -1,4 +1,4 @@
-import { type FileNode, type SkillSummary } from '../../api'
+import { type BundleContext, type FileNode, type SkillSummary } from '../../api'
 import { getLocaleTag, type AppLocale } from '../../i18n'
 
 const ORDINARY_FILE_EXCLUDED_PREFIXES = [
@@ -409,6 +409,7 @@ export type BundleKind = 'skill' | 'project'
 export type BundleInfo = {
   kind: BundleKind
   name: string
+  path?: string
   description?: string
   whenToUse?: string
   status?: string
@@ -417,6 +418,7 @@ export type BundleInfo = {
   primaryPath?: string
   logPath?: string
   capabilities?: string[]
+  relativePath?: string
 }
 
 export type FileTileModel = {
@@ -449,7 +451,10 @@ function metadataDescription(node: FileNode) {
   return normalizeSkillText(value) || ''
 }
 
-function bundleKindValue(node: Pick<FileNode, 'kind' | 'metadata'>): BundleKind | '' {
+function bundleKindValue(node: Pick<FileNode, 'kind' | 'metadata' | 'bundle_context'>): BundleKind | '' {
+  if (node.bundle_context?.kind === 'skill' || node.bundle_context?.kind === 'project') {
+    return node.bundle_context.kind
+  }
   const bundleKind = metadataValue(node.metadata, 'bundle_kind')
   if (bundleKind === 'skill' || bundleKind === 'project') return bundleKind
   if (node.kind === 'skill_bundle') return 'skill'
@@ -457,13 +462,34 @@ function bundleKindValue(node: Pick<FileNode, 'kind' | 'metadata'>): BundleKind 
   return ''
 }
 
-export function bundleInfoFromNode(node: Pick<FileNode, 'path' | 'name' | 'kind' | 'metadata' | 'source' | 'is_dir'>): BundleInfo | null {
+export function bundleInfoFromContext(context?: BundleContext | null): BundleInfo | null {
+  if (!context) return null
+  return {
+    kind: context.kind,
+    name: context.name,
+    path: context.path,
+    description: normalizeSkillText(context.description) || undefined,
+    whenToUse: normalizeSkillText(context.when_to_use) || undefined,
+    status: context.status || undefined,
+    readOnly: context.read_only === true,
+    source: normalizeSource(context.source),
+    primaryPath: context.primary_path || undefined,
+    logPath: context.log_path || undefined,
+    capabilities: Array.isArray(context.capabilities) ? context.capabilities.filter(Boolean) : undefined,
+    relativePath: context.relative_path || undefined,
+  }
+}
+
+export function bundleInfoFromNode(node: Pick<FileNode, 'path' | 'name' | 'kind' | 'metadata' | 'source' | 'is_dir' | 'bundle_context'>): BundleInfo | null {
   if (!node.is_dir) return null
+  const fromContext = bundleInfoFromContext(node.bundle_context)
+  if (fromContext) return fromContext
   const kind = bundleKindValue(node)
   if (!kind) return null
   return {
     kind,
     name: metadataValue(node.metadata, 'bundle_name') || metadataValue(node.metadata, 'name') || node.name,
+    path: normalizeHubPath(node.path),
     description: metadataDescription(node) || undefined,
     whenToUse: metadataValue(node.metadata, 'when_to_use') || undefined,
     status: metadataValue(node.metadata, 'status') || undefined,
@@ -477,7 +503,7 @@ export function bundleInfoFromNode(node: Pick<FileNode, 'path' | 'name' | 'kind'
   }
 }
 
-export function isBundleDirectory(node: Pick<FileNode, 'path' | 'name' | 'kind' | 'metadata' | 'source' | 'is_dir'>) {
+export function isBundleDirectory(node: Pick<FileNode, 'path' | 'name' | 'kind' | 'metadata' | 'source' | 'is_dir' | 'bundle_context'>) {
   return Boolean(bundleInfoFromNode(node))
 }
 
@@ -487,18 +513,18 @@ export function bundleDetailMode(currentPath: string, items: FileNode[]) {
   return false
 }
 
-function bundleDescription(bundle?: BundleInfo | null) {
+export function bundleDescription(bundle?: BundleInfo | null) {
   if (!bundle) return ''
   return normalizeSkillText(bundle.description) || normalizeSkillText(bundle.whenToUse)
 }
 
-function bundleKindLabel(kind: BundleKind, locale: AppLocale) {
+export function bundleKindLabel(kind: BundleKind, locale: AppLocale) {
   switch (kind) {
     case 'project':
-      return text(locale, '项目', 'Projects')
+      return text(locale, '项目 Bundle', 'Project Bundle')
     case 'skill':
     default:
-      return text(locale, '技能', 'Skills')
+      return text(locale, '技能 Bundle', 'Skill Bundle')
   }
 }
 
@@ -516,6 +542,41 @@ function bundleFooterEnd(bundle: BundleInfo, node: FileNode, locale: AppLocale) 
     default:
       return formatDateTime(node.updated_at || node.created_at, locale)
   }
+}
+
+export function bundleStatusLabel(bundle: BundleInfo, locale: AppLocale) {
+  if (bundle.kind === 'skill') {
+    return bundle.readOnly ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable')
+  }
+  switch ((bundle.status || '').toLowerCase()) {
+    case 'archived':
+      return text(locale, '已归档', 'Archived')
+    case 'paused':
+      return text(locale, '已暂停', 'Paused')
+    case 'active':
+      return text(locale, '进行中', 'Active')
+    default:
+      return text(locale, '未知', 'Unknown')
+  }
+}
+
+export function bundleCapabilityLabel(capability: string, locale: AppLocale = 'zh-CN') {
+  switch ((capability || '').trim().toLowerCase()) {
+    case 'context':
+      return 'Context'
+    case 'logs':
+      return text(locale, '日志', 'Logs')
+    case 'artifacts':
+      return text(locale, '产物', 'Artifacts')
+    case 'instructions':
+      return text(locale, '说明', 'Instructions')
+    default:
+      return capability
+        .split(/[_-]+/)
+        .filter(Boolean)
+        .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+        .join(' ')
+    }
 }
 
 function fileTileDescription(node: FileNode) {
@@ -671,6 +732,41 @@ export function dataFileEditorRoute(path: string) {
 export function dataFileBrowseRoute(path: string) {
   const normalized = path.replace(/^\/+/, '')
   return normalized ? `/data/files/${encodeHubRoutePath(path)}` : '/data/files'
+}
+
+export function normalizeBundleRelativeDir(value?: string | null) {
+  return (value || '')
+    .trim()
+    .replace(/^\/+|\/+$/g, '')
+    .split('/')
+    .filter(Boolean)
+    .join('/')
+}
+
+export function bundleBrowsePath(bundlePath: string, relativeDir?: string | null) {
+  const root = normalizeHubPath(bundlePath).replace(/\/+$/, '')
+  const relative = normalizeBundleRelativeDir(relativeDir)
+  return relative ? normalizeHubPath(`${root}/${relative}`) : root
+}
+
+export function bundleRelativeDirFromPath(bundlePath: string, targetPath: string) {
+  const root = normalizeHubPath(bundlePath).replace(/\/+$/, '')
+  const target = normalizeHubPath(targetPath).replace(/\/+$/, '')
+  if (target === root) return ''
+  const prefix = `${root}/`
+  return target.startsWith(prefix) ? target.slice(prefix.length) : ''
+}
+
+export function dataSkillBundleRoute(bundleKey: string, relativeDir?: string | null) {
+  const base = `/data/skills/${encodeURIComponent(bundleKey)}`
+  const relative = normalizeBundleRelativeDir(relativeDir)
+  return relative ? `${base}?dir=${encodeURIComponent(relative)}` : base
+}
+
+export function dataProjectBundleRoute(projectName: string, relativeDir?: string | null) {
+  const base = `/data/projects/${encodeURIComponent(projectName)}`
+  const relative = normalizeBundleRelativeDir(relativeDir)
+  return relative ? `${base}?dir=${encodeURIComponent(relative)}` : base
 }
 
 export function fileNamespaceLabel(path: string, locale: AppLocale = 'zh-CN') {

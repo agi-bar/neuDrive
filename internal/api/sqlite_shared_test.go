@@ -990,6 +990,19 @@ func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
 	if status != http.StatusOK || !wrote.OK {
 		t.Fatalf("write skill failed: status=%d body=%+v", status, wrote)
 	}
+	status, wrote = doJSON(t, http.MethodPut, ts.URL+"/api/tree/skills/demo/commands/run.md", adminToken, []byte(`{"content":"run\n","mime_type":"text/markdown"}`))
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("write nested skill file failed: status=%d body=%+v", status, wrote)
+	}
+
+	status, createdProject := doJSON(t, http.MethodPost, ts.URL+"/api/projects", adminToken, []byte(`{"name":"demo-project"}`))
+	if status != http.StatusCreated || !createdProject.OK {
+		t.Fatalf("create project failed: status=%d body=%+v", status, createdProject)
+	}
+	status, wrote = doJSON(t, http.MethodPut, ts.URL+"/api/tree/projects/demo-project/research/note.md", adminToken, []byte(`{"content":"note\n","mime_type":"text/markdown"}`))
+	if status != http.StatusOK || !wrote.OK {
+		t.Fatalf("write nested project file failed: status=%d body=%+v", status, wrote)
+	}
 
 	status, dirNoSlash := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/demo", adminToken, nil)
 	if status != http.StatusOK || !dirNoSlash.OK {
@@ -999,6 +1012,30 @@ func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
 		if !bytes.Contains(dirNoSlash.Data, []byte(expected)) {
 			t.Fatalf("expected %q in dir browse payload: %s", expected, string(dirNoSlash.Data))
 		}
+	}
+	var skillRoot struct {
+		Path          string `json:"path"`
+		BundleContext struct {
+			Kind         string `json:"kind"`
+			Path         string `json:"path"`
+			PrimaryPath  string `json:"primary_path"`
+			RelativePath string `json:"relative_path"`
+		} `json:"bundle_context"`
+	}
+	if err := json.Unmarshal(dirNoSlash.Data, &skillRoot); err != nil {
+		t.Fatalf("unmarshal skill root: %v", err)
+	}
+	if skillRoot.Path != "/skills/demo/" {
+		t.Fatalf("skill root path = %q, want /skills/demo/", skillRoot.Path)
+	}
+	if skillRoot.BundleContext.Kind != "skill" || skillRoot.BundleContext.Path != "/skills/demo" {
+		t.Fatalf("unexpected skill root bundle context: %+v", skillRoot.BundleContext)
+	}
+	if skillRoot.BundleContext.PrimaryPath != "/skills/demo/SKILL.md" {
+		t.Fatalf("skill primary path = %q, want /skills/demo/SKILL.md", skillRoot.BundleContext.PrimaryPath)
+	}
+	if skillRoot.BundleContext.RelativePath != "" {
+		t.Fatalf("skill root relative path = %q, want empty", skillRoot.BundleContext.RelativePath)
 	}
 
 	status, dirWithSlash := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/demo/", adminToken, nil)
@@ -1011,6 +1048,28 @@ func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
 		}
 	}
 
+	status, skillDeep := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/demo/commands", adminToken, nil)
+	if status != http.StatusOK || !skillDeep.OK {
+		t.Fatalf("browse nested skill dir failed: status=%d body=%+v", status, skillDeep)
+	}
+	var skillNested struct {
+		Path          string `json:"path"`
+		BundleContext struct {
+			Kind         string `json:"kind"`
+			Path         string `json:"path"`
+			RelativePath string `json:"relative_path"`
+		} `json:"bundle_context"`
+	}
+	if err := json.Unmarshal(skillDeep.Data, &skillNested); err != nil {
+		t.Fatalf("unmarshal nested skill dir: %v", err)
+	}
+	if skillNested.Path != "/skills/demo/commands/" {
+		t.Fatalf("nested skill path = %q, want /skills/demo/commands/", skillNested.Path)
+	}
+	if skillNested.BundleContext.Kind != "skill" || skillNested.BundleContext.Path != "/skills/demo" || skillNested.BundleContext.RelativePath != "commands" {
+		t.Fatalf("unexpected nested skill bundle context: %+v", skillNested.BundleContext)
+	}
+
 	status, systemDir := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/portability/chatgpt", adminToken, nil)
 	if status != http.StatusOK || !systemDir.OK {
 		t.Fatalf("browse system dir without slash failed: status=%d body=%+v", status, systemDir)
@@ -1019,6 +1078,26 @@ func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
 		if !bytes.Contains(systemDir.Data, []byte(expected)) {
 			t.Fatalf("expected %q in system dir payload: %s", expected, string(systemDir.Data))
 		}
+	}
+	var systemSkillRoot struct {
+		BundleContext struct {
+			Kind         string `json:"kind"`
+			Path         string `json:"path"`
+			PrimaryPath  string `json:"primary_path"`
+			RelativePath string `json:"relative_path"`
+		} `json:"bundle_context"`
+	}
+	if err := json.Unmarshal(systemDir.Data, &systemSkillRoot); err != nil {
+		t.Fatalf("unmarshal system skill root: %v", err)
+	}
+	if systemSkillRoot.BundleContext.Kind != "skill" || systemSkillRoot.BundleContext.Path != "/skills/portability/chatgpt" {
+		t.Fatalf("unexpected system skill bundle context: %+v", systemSkillRoot.BundleContext)
+	}
+	if systemSkillRoot.BundleContext.PrimaryPath != "/skills/portability/chatgpt/SKILL.md" {
+		t.Fatalf("system skill primary path = %q, want /skills/portability/chatgpt/SKILL.md", systemSkillRoot.BundleContext.PrimaryPath)
+	}
+	if systemSkillRoot.BundleContext.RelativePath != "" {
+		t.Fatalf("system skill root relative path = %q, want empty", systemSkillRoot.BundleContext.RelativePath)
 	}
 
 	status, systemSkill := doJSON(t, http.MethodGet, ts.URL+"/api/tree/skills/portability/chatgpt/SKILL.md", adminToken, nil)
@@ -1029,6 +1108,61 @@ func TestSQLiteSharedServerFileTreeBrowseRegression(t *testing.T) {
 		if !bytes.Contains(systemSkill.Data, []byte(expected)) {
 			t.Fatalf("expected %q in rendered system skill payload: %s", expected, string(systemSkill.Data))
 		}
+	}
+
+	status, projectRoot := doJSON(t, http.MethodGet, ts.URL+"/api/tree/projects/demo-project", adminToken, nil)
+	if status != http.StatusOK || !projectRoot.OK {
+		t.Fatalf("browse project root failed: status=%d body=%+v", status, projectRoot)
+	}
+	var projectBundleRoot struct {
+		Path          string `json:"path"`
+		BundleContext struct {
+			Kind         string `json:"kind"`
+			Path         string `json:"path"`
+			PrimaryPath  string `json:"primary_path"`
+			LogPath      string `json:"log_path"`
+			RelativePath string `json:"relative_path"`
+		} `json:"bundle_context"`
+	}
+	if err := json.Unmarshal(projectRoot.Data, &projectBundleRoot); err != nil {
+		t.Fatalf("unmarshal project root: %v", err)
+	}
+	if projectBundleRoot.Path != "/projects/demo-project/" {
+		t.Fatalf("project root path = %q, want /projects/demo-project/", projectBundleRoot.Path)
+	}
+	if projectBundleRoot.BundleContext.Kind != "project" || projectBundleRoot.BundleContext.Path != "/projects/demo-project" {
+		t.Fatalf("unexpected project root bundle context: %+v", projectBundleRoot.BundleContext)
+	}
+	if projectBundleRoot.BundleContext.PrimaryPath != "/projects/demo-project/context.md" {
+		t.Fatalf("project primary path = %q, want /projects/demo-project/context.md", projectBundleRoot.BundleContext.PrimaryPath)
+	}
+	if projectBundleRoot.BundleContext.LogPath != "/projects/demo-project/log.jsonl" {
+		t.Fatalf("project log path = %q, want /projects/demo-project/log.jsonl", projectBundleRoot.BundleContext.LogPath)
+	}
+	if projectBundleRoot.BundleContext.RelativePath != "" {
+		t.Fatalf("project root relative path = %q, want empty", projectBundleRoot.BundleContext.RelativePath)
+	}
+
+	status, projectDeep := doJSON(t, http.MethodGet, ts.URL+"/api/tree/projects/demo-project/research", adminToken, nil)
+	if status != http.StatusOK || !projectDeep.OK {
+		t.Fatalf("browse nested project dir failed: status=%d body=%+v", status, projectDeep)
+	}
+	var projectNested struct {
+		Path          string `json:"path"`
+		BundleContext struct {
+			Kind         string `json:"kind"`
+			Path         string `json:"path"`
+			RelativePath string `json:"relative_path"`
+		} `json:"bundle_context"`
+	}
+	if err := json.Unmarshal(projectDeep.Data, &projectNested); err != nil {
+		t.Fatalf("unmarshal nested project dir: %v", err)
+	}
+	if projectNested.Path != "/projects/demo-project/research/" {
+		t.Fatalf("nested project path = %q, want /projects/demo-project/research/", projectNested.Path)
+	}
+	if projectNested.BundleContext.Kind != "project" || projectNested.BundleContext.Path != "/projects/demo-project" || projectNested.BundleContext.RelativePath != "research" {
+		t.Fatalf("unexpected nested project bundle context: %+v", projectNested.BundleContext)
 	}
 }
 

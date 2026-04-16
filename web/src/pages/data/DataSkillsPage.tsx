@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { api, type FileNode, type SkillSummary } from '../../api'
 import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
@@ -14,17 +14,19 @@ import {
   buildFileTileModel,
   buildSourceFilterOptions,
   buildSkillBundleTileModel,
-  dataFileBrowseRoute,
+  bundleBrowsePath,
+  bundleRelativeDirFromPath,
   dataFileEditorRoute,
+  dataSkillBundleRoute,
   fileNodeSource,
   matchesSourceFilter,
-  skillSource,
+  normalizeBundleRelativeDir,
   sourceLabel,
+  skillSource,
+  sortMaterialsItems,
+  skillBundlePathFromSkillPath,
   type MaterialsSortDir,
   type MaterialsSortKey,
-  skillBundlePathFromSkillPath,
-  skillSummaryDescription,
-  sortMaterialsItems,
 } from './DataShared'
 
 type SkillBundle = SkillSummary & {
@@ -36,14 +38,6 @@ type SkillBundle = SkillSummary & {
 
 function bundleIdFromSkillPath(path: string) {
   return skillBundlePathFromSkillPath(path).replace(/^\/skills\/?/, '')
-}
-
-function encodeRoutePath(path: string) {
-  return path
-    .split('/')
-    .filter(Boolean)
-    .map((segment) => encodeURIComponent(segment))
-    .join('/')
 }
 
 function isEditableFile(entry: FileNode) {
@@ -77,16 +71,17 @@ Describe when this skill should not be used.
 export default function DataSkillsPage() {
   const { locale, tx } = useI18n()
   const navigate = useNavigate()
+  const location = useLocation()
   const params = useParams()
-  const bundleRoute = (params['*'] || '')
-    .split('/')
-    .filter(Boolean)
-    .map((segment) => decodeURIComponent(segment))
-    .join('/')
-  const currentBundlePath = bundleRoute ? `/skills/${bundleRoute}` : ''
+  const bundleKey = (params.bundleKey || '').trim()
+  const query = useMemo(() => new URLSearchParams(location.search), [location.search])
+  const currentRelativeDir = normalizeBundleRelativeDir(query.get('dir'))
+  const currentBundlePath = bundleKey ? `/skills/${bundleKey}` : ''
+  const currentBrowsePath = currentBundlePath ? bundleBrowsePath(currentBundlePath, currentRelativeDir) : ''
+  const isBundleView = Boolean(currentBundlePath)
 
   const [skills, setSkills] = useState<SkillBundle[]>([])
-  const [bundleEntries, setBundleEntries] = useState<FileNode[]>([])
+  const [bundleNode, setBundleNode] = useState<FileNode | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedBundlePath, setSelectedBundlePath] = useState<string | null>(null)
@@ -103,10 +98,18 @@ export default function DataSkillsPage() {
     setLoading(true)
     setError('')
     try {
-      const [skillData, skillsRoot, currentBundle] = await Promise.all([
+      if (isBundleView) {
+        const node = await api.getTree(currentBrowsePath)
+        setBundleNode(node)
+        setSkills([])
+        closeMenu()
+        setSelectedEntryPath(null)
+        return
+      }
+
+      const [skillData, skillsRoot] = await Promise.all([
         api.getSkills(),
         api.getTree('/skills'),
-        currentBundlePath ? api.getTree(currentBundlePath) : Promise.resolve<FileNode | null>(null),
       ])
 
       const folderLookup = (skillsRoot.children || []).reduce<Record<string, FileNode>>((acc, child) => {
@@ -129,18 +132,15 @@ export default function DataSkillsPage() {
         })
 
       setSkills(bundles)
-      setBundleEntries(currentBundle?.children || [])
+      setBundleNode(null)
       closeMenu()
-      if (!currentBundlePath) {
-        setSelectedBundlePath(null)
-      }
-      setSelectedEntryPath(null)
+      setSelectedBundlePath(null)
     } catch (err: any) {
       setError(err.message || tx('加载技能失败', 'Failed to load skills'))
     } finally {
       setLoading(false)
     }
-  }, [closeMenu, currentBundlePath, tx])
+  }, [closeMenu, currentBrowsePath, isBundleView, tx])
 
   const {
     closeDialog: closeDeleteDialog,
@@ -154,14 +154,15 @@ export default function DataSkillsPage() {
     void load()
   }, [load])
 
-  const currentSkill = currentBundlePath
-    ? skills.find((skill) => skill.bundlePath === currentBundlePath) || null
-    : null
+  const currentBundleContext = bundleNode?.bundle_context
+  const bundleEntries = bundleNode?.children || []
   const selectedBundle = selectedBundlePath
     ? skills.find((skill) => skill.bundlePath === selectedBundlePath) || null
     : null
-  const selectedDeletePath = currentBundlePath ? selectedEntryPath : selectedBundle?.bundlePath || null
-  const canDeleteSelection = Boolean(selectedDeletePath && !(currentBundlePath ? currentSkill?.read_only : selectedBundle?.read_only))
+  const selectedDeletePath = isBundleView ? selectedEntryPath : selectedBundle?.bundlePath || null
+  const canDeleteSelection = Boolean(
+    selectedDeletePath && !(isBundleView ? currentBundleContext?.read_only : selectedBundle?.read_only),
+  )
 
   const sortedSkills = useMemo(
     () =>
@@ -209,20 +210,20 @@ export default function DataSkillsPage() {
     [bundleEntries, locale],
   )
 
-  const openBundleDetail = (bundleId: string) => {
+  const openBundleDetail = useCallback((bundleId: string, relativeDir = '') => {
     closeMenu()
-    navigate(`/data/skills/${encodeRoutePath(bundleId)}`)
-  }
+    navigate(dataSkillBundleRoute(bundleId, relativeDir))
+  }, [closeMenu, navigate])
 
-  const openFileEditor = (path: string) => {
+  const openFileEditor = useCallback((path: string) => {
     closeMenu()
     navigate(dataFileEditorRoute(path))
-  }
+  }, [closeMenu, navigate])
 
-  const openFolder = (path: string) => {
-    closeMenu()
-    navigate(dataFileBrowseRoute(path))
-  }
+  const openBundleFolder = useCallback((path: string) => {
+    if (!bundleKey) return
+    openBundleDetail(bundleKey, bundleRelativeDirFromPath(currentBundlePath, path))
+  }, [bundleKey, currentBundlePath, openBundleDetail])
 
   const handleDownloadZip = useCallback(async (path: string) => {
     closeMenu()
@@ -258,12 +259,13 @@ export default function DataSkillsPage() {
   }
 
   const sortOptions = getMaterialsSortOptions(locale)
+  const relativeSegments = currentRelativeDir.split('/').filter(Boolean)
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (deleteDialog || activeMenuId) return
       if (event.key === 'Escape') {
-        if (currentBundlePath) setSelectedEntryPath(null)
+        if (isBundleView) setSelectedEntryPath(null)
         else setSelectedBundlePath(null)
         return
       }
@@ -273,11 +275,11 @@ export default function DataSkillsPage() {
         return
       }
       if (event.key !== 'Enter') return
-      if (currentBundlePath && selectedEntryPath) {
+      if (isBundleView && selectedEntryPath) {
         const entry = bundleEntries.find((item) => item.path === selectedEntryPath)
         if (!entry) return
         if (entry.is_dir) {
-          openFolder(entry.path)
+          openBundleFolder(entry.path)
           return
         }
         if (isEditableFile(entry)) {
@@ -285,45 +287,73 @@ export default function DataSkillsPage() {
         }
         return
       }
-      if (!currentBundlePath && selectedBundle) {
+      if (!isBundleView && selectedBundle) {
         openBundleDetail(selectedBundle.bundleId)
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [activeMenuId, bundleEntries, canDeleteSelection, currentBundlePath, deleteDialog, openBundleDetail, openFileEditor, openFolder, requestDelete, selectedBundle, selectedDeletePath, selectedEntryPath])
+  }, [
+    activeMenuId,
+    bundleEntries,
+    canDeleteSelection,
+    deleteDialog,
+    isBundleView,
+    openBundleDetail,
+    openBundleFolder,
+    openFileEditor,
+    requestDelete,
+    selectedBundle,
+    selectedDeletePath,
+    selectedEntryPath,
+  ])
 
   if (loading) {
     return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   }
 
-  if (currentBundlePath) {
+  if (isBundleView) {
     return (
       <div className="page materials-page">
         <section className="materials-hero">
           <div className="materials-hero-copy">
             <nav aria-label={tx('面包屑', 'Breadcrumbs')} className="materials-breadcrumbs">
               <button className="btn-text" onClick={() => navigate('/data/skills')}>{tx('技能', 'Skills')}</button>
-              <span className="breadcrumbs-sep">/</span>
-              <span>{bundleRoute || 'bundle'}</span>
+              {currentBundleContext ? (
+                <>
+                  <span className="breadcrumbs-sep">/</span>
+                  <button className="btn-text" onClick={() => openBundleDetail(bundleKey)}>{currentBundleContext.name}</button>
+                </>
+              ) : null}
+              {relativeSegments.map((segment, index) => {
+                const relative = relativeSegments.slice(0, index + 1).join('/')
+                return (
+                  <span key={relative}>
+                    <span className="breadcrumbs-sep">/</span>
+                    <button className="btn-text" onClick={() => openBundleDetail(bundleKey, relative)}>{segment}</button>
+                  </span>
+                )
+              })}
             </nav>
             <div className="materials-kicker">neuDrive Data</div>
-            <h2 className="materials-title">{currentSkill?.name || bundleRoute}</h2>
-            <p className="materials-subtitle">{skillSummaryDescription(currentSkill) || tx('这个技能 bundle 里的文件现在和文件管理器使用同一套卡片展示。', 'Files in this skill bundle now use the same card layout as the file browser.')}</p>
+            <h2 className="materials-title">{currentBundleContext?.name || bundleKey}</h2>
+            <p className="materials-subtitle">
+              {tx('在 skill bundle 内继续下钻时，顶部会持续显示 bundle 上下文。', 'The bundle context stays visible while you browse deeper inside this skill bundle.')}
+            </p>
           </div>
         </section>
 
         {error && <div className="alert alert-warn">{error}</div>}
-        {!error && !currentSkill && (
+        {!error && !currentBundleContext && (
           <div className="alert alert-warn">{tx('没有找到这个 skill bundle。', 'This skill bundle could not be found.')}</div>
         )}
 
-        {currentSkill && (
+        {currentBundleContext ? (
           <section className="materials-section">
             <div className="materials-section-head">
               <div>
                 <h3 className="materials-section-title">{tx('Bundle 内容', 'Bundle contents')}</h3>
-                <p className="materials-section-copy">{tx('这个 bundle 里的文件和文件夹按同一套文件卡片规则展示。', 'Files and folders in this bundle are displayed with the same file card rules.')}</p>
+                <p className="materials-section-copy">{tx('这个 bundle 里的文件和文件夹按同一套文件卡片规则展示。', 'Files and folders inside this bundle use the same file-card system as the browser.')}</p>
               </div>
               <MaterialsSectionToolbar
                 count={filteredBundleEntries.length}
@@ -357,7 +387,7 @@ export default function DataSkillsPage() {
                   const tile = buildFileTileModel({
                     node: entry,
                     variant: 'bundle-entry',
-                    bundleLabel: currentSkill?.name || bundleRoute,
+                    bundleLabel: currentBundleContext.name,
                     locale,
                   })
                   return (
@@ -383,7 +413,7 @@ export default function DataSkillsPage() {
                                   onSelect: () => {
                                     closeMenu()
                                     if (entry.is_dir) {
-                                      openFolder(entry.path)
+                                      openBundleFolder(entry.path)
                                     } else {
                                       openFileEditor(entry.path)
                                     }
@@ -402,10 +432,10 @@ export default function DataSkillsPage() {
                               label: selectedEntryPath === entry.path ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
                               onSelect: () => {
                                 closeMenu()
-                                setSelectedEntryPath((value) => value === entry.path ? null : entry.path)
+                                setSelectedEntryPath((value) => (value === entry.path ? null : entry.path))
                               },
                             },
-                            ...(currentSkill?.read_only
+                            ...(currentBundleContext.read_only
                               ? []
                               : [{
                                   key: 'delete',
@@ -421,14 +451,29 @@ export default function DataSkillsPage() {
                       )}
                       onMenuToggle={() => toggleMenu(entry.path)}
                       onSelect={() => setSelectedEntryPath(entry.path)}
-                      onOpen={entry.is_dir ? () => openFolder(entry.path) : (isEditableFile(entry) ? () => openFileEditor(entry.path) : undefined)}
+                      onOpen={entry.is_dir ? () => openBundleFolder(entry.path) : (isEditableFile(entry) ? () => openFileEditor(entry.path) : undefined)}
                     />
                   )
                 })}
               </div>
             )}
           </section>
-        )}
+        ) : null}
+
+        <ResourceConfirmDialog
+          open={Boolean(deleteDialog)}
+          kicker={tx('删除确认', 'Delete confirmation')}
+          title={deleteDialog?.nonEmptyDirectories.length ? tx('这些目录不是空的', 'These folders are not empty') : tx('确认删除选中条目', 'Confirm deletion')}
+          description={deleteDialog?.nonEmptyDirectories.length
+            ? tx('确认后会递归删除其中所有可写文件和文件夹。只读内容不会被删除，可能会继续保留。', 'Continuing will recursively delete all writable files and folders inside. Read-only content will not be deleted and may remain in place.')
+            : tx('这个操作会删除选中的技能文件或 bundle，且不可撤销。', 'This will delete the selected skill file or bundle and cannot be undone.')}
+          cancelLabel={tx('取消', 'Cancel')}
+          confirmLabel={deleteSubmitting ? tx('删除中...', 'Deleting...') : tx('确认删除', 'Delete')}
+          tone="danger"
+          submitting={deleteSubmitting}
+          onCancel={closeDeleteDialog}
+          onConfirm={() => void confirmDelete()}
+        />
       </div>
     )
   }
@@ -439,7 +484,7 @@ export default function DataSkillsPage() {
         <div className="materials-hero-copy">
           <div className="materials-kicker">neuDrive Data</div>
           <h2 className="materials-title">{tx('技能', 'Skills')}</h2>
-          <p className="materials-subtitle">{tx('按 skill bundle 展示 ', 'Show skills in ')}<code>/skills</code>{tx(' 下的技能。一个文件夹就是一个 skill，点开后再看 bundle 详情。', '. Each folder is a skill. Open it to inspect bundle details.')}</p>
+          <p className="materials-subtitle">{tx('按 skill bundle 展示 ', 'Show skills in ')}<code>/skills</code>{tx(' 下的技能。一个文件夹就是一个 skill。', '. Each folder is a skill bundle.')}</p>
         </div>
       </section>
 
@@ -556,7 +601,7 @@ export default function DataSkillsPage() {
                           label: selectedBundlePath === tile.node.path ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
                           onSelect: () => {
                             closeMenu()
-                            setSelectedBundlePath((value) => value === tile.node.path ? null : tile.node.path)
+                            setSelectedBundlePath((value) => (value === tile.node.path ? null : tile.node.path))
                           },
                         },
                         ...(!skill.read_only

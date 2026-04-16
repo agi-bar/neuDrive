@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"strings"
@@ -58,7 +59,6 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		DatabaseURL:             envOrOverride("DATABASE_URL", "postgres://localhost:5432/neudrive?sslmode=disable"),
 		Port:                    envOrOverride("PORT", "8080"),
 		JWTSecret:               envOrOverride("JWT_SECRET", ""),
-		UserStorageQuotaBytes:   envOrOverrideInt64(overrides, "USER_STORAGE_QUOTA_BYTES", 0),
 		GithubClientID:          envOrOverride("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret:      envOrOverride("GITHUB_CLIENT_SECRET", ""),
 		PocketProviderID:        envOrOverride("POCKET_ID_PROVIDER_ID", "pocket"),
@@ -86,6 +86,12 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		CaptureOAuth:            getEnvBool("NEUDRIVE_CAPTURE_OAUTH", false),
 		CaptureDir:              envOrOverride("NEUDRIVE_CAPTURE_DIR", "tmp/oauth-captures"),
 	}
+
+	quotaBytes, err := parseByteSize(envOrOverride("USER_STORAGE_QUOTA_BYTES", "0"))
+	if err != nil {
+		return nil, fmt.Errorf("invalid USER_STORAGE_QUOTA_BYTES: %w", err)
+	}
+	cfg.UserStorageQuotaBytes = quotaBytes
 
 	if cfg.JWTSecret == "" {
 		return nil, fmt.Errorf("JWT_SECRET environment variable is required")
@@ -117,31 +123,6 @@ func getEnvInt(key string, fallback int) int {
 	return v
 }
 
-func envOrOverrideInt64(overrides map[string]string, key string, fallback int64) int64 {
-	if overrides != nil {
-		if value, ok := overrides[key]; ok {
-			parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
-			if err == nil {
-				return parsed
-			}
-			return fallback
-		}
-	}
-	return getEnvInt64(key, fallback)
-}
-
-func getEnvInt64(key string, fallback int64) int64 {
-	s := strings.TrimSpace(getEnv(key, ""))
-	if s == "" {
-		return fallback
-	}
-	v, err := strconv.ParseInt(s, 10, 64)
-	if err != nil {
-		return fallback
-	}
-	return v
-}
-
 func getEnvBool(key string, fallback bool) bool {
 	s := strings.TrimSpace(strings.ToLower(getEnv(key, "")))
 	if s == "" {
@@ -163,4 +144,63 @@ func splitScopes(value string) []string {
 		return []string{}
 	}
 	return parts
+}
+
+func parseByteSize(value string) (int64, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0, nil
+	}
+
+	upper := strings.ToUpper(value)
+	split := len(upper)
+	for i, r := range upper {
+		if r < '0' || r > '9' {
+			split = i
+			break
+		}
+	}
+
+	numberPart := strings.TrimSpace(upper[:split])
+	unitPart := strings.TrimSpace(upper[split:])
+	if numberPart == "" {
+		return 0, fmt.Errorf("missing numeric value")
+	}
+
+	number, err := strconv.ParseInt(numberPart, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if number < 0 {
+		return 0, fmt.Errorf("must be non-negative")
+	}
+
+	multiplier, ok := map[string]int64{
+		"":      1,
+		"B":     1,
+		"BYTE":  1,
+		"BYTES": 1,
+		"K":     1024,
+		"KB":    1024,
+		"KIB":   1024,
+		"M":     1024 * 1024,
+		"MB":    1024 * 1024,
+		"MIB":   1024 * 1024,
+		"G":     1024 * 1024 * 1024,
+		"GB":    1024 * 1024 * 1024,
+		"GIB":   1024 * 1024 * 1024,
+		"T":     1024 * 1024 * 1024 * 1024,
+		"TB":    1024 * 1024 * 1024 * 1024,
+		"TIB":   1024 * 1024 * 1024 * 1024,
+		"P":     1024 * 1024 * 1024 * 1024 * 1024,
+		"PB":    1024 * 1024 * 1024 * 1024 * 1024,
+		"PIB":   1024 * 1024 * 1024 * 1024 * 1024,
+	}[unitPart]
+	if !ok {
+		return 0, fmt.Errorf("unsupported size suffix %q", unitPart)
+	}
+	if number > math.MaxInt64/multiplier {
+		return 0, fmt.Errorf("value too large")
+	}
+	return number * multiplier, nil
 }

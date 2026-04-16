@@ -35,8 +35,9 @@ const fileTreeSelectColumns = `
 `
 
 type FileTreeService struct {
-	db   *pgxpool.Pool
-	repo FileTreeRepo
+	db                    *pgxpool.Pool
+	repo                  FileTreeRepo
+	userStorageQuotaBytes int64
 }
 
 func NewFileTreeService(db *pgxpool.Pool) *FileTreeService {
@@ -45,6 +46,16 @@ func NewFileTreeService(db *pgxpool.Pool) *FileTreeService {
 
 func NewFileTreeServiceWithRepo(repo FileTreeRepo) *FileTreeService {
 	return &FileTreeService{repo: repo}
+}
+
+func (s *FileTreeService) SetUserStorageQuotaBytes(limit int64) {
+	if s == nil {
+		return
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	s.userStorageQuotaBytes = limit
 }
 
 // List returns immediate children under the requested directory path.
@@ -224,6 +235,9 @@ func (s *FileTreeService) WriteEntry(
 		metadata = mergeMetadata(current.Metadata, opts.Metadata)
 		metadata = WithSourceContextMetadata(metadata, ctx)
 		metadata = skillMetadataForPath(storagePath, content, metadata)
+		if err := s.enforceStorageQuotaTx(ctx, tx, userID, current, int64(len(content))); err != nil {
+			return nil, err
+		}
 		checksum := entryChecksum(hubpath.NormalizePublic(storagePath), content, contentType, metadata)
 
 		var updated models.FileTreeEntry
@@ -276,6 +290,9 @@ func (s *FileTreeService) WriteEntry(
 
 	metadata = WithSourceContextMetadata(metadata, ctx)
 	metadata = skillMetadataForPath(storagePath, content, metadata)
+	if err := s.enforceStorageQuotaTx(ctx, tx, userID, nil, int64(len(content))); err != nil {
+		return nil, err
+	}
 	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), content, contentType, metadata)
 
 	entryID := uuid.New()

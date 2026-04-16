@@ -81,6 +81,9 @@ func (s *FileTreeService) WriteBinaryEntry(
 		metadata = mergeMetadata(current.Metadata, opts.Metadata)
 		metadata = WithSourceContextMetadata(metadata, ctx)
 		metadata = mergeMetadata(metadata, binaryMetadata(data))
+		if err := s.enforceStorageQuotaTx(ctx, tx, userID, current, int64(len(data))); err != nil {
+			return nil, err
+		}
 		checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", contentType, metadata)
 
 		var updated models.FileTreeEntry
@@ -132,6 +135,9 @@ func (s *FileTreeService) WriteBinaryEntry(
 
 	metadata = WithSourceContextMetadata(metadata, ctx)
 	metadata = mergeMetadata(metadata, binaryMetadata(data))
+	if err := s.enforceStorageQuotaTx(ctx, tx, userID, nil, int64(len(data))); err != nil {
+		return nil, err
+	}
 	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", contentType, metadata)
 
 	entry := &models.FileTreeEntry{

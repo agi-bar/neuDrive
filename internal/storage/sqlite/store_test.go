@@ -181,6 +181,60 @@ func TestWriteEntryPreservesSourceMetadataOnUpdate(t *testing.T) {
 	}
 }
 
+func TestUserStorageQuotaRejectsWritesOverLimit(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+	store.SetUserStorageQuotaBytes(10)
+
+	if _, err := store.WriteEntry(ctx, userID, "/notes/a.txt", "12345", "text/plain", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("WriteEntry under quota: %v", err)
+	}
+
+	if _, err := store.WriteEntry(ctx, userID, "/notes/b.txt", "123456", "text/plain", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); !errors.Is(err, services.ErrStorageQuotaExceeded) {
+		t.Fatalf("WriteEntry over quota error = %v, want storage quota exceeded", err)
+	}
+
+	if _, err := store.WriteBinaryEntry(ctx, userID, "/notes/blob.bin", []byte("123456"), "application/octet-stream", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); !errors.Is(err, services.ErrStorageQuotaExceeded) {
+		t.Fatalf("WriteBinaryEntry over quota error = %v, want storage quota exceeded", err)
+	}
+}
+
+func TestUserStorageQuotaCountsReplacementWrites(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+	store.SetUserStorageQuotaBytes(10)
+
+	entry, err := store.WriteBinaryEntry(ctx, userID, "/notes/blob.bin", []byte("12345678"), "application/octet-stream", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	})
+	if err != nil {
+		t.Fatalf("initial WriteBinaryEntry: %v", err)
+	}
+
+	if _, err := store.WriteEntry(ctx, userID, "/notes/blob.bin", "123", "text/plain", models.FileTreeWriteOptions{
+		ExpectedVersion: &entry.Version,
+		MinTrustLevel:   models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("replace binary with smaller text: %v", err)
+	}
+
+	if _, err := store.WriteEntry(ctx, userID, "/notes/extra.txt", "1234567", "text/plain", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); err != nil {
+		t.Fatalf("WriteEntry at exact quota: %v", err)
+	}
+
+	if _, err := store.WriteEntry(ctx, userID, "/notes/too-much.txt", "1", "text/plain", models.FileTreeWriteOptions{
+		MinTrustLevel: models.TrustLevelGuest,
+	}); !errors.Is(err, services.ErrStorageQuotaExceeded) {
+		t.Fatalf("WriteEntry past exact quota error = %v, want storage quota exceeded", err)
+	}
+}
+
 func TestImportSkillDefaultsSourceMetadata(t *testing.T) {
 	ctx, store, userID := openTestStore(t)
 	fixture := newTestServiceFixture(store)

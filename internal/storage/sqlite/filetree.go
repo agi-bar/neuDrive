@@ -3,6 +3,7 @@ package sqlite
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -246,8 +247,13 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	if err := s.ensureParentDirectories(ctx, userID, storagePath); err != nil {
 		return nil, err
 	}
-	current, _ := s.readCurrentEntry(ctx, userID, storagePath)
 	now := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	current, _ := s.readCurrentEntryTx(ctx, tx, userID, storagePath)
 	metadata := mergeMetadata(nil, opts.Metadata)
 	kind := strings.TrimSpace(opts.Kind)
 	if kind == "" {
@@ -256,6 +262,9 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	if current == nil {
 		metadata = services.WithSourceContextMetadata(metadata, ctx)
 		metadata = services.SkillMetadataForPath(storagePath, content, metadata)
+		if err := s.enforceStorageQuotaTx(ctx, tx, userID, nil, int64(len(content))); err != nil {
+			return nil, err
+		}
 		entry := &models.FileTreeEntry{
 			ID:            uuid.New(),
 			UserID:        userID,
@@ -271,7 +280,7 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		}
-		if _, err := s.db.ExecContext(ctx,
+		if _, err := tx.ExecContext(ctx,
 			`INSERT INTO file_tree (
 				id, user_id, path, kind, is_directory, content, content_type, metadata_json,
 				checksum, version, min_trust_level, created_at, updated_at, deleted_at
@@ -291,6 +300,9 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 		); err != nil {
 			return nil, err
 		}
+		if err := tx.Commit(); err != nil {
+			return nil, err
+		}
 		return entry, nil
 	}
 	if opts.ExpectedVersion != nil && current.Version != *opts.ExpectedVersion {
@@ -302,6 +314,9 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	metadata = mergeMetadata(current.Metadata, opts.Metadata)
 	metadata = services.WithSourceContextMetadata(metadata, ctx)
 	metadata = services.SkillMetadataForPath(storagePath, content, metadata)
+	if err := s.enforceStorageQuotaTx(ctx, tx, userID, current, int64(len(content))); err != nil {
+		return nil, err
+	}
 	current.Kind = kind
 	current.IsDirectory = false
 	current.Content = content
@@ -312,7 +327,7 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	current.UpdatedAt = now
 	current.DeletedAt = nil
 	current.Checksum = entryChecksum(hubpath.NormalizePublic(storagePath), content, contentType, metadata)
-	if _, err := s.db.ExecContext(ctx,
+	if _, err := tx.ExecContext(ctx,
 		`UPDATE file_tree
 		    SET kind = ?, is_directory = 0, content = ?, content_type = ?, metadata_json = ?,
 		        checksum = ?, version = ?, min_trust_level = ?, updated_at = ?, deleted_at = NULL
@@ -329,7 +344,10 @@ func (s *Store) WriteEntry(ctx context.Context, userID uuid.UUID, rawPath, conte
 	); err != nil {
 		return nil, err
 	}
-	_, _ = s.db.ExecContext(ctx, `DELETE FROM file_blobs WHERE entry_id = ?`, current.ID.String())
+	_, _ = tx.ExecContext(ctx, `DELETE FROM file_blobs WHERE entry_id = ?`, current.ID.String())
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
 	return current, nil
 }
 
@@ -344,8 +362,13 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 	if err := s.ensureParentDirectories(ctx, userID, storagePath); err != nil {
 		return nil, err
 	}
-	current, _ := s.readCurrentEntry(ctx, userID, storagePath)
 	now := time.Now().UTC()
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	current, _ := s.readCurrentEntryTx(ctx, tx, userID, storagePath)
 	metadata := mergeMetadata(nil, opts.Metadata)
 	kind := strings.TrimSpace(opts.Kind)
 	if kind == "" {
@@ -354,6 +377,9 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 	if current == nil {
 		metadata = services.WithSourceContextMetadata(metadata, ctx)
 		metadata = mergeMetadata(metadata, binaryMetadata(data))
+		if err := s.enforceStorageQuotaTx(ctx, tx, userID, nil, int64(len(data))); err != nil {
+			return nil, err
+		}
 		current = &models.FileTreeEntry{
 			ID:            uuid.New(),
 			UserID:        userID,
@@ -369,7 +395,7 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		}
-		_, err := s.db.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`INSERT INTO file_tree (
 				id, user_id, path, kind, is_directory, content, content_type, metadata_json,
 				checksum, version, min_trust_level, created_at, updated_at, deleted_at
@@ -399,6 +425,9 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 		metadata = mergeMetadata(current.Metadata, opts.Metadata)
 		metadata = services.WithSourceContextMetadata(metadata, ctx)
 		metadata = mergeMetadata(metadata, binaryMetadata(data))
+		if err := s.enforceStorageQuotaTx(ctx, tx, userID, current, int64(len(data))); err != nil {
+			return nil, err
+		}
 		current.Kind = kind
 		current.Content = ""
 		current.ContentType = contentType
@@ -408,7 +437,7 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 		current.UpdatedAt = now
 		current.DeletedAt = nil
 		current.Checksum = entryChecksum(hubpath.NormalizePublic(storagePath), "", contentType, metadata)
-		_, err := s.db.ExecContext(ctx,
+		_, err := tx.ExecContext(ctx,
 			`UPDATE file_tree
 			    SET kind = ?, is_directory = 0, content = '', content_type = ?, metadata_json = ?,
 			        checksum = ?, version = ?, min_trust_level = ?, updated_at = ?, deleted_at = NULL
@@ -427,7 +456,7 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 		}
 	}
 	hash := sha256.Sum256(data)
-	_, err := s.db.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		`INSERT INTO file_blobs (entry_id, user_id, data, size_bytes, sha256, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(entry_id) DO UPDATE SET
@@ -444,6 +473,9 @@ func (s *Store) WriteBinaryEntry(ctx context.Context, userID uuid.UUID, rawPath 
 		timeText(now),
 	)
 	if err != nil {
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return current, nil
@@ -612,6 +644,18 @@ func (s *Store) EnsureDirectory(ctx context.Context, userID uuid.UUID, rawPath s
 
 func (s *Store) readCurrentEntry(ctx context.Context, userID uuid.UUID, storagePath string) (*models.FileTreeEntry, error) {
 	row := s.db.QueryRowContext(ctx,
+		`SELECT id, user_id, path, kind, is_directory, content, content_type, metadata_json,
+		        checksum, version, min_trust_level, created_at, updated_at, deleted_at
+		   FROM file_tree
+		  WHERE user_id = ? AND path = ? AND deleted_at IS NULL`,
+		userID.String(),
+		storagePath,
+	)
+	return scanFileTreeEntry(row)
+}
+
+func (s *Store) readCurrentEntryTx(ctx context.Context, tx *sql.Tx, userID uuid.UUID, storagePath string) (*models.FileTreeEntry, error) {
+	row := tx.QueryRowContext(ctx,
 		`SELECT id, user_id, path, kind, is_directory, content, content_type, metadata_json,
 		        checksum, version, min_trust_level, created_at, updated_at, deleted_at
 		   FROM file_tree

@@ -11,6 +11,7 @@ type Config struct {
 	DatabaseURL             string
 	Port                    string
 	JWTSecret               string
+	UserStorageQuotaBytes   int64
 	GithubClientID          string
 	GithubClientSecret      string
 	PocketProviderID        string
@@ -57,6 +58,7 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		DatabaseURL:             envOrOverride("DATABASE_URL", "postgres://localhost:5432/neudrive?sslmode=disable"),
 		Port:                    envOrOverride("PORT", "8080"),
 		JWTSecret:               envOrOverride("JWT_SECRET", ""),
+		UserStorageQuotaBytes:   envOrOverrideInt64(overrides, "USER_STORAGE_QUOTA_BYTES", 0),
 		GithubClientID:          envOrOverride("GITHUB_CLIENT_ID", ""),
 		GithubClientSecret:      envOrOverride("GITHUB_CLIENT_SECRET", ""),
 		PocketProviderID:        envOrOverride("POCKET_ID_PROVIDER_ID", "pocket"),
@@ -109,6 +111,31 @@ func getEnvInt(key string, fallback int) int {
 		return fallback
 	}
 	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fallback
+	}
+	return v
+}
+
+func envOrOverrideInt64(overrides map[string]string, key string, fallback int64) int64 {
+	if overrides != nil {
+		if value, ok := overrides[key]; ok {
+			parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+			if err == nil {
+				return parsed
+			}
+			return fallback
+		}
+	}
+	return getEnvInt64(key, fallback)
+}
+
+func getEnvInt64(key string, fallback int64) int64 {
+	s := strings.TrimSpace(getEnv(key, ""))
+	if s == "" {
+		return fallback
+	}
+	v, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
 		return fallback
 	}

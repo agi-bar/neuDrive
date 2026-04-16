@@ -106,6 +106,7 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	store.SetUserStorageQuotaBytes(cfg.UserStorageQuotaBytes)
 	owner, err := store.EnsureOwner(ctx)
 	if err != nil {
 		_ = store.Close()
@@ -118,6 +119,7 @@ func buildSQLite(ctx context.Context, opts Options) (*App, error) {
 		return nil, err
 	}
 	fileTreeSvc := services.NewFileTreeServiceWithRepo(sqlitestorage.NewFileTreeRepo(store))
+	fileTreeSvc.SetUserStorageQuotaBytes(cfg.UserStorageQuotaBytes)
 	memorySvc := services.NewMemoryServiceWithRepo(sqlitestorage.NewMemoryRepo(store), nil)
 	userSvc := services.NewUserServiceWithRepo(sqlitestorage.NewUserRepo(store))
 	connSvc := services.NewConnectionServiceWithRepo(sqlitestorage.NewConnectionRepo(store))
@@ -414,6 +416,7 @@ func buildPostgresDeps(_ context.Context, db *pgxpool.Pool, cfg *config.Config) 
 	externalAuthSvc := services.NewExternalAuthService(db, authSvc, cfg)
 	connSvc := services.NewConnectionService(db)
 	fileTreeSvc := services.NewFileTreeService(db)
+	fileTreeSvc.SetUserStorageQuotaBytes(cfg.UserStorageQuotaBytes)
 	vaultSvc := services.NewVaultService(db, v)
 	memorySvc := services.NewMemoryService(db, fileTreeSvc)
 	roleSvc := services.NewRoleService(db, fileTreeSvc)

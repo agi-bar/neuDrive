@@ -169,6 +169,9 @@ func (s *FileTreeService) writePreparedTextImportTx(ctx context.Context, tx pgx.
 
 	minTrust := models.TrustLevelGuest
 	if current != nil {
+		if err := s.enforceStorageQuotaTx(ctx, tx, userID, current, int64(len(entry.content))); err != nil {
+			return err
+		}
 		var updated models.FileTreeEntry
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`UPDATE file_tree
@@ -225,6 +228,9 @@ func (s *FileTreeService) writePreparedTextImportTx(ctx context.Context, tx pgx.
 		CreatedAt:     now,
 		UpdatedAt:     now,
 	}
+	if err := s.enforceStorageQuotaTx(ctx, tx, userID, nil, int64(len(entry.content))); err != nil {
+		return err
+	}
 	_, err = tx.Exec(ctx,
 		`INSERT INTO file_tree (
 			id, user_id, path, kind, is_directory, content, content_type, metadata,
@@ -256,6 +262,9 @@ func (s *FileTreeService) writePreparedBinaryImportTx(ctx context.Context, tx pg
 
 	minTrust := models.TrustLevelGuest
 	if current != nil {
+		if err := s.enforceStorageQuotaTx(ctx, tx, userID, current, int64(len(entry.data))); err != nil {
+			return err
+		}
 		var updated models.FileTreeEntry
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`UPDATE file_tree
@@ -311,6 +320,9 @@ func (s *FileTreeService) writePreparedBinaryImportTx(ctx context.Context, tx pg
 		MinTrustLevel: minTrust,
 		CreatedAt:     now,
 		UpdatedAt:     now,
+	}
+	if err := s.enforceStorageQuotaTx(ctx, tx, userID, nil, int64(len(entry.data))); err != nil {
+		return err
 	}
 	_, err = tx.Exec(ctx,
 		`INSERT INTO file_tree (

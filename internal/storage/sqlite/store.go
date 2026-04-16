@@ -20,8 +20,9 @@ import (
 )
 
 type Store struct {
-	path string
-	db   *sql.DB
+	path                  string
+	db                    *sql.DB
+	userStorageQuotaBytes int64
 }
 
 const sqliteDriverName = "sqlite"
@@ -67,6 +68,16 @@ func (s *Store) DB() *sql.DB {
 		return nil
 	}
 	return s.db
+}
+
+func (s *Store) SetUserStorageQuotaBytes(limit int64) {
+	if s == nil {
+		return
+	}
+	if limit < 0 {
+		limit = 0
+	}
+	s.userStorageQuotaBytes = limit
 }
 
 func (s *Store) init(ctx context.Context) error {

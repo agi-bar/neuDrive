@@ -18,6 +18,7 @@ import (
 
 	"github.com/agi-bar/neudrive/internal/database"
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/skillsarchive"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -288,6 +289,36 @@ func TestBundleImportExport_RoundTripRealisticFixture(t *testing.T) {
 	}
 	if _, ok := exported.Skills["portability"]; ok {
 		t.Fatal("export unexpectedly included system skill")
+	}
+}
+
+func TestImportSkillsArchiveEntries_RespectsUserStorageQuota(t *testing.T) {
+	ctx, userID, fileTree, _, importSvc, _ := setupBundleIntegration(t)
+	fileTree.SetUserStorageQuotaBytes(8)
+
+	result, err := importSvc.ImportSkillsArchiveEntries(ctx, userID, []skillsarchive.Entry{
+		{
+			SkillName: "quota-skill",
+			RelPath:   "SKILL.md",
+			Data:      []byte("# quota\n"),
+		},
+		{
+			SkillName: "quota-skill",
+			RelPath:   "extra.txt",
+			Data:      []byte("x"),
+		},
+	}, "test", "quota.skill")
+	if err != nil {
+		t.Fatalf("ImportSkillsArchiveEntries: %v", err)
+	}
+	if result.Imported != 1 {
+		t.Fatalf("Imported = %d, want 1", result.Imported)
+	}
+	if len(result.Errors) != 1 {
+		t.Fatalf("Errors = %d, want 1", len(result.Errors))
+	}
+	if !strings.Contains(result.Errors[0], ErrStorageQuotaExceeded.Error()) {
+		t.Fatalf("quota error = %q, want storage quota exceeded", result.Errors[0])
 	}
 }
 

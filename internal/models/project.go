@@ -7,14 +7,18 @@ import (
 )
 
 type Project struct {
-	ID        uuid.UUID              `json:"id" db:"id"`
-	UserID    uuid.UUID              `json:"user_id" db:"user_id"`
-	Name      string                 `json:"name" db:"name"`
-	Status    string                 `json:"status" db:"status"` // active, archived
-	ContextMD string                 `json:"context_md" db:"context_md"`
-	Metadata  map[string]interface{} `json:"metadata,omitempty" db:"metadata"`
-	CreatedAt time.Time              `json:"created_at" db:"created_at"`
-	UpdatedAt time.Time              `json:"updated_at" db:"updated_at"`
+	ID           uuid.UUID              `json:"id" db:"id"`
+	UserID       uuid.UUID              `json:"user_id" db:"user_id"`
+	Name         string                 `json:"name" db:"name"`
+	Status       string                 `json:"status" db:"status"` // active, archived
+	Description  string                 `json:"description,omitempty"`
+	PrimaryPath  string                 `json:"primary_path,omitempty"`
+	LogPath      string                 `json:"log_path,omitempty"`
+	Capabilities []string               `json:"capabilities,omitempty"`
+	ContextMD    string                 `json:"context_md" db:"context_md"`
+	Metadata     map[string]interface{} `json:"metadata,omitempty" db:"metadata"`
+	CreatedAt    time.Time              `json:"created_at" db:"created_at"`
+	UpdatedAt    time.Time              `json:"updated_at" db:"updated_at"`
 }
 
 type ProjectLog struct {

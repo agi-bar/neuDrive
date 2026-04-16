@@ -356,7 +356,7 @@ export default function DataSkillsPage() {
                 {filteredBundleEntries.map((entry) => {
                   const tile = buildFileTileModel({
                     node: entry,
-                    variant: 'skill-bundle-entry',
+                    variant: 'bundle-entry',
                     bundleLabel: currentSkill?.name || bundleRoute,
                     locale,
                   })

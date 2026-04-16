@@ -14,6 +14,7 @@ import {
   matchesSourceFilter,
   projectSource,
   sourceLabel,
+  dataFileBrowseRoute,
   type MaterialsSortDir,
   type MaterialsSortKey,
   dataFileEditorRoute,
@@ -24,6 +25,9 @@ interface Project {
   name: string
   status: string
   description?: string
+  primary_path?: string
+  log_path?: string
+  capabilities?: string[]
   last_activity?: string
   updated_at?: string
   context_md?: string
@@ -96,7 +100,45 @@ export default function ProjectsPage() {
     void loadProjectDetail(project.name)
   }
 
-  const projectContextRoute = (name: string) => dataFileEditorRoute(projectContextPath(name))
+  const projectBundlePath = (name: string) => `/projects/${name}/`
+  const projectContextPath = (project: Pick<Project, 'name' | 'primary_path'> | string) =>
+    typeof project === 'string'
+      ? `/projects/${project}/context.md`
+      : project.primary_path || `/projects/${project.name}/context.md`
+  const projectLogPath = (project: Pick<Project, 'name' | 'log_path'> | string) =>
+    typeof project === 'string'
+      ? `/projects/${project}/log.jsonl`
+      : project.log_path || `/projects/${project.name}/log.jsonl`
+  const projectContextRoute = (project: Pick<Project, 'name' | 'primary_path'> | string) =>
+    dataFileEditorRoute(projectContextPath(project))
+  const projectLogRoute = (project: Pick<Project, 'name' | 'log_path'> | string) =>
+    dataFileEditorRoute(projectLogPath(project))
+  const projectBundleRoute = (project: Pick<Project, 'name'> | string) =>
+    dataFileBrowseRoute(projectBundlePath(typeof project === 'string' ? project : project.name))
+  const projectCapabilities = (project: Project) => {
+    const raw = Array.isArray(project.capabilities)
+      ? project.capabilities.map((value) => `${value || ''}`.trim().toLowerCase()).filter(Boolean)
+      : []
+    return Array.from(new Set(raw.length > 0 ? raw : ['context', 'logs']))
+  }
+  const projectCapabilityLabel = (capability: string) => {
+    switch (capability) {
+      case 'context':
+        return 'Context'
+      case 'logs':
+        return tx('日志', 'Logs')
+      case 'artifacts':
+        return tx('产物', 'Artifacts')
+      default:
+        return capability
+          .split(/[_-]+/)
+          .filter(Boolean)
+          .map((part) => part.slice(0, 1).toUpperCase() + part.slice(1))
+          .join(' ')
+    }
+  }
+  const projectDescription = (project: Project) =>
+    project.description || tx('这个项目 bundle 还没有补充描述。', 'This project bundle does not have a description yet.')
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -170,7 +212,6 @@ export default function ProjectsPage() {
   const sortOptions = getMaterialsSortOptions(locale)
 
   const getProjectLastActivity = (project: Project) => project.last_activity || project.updated_at
-  const projectContextPath = (name: string) => `/projects/${name}/context.md`
   const sortedProjects = useMemo(
     () =>
       sortMaterialsItems({
@@ -204,7 +245,7 @@ export default function ProjectsPage() {
         return
       }
       if (event.key === 'Enter' && selectedProject) {
-        navigate(projectContextRoute(selectedProject.name))
+        navigate(projectBundleRoute(selectedProject))
       }
     }
     window.addEventListener('keydown', onKey)
@@ -305,15 +346,31 @@ export default function ProjectsPage() {
           </div>
         ) : (
           <div className="materials-grid materials-grid-wide">
-            {filteredProjects.map((project) => (
+            {filteredProjects.map((project) => {
+              const source = projectSource(project)
+              return (
                 <MaterialsTile
                   key={project.name}
                   iconClassName="icon-folder"
                   title={project.name}
-                  titleActionAriaLabel={tx(`打开项目 ${project.name} 的 context.md`, `Open ${project.name} context.md`)}
-                  subtitle={`${getStatusLabel(project.status)} · ${sourceLabel(projectSource(project), locale)}`}
-                  description={project.description || tx('这个项目还没有补充描述。', 'This project does not have a description yet.')}
-                  path={projectContextPath(project.name)}
+                  titleActionAriaLabel={tx(`打开项目 ${project.name} 的 bundle 目录`, `Open the ${project.name} bundle folder`)}
+                  subtitle={`${tx('项目 bundle', 'Project bundle')} · ${getStatusLabel(project.status)}`}
+                  description={projectDescription(project)}
+                  path={projectBundlePath(project.name)}
+                  pills={(
+                    <>
+                      {source ? (
+                        <span className="materials-tile-pill materials-source-pill">
+                          {sourceLabel(source, locale)}
+                        </span>
+                      ) : null}
+                      {projectCapabilities(project).map((capability) => (
+                        <span key={capability} className="materials-tile-pill">
+                          {projectCapabilityLabel(capability)}
+                        </span>
+                      ))}
+                    </>
+                  )}
                   footerStart={tx('最后活动', 'Last activity')}
                   footerEnd={formatTime(getProjectLastActivity(project))}
                   selected={selectedProject?.name === project.name}
@@ -323,11 +380,27 @@ export default function ProjectsPage() {
                     <ResourceActionMenu
                       items={[
                         {
+                          key: 'bundle',
+                          label: tx('打开 bundle', 'Open bundle'),
+                          onSelect: () => {
+                            closeMenu()
+                            navigate(projectBundleRoute(project))
+                          },
+                        },
+                        {
                           key: 'open',
                           label: tx('打开 context', 'Open context'),
                           onSelect: () => {
                             closeMenu()
-                            navigate(projectContextRoute(project.name))
+                            navigate(projectContextRoute(project))
+                          },
+                        },
+                        {
+                          key: 'log',
+                          label: tx('打开日志', 'Open log'),
+                          onSelect: () => {
+                            closeMenu()
+                            navigate(projectLogRoute(project))
                           },
                         },
                         {
@@ -355,9 +428,21 @@ export default function ProjectsPage() {
                   )}
                   onMenuToggle={() => toggleMenu(project.name)}
                   onSelect={() => handleSelectProject(project)}
-                  onOpen={() => navigate(projectContextRoute(project.name))}
-                />
-              ))}
+                  onOpen={() => navigate(projectBundleRoute(project))}
+                >
+                  <div className="project-bundle-paths">
+                    <div className="project-bundle-path-row">
+                      <span className="project-bundle-path-label">{tx('主文件', 'Primary')}</span>
+                      <code className="project-bundle-path-value">{projectContextPath(project)}</code>
+                    </div>
+                    <div className="project-bundle-path-row">
+                      <span className="project-bundle-path-label">{tx('Log', 'Log')}</span>
+                      <code className="project-bundle-path-value">{projectLogPath(project)}</code>
+                    </div>
+                  </div>
+                </MaterialsTile>
+              )
+            })}
           </div>
         )}
       </section>
@@ -382,9 +467,76 @@ export default function ProjectsPage() {
               <div className="page-loading">{tx('加载详情...', 'Loading details...')}</div>
             ) : (
               <>
+                <div className="materials-panel project-bundle-overview">
+                  <div className="project-bundle-overview-top">
+                    <div>
+                      <div className="project-bundle-kicker">{tx('项目 bundle', 'Project bundle')}</div>
+                      <h4 className="card-title project-bundle-title">{selectedProject.name}</h4>
+                      <p className="project-bundle-description">{projectDescription(selectedProject)}</p>
+                    </div>
+                    <span className={`badge project-bundle-status status-${(selectedProject.status || 'unknown').toLowerCase()}`}>
+                      {getStatusLabel(selectedProject.status)}
+                    </span>
+                  </div>
+
+                  <div className="project-bundle-pill-row">
+                    <span className="materials-tile-pill">{tx('Bundle 目录', 'Bundle directory')}</span>
+                    {projectSource(selectedProject) ? (
+                      <span className="materials-tile-pill materials-source-pill">
+                        {sourceLabel(projectSource(selectedProject), locale)}
+                      </span>
+                    ) : null}
+                    {projectCapabilities(selectedProject).map((capability) => (
+                      <span key={capability} className="materials-tile-pill">
+                        {projectCapabilityLabel(capability)}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="project-bundle-meta-grid">
+                    <div className="project-bundle-meta-card">
+                      <span className="project-bundle-meta-label">{tx('目录路径', 'Bundle path')}</span>
+                      <code className="project-bundle-meta-value">{projectBundlePath(selectedProject.name)}</code>
+                    </div>
+                    <div className="project-bundle-meta-card">
+                      <span className="project-bundle-meta-label">{tx('主文件', 'Primary file')}</span>
+                      <code className="project-bundle-meta-value">{projectContextPath(selectedProject)}</code>
+                    </div>
+                    <div className="project-bundle-meta-card">
+                      <span className="project-bundle-meta-label">{tx('日志文件', 'Log file')}</span>
+                      <code className="project-bundle-meta-value">{projectLogPath(selectedProject)}</code>
+                    </div>
+                  </div>
+
+                  <div className="project-bundle-actions">
+                    <button
+                      type="button"
+                      className="btn btn-sm materials-toolbar-control"
+                      onClick={() => navigate(projectBundleRoute(selectedProject))}
+                    >
+                      {tx('打开 bundle', 'Open bundle')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm materials-toolbar-control"
+                      onClick={() => navigate(projectContextRoute(selectedProject))}
+                    >
+                      {tx('打开 context', 'Open context')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-sm materials-toolbar-control"
+                      onClick={() => navigate(projectLogRoute(selectedProject))}
+                    >
+                      {tx('打开日志', 'Open log')}
+                    </button>
+                  </div>
+                </div>
+
                 {selectedProject.context_md && (
                   <div className="materials-panel">
                     <h4 className="card-title">context.md</h4>
+                    <div className="project-bundle-panel-path">{projectContextPath(selectedProject)}</div>
                     <pre className="context-content">
                       {selectedProject.context_md}
                     </pre>
@@ -394,6 +546,7 @@ export default function ProjectsPage() {
                 {selectedProject.logs && selectedProject.logs.length > 0 && (
                   <div className="materials-panel">
                     <h4 className="card-title">{tx('最近日志', 'Recent logs')}</h4>
+                    <div className="project-bundle-panel-path">{projectLogPath(selectedProject)}</div>
                     <div className="log-timeline">
                       {selectedProject.logs.map((log, i) => (
                         <div key={i} className="timeline-item">

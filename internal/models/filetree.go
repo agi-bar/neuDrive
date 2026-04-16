@@ -70,10 +70,32 @@ type EntrySnapshot struct {
 type SkillSummary struct {
 	Name          string                 `json:"name"`
 	Path          string                 `json:"path"`
+	BundlePath    string                 `json:"bundle_path,omitempty"`
+	PrimaryPath   string                 `json:"primary_path,omitempty"`
 	Source        string                 `json:"source"`
 	ReadOnly      bool                   `json:"read_only,omitempty"`
 	Description   string                 `json:"description,omitempty"`
 	WhenToUse     string                 `json:"when_to_use,omitempty"`
+	Capabilities  []string               `json:"capabilities,omitempty"`
+	AllowedTools  []string               `json:"allowed_tools,omitempty"`
+	Tags          []string               `json:"tags,omitempty"`
+	Arguments     map[string]interface{} `json:"arguments,omitempty"`
+	Activation    map[string]interface{} `json:"activation,omitempty"`
+	MinTrustLevel int                    `json:"min_trust_level,omitempty"`
+}
+
+type BundleSummary struct {
+	Kind          string                 `json:"kind"`
+	Name          string                 `json:"name"`
+	Path          string                 `json:"path"`
+	Source        string                 `json:"source,omitempty"`
+	ReadOnly      bool                   `json:"read_only,omitempty"`
+	Description   string                 `json:"description,omitempty"`
+	WhenToUse     string                 `json:"when_to_use,omitempty"`
+	Status        string                 `json:"status,omitempty"`
+	PrimaryPath   string                 `json:"primary_path,omitempty"`
+	LogPath       string                 `json:"log_path,omitempty"`
+	Capabilities  []string               `json:"capabilities,omitempty"`
 	AllowedTools  []string               `json:"allowed_tools,omitempty"`
 	Tags          []string               `json:"tags,omitempty"`
 	Arguments     map[string]interface{} `json:"arguments,omitempty"`

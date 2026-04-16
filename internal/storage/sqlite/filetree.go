@@ -46,6 +46,12 @@ func (s *Store) Read(ctx context.Context, userID uuid.UUID, rawPath string, trus
 	if entry.MinTrustLevel > trustLevel {
 		return nil, fmt.Errorf("insufficient trust level")
 	}
+	if entry.IsDirectory {
+		if snapshot, snapshotErr := s.Snapshot(ctx, userID, storagePath, trustLevel); snapshotErr == nil {
+			enriched := services.EnrichBundleDirectoryEntry(*entry, snapshot.Entries)
+			entry = &enriched
+		}
+	}
 	return entry, nil
 }
 
@@ -69,6 +75,7 @@ func (s *Store) List(ctx context.Context, userID uuid.UUID, rawPath string, trus
 	}
 	defer rows.Close()
 	seen := map[string]models.FileTreeEntry{}
+	descendantsByChild := map[string][]models.FileTreeEntry{}
 	for rows.Next() {
 		entry, err := scanFileTreeEntry(rows)
 		if err != nil {
@@ -86,6 +93,8 @@ func (s *Store) List(ctx context.Context, userID uuid.UUID, rawPath string, trus
 		if entry.IsDirectory || strings.Contains(rest, "/") {
 			childPath += "/"
 		}
+		childPath = hubpath.NormalizeStorage(childPath)
+		descendantsByChild[childPath] = append(descendantsByChild[childPath], *entry)
 		if _, ok := seen[childPath]; ok {
 			continue
 		}
@@ -94,7 +103,7 @@ func (s *Store) List(ctx context.Context, userID uuid.UUID, rawPath string, trus
 			seen[childPath] = models.FileTreeEntry{
 				ID:            uuid.Nil,
 				UserID:        userID,
-				Path:          hubpath.NormalizeStorage(childPath),
+				Path:          childPath,
 				Kind:          "directory",
 				IsDirectory:   true,
 				ContentType:   "directory",
@@ -107,13 +116,17 @@ func (s *Store) List(ctx context.Context, userID uuid.UUID, rawPath string, trus
 			}
 			continue
 		}
+		entry.Path = childPath
 		seen[childPath] = *entry
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
 	out := make([]models.FileTreeEntry, 0, len(seen))
-	for _, entry := range seen {
+	for childPath, entry := range seen {
+		if entry.IsDirectory {
+			entry = services.EnrichBundleDirectoryEntry(entry, descendantsByChild[childPath])
+		}
 		out = append(out, entry)
 	}
 	if systemEntries, handled := systemskills.ListEntries(storagePath); handled {
@@ -527,12 +540,23 @@ func (s *Store) ListSkillSummaries(ctx context.Context, userID uuid.UUID, trustL
 			}
 			description, _ := resolved["description"].(string)
 			whenToUse, _ := resolved["when_to_use"].(string)
+			readOnly, _ := resolved["read_only"].(bool)
+			capabilities := stringSliceValue(resolved["bundle_capabilities"])
+			if len(capabilities) == 0 {
+				capabilities = []string{"instructions"}
+			}
 			summaries = append(summaries, models.SkillSummary{
 				Name:          name,
 				Path:          hubpath.NormalizePublic(entry.Path),
+				BundlePath:    path.Dir(hubpath.NormalizePublic(entry.Path)),
+				PrimaryPath:   hubpath.NormalizePublic(entry.Path),
 				Source:        services.EntrySourceFromMetadata(resolved),
+				ReadOnly:      readOnly,
 				Description:   description,
 				WhenToUse:     whenToUse,
+				Capabilities:  capabilities,
+				AllowedTools:  stringSliceValue(resolved["allowed_tools"]),
+				Tags:          stringSliceValue(resolved["tags"]),
 				MinTrustLevel: entry.MinTrustLevel,
 			})
 		}
@@ -863,4 +887,21 @@ func detectContentTypeFromPath(pathValue string) string {
 		}
 	}
 	return "text/plain"
+}
+
+func stringSliceValue(value interface{}) []string {
+	switch typed := value.(type) {
+	case []string:
+		return append([]string(nil), typed...)
+	case []interface{}:
+		out := make([]string, 0, len(typed))
+		for _, item := range typed {
+			if text, ok := item.(string); ok && strings.TrimSpace(text) != "" {
+				out = append(out, strings.TrimSpace(text))
+			}
+		}
+		return out
+	default:
+		return nil
+	}
 }

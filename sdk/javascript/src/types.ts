@@ -45,6 +45,10 @@ export interface Project {
   user_id: string
   name: string
   status: string
+  description?: string
+  primary_path?: string
+  log_path?: string
+  capabilities?: string[]
   context_md: string
   metadata?: Record<string, unknown>
   created_at: string
@@ -125,10 +129,13 @@ export interface SearchResult {
 export interface Skill {
   name: string
   path?: string
+  bundle_path?: string
+  primary_path?: string
   source?: string
   read_only?: boolean
   description?: string
   when_to_use?: string
+  capabilities?: string[]
   allowed_tools?: string[]
   tags?: string[]
 }

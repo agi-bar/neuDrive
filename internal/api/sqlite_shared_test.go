@@ -886,7 +886,7 @@ func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 	if status != http.StatusOK || !skills.OK {
 		t.Fatalf("GET /api/tree/skills/ failed: status=%d body=%+v", status, skills)
 	}
-	for _, expected := range []string{`"/skills/demo"`, `"/skills/neudrive/"`} {
+	for _, expected := range []string{`"/skills/demo/"`, `"kind":"skill_bundle"`, `"/skills/neudrive/"`} {
 		if !bytes.Contains(skills.Data, []byte(expected)) {
 			t.Fatalf("expected %q in skills payload: %s", expected, string(skills.Data))
 		}
@@ -903,7 +903,7 @@ func TestSQLiteSharedServerProjectsAndSkillsEndpoints(t *testing.T) {
 	if status != http.StatusOK || !root.OK {
 		t.Fatalf("GET /api/tree/ failed: status=%d body=%+v", status, root)
 	}
-	for _, expected := range []string{`"/projects"`, `"/skills/"`} {
+	for _, expected := range []string{`"/projects/"`, `"/skills/"`} {
 		if !bytes.Contains(root.Data, []byte(expected)) {
 			t.Fatalf("expected %q in root tree payload: %s", expected, string(root.Data))
 		}

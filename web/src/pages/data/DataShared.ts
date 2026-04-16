@@ -404,6 +404,21 @@ export function skillSummaryForPath(path: string, lookup: Record<string, SkillSu
   return lookup[normalizeHubPath(path)]
 }
 
+export type BundleKind = 'skill' | 'project'
+
+export type BundleInfo = {
+  kind: BundleKind
+  name: string
+  description?: string
+  whenToUse?: string
+  status?: string
+  readOnly?: boolean
+  source?: string
+  primaryPath?: string
+  logPath?: string
+  capabilities?: string[]
+}
+
 export type FileTileModel = {
   node: Pick<FileNode, 'path' | 'name' | 'is_dir' | 'kind'>
   subtitle?: string
@@ -419,14 +434,13 @@ export type FileTileVariant =
   | 'recent'
   | 'memory'
   | 'search'
-  | 'skill-bundle-entry'
+  | 'bundle-entry'
 
 type BuildFileTileModelOptions = {
   node: FileNode
   variant: FileTileVariant
   currentLabel?: string
   bundleLabel?: string
-  skillLookup?: Record<string, SkillSummary>
   locale?: AppLocale
 }
 
@@ -435,15 +449,86 @@ function metadataDescription(node: FileNode) {
   return normalizeSkillText(value) || ''
 }
 
-function fileTileDescription(node: FileNode, skillLookup: Record<string, SkillSummary> = {}) {
+function bundleKindValue(node: Pick<FileNode, 'kind' | 'metadata'>): BundleKind | '' {
+  const bundleKind = metadataValue(node.metadata, 'bundle_kind')
+  if (bundleKind === 'skill' || bundleKind === 'project') return bundleKind
+  if (node.kind === 'skill_bundle') return 'skill'
+  if (node.kind === 'project_bundle') return 'project'
+  return ''
+}
+
+export function bundleInfoFromNode(node: Pick<FileNode, 'path' | 'name' | 'kind' | 'metadata' | 'source' | 'is_dir'>): BundleInfo | null {
+  if (!node.is_dir) return null
+  const kind = bundleKindValue(node)
+  if (!kind) return null
+  return {
+    kind,
+    name: metadataValue(node.metadata, 'bundle_name') || metadataValue(node.metadata, 'name') || node.name,
+    description: metadataDescription(node) || undefined,
+    whenToUse: metadataValue(node.metadata, 'when_to_use') || undefined,
+    status: metadataValue(node.metadata, 'status') || undefined,
+    readOnly: node.metadata?.read_only === true,
+    source: fileNodeSource(node),
+    primaryPath: metadataValue(node.metadata, 'bundle_primary_path') || undefined,
+    logPath: metadataValue(node.metadata, 'bundle_log_path') || undefined,
+    capabilities: Array.isArray(node.metadata?.bundle_capabilities)
+      ? (node.metadata?.bundle_capabilities as string[]).filter(Boolean)
+      : undefined,
+  }
+}
+
+export function isBundleDirectory(node: Pick<FileNode, 'path' | 'name' | 'kind' | 'metadata' | 'source' | 'is_dir'>) {
+  return Boolean(bundleInfoFromNode(node))
+}
+
+export function bundleDetailMode(currentPath: string, items: FileNode[]) {
+  if (currentPath.startsWith('/projects/') && currentPath.split('/').filter(Boolean).length === 2) return true
+  if (currentPath.startsWith('/skills/') && items.some((item) => item.name === 'SKILL.md')) return true
+  return false
+}
+
+function bundleDescription(bundle?: BundleInfo | null) {
+  if (!bundle) return ''
+  return normalizeSkillText(bundle.description) || normalizeSkillText(bundle.whenToUse)
+}
+
+function bundleKindLabel(kind: BundleKind, locale: AppLocale) {
+  switch (kind) {
+    case 'project':
+      return text(locale, '项目', 'Projects')
+    case 'skill':
+    default:
+      return text(locale, '技能', 'Skills')
+  }
+}
+
+function bundleFooterEnd(bundle: BundleInfo, node: FileNode, locale: AppLocale) {
+  if (bundle.kind === 'skill') {
+    return bundle.readOnly ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable')
+  }
+  switch ((bundle.status || '').toLowerCase()) {
+    case 'archived':
+      return text(locale, '已归档', 'Archived')
+    case 'paused':
+      return text(locale, '已暂停', 'Paused')
+    case 'active':
+      return text(locale, '进行中', 'Active')
+    default:
+      return formatDateTime(node.updated_at || node.created_at, locale)
+  }
+}
+
+function fileTileDescription(node: FileNode) {
   if (!node.is_dir) return ''
-  return skillSummaryDescription(skillSummaryForPath(node.path, skillLookup)) || metadataDescription(node)
+  return bundleDescription(bundleInfoFromNode(node)) || metadataDescription(node)
 }
 
 function fileTileName(node: FileNode, variant: FileTileVariant) {
   if (variant === 'memory') {
     return displayNameFromPath(node.path.replace(/^\/memory\//, ''))
   }
+  const bundle = bundleInfoFromNode(node)
+  if (bundle) return bundle.name
   return node.name
 }
 
@@ -456,12 +541,11 @@ export function buildFileTileModel({
   variant,
   currentLabel,
   bundleLabel,
-  skillLookup = {},
   locale = 'zh-CN',
 }: BuildFileTileModelOptions): FileTileModel {
-  const skillSummary = skillSummaryForPath(node.path, skillLookup)
-  const skillBundleCard = variant === 'browser' && node.is_dir && Boolean(skillSummary)
-  const resolvedSource = skillBundleCard ? skillSource(skillSummary) : fileNodeSource(node)
+  const bundle = bundleInfoFromNode(node)
+  const bundleCard = variant === 'browser' && Boolean(bundle)
+  const resolvedSource = bundle?.source || fileNodeSource(node)
 
   switch (variant) {
     case 'recent':
@@ -493,32 +577,36 @@ export function buildFileTileModel({
         footerStart: fileNamespaceLabel(node.path, locale),
         footerEnd: fileTileFooterEnd(node, locale),
       }
-    case 'skill-bundle-entry':
+    case 'bundle-entry':
       return {
         node,
         source: resolvedSource,
-        description: fileTileDescription(node, skillLookup) || undefined,
+        description: fileTileDescription(node) || undefined,
         footerStart: bundleLabel || 'Bundle',
         footerEnd: fileTileFooterEnd(node, locale),
       }
     case 'browser':
     default:
       return {
-        node,
+        node: {
+          ...node,
+          name: fileTileName(node, variant),
+        },
         source: resolvedSource,
-        description: fileTileDescription(node, skillLookup) || undefined,
-        footerStart: skillBundleCard ? text(locale, '技能', 'Skills') : (currentLabel || text(locale, '根目录', 'Root')),
-        footerEnd: skillBundleCard
-          ? (skillSummary?.read_only ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable'))
+        description: fileTileDescription(node) || undefined,
+        footerStart: bundleCard && bundle ? bundleKindLabel(bundle.kind, locale) : (currentLabel || text(locale, '根目录', 'Root')),
+        footerEnd: bundleCard && bundle
+          ? bundleFooterEnd(bundle, node, locale)
           : fileTileFooterEnd(node, locale),
       }
   }
 }
 
 export function buildSkillBundleTileModel(skill: SkillSummary, locale: AppLocale = 'zh-CN'): FileTileModel {
+  const bundlePath = normalizeHubPath(skill.bundle_path || skillBundlePathFromSkillPath(skill.path))
   return {
     node: {
-      path: skillBundlePathFromSkillPath(skill.path),
+      path: bundlePath,
       name: skill.name,
       is_dir: true,
     },

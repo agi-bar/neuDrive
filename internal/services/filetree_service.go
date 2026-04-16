@@ -144,6 +144,11 @@ func (s *FileTreeService) Read(ctx context.Context, userID uuid.UUID, path strin
 	if entry.MinTrustLevel > trustLevel {
 		return nil, fmt.Errorf("filetree.Read: insufficient trust level (need %d, have %d)", entry.MinTrustLevel, trustLevel)
 	}
+	if entry.IsDirectory {
+		if snapshot, snapshotErr := s.Snapshot(ctx, userID, entry.Path, trustLevel); snapshotErr == nil {
+			entry = EnrichBundleDirectoryEntry(entry, snapshot.Entries)
+		}
+	}
 	return &entry, nil
 }
 
@@ -545,10 +550,11 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 	if current != nil {
 		mergedMeta := mergeMetadata(current.Metadata, meta)
 		checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", mergedMeta)
+		dirKind := bundleEntryKind(metadataString(mergedMeta, "bundle_kind"))
 		var updated models.FileTreeEntry
 		err = tx.QueryRow(ctx,
 			fmt.Sprintf(`UPDATE file_tree
-			 SET kind = 'directory',
+			 SET kind = $7,
 			     is_directory = true,
 			     content = '',
 			     content_type = 'directory',
@@ -560,7 +566,7 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 			     updated_at = $6
 			 WHERE user_id = $1 AND path = $2
 			 RETURNING %s`, fileTreeSelectColumns),
-			userID, current.Path, mergedMeta, checksum, minTrust, now,
+			userID, current.Path, mergedMeta, checksum, minTrust, now, dirKind,
 		).Scan(
 			&updated.ID,
 			&updated.UserID,
@@ -597,12 +603,13 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 	}
 
 	checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", meta)
+	dirKind := bundleEntryKind(metadataString(meta, "bundle_kind"))
 
 	entry := &models.FileTreeEntry{
 		ID:            uuid.New(),
 		UserID:        userID,
 		Path:          storagePath,
-		Kind:          "directory",
+		Kind:          dirKind,
 		IsDirectory:   true,
 		Content:       "",
 		ContentType:   "directory",
@@ -617,9 +624,9 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 		`INSERT INTO file_tree (
 			id, user_id, path, kind, is_directory, content, content_type, metadata,
 			checksum, version, min_trust_level, created_at, updated_at
-		) VALUES ($1, $2, $3, 'directory', true, '', 'directory', $4, $5, 1, $6, $7, $7)
+		) VALUES ($1, $2, $3, $4, true, '', 'directory', $5, $6, 1, $7, $8, $8)
 		ON CONFLICT (user_id, path) DO NOTHING`,
-		entry.ID, entry.UserID, entry.Path, entry.Metadata, entry.Checksum, entry.MinTrustLevel, entry.CreatedAt,
+		entry.ID, entry.UserID, entry.Path, entry.Kind, entry.Metadata, entry.Checksum, entry.MinTrustLevel, entry.CreatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("filetree.EnsureDirectory: insert: %w", err)
@@ -733,7 +740,7 @@ func (s *FileTreeService) Changes(ctx context.Context, userID uuid.UUID, cursor 
 			UserID:        version.UserID,
 			Path:          version.Path,
 			Kind:          version.Kind,
-			IsDirectory:   version.Kind == "directory",
+			IsDirectory:   IsDirectoryLikeKind(version.Kind) || version.ContentType == "directory",
 			Content:       version.Content,
 			ContentType:   version.ContentType,
 			Metadata:      version.Metadata,
@@ -949,6 +956,7 @@ func immediateChildEntries(parentPath string, userID uuid.UUID, entries []models
 	}
 
 	children := make(map[string]models.FileTreeEntry)
+	descendantsByChild := make(map[string][]models.FileTreeEntry)
 	for _, entry := range entries {
 		publicEntryPath := hubpath.NormalizePublic(entry.Path)
 		if publicEntryPath == publicParentPath || !strings.HasPrefix(publicEntryPath, publicParentPath) {
@@ -970,6 +978,7 @@ func immediateChildEntries(parentPath string, userID uuid.UUID, entries []models
 			childPath += "/"
 		}
 		childPath = hubpath.NormalizeStorage(childPath)
+		descendantsByChild[childPath] = append(descendantsByChild[childPath], entry)
 
 		if _, ok := children[childPath]; ok {
 			continue
@@ -999,7 +1008,10 @@ func immediateChildEntries(parentPath string, userID uuid.UUID, entries []models
 	}
 
 	out := make([]models.FileTreeEntry, 0, len(children))
-	for _, entry := range children {
+	for childPath, entry := range children {
+		if entry.IsDirectory {
+			entry = EnrichBundleDirectoryEntry(entry, descendantsByChild[childPath])
+		}
 		out = append(out, entry)
 	}
 	return mergeFileTreeEntries(out)
@@ -1075,8 +1087,11 @@ func entryToSkillSummary(entry models.FileTreeEntry, source string) models.Skill
 	summary := models.SkillSummary{
 		Name:          hubpath.BaseName(pathpkg.Dir(hubpath.NormalizePublic(entry.Path))),
 		Path:          hubpath.StorageToPublic(entry.Path),
+		BundlePath:    hubpath.StorageToPublic(pathpkg.Dir(entry.Path)),
+		PrimaryPath:   hubpath.StorageToPublic(entry.Path),
 		Source:        resolvedSource,
 		Description:   firstMarkdownParagraph(entry.Content),
+		Capabilities:  []string{"instructions"},
 		MinTrustLevel: entry.MinTrustLevel,
 	}
 
@@ -1106,6 +1121,9 @@ func entryToSkillSummary(entry models.FileTreeEntry, source string) models.Skill
 	}
 	if value, ok := entry.Metadata["min_trust_level"].(int); ok && value > 0 {
 		summary.MinTrustLevel = value
+	}
+	if value := toStringSlice(entry.Metadata["bundle_capabilities"]); len(value) > 0 {
+		summary.Capabilities = uniqueSortedStrings(value)
 	}
 	return summary
 }

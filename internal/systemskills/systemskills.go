@@ -165,10 +165,13 @@ func SkillSummaries() []models.SkillSummary {
 		summaries = append(summaries, models.SkillSummary{
 			Name:          manifest.SkillName,
 			Path:          manifest.Path + "/SKILL.md",
+			BundlePath:    manifest.Path,
+			PrimaryPath:   manifest.Path + "/SKILL.md",
 			Source:        "system",
 			ReadOnly:      true,
 			Description:   manifest.Description,
 			WhenToUse:     manifest.WhenToUse,
+			Capabilities:  []string{"instructions"},
 			Tags:          append([]string{}, manifest.Tags...),
 			MinTrustLevel: models.TrustLevelGuest,
 		})
@@ -385,14 +388,26 @@ func directoryEntry(publicPath string) models.FileTreeEntry {
 	metadata := map[string]interface{}{
 		"source": "system",
 	}
+	kind := "directory"
 	if IsProtectedPath(publicPath) {
 		metadata["read_only"] = true
+	}
+	if manifest, ok := bundleManifestForPath(publicPath); ok {
+		kind = "skill_bundle"
+		metadata["bundle_kind"] = "skill"
+		metadata["bundle_name"] = manifest.SkillName
+		metadata["name"] = manifest.SkillName
+		metadata["description"] = manifest.Description
+		metadata["when_to_use"] = manifest.WhenToUse
+		metadata["bundle_primary_path"] = manifest.Path + "/SKILL.md"
+		metadata["bundle_capabilities"] = []string{"instructions"}
+		metadata["tags"] = append([]string{}, manifest.Tags...)
 	}
 	return models.FileTreeEntry{
 		ID:            uuid.Nil,
 		UserID:        uuid.Nil,
 		Path:          publicPath,
-		Kind:          "directory",
+		Kind:          kind,
 		IsDirectory:   true,
 		ContentType:   "directory",
 		Metadata:      metadata,
@@ -402,6 +417,20 @@ func directoryEntry(publicPath string) models.FileTreeEntry {
 		CreatedAt:     systemSkillTimestamp,
 		UpdatedAt:     systemSkillTimestamp,
 	}
+}
+
+func bundleManifestForPath(rawPath string) (skillManifest, bool) {
+	publicPath := strings.TrimSuffix(hubpath.NormalizePublic(rawPath), "/")
+	if publicPath == neudriveManifest.Path {
+		return neudriveManifest, true
+	}
+	for _, platform := range portabilityPlatforms {
+		manifest, ok := platformManifests[platform]
+		if ok && publicPath == manifest.Path {
+			return manifest, true
+		}
+	}
+	return skillManifest{}, false
 }
 
 func contentType(filename string) string {

@@ -150,10 +150,13 @@ export interface DashboardStats {
 export interface SkillSummary {
   name: string
   path: string
+  bundle_path?: string
+  primary_path?: string
   source: string
   read_only?: boolean
   description?: string
   when_to_use?: string
+  capabilities?: string[]
   tags?: string[]
   min_trust_level?: number
 }

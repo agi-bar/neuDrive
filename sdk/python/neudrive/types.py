@@ -23,6 +23,10 @@ class Profile:
 class Project:
     name: str
     status: str
+    description: str = ""
+    primary_path: str = ""
+    log_path: str = ""
+    capabilities: list[str] = field(default_factory=list)
     context_md: str = ""
 
 

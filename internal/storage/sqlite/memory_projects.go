@@ -192,6 +192,7 @@ func (s *Store) ListProjects(ctx context.Context, userID uuid.UUID) ([]models.Pr
 		project.ContextMD = entry.Content
 		project.UpdatedAt = entry.UpdatedAt
 		project.Metadata = cloneProjectMetadata(entry.Metadata)
+		project.Description = localFirstNonEmpty(projectDescriptionFromMetadata(entry.Metadata), localFirstMarkdownParagraph(entry.Content))
 		projects[name] = project
 	}
 	names := make([]string, 0, len(projects))
@@ -201,7 +202,12 @@ func (s *Store) ListProjects(ctx context.Context, userID uuid.UUID) ([]models.Pr
 	sort.Strings(names)
 	out := make([]models.Project, 0, len(names))
 	for _, name := range names {
-		out = append(out, projects[name])
+		project := projects[name]
+		project.Description = localFirstNonEmpty(projectDescriptionFromMetadata(project.Metadata), localFirstMarkdownParagraph(project.ContextMD))
+		project.PrimaryPath = hubpath.ProjectContextPath(name)
+		project.LogPath = hubpath.ProjectLogPath(name)
+		project.Capabilities = []string{"context", "logs"}
+		out = append(out, project)
 	}
 	return out, nil
 }
@@ -216,10 +222,7 @@ func (s *Store) CreateProject(ctx context.Context, userID uuid.UUID, name string
 	entry, err := s.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), "", "text/markdown", models.FileTreeWriteOptions{
 		Kind:          "project_context",
 		MinTrustLevel: models.TrustLevelCollaborate,
-		Metadata: map[string]interface{}{
-			"status": "active",
-			"source": source,
-		},
+		Metadata:      localProjectBundleMetadata(name, "", "active", source),
 	})
 	if err != nil {
 		return nil, err
@@ -236,17 +239,18 @@ func (s *Store) CreateProject(ctx context.Context, userID uuid.UUID, name string
 		return nil, err
 	}
 	return &models.Project{
-		ID:        uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-project:"+name)),
-		UserID:    userID,
-		Name:      name,
-		Status:    "active",
-		ContextMD: "",
-		Metadata: map[string]interface{}{
-			"status": "active",
-			"source": source,
-		},
-		CreatedAt: entry.CreatedAt,
-		UpdatedAt: now,
+		ID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-project:"+name)),
+		UserID:       userID,
+		Name:         name,
+		Status:       "active",
+		Description:  "",
+		PrimaryPath:  hubpath.ProjectContextPath(name),
+		LogPath:      hubpath.ProjectLogPath(name),
+		Capabilities: []string{"context", "logs"},
+		ContextMD:    "",
+		Metadata:     localProjectBundleMetadata(name, "", "active", source),
+		CreatedAt:    entry.CreatedAt,
+		UpdatedAt:    now,
 	}, nil
 }
 
@@ -256,14 +260,18 @@ func (s *Store) GetProject(ctx context.Context, userID uuid.UUID, name string) (
 		return nil, err
 	}
 	return &models.Project{
-		ID:        uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-project:"+name)),
-		UserID:    userID,
-		Name:      name,
-		Status:    projectStatus(entry.Metadata),
-		ContextMD: entry.Content,
-		Metadata:  cloneProjectMetadata(entry.Metadata),
-		CreatedAt: entry.CreatedAt,
-		UpdatedAt: entry.UpdatedAt,
+		ID:           uuid.NewSHA1(uuid.NameSpaceURL, []byte("local-project:"+name)),
+		UserID:       userID,
+		Name:         name,
+		Status:       projectStatus(entry.Metadata),
+		Description:  localFirstNonEmpty(projectDescriptionFromMetadata(entry.Metadata), localFirstMarkdownParagraph(entry.Content)),
+		PrimaryPath:  hubpath.ProjectContextPath(name),
+		LogPath:      hubpath.ProjectLogPath(name),
+		Capabilities: []string{"context", "logs"},
+		ContextMD:    entry.Content,
+		Metadata:     cloneProjectMetadata(entry.Metadata),
+		CreatedAt:    entry.CreatedAt,
+		UpdatedAt:    entry.UpdatedAt,
 	}, nil
 }
 
@@ -276,11 +284,10 @@ func (s *Store) ArchiveProject(ctx context.Context, userID uuid.UUID, name strin
 	if metadata == nil {
 		metadata = map[string]interface{}{}
 	}
-	metadata["status"] = "archived"
 	_, err = s.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), project.ContextMD, "text/markdown", models.FileTreeWriteOptions{
 		Kind:          "project_context",
 		MinTrustLevel: models.TrustLevelCollaborate,
-		Metadata:      metadata,
+		Metadata:      localProjectBundleMetadata(name, project.ContextMD, "archived", services.EntrySourceFromMetadata(metadata)),
 	})
 	return err
 }
@@ -363,7 +370,7 @@ func (s *Store) AppendProjectLog(ctx context.Context, userID uuid.UUID, name str
 	_, err = s.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), project.ContextMD, "text/markdown", models.FileTreeWriteOptions{
 		Kind:          "project_context",
 		MinTrustLevel: models.TrustLevelCollaborate,
-		Metadata:      metadata,
+		Metadata:      localProjectBundleMetadata(name, project.ContextMD, project.Status, services.EntrySourceFromMetadata(metadata)),
 	})
 	return err
 }
@@ -401,4 +408,77 @@ func metadataTime(metadata map[string]interface{}, key string) *time.Time {
 	}
 	utc := ts.UTC()
 	return &utc
+}
+
+func localProjectBundleMetadata(name, contextMD, status, source string) map[string]interface{} {
+	summary := models.BundleSummary{
+		Kind:         services.BundleKindProject,
+		Name:         name,
+		Path:         hubpath.ProjectDir(name),
+		Source:       strings.TrimSpace(source),
+		Description:  localFirstMarkdownParagraph(contextMD),
+		Status:       localFirstNonEmpty(status, "active"),
+		PrimaryPath:  hubpath.ProjectContextPath(name),
+		LogPath:      hubpath.ProjectLogPath(name),
+		Capabilities: []string{"context", "logs"},
+	}
+	metadata := services.BundleMetadata(summary)
+	metadata["project"] = name
+	return metadata
+}
+
+func projectDescriptionFromMetadata(metadata map[string]interface{}) string {
+	if metadata == nil {
+		return ""
+	}
+	if description, _ := metadata["description"].(string); strings.TrimSpace(description) != "" {
+		return strings.TrimSpace(description)
+	}
+	return ""
+}
+
+func localFirstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func localFirstMarkdownParagraph(markdown string) string {
+	lines := strings.Split(markdown, "\n")
+	paragraph := make([]string, 0, 4)
+	inFrontmatter := false
+	frontmatterClosed := false
+
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if idx == 0 && trimmed == "---" {
+			inFrontmatter = true
+			continue
+		}
+		if inFrontmatter {
+			if trimmed == "---" {
+				inFrontmatter = false
+				frontmatterClosed = true
+			}
+			continue
+		}
+		if trimmed == "" {
+			if len(paragraph) > 0 {
+				break
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") && len(paragraph) == 0 {
+			if frontmatterClosed || idx == 0 {
+				continue
+			}
+			continue
+		}
+		paragraph = append(paragraph, trimmed)
+	}
+
+	return strings.TrimSpace(strings.Join(paragraph, " "))
 }

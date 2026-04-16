@@ -51,9 +51,16 @@ func (s *ProjectService) List(ctx context.Context, userID uuid.UUID) ([]models.P
 		if s.fileTree != nil {
 			if entry, err := s.fileTree.Read(ctx, userID, hubpath.ProjectContextPath(p.Name), models.TrustLevelFull); err == nil {
 				p.ContextMD = entry.Content
-				p.UpdatedAt = entry.UpdatedAt
+				if entry.UpdatedAt.After(p.UpdatedAt) {
+					p.UpdatedAt = entry.UpdatedAt
+				}
+				p.Metadata = mergeMetadata(p.Metadata, entry.Metadata)
 			}
 		}
+		p.Description = firstNonEmpty(metadataString(p.Metadata, "description"), firstMarkdownParagraph(p.ContextMD))
+		p.PrimaryPath = hubpath.ProjectContextPath(p.Name)
+		p.LogPath = hubpath.ProjectLogPath(p.Name)
+		p.Capabilities = []string{"context", "logs"}
 		projects = append(projects, p)
 	}
 	return projects, rows.Err()
@@ -74,9 +81,16 @@ func (s *ProjectService) Get(ctx context.Context, userID uuid.UUID, name string)
 	if s.fileTree != nil {
 		if entry, err := s.fileTree.Read(ctx, userID, hubpath.ProjectContextPath(name), models.TrustLevelFull); err == nil {
 			p.ContextMD = entry.Content
-			p.UpdatedAt = entry.UpdatedAt
+			if entry.UpdatedAt.After(p.UpdatedAt) {
+				p.UpdatedAt = entry.UpdatedAt
+			}
+			p.Metadata = mergeMetadata(p.Metadata, entry.Metadata)
 		}
 	}
+	p.Description = firstNonEmpty(metadataString(p.Metadata, "description"), firstMarkdownParagraph(p.ContextMD))
+	p.PrimaryPath = hubpath.ProjectContextPath(p.Name)
+	p.LogPath = hubpath.ProjectLogPath(p.Name)
+	p.Capabilities = []string{"context", "logs"}
 	return &p, nil
 }
 
@@ -121,11 +135,7 @@ func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name stri
 
 	source := SourceOrDefault(ctx, "manual")
 	if s.fileTree != nil {
-		if _, err := s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, projectPath, map[string]interface{}{
-			"project": name,
-			"status":  "active",
-			"source":  source,
-		}, models.TrustLevelWork); err != nil {
+		if _, err := s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, projectPath, projectBundleDirectoryMetadata(name, "", "active", source), models.TrustLevelWork); err != nil {
 			return nil, err
 		}
 		if _, err := s.fileTree.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), "", "text/markdown", models.FileTreeWriteOptions{
@@ -152,16 +162,18 @@ func (s *ProjectService) Create(ctx context.Context, userID uuid.UUID, name stri
 	}
 
 	p := &models.Project{
-		ID:        id,
-		UserID:    userID,
-		Name:      name,
-		Status:    "active",
-		ContextMD: "",
-		Metadata: map[string]interface{}{
-			"source": source,
-		},
-		CreatedAt: now,
-		UpdatedAt: now,
+		ID:           id,
+		UserID:       userID,
+		Name:         name,
+		Status:       "active",
+		Description:  "",
+		PrimaryPath:  hubpath.ProjectContextPath(name),
+		LogPath:      hubpath.ProjectLogPath(name),
+		Capabilities: []string{"context", "logs"},
+		ContextMD:    "",
+		Metadata:     projectBundleDirectoryMetadata(name, "", "active", source),
+		CreatedAt:    now,
+		UpdatedAt:    now,
 	}
 	return p, nil
 }
@@ -177,10 +189,14 @@ func (s *ProjectService) Archive(ctx context.Context, userID uuid.UUID, name str
 		return fmt.Errorf("project.Archive: %w", err)
 	}
 	if s.fileTree != nil {
-		_, _ = s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, hubpath.ProjectDir(name), map[string]interface{}{
-			"project": name,
-			"status":  "archived",
-		}, models.TrustLevelWork)
+		project, _ := s.Get(ctx, userID, name)
+		contextMD := ""
+		source := ""
+		if project != nil {
+			contextMD = project.ContextMD
+			source = EntrySourceFromMetadata(project.Metadata)
+		}
+		_, _ = s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, hubpath.ProjectDir(name), projectBundleDirectoryMetadata(name, contextMD, "archived", source), models.TrustLevelWork)
 	}
 	return nil
 }
@@ -190,14 +206,22 @@ func (s *ProjectService) UpdateContext(ctx context.Context, userID uuid.UUID, na
 		return s.repo.UpdateProjectContext(ctx, userID, name, contextMD)
 	}
 	if s.fileTree != nil {
+		source := ""
+		if project, err := s.Get(ctx, userID, name); err == nil {
+			source = EntrySourceFromMetadata(project.Metadata)
+		}
 		if _, err := s.fileTree.WriteEntry(ctx, userID, hubpath.ProjectContextPath(name), contextMD, "text/markdown", models.FileTreeWriteOptions{
 			Kind:          "project_context",
 			MinTrustLevel: models.TrustLevelWork,
 			Metadata: map[string]interface{}{
-				"project": name,
+				"project":     name,
+				"description": firstMarkdownParagraph(contextMD),
 			},
 		}); err != nil {
 			return fmt.Errorf("project.UpdateContext: write canonical entry: %w", err)
+		}
+		if _, err := s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, hubpath.ProjectDir(name), projectBundleDirectoryMetadata(name, contextMD, "", source), models.TrustLevelWork); err != nil {
+			return fmt.Errorf("project.UpdateContext: ensure bundle dir: %w", err)
 		}
 	}
 	_, err := s.db.Exec(ctx,
@@ -250,6 +274,22 @@ func (s *ProjectService) AppendLog(ctx context.Context, projectID uuid.UUID, log
 			},
 		}); err != nil {
 			return fmt.Errorf("project.AppendLog: write canonical entry: %w", err)
+		}
+		project, _ := s.Get(ctx, userID, projectName)
+		contextMD := ""
+		status := "active"
+		source := log.Source
+		if project != nil {
+			contextMD = project.ContextMD
+			if project.Status != "" {
+				status = project.Status
+			}
+			if source == "" {
+				source = EntrySourceFromMetadata(project.Metadata)
+			}
+		}
+		if _, err := s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, hubpath.ProjectDir(projectName), projectBundleDirectoryMetadata(projectName, contextMD, status, source), models.TrustLevelWork); err != nil {
+			return fmt.Errorf("project.AppendLog: ensure bundle dir: %w", err)
 		}
 	}
 
@@ -354,4 +394,21 @@ func reverseProjectLogs(logs []models.ProjectLog) {
 	for i, j := 0, len(logs)-1; i < j; i, j = i+1, j-1 {
 		logs[i], logs[j] = logs[j], logs[i]
 	}
+}
+
+func projectBundleDirectoryMetadata(name, contextMD, status, source string) map[string]interface{} {
+	summary := models.BundleSummary{
+		Kind:         BundleKindProject,
+		Name:         name,
+		Path:         hubpath.ProjectDir(name),
+		Source:       strings.TrimSpace(source),
+		Description:  firstMarkdownParagraph(contextMD),
+		Status:       firstNonEmpty(status, "active"),
+		PrimaryPath:  hubpath.ProjectContextPath(name),
+		LogPath:      hubpath.ProjectLogPath(name),
+		Capabilities: []string{"context", "logs"},
+	}
+	metadata := BundleMetadata(summary)
+	metadata["project"] = name
+	return metadata
 }

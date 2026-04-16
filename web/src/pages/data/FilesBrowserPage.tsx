@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
-import { api, type FileNode, type SkillSummary } from '../../api'
+import { api, type FileNode } from '../../api'
 import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
 import FileMaterialsTile from '../../components/FileMaterialsTile'
 import ResourceActionMenu from '../../components/ResourceActionMenu'
@@ -11,14 +11,11 @@ import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
 import { useI18n } from '../../i18n'
 import {
   buildFileTileModel,
-  buildSkillBundleTileModel,
-  buildSkillSummaryLookup,
+  bundleDetailMode,
   buildSourceFilterOptions,
   dataFileEditorRoute,
   fileNodeSource,
   matchesSourceFilter,
-  skillSource,
-  skillSummaryForPath,
   sourceLabel,
 } from './DataShared'
 
@@ -85,7 +82,6 @@ export default function FilesBrowserPage() {
   const [newFileName, setNewFileName] = useState(tx('新建文档.md', 'new-document.md'))
   const [searchInput, setSearchInput] = useState('')
   const [appliedSearch, setAppliedSearch] = useState('')
-  const [skillLookup, setSkillLookup] = useState<Record<string, SkillSummary>>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
   const { activeMenuId, closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
 
@@ -110,17 +106,8 @@ export default function FilesBrowserPage() {
           updated_at: result.updated_at,
         }))
         setItems(sortNodes(mapped, sortKey, sortDir))
-        setSkillLookup({})
       } else {
-        const [root, skills] = await Promise.all([
-          api.getTree(currentPath),
-          currentPath === '/skills' ? api.getSkills() : Promise.resolve<SkillSummary[]>([]),
-        ])
-        if (skills.length > 0) {
-          setSkillLookup(buildSkillSummaryLookup(skills))
-        } else {
-          setSkillLookup({})
-        }
+        const root = await api.getTree(currentPath)
         setItems(sortNodes(root.children || [], sortKey, sortDir))
       }
       closeMenu()
@@ -289,29 +276,17 @@ export default function FilesBrowserPage() {
 
   const isSelected = (pathValue: string) => selected.has(pathValue)
   const currentLabel = currentPath === '/' ? tx('根目录', 'Root') : currentPath.split('/').filter(Boolean).slice(-1)[0] || tx('根目录', 'Root')
+  const currentBundleMode = useMemo(
+    () => !searchMode && bundleDetailMode(currentPath, items),
+    [currentPath, items, searchMode],
+  )
   const filteredItems = useMemo(
-    () => items.filter((item) => {
-      if (searchMode) return matchesSourceFilter(fileNodeSource(item), sourceFilter)
-      if (currentPath === '/skills' && item.is_dir) {
-        const skillSummary = skillSummaryForPath(item.path, skillLookup)
-        return matchesSourceFilter(skillSource(skillSummary), sourceFilter)
-      }
-      return matchesSourceFilter(fileNodeSource(item), sourceFilter)
-    }),
-    [currentPath, items, searchMode, skillLookup, sourceFilter],
+    () => items.filter((item) => matchesSourceFilter(fileNodeSource(item), sourceFilter)),
+    [items, sourceFilter],
   )
   const sourceOptions = useMemo(
-    () => buildSourceFilterOptions(
-      items,
-      (item) => {
-        if (!searchMode && currentPath === '/skills' && item.is_dir) {
-          return skillSource(skillSummaryForPath(item.path, skillLookup))
-        }
-        return fileNodeSource(item)
-      },
-      locale,
-    ),
-    [currentPath, items, locale, searchMode, skillLookup],
+    () => buildSourceFilterOptions(items, fileNodeSource, locale),
+    [items, locale],
   )
 
   if (loading) return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
@@ -441,31 +416,26 @@ export default function FilesBrowserPage() {
         ) : (
           <div className="materials-grid">
             {filteredItems.map((item) => {
-              const skillSummary = skillSummaryForPath(item.path, skillLookup)
               const tile = searchMode
                 ? buildFileTileModel({
                     node: item,
                     variant: 'search',
                     currentLabel,
-                    skillLookup,
                     locale,
                   })
-                : currentPath === '/skills' && item.is_dir && skillSummary
-                  ? buildSkillBundleTileModel(skillSummary, locale)
-                  : currentPath.startsWith('/skills/') && currentPath !== '/skills'
-                    ? buildFileTileModel({
-                        node: item,
-                        variant: 'skill-bundle-entry',
-                        bundleLabel: currentLabel,
-                        locale,
-                      })
-                    : buildFileTileModel({
-                        node: item,
-                        variant: 'browser',
-                        currentLabel,
-                        skillLookup,
-                        locale,
-                      })
+                : currentBundleMode
+                  ? buildFileTileModel({
+                      node: item,
+                      variant: 'bundle-entry',
+                      bundleLabel: currentLabel,
+                      locale,
+                    })
+                  : buildFileTileModel({
+                      node: item,
+                      variant: 'browser',
+                      currentLabel,
+                      locale,
+                    })
               return (
                 <FileMaterialsTile
                   key={item.path}

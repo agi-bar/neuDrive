@@ -15,7 +15,7 @@
    - 自动托管本地 Hub daemon
    - 管理本地 agent 平台接入、bundle sync、daemon 状态和 local / hosted targets
 2. **neuDrive Server**
-   - 可以是官方服务 `https://agenthub.agi.bar`
+   - 可以是官方服务 `https://neudrive.ai`
    - 也可以是用户自己启动的 `neudrive server`
 
 当前推荐心智：
@@ -24,7 +24,7 @@
 - `neudrive connect <platform>` 把本地 Claude/Codex/Gemini/Cursor 连到本地 Hub
 - `neudrive import <platform>` / `neudrive export <platform>` 处理平台数据，其中 Codex 和 Claude 默认优先走 agent-mediated 导入
 - `neudrive sync ...` 处理 bundle 迁移、备份、恢复
-- 需要云端工作区时，用 `neudrive login --profile official --api-base https://agenthub.agi.bar`
+- 需要云端工作区时，用 `neudrive login --profile official --api-base https://neudrive.ai`
 
 ### 平台接入的三层模型
 
@@ -53,7 +53,7 @@ flowchart LR
     CLI --> Sync["bundle sync"]
     Sync --> Local
     CLI --> Remote["optional hosted profiles"]
-    Remote --> Hosted["agenthub.agi.bar or self-hosted server"]
+    Remote --> Hosted["neudrive.ai or self-hosted server"]
     Platforms --> Local
 ```
 

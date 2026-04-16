@@ -196,8 +196,8 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	"login": {
 		Key:       "login",
 		Summary:   "Open the browser and sign in to a hosted neuDrive profile.",
-		Usage:     []string{"neudrive login [--profile NAME] [--api-base URL]", "neudrive login --profile official --api-base https://agenthub.agi.bar"},
-		Examples:  []string{"neudrive login", "neudrive login --profile official", "neudrive login --profile staging --api-base https://agenthub.agi.bar"},
+		Usage:     []string{"neudrive login [--profile NAME] [--api-base URL]", "neudrive login --profile official --api-base https://neudrive.ai"},
+		Examples:  []string{"neudrive login", "neudrive login --profile official", "neudrive login --profile staging --api-base https://neudrive.ai"},
 		Notes:     []string{"This is the primary hosted login entrypoint.", "The CLI opens a browser, completes OAuth, stores an access token plus refresh token, and switches the current target to that profile.", "Use `--token` only when you already have a bearer token and want to save it manually."},
 		SeeAlso:   []string{"profiles", "use", "whoami", "remote"},
 		SortOrder: 171,

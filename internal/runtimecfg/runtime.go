@@ -26,7 +26,7 @@ const (
 	DefaultDatabaseURL    = "postgres://neudrive:neudrive_dev@localhost:5432/neudrive?sslmode=disable"
 	DefaultStorage        = "sqlite"
 	DefaultGitMirrorPath  = "./neudrive-export/git-mirror"
-	DefaultRemoteOfficial = "https://agenthub.agi.bar"
+	DefaultRemoteOfficial = "https://neudrive.ai"
 	ConfigEnv             = "NEUDRIVE_CONFIG"
 )
 

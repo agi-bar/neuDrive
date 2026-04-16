@@ -20,7 +20,7 @@ type LocalSettingsDraft = {
 
 const REMOTE_PROFILES_EXAMPLE = `${JSON.stringify({
   official: {
-    api_base: 'https://agenthub.agi.bar',
+    api_base: 'https://neudrive.ai',
     token: 'eyJhbGciOi...',
     refresh_token: 'ndr_refresh_xxxxxxxx',
     expires_at: '2026-12-31T23:59:59Z',

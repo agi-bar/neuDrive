@@ -78,7 +78,7 @@ Bundle Sync 支持两种文件格式：
 首次登录 hosted 推荐直接走浏览器：
 
 ```bash
-neudrive login --api-base https://agenthub.agi.bar
+neudrive login --api-base https://neudrive.ai
 neudrive profiles
 neudrive whoami
 ```
@@ -88,7 +88,7 @@ neudrive whoami
 ```bash
 neudrive login \
   --profile official \
-  --api-base https://agenthub.agi.bar \
+  --api-base https://neudrive.ai \
   --token ndt_xxx
 ```
 
@@ -103,7 +103,7 @@ neudrive logout --profile official
 `sync login` 仍然保留，但它现在主要用于 sync-scoped token 工作流，不再是主 hosted 登录入口：
 
 ```bash
-neudrive sync login --profile prod --api-base https://agenthub.agi.bar --token ndt_xxx
+neudrive sync login --profile prod --api-base https://neudrive.ai --token ndt_xxx
 ```
 
 ## `merge` 与 `mirror`

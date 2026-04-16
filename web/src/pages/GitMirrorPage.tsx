@@ -441,7 +441,7 @@ export default function GitMirrorPage() {
 
         {isLocalExecution && !mirror?.enabled && (
           <div className="alert alert-warn" style={{ marginTop: 12 }}>
-            {tx('先运行 `neudrive git init` 初始化本地 mirror，再回来配置自动 commit / push。', 'Run `neudrive git init` first to initialize the local mirror, then come back to configure auto commit / push.')}
+            {tx('本地 mirror 还没初始化。首次保存这些设置时，neuDrive 会按当前本地配置自动创建并同步 Git Mirror。', 'The local mirror is not initialized yet. On the first save, neuDrive will create and sync the Git Mirror automatically using the current local settings.')}
           </div>
         )}
 

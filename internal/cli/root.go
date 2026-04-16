@@ -47,8 +47,6 @@ func Run(args []string) int {
 		return runMCP(args[1:])
 	case "sync":
 		return runSync(args[1:])
-	case "remote":
-		return runRemote(args[1:])
 	case "login":
 		return runLogin(args[1:])
 	case "logout":
@@ -91,8 +89,6 @@ func Run(args []string) int {
 		return runHubToken(args[1:])
 	case "stats":
 		return runHubStats(args[1:])
-	case "git":
-		return runGit(args[1:])
 	case "daemon":
 		return runDaemon(args[1:])
 	default:
@@ -701,195 +697,6 @@ func runExport(args []string) int {
 	return 0
 }
 
-func runGit(args []string) int {
-	if len(args) == 0 || isHelpArg(args[:1]) {
-		printHelpTopic("git")
-		return 0
-	}
-	switch args[0] {
-	case "init":
-		if isExplicitHelpRequest(args[1:]) {
-			printHelpTopic("git")
-			return 0
-		}
-		fs := flag.NewFlagSet("git init", flag.ContinueOnError)
-		fs.SetOutput(os.Stderr)
-		output := fs.String("output", "", "output directory for the local Git mirror")
-		if err := fs.Parse(args[1:]); err != nil {
-			if errors.Is(err, flag.ErrHelp) {
-				return 0
-			}
-			return 2
-		}
-		if fs.NArg() != 0 {
-			fmt.Fprintln(os.Stderr, usageLine("git init [--output DIR]"))
-			return 2
-		}
-		return runGitInit(*output)
-	case "pull":
-		if isExplicitHelpRequest(args[1:]) {
-			printHelpTopic("git")
-			return 0
-		}
-		fs := flag.NewFlagSet("git pull", flag.ContinueOnError)
-		fs.SetOutput(os.Stderr)
-		if err := fs.Parse(args[1:]); err != nil {
-			if errors.Is(err, flag.ErrHelp) {
-				return 0
-			}
-			return 2
-		}
-		if fs.NArg() != 0 {
-			fmt.Fprintln(os.Stderr, usageLine("git pull"))
-			return 2
-		}
-		return runGitPull()
-	case "auth":
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, usageLine("git auth github-app --device"))
-			return 2
-		}
-		if args[1] != "github-app" {
-			fmt.Fprintf(os.Stderr, "unknown git auth subcommand %q\n", args[1])
-			return 2
-		}
-		fs := flag.NewFlagSet("git auth github-app", flag.ContinueOnError)
-		fs.SetOutput(os.Stderr)
-		device := fs.Bool("device", false, "use the GitHub device flow")
-		if err := fs.Parse(args[2:]); err != nil {
-			if errors.Is(err, flag.ErrHelp) {
-				return 0
-			}
-			return 2
-		}
-		if !*device || fs.NArg() != 0 {
-			fmt.Fprintln(os.Stderr, usageLine("git auth github-app --device"))
-			return 2
-		}
-		return runGitAuthGitHubAppDevice()
-	default:
-		fmt.Fprintf(os.Stderr, "unknown git subcommand %q\n\n", args[0])
-		fmt.Println(renderCLIText("usage: neudrive git init [--output DIR]\n       neudrive git pull\n       neudrive git auth github-app --device"))
-		return 2
-	}
-}
-
-func runGitInit(output string) int {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	cfg, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "prepare local git mirror: %v\n", err)
-		return 1
-	}
-	output = configuredGitMirrorPath(cfg, output)
-	var info localgitsync.SyncInfo
-	if err := localAPIPostJSON(ctx, state.APIBase, token, "/agent/local-git-mirror/register", map[string]string{"output_root": output}, &info); err != nil {
-		fmt.Fprintf(os.Stderr, "git init: %v\n", err)
-		return 1
-	}
-
-	fmt.Printf("本地 Git 镜像目录: %s\n", info.Path)
-	fmt.Println("Secrets 未导出；vault 仅导出了 scope 元数据。")
-	printLocalGitSyncMessage(&info)
-	fmt.Println("如需继续同步到 GitHub，请在该目录执行 git add / git commit / git remote add origin / git push。")
-	return 0
-}
-
-func runGitPull() int {
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
-	info, err := syncLocalGitMirrorIfConfigured(ctx, nil)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "git pull: %v\n", err)
-		return 1
-	}
-	if info == nil || !info.Enabled || strings.TrimSpace(info.Path) == "" {
-		fmt.Fprintln(os.Stderr, renderCLIText("git pull: no local Git mirror is configured; run `neudrive git init [--output DIR]` first"))
-		return 1
-	}
-
-	fmt.Printf("本地 Git 镜像目录: %s\n", info.Path)
-	printLocalGitSyncMessage(info)
-	fmt.Println("如需继续同步到 GitHub，请在该目录执行 git add / git commit / git remote add origin / git push。")
-	return 0
-}
-
-func runGitAuthGitHubAppDevice() int {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Minute)
-	defer cancel()
-
-	_, state, token, err := ensureLocalOwnerAccessForAPI(ctx)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "git auth github-app: %v\n", err)
-		return 1
-	}
-
-	var start struct {
-		DeviceCode      string `json:"device_code"`
-		UserCode        string `json:"user_code"`
-		VerificationURI string `json:"verification_uri"`
-		ExpiresAt       string `json:"expires_at"`
-		Interval        int    `json:"interval"`
-	}
-	if err := localAPIPostJSON(ctx, state.APIBase, token, "/api/git-mirror/github-app/device/start", map[string]any{}, &start); err != nil {
-		fmt.Fprintf(os.Stderr, "git auth github-app: %v\n", err)
-		return 1
-	}
-
-	fmt.Println("Open this URL in your browser and enter the code:")
-	fmt.Printf("  %s\n", start.VerificationURI)
-	fmt.Printf("  code: %s\n", start.UserCode)
-	fmt.Println("Waiting for GitHub authorization...")
-
-	interval := time.Duration(start.Interval) * time.Second
-	if interval <= 0 {
-		interval = 5 * time.Second
-	}
-	deadline := time.Now().Add(15 * time.Minute)
-	if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(start.ExpiresAt)); err == nil {
-		deadline = parsed
-	}
-
-	for time.Now().Before(deadline) {
-		select {
-		case <-ctx.Done():
-			fmt.Fprintln(os.Stderr, "git auth github-app: authorization timed out")
-			return 1
-		case <-time.After(interval):
-		}
-
-		var poll struct {
-			Connected          bool   `json:"connected"`
-			Pending            bool   `json:"pending"`
-			Message            string `json:"message"`
-			GitHubAppUserLogin string `json:"github_app_user_login"`
-		}
-		if err := localAPIPostJSON(ctx, state.APIBase, token, "/api/git-mirror/github-app/device/poll", map[string]string{
-			"device_code": start.DeviceCode,
-		}, &poll); err != nil {
-			fmt.Fprintf(os.Stderr, "git auth github-app: %v\n", err)
-			return 1
-		}
-		if poll.Connected {
-			if strings.TrimSpace(poll.GitHubAppUserLogin) != "" {
-				fmt.Printf("Connected GitHub App user: %s\n", poll.GitHubAppUserLogin)
-			} else {
-				fmt.Println("Connected GitHub App account.")
-			}
-			return 0
-		}
-		if strings.EqualFold(strings.TrimSpace(poll.Message), "slow_down") {
-			interval += 5 * time.Second
-		}
-	}
-
-	fmt.Fprintln(os.Stderr, "git auth github-app: device code expired; run the command again")
-	return 1
-}
-
 func runBrowse(args []string) int {
 	if isExplicitHelpRequest(args) {
 		printHelpTopic("browse")
@@ -1158,68 +965,6 @@ func runSync(args []string) int {
 	return 0
 }
 
-func runRemote(args []string) int {
-	if len(args) == 0 || isHelpArg(args) {
-		printHelpTopic("remote")
-		return 0
-	}
-	switch args[0] {
-	case "ls":
-		return runProfilesCommand(nil)
-	case "profiles":
-		return runProfilesCommand(args[1:])
-	case "login":
-		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println(usageLine("remote login <profile> [--url URL] [--token TOKEN]"))
-			return 0
-		}
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, usageLine("remote login <profile> [--url URL] [--token TOKEN]"))
-			return 2
-		}
-		profileName := args[1]
-		loginArgs := []string{"--profile", profileName}
-		if !containsFlag(args[2:], "--api-base") && !containsFlag(args[2:], "--url") {
-			loginArgs = append(loginArgs, "--api-base", runtimecfg.DefaultRemoteOfficial)
-		}
-		loginArgs = append(loginArgs, normalizeRemoteArgs(args[2:])...)
-		return runLogin(loginArgs)
-	case "use":
-		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println(usageLine("remote use <profile>"))
-			return 0
-		}
-		if len(args) != 2 {
-			fmt.Fprintln(os.Stderr, usageLine("remote use <profile>"))
-			return 2
-		}
-		return runUse([]string{args[1]})
-	case "logout":
-		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println(usageLine("remote logout [profile]"))
-			return 0
-		}
-		logoutArgs := []string{}
-		if len(args) == 2 {
-			logoutArgs = append(logoutArgs, "--profile", args[1])
-		}
-		return runLogout(logoutArgs)
-	case "whoami":
-		if len(args) > 1 && isHelpArg(args[1:]) {
-			fmt.Println(usageLine("remote whoami [profile]"))
-			return 0
-		}
-		whoamiArgs := []string{}
-		if len(args) == 2 {
-			whoamiArgs = append(whoamiArgs, "--profile", args[1])
-		}
-		return runWhoAmICommand(whoamiArgs)
-	default:
-		fmt.Fprintf(os.Stderr, "unknown remote subcommand %q\n", args[0])
-		return 2
-	}
-}
-
 func saveConfig(path string, cfg *runtimecfg.CLIConfig) error {
 	return runtimecfg.SaveConfig(path, cfg)
 }
@@ -1252,17 +997,6 @@ func ensureLocalOwnerAccessForAPI(ctx context.Context) (*runtimecfg.CLIConfig, *
 		return nil, nil, "", err
 	}
 	return cfg, state, cfg.Local.OwnerToken, nil
-}
-
-func configuredGitMirrorPath(cfg *runtimecfg.CLIConfig, output string) string {
-	output = strings.TrimSpace(output)
-	if output != "" {
-		return output
-	}
-	if cfg == nil {
-		return ""
-	}
-	return strings.TrimSpace(cfg.Local.GitMirrorPath)
 }
 
 func ensureOwnerToken(ctx context.Context, configPath string, cfg *runtimecfg.CLIConfig, apiBase string) error {
@@ -1384,18 +1118,7 @@ func shouldUseLocalSyncDefaults(args []string) bool {
 		return false
 	}
 	switch args[0] {
-	case "login", "profiles", "use", "logout":
-		return false
-	case "whoami":
-		if containsFlag(args[1:], "--local") {
-			return true
-		}
-		if containsFlag(args[1:], "--profile") || containsFlag(args[1:], "--token") || containsFlag(args[1:], "--api-base") {
-			return false
-		}
-		_, cfg, err := runtimecfg.LoadConfig("")
-		return err == nil && runtimecfg.SelectedTarget(cfg) == runtimecfg.TargetLocal
-	case "export", "preview", "push", "pull", "resume", "history", "diff":
+	case "preview", "push", "pull", "resume", "history":
 		if containsFlag(args[1:], "--local") {
 			return true
 		}
@@ -1418,18 +1141,6 @@ func containsFlag(args []string, names ...string) bool {
 		}
 	}
 	return false
-}
-
-func normalizeRemoteArgs(args []string) []string {
-	out := make([]string, 0, len(args))
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--url" {
-			out = append(out, "--api-base")
-			continue
-		}
-		out = append(out, args[i])
-	}
-	return out
 }
 
 type localAPIEnvelope struct {

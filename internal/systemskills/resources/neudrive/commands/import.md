@@ -14,4 +14,4 @@ Use this command when the user wants to bring local or platform data into neuDri
 
 - Categories come after the verb.
 - A leading `/` is optional when the user writes category-like paths.
-- If the user already initialized a local Git mirror with `neudrive git init`, remind them that later Hub writes and imports are mirrored there automatically, but GitHub push still requires manual Git commands in that directory.
+- If the user already enabled local Git Mirror, remind them that later Hub writes and imports are mirrored there automatically, but GitHub push still requires normal Git credentials and repo setup in that directory.

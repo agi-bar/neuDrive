@@ -72,7 +72,6 @@ neudrive platform ls
 neudrive connect codex
 neudrive ls codex
 neudrive import codex
-neudrive git init
 
 neudrive browse
 ```
@@ -84,10 +83,10 @@ neudrive browse
 - 本地 daemon 默认使用 SQLite，首次启动时会自动创建本地数据库
 - `neudrive browse` 会打开本地 dashboard，并自动附带本地 owner token
 - `neudrive files ls|cat` 可以快速检查 profile / memory / project context 是否已经导入
-- `neudrive git init [--output DIR]` 可以把当前本地 Hub 的非 secret 数据导出成一个已 `git init` 的本地目录；未传 `--output` 时会直接使用 `config.json` 里的 `local.git_mirror_path`，如果还没配置，neuDrive 会先把默认值 `./neudrive-export/git-mirror` 写进 `config.json`
-- `neudrive git pull` 可以手动把当前 Hub 状态刷新到这个本地 Git 目录；同时之后新的 import / write 也会自动同步到这个目录
+- Git Mirror 现在通过 dashboard 配置；本地模式下第一次保存 Git Mirror 设置时，会自动按 `config.json` 里的 `local.git_mirror_path` 初始化 mirror
+- 启用 Git Mirror 之后，后续的 import / write 会继续自动同步到这个本地 Git 目录；如果还要推到 GitHub，再在该目录里做正常的 Git remote / push
 
-如果你想把默认镜像目录固定下来，可以直接编辑 neuDrive 本地配置文件；如果你不手动配，`neudrive git init` 也会先把默认值写进去，方便你之后找到：
+如果你想把默认镜像目录固定下来，可以直接编辑 neuDrive 本地配置文件：
 
 ```json
 {

@@ -420,11 +420,6 @@ export default function DataSyncPage() {
   }
 
   const handleGitMirrorSave = async () => {
-    if (!gitMirrorEnabled) {
-      setGitMirrorError(tx('请先运行 `neudrive git init` 初始化本地 mirror，然后再保存这些设置。', 'Run `neudrive git init` first to initialize the local mirror, then save these settings.'))
-      setGitMirrorMessage('')
-      return
-    }
     if (gitMirrorDraft.auth_mode === 'github_token' && gitMirrorDraft.auto_push_enabled && !gitMirrorVerificationCurrent) {
       setGitMirrorError(tx('启用 GitHub token 自动推送前，请先测试并确认 token 可用。', 'Test and verify the GitHub token before enabling auto push.'))
       return
@@ -607,7 +602,7 @@ export default function DataSyncPage() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="config-git-mirror-path">{tx('Git Mirror 目录', 'Git Mirror path')}</label>
-                      <div className="data-sync-field-note">{tx('`neudrive git init` 默认会把 Hub 导出到这里。', 'This is the default export directory used by `neudrive git init`.')}</div>
+                      <div className="data-sync-field-note">{tx('首次初始化本地 Git Mirror 时，neuDrive 会优先使用这里的目录。', 'When neuDrive initializes the local Git Mirror for the first time, it uses this directory first.')}</div>
                       <input
                         id="config-git-mirror-path"
                         value={settingsDraft.gitMirrorPath}
@@ -739,7 +734,7 @@ export default function DataSyncPage() {
         {gitMirrorBusy && <div className="page-loading">{tx('加载中...', 'Loading...')}</div>}
         {!gitMirrorBusy && gitMirror && !gitMirrorEnabled && (
           <div className="alert alert-warn">
-            {tx('当前还没有初始化 Git Mirror。你现在可以先查看下面的配置项；运行 `neudrive git init` 后，再回来保存并启用自动 commit / push。', 'No Git Mirror is initialized yet. You can review the configuration below now; run `neudrive git init` before coming back to save and enable auto commit / push.')}
+            {tx('当前还没有初始化 Git Mirror。你现在就可以直接保存下面的配置；首次保存时，neuDrive 会自动创建并同步本地 mirror。', 'Git Mirror is not initialized yet. You can save the configuration below directly; on the first save, neuDrive will create and sync the local mirror automatically.')}
           </div>
         )}
         {!gitMirrorBusy && gitMirror && (
@@ -940,12 +935,12 @@ export default function DataSyncPage() {
             {gitMirrorEnabled && gitMirror.last_error && <div className="alert alert-warn">{gitMirror.last_error}</div>}
 
             <div className="data-sync-actions">
-              <button className="btn btn-primary" onClick={() => { void handleGitMirrorSave() }} disabled={gitMirrorSaving || !gitMirrorEnabled}>
+              <button className="btn btn-primary" onClick={() => { void handleGitMirrorSave() }} disabled={gitMirrorSaving}>
                 {gitMirrorSaving ? tx('保存中...', 'Saving...') : tx('保存 Git Mirror 配置', 'Save Git Mirror settings')}
               </button>
               {!gitMirrorEnabled && (
                 <span className="data-record-secondary">
-                  {tx('先运行 `neudrive git init`，再保存这些配置。', 'Run `neudrive git init` before saving these settings.')}
+                  {tx('首次保存时会自动初始化本地 mirror。', 'The local mirror will be initialized automatically on the first save.')}
                 </span>
               )}
               {gitMirrorDraft.auth_mode === 'github_token' && gitMirrorDraft.auto_push_enabled && !gitMirrorVerificationCurrent && (

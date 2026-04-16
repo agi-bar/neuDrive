@@ -67,8 +67,6 @@ flowchart LR
   已并入统一 CLI 表面
 - `neudrive platform ls/show/connect/disconnect/import/export`
   已提供首批本地 CLI 平台适配器：`claude-code`、`codex`、`gemini-cli`、`cursor-agent`
-- `neudrive remote ...`
-  作为兼容别名保留，对应顶层 `login/logout/use/whoami/profiles`
 - 本地 daemon 默认使用 SQLite
   本地首次启动会自动 bootstrap local owner 和本地数据库路径
 - 远端 / 官方服务模式继续以 Postgres 为主

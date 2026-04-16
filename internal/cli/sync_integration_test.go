@@ -47,47 +47,6 @@ type cliSessionEnvelope struct {
 	Data models.SyncSessionResponse `json:"data"`
 }
 
-func TestAgenthubSyncLoginProfilesWhoAmI_LocalSQLite(t *testing.T) {
-	binary := buildAgenthubBinary(t)
-	env, configPath, statePath, _, _ := isolatedAgenthubEnv(t)
-	mustRunAgenthub(t, binary, env, "sync", "history")
-	cfg := loadCLIConfigForTest(t, configPath)
-	state := loadRuntimeStateForTest(t, statePath)
-	if strings.TrimSpace(cfg.Local.OwnerToken) == "" {
-		t.Fatal("expected local owner token after bootstrap")
-	}
-
-	stdout, _ := mustRunAgenthub(t, binary, env,
-		"sync", "login",
-		"--profile", "localtest",
-		"--token", cfg.Local.OwnerToken,
-		"--api-base", state.APIBase,
-	)
-	if !strings.Contains(stdout, "Logged in to") {
-		t.Fatalf("login output missing success text: %s", stdout)
-	}
-
-	stdout, _ = mustRunAgenthub(t, binary, env, "sync", "profiles")
-	if !strings.Contains(stdout, "localtest") {
-		t.Fatalf("profiles output missing localtest: %s", stdout)
-	}
-
-	stdout, _ = mustRunAgenthub(t, binary, env, "sync", "whoami", "--profile", "localtest")
-	if !strings.Contains(stdout, "Current profile: localtest") {
-		t.Fatalf("whoami output missing profile: %s", stdout)
-	}
-	if !strings.Contains(stdout, "Scopes: admin") {
-		t.Fatalf("whoami output missing scopes: %s", stdout)
-	}
-
-	mustRunAgenthub(t, binary, env, "sync", "logout", "--profile", "localtest")
-	updated := loadCLIConfigForTest(t, configPath)
-	if updated.Profiles["localtest"].Token != "" {
-		t.Fatal("expected logout to clear saved token")
-	}
-	mustRunAgenthub(t, binary, env, "daemon", "stop")
-}
-
 func TestAgenthubSyncLocalSQLiteRoundTrip_WithRealisticFixture(t *testing.T) {
 	binary := buildAgenthubBinary(t)
 	env, _, _, _, workDir := isolatedAgenthubEnv(t)
@@ -182,49 +141,6 @@ func TestAgenthubSyncResume_LocalSQLiteArchiveSession(t *testing.T) {
 	stdout, _ = mustRunAgenthub(t, binary, env, "sync", "history")
 	if !strings.Contains(stdout, "\"transport\": \"archive\"") {
 		t.Fatalf("history output missing archive jobs: %s", stdout)
-	}
-	mustRunAgenthub(t, binary, env, "daemon", "stop")
-}
-
-func TestAgenthubRemoteCommands_LocalSQLiteProfile(t *testing.T) {
-	binary := buildAgenthubBinary(t)
-	env, configPath, statePath, _, _ := isolatedAgenthubEnv(t)
-
-	mustRunAgenthub(t, binary, env, "sync", "history")
-	cfg := loadCLIConfigForTest(t, configPath)
-	state := loadRuntimeStateForTest(t, statePath)
-	if strings.TrimSpace(cfg.Local.OwnerToken) == "" {
-		t.Fatal("expected local owner token after bootstrap")
-	}
-
-	stdout, _ := mustRunAgenthub(t, binary, env,
-		"remote", "login", "local",
-		"--url", state.APIBase,
-		"--token", cfg.Local.OwnerToken,
-	)
-	if !strings.Contains(stdout, "Logged in to") {
-		t.Fatalf("unexpected remote login output: %s", stdout)
-	}
-
-	stdout, _ = mustRunAgenthub(t, binary, env, "remote", "ls")
-	if !strings.Contains(stdout, "Current target: profile:local") || !strings.Contains(stdout, "* local") || !strings.Contains(stdout, state.APIBase) {
-		t.Fatalf("unexpected remote ls output: %s", stdout)
-	}
-
-	stdout, _ = mustRunAgenthub(t, binary, env, "remote", "use", "local")
-	if !strings.Contains(stdout, "Current target: profile:local") {
-		t.Fatalf("unexpected remote use output: %s", stdout)
-	}
-
-	stdout, _ = mustRunAgenthub(t, binary, env, "remote", "whoami", "local")
-	if !strings.Contains(stdout, "Current target: profile:local") || !strings.Contains(stdout, "Current profile: local") || !strings.Contains(stdout, "Auth mode: scoped_token") {
-		t.Fatalf("unexpected remote whoami output: %s", stdout)
-	}
-
-	mustRunAgenthub(t, binary, env, "remote", "logout", "local")
-	updated := loadCLIConfigForTest(t, configPath)
-	if updated.Profiles["local"].Token != "" {
-		t.Fatal("expected remote logout to clear saved token")
 	}
 	mustRunAgenthub(t, binary, env, "daemon", "stop")
 }

@@ -2,20 +2,12 @@ package synccli
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
-	"net"
-	"net/http"
-	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"runtime"
-	"sort"
 	"strings"
 	"time"
 
@@ -26,7 +18,6 @@ import (
 
 const (
 	fallbackAPIBase = "http://localhost:8080"
-	loginTimeout    = 5 * time.Minute
 	syncConfigEnv   = "NEUDRIVE_SYNC_CONFIG"
 	syncProfileEnv  = "NEUDRIVE_SYNC_PROFILE"
 	syncAPIBaseEnv  = "NEUDRIVE_SYNC_API_BASE"
@@ -74,16 +65,6 @@ type sessionState struct {
 	CreatedAt          string `json:"created_at"`
 }
 
-type loginCallbackPayload struct {
-	State     string   `json:"state"`
-	Profile   string   `json:"profile"`
-	Token     string   `json:"token"`
-	ExpiresAt string   `json:"expires_at"`
-	APIBase   string   `json:"api_base"`
-	Scopes    []string `json:"scopes"`
-	Usage     string   `json:"usage"`
-}
-
 func CheckDependencies() error {
 	return nil
 }
@@ -97,16 +78,6 @@ func Run(args []string) error {
 	case "help", "--help", "-h":
 		printUsage()
 		return nil
-	case "login":
-		return runLogin(args[1:])
-	case "profiles":
-		return runProfiles(args[1:])
-	case "use":
-		return runUse(args[1:])
-	case "whoami":
-		return runWhoAmI(args[1:])
-	case "logout":
-		return runLogout(args[1:])
 	case "export":
 		return runExport(args[1:])
 	case "preview":
@@ -129,215 +100,7 @@ func Run(args []string) error {
 }
 
 func printUsage() {
-	fmt.Println("Usage: neudrive sync login|profiles|use|whoami|logout|export|preview|push|pull|resume|history|diff")
-}
-
-func runLogin(args []string) error {
-	fs := flag.NewFlagSet("sync login", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	token := fs.String("token", "", "existing sync scoped token")
-	apiBase := fs.String("api-base", "", "neuDrive base URL")
-	profile := fs.String("profile", "", "profile name to save")
-	configPath := fs.String("config", "", "override config path")
-	access := fs.String("access", "both", "push, pull, or both")
-	ttlMinutes := fs.Int("ttl-minutes", 30, "token TTL in minutes")
-	if err := parseFlags(fs, args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-		return &ExitError{Code: 2}
-	}
-	if *ttlMinutes <= 0 {
-		*ttlMinutes = 30
-	}
-	configPathValue, cfg, err := loadCLIConfig(*configPath)
-	if err != nil {
-		return err
-	}
-	apiBaseValue := resolveAPIBase(commonOptions{APIBase: *apiBase}, cfg, nil)
-	profileName := pickProfileName(cfg, strings.TrimSpace(*profile), apiBaseValue)
-	source := "manual"
-	callbackPayload := loginCallbackPayload{}
-	tokenValue := strings.TrimSpace(*token)
-	if tokenValue == "" {
-		source = "browser"
-		callbackPayload, err = waitForBrowserLogin(apiBaseValue, profileName, strings.ToLower(strings.TrimSpace(*access)), *ttlMinutes)
-		if err != nil {
-			return err
-		}
-		tokenValue = strings.TrimSpace(callbackPayload.Token)
-		if tokenValue == "" {
-			return errors.New("browser login did not return a token")
-		}
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
-	defer cancel()
-	info, err := newClient(apiBaseValue, tokenValue).getAuthInfo(ctx)
-	if err != nil {
-		return err
-	}
-	if strings.TrimSpace(info.APIBase) == "" {
-		info.APIBase = defaultString(callbackPayload.APIBase, apiBaseValue)
-	}
-	if info.ExpiresAt == nil && strings.TrimSpace(callbackPayload.ExpiresAt) != "" {
-		if parsed, err := time.Parse(time.RFC3339, callbackPayload.ExpiresAt); err == nil {
-			info.ExpiresAt = &parsed
-		}
-	}
-	if len(info.Scopes) == 0 && len(callbackPayload.Scopes) > 0 {
-		info.Scopes = append([]string{}, callbackPayload.Scopes...)
-	}
-	if cfg.Profiles == nil {
-		cfg.Profiles = map[string]runtimecfg.SyncProfile{}
-	}
-	profileEntry := runtimecfg.SyncProfile{
-		APIBase:   strings.TrimRight(info.APIBase, "/"),
-		Token:     tokenValue,
-		Scopes:    append([]string{}, info.Scopes...),
-		UpdatedAt: time.Now().UTC().Format(time.RFC3339),
-		Source:    source,
-	}
-	if info.ExpiresAt != nil {
-		profileEntry.ExpiresAt = info.ExpiresAt.UTC().Format(time.RFC3339)
-	}
-	cfg.Profiles[profileName] = profileEntry
-	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
-		return err
-	}
-	printLoginSummary(profileName, profileEntry.APIBase, info)
-	return nil
-}
-
-func runProfiles(args []string) error {
-	fs := flag.NewFlagSet("sync profiles", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	configPath := fs.String("config", "", "override config path")
-	if err := parseFlags(fs, args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-		return &ExitError{Code: 2}
-	}
-	_, cfg, err := loadCLIConfig(*configPath)
-	if err != nil {
-		return err
-	}
-	fmt.Println(renderProfiles(cfg))
-	return nil
-}
-
-func runUse(args []string) error {
-	fs := flag.NewFlagSet("sync use", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	profileFlag := fs.String("profile", "", "profile name")
-	configPath := fs.String("config", "", "override config path")
-	if err := parseFlags(fs, args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-		return &ExitError{Code: 2}
-	}
-	profileName := strings.TrimSpace(*profileFlag)
-	if profileName == "" && len(fs.Args()) > 0 {
-		profileName = strings.TrimSpace(fs.Args()[0])
-	}
-	if profileName == "" {
-		return errors.New("profile name is required")
-	}
-	configPathValue, cfg, err := loadCLIConfig(*configPath)
-	if err != nil {
-		return err
-	}
-	if _, ok := cfg.Profiles[profileName]; !ok {
-		return fmt.Errorf("profile %s does not exist", profileName)
-	}
-	cfg.CurrentTarget = runtimecfg.ProfileTarget(profileName)
-	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
-		return err
-	}
-	fmt.Printf("Current target: %s\n", cfg.CurrentTarget)
-	return nil
-}
-
-func runWhoAmI(args []string) error {
-	opts, err := parseCommonOptions("sync whoami", args)
-	if err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-		return err
-	}
-	_, _, apiBaseValue, tokenValue, profileName, tokenSource, err := resolveRuntimeAuth(opts, nil)
-	if err != nil {
-		return err
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-	info, err := newClient(apiBaseValue, tokenValue).getAuthInfo(ctx)
-	if err != nil {
-		return err
-	}
-	fmt.Printf("Current profile: %s\n", defaultString(profileName, "-"))
-	fmt.Printf("API base: %s\n", strings.TrimRight(defaultString(info.APIBase, apiBaseValue), "/"))
-	if strings.TrimSpace(info.UserSlug) != "" {
-		fmt.Printf("User: %s\n", info.UserSlug)
-	}
-	fmt.Printf("Auth mode: %s\n", defaultString(info.AuthMode, "scoped_token"))
-	fmt.Printf("Trust level: %d\n", info.TrustLevel)
-	fmt.Printf("Token source: %s\n", tokenSource)
-	if info.ExpiresAt != nil {
-		fmt.Printf("Token expires at: %s\n", info.ExpiresAt.UTC().Format(time.RFC3339))
-	} else {
-		fmt.Println("Token expires at: -")
-	}
-	if len(info.Scopes) == 0 {
-		fmt.Println("Scopes: -")
-	} else {
-		fmt.Printf("Scopes: %s\n", strings.Join(info.Scopes, ", "))
-	}
-	return nil
-}
-
-func runLogout(args []string) error {
-	fs := flag.NewFlagSet("sync logout", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
-	profile := fs.String("profile", "", "profile name")
-	configPath := fs.String("config", "", "override config path")
-	if err := parseFlags(fs, args); err != nil {
-		if errors.Is(err, flag.ErrHelp) {
-			return nil
-		}
-		return &ExitError{Code: 2}
-	}
-	configPathValue, cfg, err := loadCLIConfig(*configPath)
-	if err != nil {
-		return err
-	}
-	profileName := strings.TrimSpace(*profile)
-	if profileName == "" {
-		profileName = selectedProfileName("", cfg)
-	}
-	if profileName == "" {
-		return errors.New("no profile selected; pass --profile")
-	}
-	entry, ok := cfg.Profiles[profileName]
-	if !ok {
-		return fmt.Errorf("profile %s does not exist", profileName)
-	}
-	entry.Token = ""
-	entry.RefreshToken = ""
-	entry.ExpiresAt = ""
-	entry.Scopes = nil
-	entry.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
-	cfg.Profiles[profileName] = entry
-	if runtimecfg.TargetProfileName(cfg.CurrentTarget) == profileName {
-		cfg.CurrentTarget = runtimecfg.TargetLocal
-	}
-	if err := runtimecfg.SaveConfig(configPathValue, cfg); err != nil {
-		return err
-	}
-	fmt.Printf("Logged out profile %s\n", profileName)
-	return nil
+	fmt.Println("Usage: neudrive sync export|preview|push|pull|resume|history|diff")
 }
 
 func runExport(args []string) error {
@@ -909,7 +672,7 @@ func resolveRuntimeAuth(opts commonOptions, state *sessionState) (string, *runti
 	}
 	profileName, profile, ok := profileEntry(opts.Profile, cfg)
 	if !ok {
-		return "", nil, "", "", "", "", errors.New("no sync token found; run `neudrive sync login` or pass --token")
+		return "", nil, "", "", "", "", errors.New("no sync token found; run `neudrive login` or pass --token")
 	}
 	if strings.TrimSpace(profile.AuthMode) == runtimecfg.AuthModeOAuthSession {
 		refreshed, err := profileauth.EnsureProfileToken(context.Background(), configPath, cfg, profileName)
@@ -919,10 +682,10 @@ func resolveRuntimeAuth(opts commonOptions, state *sessionState) (string, *runti
 		profile = refreshed
 	}
 	if strings.TrimSpace(profile.Token) == "" {
-		return "", nil, "", "", "", "", fmt.Errorf("profile %s has no saved token; run `neudrive sync login --profile %s`", profileName, profileName)
+		return "", nil, "", "", "", "", fmt.Errorf("profile %s has no saved token; run `neudrive login --profile %s`", profileName, profileName)
 	}
 	if strings.TrimSpace(profile.AuthMode) != runtimecfg.AuthModeOAuthSession && profileExpired(profile) {
-		return "", nil, "", "", "", "", fmt.Errorf("stored token for profile %s expired at %s; run `neudrive sync login --profile %s`", profileName, profile.ExpiresAt, profileName)
+		return "", nil, "", "", "", "", fmt.Errorf("stored token for profile %s expired at %s; run `neudrive login --profile %s`", profileName, profile.ExpiresAt, profileName)
 	}
 	return configPath, cfg, apiBaseValue, profile.Token, profileName, "profile:" + profileName, nil
 }
@@ -968,204 +731,6 @@ func profileExpired(profile runtimecfg.SyncProfile) bool {
 	return !expiresAt.After(time.Now().UTC())
 }
 
-func pickProfileName(cfg *runtimecfg.CLIConfig, requested, apiBaseValue string) string {
-	if strings.TrimSpace(requested) != "" {
-		return strings.TrimSpace(requested)
-	}
-	if current := strings.TrimSpace(cfg.CurrentProfile); current != "" {
-		if profile, ok := cfg.Profiles[current]; ok && strings.TrimRight(profile.APIBase, "/") == strings.TrimRight(apiBaseValue, "/") {
-			return current
-		}
-	}
-	if current := runtimecfg.TargetProfileName(cfg.CurrentTarget); current != "" {
-		if profile, ok := cfg.Profiles[current]; ok && strings.TrimRight(profile.APIBase, "/") == strings.TrimRight(apiBaseValue, "/") {
-			return current
-		}
-	}
-	for name, profile := range cfg.Profiles {
-		if strings.TrimRight(profile.APIBase, "/") == strings.TrimRight(apiBaseValue, "/") {
-			return name
-		}
-	}
-	if len(cfg.Profiles) == 0 {
-		return "default"
-	}
-	if _, ok := cfg.Profiles["default"]; !ok {
-		return "default"
-	}
-	host := "profile"
-	if parsed, err := url.Parse(apiBaseValue); err == nil && parsed.Hostname() != "" {
-		host = strings.Split(parsed.Hostname(), ".")[0]
-	}
-	base := safeLabel(host, "profile")
-	candidate := base
-	counter := 2
-	for {
-		if _, ok := cfg.Profiles[candidate]; !ok {
-			return candidate
-		}
-		candidate = fmt.Sprintf("%s-%d", base, counter)
-		counter++
-	}
-}
-
-func renderProfiles(cfg *runtimecfg.CLIConfig) string {
-	if len(cfg.Profiles) == 0 {
-		return "No saved profiles. Run `neudrive sync login`."
-	}
-	names := make([]string, 0, len(cfg.Profiles))
-	for name := range cfg.Profiles {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	lines := make([]string, 0, len(names))
-	for _, name := range names {
-		profile := cfg.Profiles[name]
-		prefix := " "
-		if runtimecfg.TargetProfileName(runtimecfg.SelectedTarget(cfg)) == name {
-			prefix = "*"
-		}
-		authStatus := "logged-out"
-		if strings.TrimSpace(profile.Token) != "" {
-			if strings.TrimSpace(profile.AuthMode) == runtimecfg.AuthModeOAuthSession {
-				if profileauth.TokenExpired(profile.ExpiresAt) {
-					authStatus = "refresh-needed"
-				} else {
-					authStatus = "ready"
-				}
-			} else if profileExpired(profile) {
-				authStatus = "expired"
-			} else {
-				authStatus = "ready"
-			}
-		}
-		scopes := strings.Join(profile.Scopes, ",")
-		if scopes == "" {
-			scopes = "-"
-		}
-		expiresAt := defaultString(profile.ExpiresAt, "-")
-		apiBaseValue := defaultString(profile.APIBase, "-")
-		lines = append(lines, fmt.Sprintf("%s %s  %s  %s  scopes=%s  expires=%s", prefix, name, apiBaseValue, authStatus, scopes, expiresAt))
-	}
-	return strings.Join(lines, "\n")
-}
-
-func printLoginSummary(profileName, apiBaseValue string, info *models.AgentAuthInfo) {
-	fmt.Printf("Logged in to %s as profile %s\n", apiBaseValue, profileName)
-	if strings.TrimSpace(info.UserSlug) != "" {
-		fmt.Printf("User: %s\n", info.UserSlug)
-	}
-	if info.ExpiresAt != nil {
-		fmt.Printf("Token expires at %s\n", info.ExpiresAt.UTC().Format(time.RFC3339))
-	} else {
-		fmt.Println("Token expires at -")
-	}
-	if len(info.Scopes) == 0 {
-		fmt.Println("Scopes: -")
-	} else {
-		fmt.Printf("Scopes: %s\n", strings.Join(info.Scopes, ", "))
-	}
-	fmt.Printf("Current profile: %s\n", profileName)
-}
-
-func waitForBrowserLogin(apiBaseValue, profileName, access string, ttlMinutes int) (loginCallbackPayload, error) {
-	if access == "" {
-		access = "both"
-	}
-	if ttlMinutes <= 0 {
-		ttlMinutes = 30
-	}
-	state, err := randomHex(18)
-	if err != nil {
-		return loginCallbackPayload{}, err
-	}
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return loginCallbackPayload{}, err
-	}
-	defer listener.Close()
-	payloadCh := make(chan loginCallbackPayload, 1)
-	errCh := make(chan error, 1)
-	server := &http.Server{
-		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Access-Control-Allow-Origin", "*")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-			if r.Method == http.MethodOptions {
-				w.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS")
-				w.WriteHeader(http.StatusNoContent)
-				return
-			}
-			if r.Method != http.MethodPost || r.URL.Path != "/callback" {
-				w.WriteHeader(http.StatusNotFound)
-				_, _ = w.Write([]byte(`{"error":"not found"}`))
-				return
-			}
-			var payload loginCallbackPayload
-			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(`{"error":"invalid request body"}`))
-				return
-			}
-			if payload.State != state {
-				w.WriteHeader(http.StatusBadRequest)
-				_, _ = w.Write([]byte(`{"error":"invalid login state"}`))
-				return
-			}
-			select {
-			case payloadCh <- payload:
-			default:
-			}
-			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"ok":true}`))
-		}),
-	}
-	go func() {
-		if serveErr := server.Serve(listener); serveErr != nil && !errors.Is(serveErr, http.ErrServerClosed) {
-			errCh <- serveErr
-		}
-	}()
-	callbackURL := fmt.Sprintf("http://127.0.0.1:%d/callback", listener.Addr().(*net.TCPAddr).Port)
-	syncURL := fmt.Sprintf("%s/sync/login?%s", strings.TrimRight(apiBaseValue, "/"), url.Values{
-		"cli_login":       []string{"1"},
-		"cli_profile":     []string{profileName},
-		"cli_access":      []string{access},
-		"cli_ttl_minutes": []string{fmt.Sprintf("%d", ttlMinutes)},
-		"cli_callback":    []string{callbackURL},
-		"cli_state":       []string{state},
-	}.Encode())
-	fmt.Printf("Opening browser for neuDrive sync login:\n%s\n", syncURL)
-	_ = openBrowser(syncURL)
-	timer := time.NewTimer(loginTimeout)
-	defer timer.Stop()
-	select {
-	case payload := <-payloadCh:
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = server.Shutdown(ctx)
-		return payload, nil
-	case err := <-errCh:
-		return loginCallbackPayload{}, err
-	case <-timer.C:
-		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-		defer cancel()
-		_ = server.Shutdown(ctx)
-		return loginCallbackPayload{}, errors.New("timed out waiting for browser login callback")
-	}
-}
-
-func openBrowser(target string) error {
-	var cmd *exec.Cmd
-	switch runtime.GOOS {
-	case "darwin":
-		cmd = exec.Command("open", target)
-	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", target)
-	default:
-		cmd = exec.Command("xdg-open", target)
-	}
-	return cmd.Start()
-}
-
 func saveSessionFile(path string, state sessionState) error {
 	return writePrettyJSON(path, state)
 }
@@ -1203,15 +768,4 @@ func printJSON(value any) {
 	encoder.SetEscapeHTML(false)
 	encoder.SetIndent("", "  ")
 	_ = encoder.Encode(value)
-}
-
-func randomHex(byteLen int) (string, error) {
-	if byteLen <= 0 {
-		byteLen = 16
-	}
-	buf := make([]byte, byteLen)
-	if _, err := rand.Read(buf); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(buf), nil
 }

@@ -81,11 +81,6 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		{"mcp", "--help"},
 		{"mcp", "stdio", "--help"},
 		{"sync", "--help"},
-		{"sync", "login", "--help"},
-		{"sync", "profiles", "--help"},
-		{"sync", "use", "--help"},
-		{"sync", "whoami", "--help"},
-		{"sync", "logout", "--help"},
 		{"sync", "export", "--help"},
 		{"sync", "preview", "--help"},
 		{"sync", "push", "--help"},
@@ -93,11 +88,6 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		{"sync", "resume", "--help"},
 		{"sync", "history", "--help"},
 		{"sync", "diff", "--help"},
-		{"remote", "--help"},
-		{"remote", "login", "--help"},
-		{"remote", "use", "--help"},
-		{"remote", "logout", "--help"},
-		{"remote", "whoami", "--help"},
 	}
 
 	for _, args := range cases {
@@ -123,15 +113,6 @@ func TestRootCommandsHelpSurface(t *testing.T) {
 		}
 	})
 
-	t.Run("git --help is descriptive", func(t *testing.T) {
-		stdout, stderr, code := runRootForTest(t, "git", "--help")
-		if code != 0 {
-			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
-		}
-		if !strings.Contains(stdout, "Mirror local neuDrive data into a local Git repository and keep it refreshed.") {
-			t.Fatalf("expected descriptive git help, got %q", stdout)
-		}
-	})
 }
 
 func TestRootCommandsUsageAndExitCodes(t *testing.T) {
@@ -160,9 +141,6 @@ func TestRootCommandsUsageAndExitCodes(t *testing.T) {
 		{name: "daemon unknown", args: []string{"daemon", "wat"}, want: 2, substr: "unknown daemon subcommand", stream: "stderr"},
 		{name: "use missing", args: []string{"use"}, want: 2, substr: "usage: neudrive use <local|profile>", stream: "stderr"},
 		{name: "sync unknown", args: []string{"sync", "wat"}, want: 2, substr: "unknown sync subcommand", stream: "stderr"},
-		{name: "remote unknown", args: []string{"remote", "wat"}, want: 2, substr: "unknown remote subcommand", stream: "stderr"},
-		{name: "remote login missing", args: []string{"remote", "login"}, want: 2, substr: "usage: neudrive remote login <profile>", stream: "stderr"},
-		{name: "remote use missing", args: []string{"remote", "use"}, want: 2, substr: "usage: neudrive remote use <profile>", stream: "stderr"},
 		{name: "help unknown topic", args: []string{"help", "wat"}, want: 2, substr: "available topics:", stream: "stderr"},
 	}
 

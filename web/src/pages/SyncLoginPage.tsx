@@ -36,8 +36,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? '这个页面需要由 `neudrive sync login` 自动打开。'
-        : 'This page must be opened automatically by `neudrive sync login`.',
+        ? '这个页面需要由 neuDrive CLI 的浏览器登录流程自动打开。'
+        : 'This page must be opened automatically by the neuDrive CLI browser login flow.',
     }
   }
 
@@ -51,8 +51,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? '缺少必要的 CLI 登录参数，请回到终端重新执行 `neudrive sync login`。'
-        : 'Missing required CLI login parameters. Please rerun `neudrive sync login` in the terminal.',
+        ? '缺少必要的 CLI 登录参数，请回到终端重新执行登录命令。'
+        : 'Missing required CLI login parameters. Please rerun the login command in the terminal.',
     }
   }
 
@@ -60,8 +60,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? '无效的访问范围参数，请回到终端重新执行 `neudrive sync login`。'
-        : 'Invalid access scope parameter. Please rerun `neudrive sync login` in the terminal.',
+        ? '无效的访问范围参数，请回到终端重新执行登录命令。'
+        : 'Invalid access scope parameter. Please rerun the login command in the terminal.',
     }
   }
 
@@ -79,8 +79,8 @@ function parseCLILoginRequest(search: string, locale: 'zh-CN' | 'en'): { request
     return {
       request: null,
       error: locale === 'zh-CN'
-        ? 'CLI 回调地址无效，请回到终端重新执行 `neudrive sync login`。'
-        : 'The CLI callback URL is invalid. Please rerun `neudrive sync login` in the terminal.',
+        ? 'CLI 回调地址无效，请回到终端重新执行登录命令。'
+        : 'The CLI callback URL is invalid. Please rerun the login command in the terminal.',
     }
   }
 
@@ -134,8 +134,8 @@ export default function SyncLoginPage({ systemSettingsEnabled = false }: SyncLog
 
       if (!callbackRes.ok) {
         throw new Error(tx(
-          'Sync Token 已生成，但回填本地 CLI 失败。请确认终端还在等待登录，或改用手工 `neudrive sync login --token ...`。',
-          'The Sync token was created, but sending it back to the local CLI failed. Make sure the terminal is still waiting, or use `neudrive sync login --token ...` manually.',
+          'Sync Token 已生成，但回填本地 CLI 失败。请确认终端还在等待登录，或改用手工 `neudrive login --token ...`。',
+          'The Sync token was created, but sending it back to the local CLI failed. Make sure the terminal is still waiting, or use `neudrive login --token ...` manually.',
         ))
       }
 
@@ -218,7 +218,7 @@ export default function SyncLoginPage({ systemSettingsEnabled = false }: SyncLog
             <div className="data-record-meta">{tx('过期时间：', 'Expires at: ')}{formatDateTime(syncToken.expires_at, locale)}</div>
             <div className="data-record-secondary">
               {tx('如果终端还在等待，也可以手工执行：', 'If the terminal is still waiting, you can also run:')}
-              <code> neudrive sync login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code>
+              <code> neudrive login --api-base {window.location.origin} --token &lt;PASTE_TOKEN&gt;</code>
             </div>
           </div>
         )}

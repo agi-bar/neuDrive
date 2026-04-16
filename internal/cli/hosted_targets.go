@@ -48,7 +48,7 @@ type loginResult struct {
 
 func addTargetFlags(fs *flag.FlagSet, opts *commandTargetOptions) {
 	fs.BoolVar(&opts.Local, "local", false, "force the local neuDrive target")
-	fs.StringVar(&opts.Profile, "profile", "", "remote profile name")
+	fs.StringVar(&opts.Profile, "profile", "", "hosted profile name")
 	fs.StringVar(&opts.APIBase, "api-base", "", "explicit neuDrive API base")
 	fs.StringVar(&opts.Token, "token", "", "explicit bearer token")
 }

@@ -61,7 +61,7 @@ neudrive sync diff --help
 命令模板：
 
 ```bash
-neudrive sync login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
+neudrive login --token "$SYNC_TOKEN" --api-base "$BASE_URL"
 neudrive sync export --source /path/to/fixture --format archive -o fixture.ndrvz
 neudrive sync preview --bundle fixture.ndrvz
 neudrive sync push --bundle fixture.ndrvz --transport auto

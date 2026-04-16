@@ -411,7 +411,7 @@ export default function SystemSettingsPage() {
                     </div>
                     <div className="form-group">
                       <label htmlFor="config-git-mirror-path">{tx('Git Mirror 默认目录', 'Default Git Mirror path')}</label>
-                      <div className="data-sync-field-note">{tx('`neudrive git init` 默认会把 mirror 写到这里。', 'This is the default path used by `neudrive git init`.')}</div>
+                      <div className="data-sync-field-note">{tx('首次初始化本地 Git Mirror 时，neuDrive 会优先使用这里的目录。', 'When neuDrive initializes the local Git Mirror for the first time, it uses this directory first.')}</div>
                       <input id="config-git-mirror-path" value={settingsDraft.gitMirrorPath} onChange={(e) => updateSettingsDraft({ gitMirrorPath: e.target.value })} placeholder="./neudrive-export/git-mirror" />
                     </div>
                     <div className="form-group">

@@ -66,7 +66,7 @@ func (s *Service) UpdateMirrorSettings(ctx context.Context, userID uuid.UUID, up
 		return nil, err
 	}
 	if s.configuredExecutionMode() == ExecutionModeLocal && (active == nil || strings.TrimSpace(active.RootPath) == "") {
-		return nil, fmt.Errorf("no local Git mirror is configured; run `neudrive git init` first")
+		return nil, fmt.Errorf("no local Git mirror is configured; initialize Git Mirror first")
 	}
 	if err := applySettingsUpdate(&mirror, update); err != nil {
 		return nil, err

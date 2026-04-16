@@ -130,7 +130,7 @@ func (s *Server) handleAgentCreateEphemeralToken(w http.ResponseWriter, r *http.
 			"expires_at": created.ScopedToken.ExpiresAt.Format(time.RFC3339),
 			"api_base":   baseURL,
 			"scopes":     created.ScopedToken.Scopes,
-			"usage":      fmt.Sprintf("neudrive sync login --api-base %s --token %s && neudrive sync push --bundle backup.ndrv", baseURL, created.Token),
+			"usage":      fmt.Sprintf("neudrive login --api-base %s --token %s && neudrive sync push --bundle backup.ndrv", baseURL, created.Token),
 		})
 		return
 

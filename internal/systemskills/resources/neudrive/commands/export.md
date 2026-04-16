@@ -7,12 +7,12 @@ Use this command when the user wants neuDrive to prepare platform-oriented expor
 - Capture exact assets when they are directly available.
 - Capture derived long-term memory, preferences, and working rules when only the agent can interpret them.
 - Preserve unsupported or partially mapped content as archive metadata instead of dropping it.
-- When the user asks to "put my neuDrive into a repo", hand off to `neudrive git` instead of overloading `export`.
+- When the user asks to "put my neuDrive into a repo", hand off to the Git Mirror workflow instead of overloading `export`.
 
 ## Steps
 
 1. Read `/skills/neudrive/SKILL.md`.
-2. If the user explicitly wants a local Git repo for the Hub itself, read `/skills/neudrive/commands/git.md` and use `neudrive git init [--output DIR]` instead.
+2. If the user explicitly wants a local Git repo for the Hub itself, direct them to the Git Mirror workflow in the neuDrive dashboard instead.
 3. Read `/skills/neudrive/references/platforms/<platform>.md` if present.
 4. Read `/skills/portability/<platform>/SKILL.md` when a platform portability manual exists; otherwise read `/skills/portability/general/SKILL.md`.
 5. Do not choose `import_skill`, `import_skills_archive`, or `prepare_skills_upload` until that portability manual has been read.

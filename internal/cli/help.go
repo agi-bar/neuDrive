@@ -99,8 +99,8 @@ var cliHelpTopics = map[string]cliHelpTopic{
 			"neudrive import memory ./notes/",
 			"neudrive import project ./demo-project --name imported",
 		},
-		Notes:     []string{"Import categories come after the verb so the command shape matches `ls/read/write`.", "If you already initialized a local Git mirror with `neudrive git init`, successful imports will sync into that mirror automatically.", "Use `import platform ...` for Claude/Codex platform capture flows and `import skill/profile/memory/project ...` for direct local content."},
-		SeeAlso:   []string{"write", "git", "platform"},
+		Notes:     []string{"Import categories come after the verb so the command shape matches `ls/read/write`.", "If local Git Mirror is enabled, successful imports keep syncing into that mirror automatically.", "Use `import platform ...` for Claude/Codex platform capture flows and `import skill/profile/memory/project ...` for direct local content."},
+		SeeAlso:   []string{"write", "platform"},
 		SortOrder: 80,
 	},
 	"token": {
@@ -120,15 +120,6 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		Notes:     []string{"Use this to confirm the Hub is non-empty after imports or writes.", "The human-readable view reports file, memory, profile, project, and skill counts."},
 		SeeAlso:   []string{"status", "ls"},
 		SortOrder: 100,
-	},
-	"git": {
-		Key:       "git",
-		Summary:   "Mirror local neuDrive data into a local Git repository and keep it refreshed.",
-		Usage:     []string{"neudrive git init [--output DIR]", "neudrive git pull", "neudrive git auth github-app --device"},
-		Examples:  []string{"neudrive git init --output ./neudrive-export/git-mirror", "neudrive git pull", "neudrive git auth github-app --device"},
-		Notes:     []string{"`git init` exports all non-secret local Hub data, initializes the repo when needed, and registers it as the active mirror.", "If `--output` is omitted, neuDrive uses `local.git_mirror_path` from `config.json`; if it is missing, neuDrive writes the default `./neudrive-export/git-mirror` into `config.json` first.", "`git pull` refreshes the active mirror from the current local Hub state.", "`git auth github-app --device` connects your GitHub App user account; repository selection still happens in the web dashboard.", "Secrets are not exported; vault only contributes scope metadata.", "GitHub sync still requires running `git add / git commit / git remote add origin / git push` in that directory."},
-		SeeAlso:   []string{"import", "write"},
-		SortOrder: 110,
 	},
 	"platform": {
 		Key:       "platform",
@@ -180,8 +171,8 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		Summary:   "Stage platform-oriented export materials from the current local Hub state.",
 		Usage:     []string{"neudrive export <platform> [--output DIR]"},
 		Examples:  []string{"neudrive export codex --output ./codex-export", "neudrive export claude --output ./claude-export"},
-		Notes:     []string{"Use this when you want platform-shaped export materials, not a Git mirror of the Hub itself.", "If the user wants a repo mirror of the Hub, prefer `neudrive git init` instead."},
-		SeeAlso:   []string{"git", "platform"},
+		Notes:     []string{"Use this when you want platform-shaped export materials, not a Git mirror of the Hub itself.", "If the user wants a repo mirror of the Hub, use the Git Mirror workflow in the dashboard instead."},
+		SeeAlso:   []string{"platform"},
 		SortOrder: 150,
 	},
 	"status": {
@@ -199,7 +190,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		Usage:     []string{"neudrive login [--profile NAME] [--api-base URL]", "neudrive login --profile official --api-base https://neudrive.ai"},
 		Examples:  []string{"neudrive login", "neudrive login --profile official", "neudrive login --profile staging --api-base https://neudrive.ai"},
 		Notes:     []string{"This is the primary hosted login entrypoint.", "The CLI opens a browser, completes OAuth, stores an access token plus refresh token, and switches the current target to that profile.", "Use `--token` only when you already have a bearer token and want to save it manually."},
-		SeeAlso:   []string{"profiles", "use", "whoami", "remote"},
+		SeeAlso:   []string{"profiles", "use", "whoami"},
 		SortOrder: 171,
 	},
 	"logout": {
@@ -267,21 +258,12 @@ var cliHelpTopics = map[string]cliHelpTopic{
 	},
 	"sync": {
 		Key:       "sync",
-		Summary:   "Manage bundle-style sync workflows against a remote neuDrive profile or archive transport.",
+		Summary:   "Manage bundle-style sync workflows against the current target or an archive transport.",
 		Usage:     []string{"neudrive sync <subcommand>"},
-		Examples:  []string{"neudrive sync profiles", "neudrive sync login --profile official", "neudrive sync push --bundle backup.ndrv"},
-		Notes:     []string{"`sync` is an operational workflow surface and is separate from the root-directory Hub commands.", "`neudrive login` is the main hosted login entrypoint; `sync login` remains available for sync-scoped token workflows.", "Use `neudrive token create --kind sync` when you need an ephemeral sync token."},
-		SeeAlso:   []string{"login", "token", "remote"},
+		Examples:  []string{"neudrive sync export --source ./skills --format archive -o backup.ndrvz", "neudrive sync push --bundle backup.ndrvz", "neudrive sync pull --format archive -o restore.ndrvz"},
+		Notes:     []string{"`sync` is the bundle transfer surface and is separate from the root-directory Hub commands.", "Authentication and default target selection now live at the top level via `neudrive login`, `neudrive use`, and `neudrive whoami`.", "Use `neudrive token create --kind sync` when you need an ephemeral sync token for a one-off push or pull."},
+		SeeAlso:   []string{"login", "use", "whoami", "token"},
 		SortOrder: 200,
-	},
-	"remote": {
-		Key:       "remote",
-		Summary:   "Compatibility alias for hosted profile management commands.",
-		Usage:     []string{"neudrive remote <subcommand>"},
-		Examples:  []string{"neudrive remote login official", "neudrive remote use official", "neudrive remote whoami official"},
-		Notes:     []string{"Prefer the top-level `login`, `logout`, `use`, `whoami`, and `profiles` commands for new workflows."},
-		SeeAlso:   []string{"login", "profiles", "use", "whoami", "sync"},
-		SortOrder: 210,
 	},
 	"server": {
 		Key:       "server",
@@ -304,25 +286,22 @@ var cliHelpTopics = map[string]cliHelpTopic{
 }
 
 var cliHelpAliases = map[string]string{
-	"root":                "",
-	"overview":            "",
-	"paths":               "roots",
-	"path":                "roots",
-	"profile":             "roots",
-	"memory":              "roots",
-	"memories":            "roots",
-	"project":             "roots",
-	"projects":            "roots",
-	"skill":               "roots",
-	"skills":              "roots",
-	"secret":              "roots",
-	"secrets":             "roots",
-	"platforms":           "platform",
-	"list":                "ls",
-	"token create":        "token",
-	"git init":            "git",
-	"git pull":            "git",
-	"git auth github-app": "git",
+	"root":         "",
+	"overview":     "",
+	"paths":        "roots",
+	"path":         "roots",
+	"profile":      "roots",
+	"memory":       "roots",
+	"memories":     "roots",
+	"project":      "roots",
+	"projects":     "roots",
+	"skill":        "roots",
+	"skills":       "roots",
+	"secret":       "roots",
+	"secrets":      "roots",
+	"platforms":    "platform",
+	"list":         "ls",
+	"token create": "token",
 }
 
 func runHelp(args []string) int {
@@ -360,9 +339,6 @@ Public commands:
   neudrive import <category> <src>                   Import local or platform data
   neudrive token create --kind sync|skills-upload    Create a short-lived workflow token
   neudrive stats                                     Show a quick Hub summary
-  neudrive git init [--output DIR]                   Create the local Git mirror
-  neudrive git pull                                  Refresh the active Git mirror
-  neudrive git auth github-app --device              Connect GitHub App user auth
 
 Operational commands:
   neudrive platform ls
@@ -380,7 +356,6 @@ Operational commands:
   neudrive profiles
   neudrive daemon status|stop|logs
   neudrive sync <subcommand>
-  neudrive remote <subcommand>                       Compatibility alias
   neudrive server [flags]
   neudrive mcp stdio [flags]
 
@@ -390,13 +365,11 @@ Examples:
   neudrive write memory "Remember this"
   neudrive create project demo
   neudrive import skill ./demo-skill
-  neudrive git init --output ./neudrive-export/git-mirror
 
 More help:
   neudrive help roots
   neudrive help write
   neudrive help import
-  neudrive help git
 `))
 }
 

@@ -48,7 +48,7 @@ Bundle Sync 支持两种文件格式：
 - `profiles.<name>.expires_at`
 - `profiles.<name>.scopes`
 - `profiles.<name>.auth_mode`
-- `local.git_mirror_path`（给 `neudrive git init` 提供默认镜像目录；如果缺失，首次 `git init` 会自动写入 `./neudrive-export/git-mirror`）
+- `local.git_mirror_path`（首次初始化本地 Git Mirror 时优先使用的默认目录）
 
 例如：
 
@@ -100,10 +100,10 @@ neudrive use local
 neudrive logout --profile official
 ```
 
-`sync login` 仍然保留，但它现在主要用于 sync-scoped token 工作流，不再是主 hosted 登录入口：
+如果你已经拿到了一个短效 sync token，也可以直接用顶层 `login` 手工写入 profile：
 
 ```bash
-neudrive sync login --profile prod --api-base https://neudrive.ai --token ndt_xxx
+neudrive login --profile prod --api-base https://neudrive.ai --token ndt_xxx
 ```
 
 ## `merge` 与 `mirror`

@@ -858,7 +858,7 @@ func (s *MCPServer) callTool(params ToolCallParams) (string, bool) {
 			"expires_at": resp.ScopedToken.ExpiresAt.Format(time.RFC3339),
 			"api_base":   s.BaseURL,
 			"scopes":     resp.ScopedToken.Scopes,
-			"usage":      fmt.Sprintf("neudrive sync login --api-base %s --token %s && neudrive sync push --bundle backup.ndrv", s.BaseURL, resp.Token),
+			"usage":      fmt.Sprintf("neudrive login --api-base %s --token %s && neudrive sync push --bundle backup.ndrv", s.BaseURL, resp.Token),
 		}, "", "  ")
 		return string(payload), false
 

@@ -214,7 +214,6 @@ func TestExportSkillFilesNeuDrive(t *testing.T) {
 		"SKILL.md",
 		"commands/create.md",
 		"commands/export.md",
-		"commands/git.md",
 		"commands/log.md",
 		"commands/import.md",
 		"commands/ls.md",

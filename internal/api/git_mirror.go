@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neudrive/internal/runtimecfg"
 )
 
 func (s *Server) handleGitMirrorGet(w http.ResponseWriter, r *http.Request) {
@@ -36,6 +37,28 @@ func (s *Server) handleGitMirrorUpdate(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		respondUnauthorized(w)
 		return
+	}
+	if s.isLocalMode() {
+		settings, err := s.LocalGitSync.GetMirrorSettings(r.Context(), userID)
+		if err != nil {
+			respondInternalError(w, err)
+			return
+		}
+		if settings != nil && !settings.Enabled {
+			_, cfg, err := runtimecfg.LoadConfig("")
+			if err != nil {
+				respondInternalError(w, err)
+				return
+			}
+			if err := runtimecfg.EnsureLocalDefaults(cfg); err != nil {
+				respondInternalError(w, err)
+				return
+			}
+			if _, err := s.LocalGitSync.RegisterMirrorAndSync(r.Context(), userID, cfg.Local.GitMirrorPath); err != nil {
+				respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
+				return
+			}
+		}
 	}
 	var req localgitsync.MirrorSettingsUpdate
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

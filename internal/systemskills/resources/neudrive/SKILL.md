@@ -40,8 +40,6 @@ Use this umbrella skill when the user wants to work with neuDrive from inside a 
   Read `/skills/neudrive/commands/token.md`
 - `stats`
   Read `/skills/neudrive/commands/stats.md`
-- `git`
-  Read `/skills/neudrive/commands/git.md`
 - `export`
   Read `/skills/neudrive/commands/export.md`
 - `status`
@@ -51,8 +49,8 @@ Use this umbrella skill when the user wants to work with neuDrive from inside a 
 
 ## Quick Start
 
-- Codex examples: `$neudrive help`, `$neudrive ls`, `$neudrive read profile/preferences`, `$neudrive git init`
-- Claude examples: `/neudrive help`, `/neudrive ls`, `/neudrive read profile/preferences`, `/neudrive git init`
+- Codex examples: `$neudrive help`, `$neudrive ls`, `$neudrive read profile/preferences`, `$neudrive status`
+- Claude examples: `/neudrive help`, `/neudrive ls`, `/neudrive read profile/preferences`, `/neudrive status`
 
 ## Rules
 

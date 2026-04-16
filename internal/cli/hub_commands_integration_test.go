@@ -130,7 +130,7 @@ func TestAgenthubHubCommands_LocalSQLiteFixture(t *testing.T) {
 	}
 
 	stdout, _ = mustRunAgenthub(t, binary, env, "token", "create", "--kind", "sync", "--purpose", "backup")
-	if !strings.Contains(stdout, "token: ") || !strings.Contains(stdout, "usage: neudrive sync login") {
+	if !strings.Contains(stdout, "token: ") || !strings.Contains(stdout, "usage: neudrive login") {
 		t.Fatalf("unexpected sync token output: %s", stdout)
 	}
 

@@ -823,7 +823,7 @@ func runHubStats(args []string) int {
 func bindHubCommandFlags(fs *flag.FlagSet, includeLiteral bool) *hubCommandOptions {
 	opts := &hubCommandOptions{}
 	fs.BoolVar(&opts.Local, "local", false, "force the local neuDrive target")
-	fs.StringVar(&opts.Profile, "profile", "", "explicit remote profile name")
+	fs.StringVar(&opts.Profile, "profile", "", "explicit hosted profile name")
 	fs.StringVar(&opts.APIBase, "api-base", "", "explicit neuDrive API base")
 	fs.StringVar(&opts.Token, "token", "", "explicit scoped token")
 	fs.BoolVar(&opts.JSON, "json", false, "output JSON")

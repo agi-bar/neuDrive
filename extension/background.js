@@ -382,6 +382,7 @@ async function writeConversationArchiveSplit({
     basePath: conversationPath,
     content: JSON.stringify({
       ...normalizedConversation,
+      message_count: normalizedConversation.turn_count || (Array.isArray(normalizedConversation.turns) ? normalizedConversation.turns.length : 0),
       transcript_path: transcriptEntry.path,
       exports: exportPaths,
     }) + '\n',
@@ -790,6 +791,8 @@ function normalizedConversationToMarkdown(conversation, options = {}) {
 const CONVERSATION_EXPORT_TARGETS = ['claude', 'chatgpt'];
 
 function buildConversationBundleMetadata(conversation, transcriptPath, conversationPath, exportPaths) {
+  const messageCount = getConversationMessageCount(conversation);
+  const timeline = getConversationTimeline(conversation);
   return {
     bundle_kind: 'conversation',
     bundle_name: sanitizeLine(conversation.title || 'Untitled conversation'),
@@ -799,7 +802,15 @@ function buildConversationBundleMetadata(conversation, transcriptPath, conversat
     source_conversation_id: sanitizeLine(conversation.source_conversation_id || ''),
     import_strategy: sanitizeLine(conversation.import_strategy || ''),
     imported_at: sanitizeLine(conversation.imported_at || ''),
-    turn_count: Array.isArray(conversation.turns) ? conversation.turns.length : 0,
+    turn_count: messageCount,
+    message_count: messageCount,
+    conversation_message_count: messageCount,
+    conversation_title: sanitizeLine(conversation.title || 'Untitled conversation'),
+    conversation_started_at: timeline.startedAt,
+    conversation_ended_at: timeline.endedAt,
+    conversation_model: sanitizeLine(conversation.model || ''),
+    conversation_project_name: sanitizeLine(conversation.project_name || ''),
+    conversation_source_url: sanitizeLine(conversation.source_url || ''),
     description: conversationBundleDescription(conversation),
     status: 'archived',
     bundle_primary_path: transcriptPath,
@@ -812,11 +823,43 @@ function buildConversationBundleMetadata(conversation, transcriptPath, conversat
 
 function conversationBundleDescription(conversation) {
   const source = sanitizeLine(conversation.source_platform || 'unknown-platform') || 'unknown-platform';
-  const turnCount = Array.isArray(conversation.turns) ? conversation.turns.length : 0;
-  if (turnCount > 0) {
-    return `Imported from ${source} with ${turnCount} turns.`;
+  const messageCount = getConversationMessageCount(conversation);
+  const timeline = getConversationTimeline(conversation);
+  if (messageCount > 0 && timeline.startedAt && timeline.endedAt) {
+    return `Imported from ${source} with ${messageCount} messages from ${timeline.startedAt} to ${timeline.endedAt}.`;
+  }
+  if (messageCount > 0) {
+    return `Imported from ${source} with ${messageCount} messages.`;
   }
   return `Imported from ${source}.`;
+}
+
+function getConversationMessageCount(conversation) {
+  if (typeof conversation?.turn_count === 'number' && Number.isFinite(conversation.turn_count) && conversation.turn_count > 0) {
+    return conversation.turn_count;
+  }
+  return Array.isArray(conversation?.turns) ? conversation.turns.length : 0;
+}
+
+function getConversationTimeline(conversation) {
+  let startedAt = sanitizeLine(conversation?.created_at || '');
+  if (!startedAt && Array.isArray(conversation?.turns)) {
+    const firstTurn = conversation.turns.find(turn => sanitizeLine(turn?.at || ''));
+    startedAt = sanitizeLine(firstTurn?.at || '');
+  }
+
+  let endedAt = sanitizeLine(conversation?.updated_at || '');
+  if (!endedAt && Array.isArray(conversation?.turns)) {
+    for (let index = conversation.turns.length - 1; index >= 0; index -= 1) {
+      const at = sanitizeLine(conversation.turns[index]?.at || '');
+      if (at) {
+        endedAt = at;
+        break;
+      }
+    }
+  }
+
+  return { startedAt, endedAt };
 }
 
 function renderConversationContinuationMarkdown(conversation, target) {

@@ -69,6 +69,29 @@ func TestImportAgentExportClaudeConversationWritesCanonicalArchive(t *testing.T)
 	chatGPTResumePath := rootPath + "/resume-chatgpt.md"
 	indexPath := "/conversations/claude-code/index.json"
 
+	root, err := store.Read(ctx, user.ID, rootPath, models.TrustLevelWork)
+	if err != nil {
+		t.Fatalf("Read conversation root: %v", err)
+	}
+	for key, want := range map[string]interface{}{
+		"conversation_title":           "Demo Chat",
+		"source_platform":              "claude-code",
+		"source_conversation_id":       "sess-123",
+		"conversation_started_at":      "2026-04-16T20:00:00Z",
+		"conversation_ended_at":        "2026-04-16T20:00:02Z",
+		"conversation_project_name":    "demo-project",
+		"conversation_message_count":   float64(2),
+		"message_count":                float64(2),
+		"turn_count":                   float64(2),
+		"bundle_primary_path":          transcriptPath,
+		"conversation_transcript_path": transcriptPath,
+		"conversation_path":            conversationPath,
+	} {
+		if got := root.Metadata[key]; got != want {
+			t.Fatalf("root metadata[%s] = %#v, want %#v", key, got, want)
+		}
+	}
+
 	transcript, err := store.Read(ctx, user.ID, transcriptPath, models.TrustLevelWork)
 	if err != nil {
 		t.Fatalf("Read transcript: %v", err)
@@ -92,6 +115,7 @@ func TestImportAgentExportClaudeConversationWritesCanonicalArchive(t *testing.T)
 		`"exports": {`,
 		`"claude": "` + claudeResumePath + `"`,
 		`"chatgpt": "` + chatGPTResumePath + `"`,
+		`"message_count": 2`,
 	} {
 		if !strings.Contains(conversation.Content, want) {
 			t.Fatalf("conversation sidecar missing %s: %q", want, conversation.Content)

@@ -835,6 +835,10 @@ func deletableEntriesForDeletion(targetPath string, entries []models.FileTreeEnt
 }
 
 func handledSystemPrefix(storagePath string) bool {
+	switch hubpath.NormalizeStorage(storagePath) {
+	case "/", "/conversations", "/conversations/", "/inbox", "/inbox/", "/memory", "/memory/", "/memory/profile", "/memory/profile/", "/projects", "/projects/", "/roles", "/roles/", "/skills", "/skills/":
+		return true
+	}
 	_, handled := systemskills.ListEntries(storagePath)
 	return handled
 }

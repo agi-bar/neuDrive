@@ -8,7 +8,7 @@ import ResourceConfirmDialog from '../../components/ResourceConfirmDialog'
 import SourceFilterBar from '../../components/SourceFilterBar'
 import useResourceCardMenu from '../../hooks/useResourceCardMenu'
 import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
-import { useI18n } from '../../i18n'
+import { useI18n, type AppLocale } from '../../i18n'
 import {
   buildFileTileModel,
   buildSourceFilterOptions,
@@ -19,6 +19,7 @@ import {
   dataConversationBundleRoute,
   dataFileEditorRoute,
   fileNodeSource,
+  formatDateTime,
   getMaterialsSortOptions,
   isTextLikeFile,
   matchesSourceFilter,
@@ -49,6 +50,154 @@ function triggerTextDownload(content: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+type ConversationBundleMeta = {
+  title: string
+  source: string
+  sourceConversationId: string
+  messageCount: number
+  startedAt: string
+  endedAt: string
+  importedAt: string
+  model: string
+  projectName: string
+  sourceUrl: string
+  description: string
+}
+
+type ConversationMetaEntry = {
+  label: string
+  value: string
+  code?: boolean
+}
+
+function metadataString(metadata: Record<string, any> | undefined, key: string) {
+  const value = metadata?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function metadataNumber(metadata: Record<string, any> | undefined, key: string) {
+  const value = metadata?.[key]
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) return parsed
+  }
+  return 0
+}
+
+function conversationBundleMeta(node: FileNode): ConversationBundleMeta {
+  const bundle = bundleInfoFromNode(node)
+  const metadata = node.metadata
+  return {
+    title: bundle?.name || metadataString(metadata, 'conversation_title') || node.name,
+    source: bundle?.source || fileNodeSource(node),
+    sourceConversationId: metadataString(metadata, 'source_conversation_id'),
+    messageCount:
+      metadataNumber(metadata, 'conversation_message_count')
+      || metadataNumber(metadata, 'message_count')
+      || metadataNumber(metadata, 'turn_count'),
+    startedAt: metadataString(metadata, 'conversation_started_at') || node.created_at || '',
+    endedAt: metadataString(metadata, 'conversation_ended_at') || node.updated_at || node.created_at || '',
+    importedAt: metadataString(metadata, 'imported_at') || node.updated_at || node.created_at || '',
+    model: metadataString(metadata, 'conversation_model'),
+    projectName: metadataString(metadata, 'conversation_project_name'),
+    sourceUrl: metadataString(metadata, 'conversation_source_url'),
+    description: metadataString(metadata, 'description') || bundle?.description || '',
+  }
+}
+
+function conversationMessageCountLabel(count: number, locale: AppLocale) {
+  if (count <= 0) return locale === 'zh-CN' ? '消息数未知' : 'Message count unknown'
+  return locale === 'zh-CN' ? `${count} 条消息` : `${count} messages`
+}
+
+function conversationTimeSpanLabel(meta: ConversationBundleMeta, locale: AppLocale) {
+  const startedAt = meta.startedAt ? formatDateTime(meta.startedAt, locale) : ''
+  const endedAt = meta.endedAt ? formatDateTime(meta.endedAt, locale) : ''
+  if (startedAt && endedAt) {
+    if (startedAt === endedAt) return startedAt
+    return locale === 'zh-CN' ? `${startedAt} 至 ${endedAt}` : `${startedAt} to ${endedAt}`
+  }
+  return startedAt || endedAt
+}
+
+function conversationCardDescription(meta: ConversationBundleMeta, fallbackDescription: string | undefined, locale: AppLocale) {
+  const details = [
+    meta.model,
+    meta.projectName ? (locale === 'zh-CN' ? `项目 ${meta.projectName}` : `Project ${meta.projectName}`) : '',
+    meta.sourceConversationId ? (locale === 'zh-CN' ? `来源 ID ${meta.sourceConversationId}` : `Source ID ${meta.sourceConversationId}`) : '',
+  ].filter(Boolean)
+  if (details.length > 0) return details.join(' · ')
+  return fallbackDescription || meta.description
+}
+
+function buildConversationMetaEntries(meta: ConversationBundleMeta, locale: AppLocale, detailed = false): ConversationMetaEntry[] {
+  const entries: ConversationMetaEntry[] = []
+  const timeSpan = conversationTimeSpanLabel(meta, locale)
+  if (detailed && meta.source) {
+    entries.push({
+      label: locale === 'zh-CN' ? '来源平台' : 'Source',
+      value: sourceLabel(meta.source, locale),
+    })
+  }
+  if (detailed && timeSpan) {
+    entries.push({
+      label: locale === 'zh-CN' ? '时间跨度' : 'Time span',
+      value: timeSpan,
+    })
+  }
+  if (meta.messageCount > 0 || detailed) {
+    entries.push({
+      label: locale === 'zh-CN' ? '消息数' : 'Messages',
+      value: conversationMessageCountLabel(meta.messageCount, locale),
+    })
+  }
+  if (meta.importedAt) {
+    entries.push({
+      label: locale === 'zh-CN' ? '导入时间' : 'Imported',
+      value: formatDateTime(meta.importedAt, locale),
+    })
+  }
+  if (detailed && meta.model) {
+    entries.push({
+      label: locale === 'zh-CN' ? '模型' : 'Model',
+      value: meta.model,
+    })
+  }
+  if (detailed && meta.projectName) {
+    entries.push({
+      label: locale === 'zh-CN' ? '项目' : 'Project',
+      value: meta.projectName,
+    })
+  }
+  if (detailed && meta.sourceConversationId) {
+    entries.push({
+      label: locale === 'zh-CN' ? '来源 ID' : 'Source ID',
+      value: meta.sourceConversationId,
+      code: true,
+    })
+  }
+  return entries
+}
+
+function ConversationMetaPanel({ entries, compact = false }: { entries: ConversationMetaEntry[]; compact?: boolean }) {
+  if (entries.length === 0) return null
+  return (
+    <div className={`conversation-meta-panel${compact ? ' is-compact' : ''}`}>
+      {entries.map((entry) => (
+        <div key={`${entry.label}:${entry.value}`} className="conversation-meta-item">
+          <span className="conversation-meta-label">{entry.label}</span>
+          {entry.code ? (
+            <code className="conversation-meta-value is-code">{entry.value}</code>
+          ) : (
+            <span className="conversation-meta-value">{entry.value}</span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+
 export default function DataConversationsPage() {
   const { locale, tx } = useI18n()
   const navigate = useNavigate()
@@ -63,6 +212,7 @@ export default function DataConversationsPage() {
 
   const [bundles, setBundles] = useState<FileNode[]>([])
   const [bundleNode, setBundleNode] = useState<FileNode | null>(null)
+  const [bundleRootNode, setBundleRootNode] = useState<FileNode | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [selectedBundlePath, setSelectedBundlePath] = useState<string | null>(null)
@@ -78,8 +228,12 @@ export default function DataConversationsPage() {
     setError('')
     try {
       if (isBundleView) {
-        const node = await api.getTree(currentBrowsePath)
+        const [node, rootNode] = await Promise.all([
+          api.getTree(currentBrowsePath),
+          currentBrowsePath === currentBundlePath ? Promise.resolve<FileNode | null>(null) : api.getTree(currentBundlePath),
+        ])
         setBundleNode(node)
+        setBundleRootNode(rootNode || node)
         setBundles([])
         setSelectedEntryPath(null)
         closeMenu()
@@ -93,6 +247,7 @@ export default function DataConversationsPage() {
       })
       setBundles(nextBundles)
       setBundleNode(null)
+      setBundleRootNode(null)
       setSelectedBundlePath(null)
       closeMenu()
     } catch (err: any) {
@@ -100,7 +255,7 @@ export default function DataConversationsPage() {
     } finally {
       setLoading(false)
     }
-  }, [closeMenu, currentBrowsePath, isBundleView, tx])
+  }, [closeMenu, currentBrowsePath, currentBundlePath, isBundleView, tx])
 
   const {
     closeDialog: closeDeleteDialog,
@@ -114,7 +269,10 @@ export default function DataConversationsPage() {
     void load()
   }, [load])
 
-  const currentBundleContext = bundleNode?.bundle_context
+  const currentBundleContext = bundleNode?.bundle_context || bundleRootNode?.bundle_context
+  const currentConversationMeta = bundleRootNode
+    ? conversationBundleMeta(bundleRootNode)
+    : (bundleNode ? conversationBundleMeta(bundleNode) : null)
   const bundleEntries = bundleNode?.children || []
   const selectedDeletePath = isBundleView ? selectedEntryPath : selectedBundlePath
   const canDeleteSelection = Boolean(selectedDeletePath)
@@ -238,6 +396,9 @@ export default function DataConversationsPage() {
             <div className="materials-kicker">neuDrive Data</div>
             <h2 className="materials-title">{currentBundleContext?.name || tx('会话 Bundle', 'Conversation Bundle')}</h2>
             <p className="materials-subtitle">{tx('会话现在作为一等 bundle 管理：可读转录、规范化 sidecar，以及 Claude / ChatGPT 续聊导出都放在同一个目录。', 'Conversations now live as first-class bundles: readable transcript, normalized sidecar, and Claude / ChatGPT resume exports stay in one directory.')}</p>
+            {currentConversationMeta ? (
+              <ConversationMetaPanel entries={buildConversationMetaEntries(currentConversationMeta, locale, true)} />
+            ) : null}
           </div>
         </section>
 
@@ -442,7 +603,7 @@ export default function DataConversationsPage() {
             <p className="empty-hint">{tx('从 Claude Web、ChatGPT Web 或 Claude Code 导入后，会在这里生成 conversation bundle。', 'Conversation bundles will appear here after imports from Claude Web, ChatGPT Web, or Claude Code.')}</p>
           </div>
         ) : (
-          <div className="materials-grid">
+          <div className="materials-grid materials-grid-wide">
             {filteredBundles.map((bundle) => {
               const tile = buildFileTileModel({
                 node: bundle,
@@ -451,12 +612,16 @@ export default function DataConversationsPage() {
                 locale,
               })
               const bundlePath = bundle.path
+              const meta = conversationBundleMeta(bundle)
+              const metaEntries = buildConversationMetaEntries(meta, locale)
+              const subtitle = conversationTimeSpanLabel(meta, locale) || tile.subtitle
+              const description = conversationCardDescription(meta, typeof tile.description === 'string' ? tile.description : meta.description, locale) || undefined
               return (
                 <FileMaterialsTile
                   key={bundle.path}
                   node={tile.node}
-                  subtitle={tile.subtitle}
-                  description={tile.description}
+                  subtitle={subtitle}
+                  description={description}
                   path={tile.path}
                   extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
                   footerStart={tile.footerStart}
@@ -482,6 +647,7 @@ export default function DataConversationsPage() {
                       </button>
                     </>
                   )}
+                  children={<ConversationMetaPanel entries={metaEntries} compact />}
                   menuOpen={isMenuOpen(bundle.path)}
                   menuButtonAriaLabel={tx(`打开 ${tile.node.name} 的工具菜单`, `Open tools menu for ${tile.node.name}`)}
                   menuPanel={(

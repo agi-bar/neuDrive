@@ -36,6 +36,8 @@ function App() {
   const navigate = useNavigate()
   const location = useLocation()
   const [isDataNavOpen, setIsDataNavOpen] = useState(false)
+  const [isConnectionsNavOpen, setIsConnectionsNavOpen] = useState(false)
+  const [isImportsNavOpen, setIsImportsNavOpen] = useState(false)
 
   const checkAuth = useCallback(async () => {
     const clearAuthParamsFromURL = () => {
@@ -141,8 +143,30 @@ function App() {
     })
   }
 
+  const handleConnectionsNavToggle = () => {
+    setIsConnectionsNavOpen((current) => {
+      const next = !current
+      if (next) {
+        navigate('/connections')
+      }
+      return next
+    })
+  }
+
+  const handleImportsNavToggle = () => {
+    setIsImportsNavOpen((current) => {
+      const next = !current
+      if (next) {
+        navigate('/imports/claude')
+      }
+      return next
+    })
+  }
+
   const isProfileRoute = location.pathname === '/data/profile'
   const isDataRoute = location.pathname.startsWith('/data') && !isProfileRoute
+  const isConnectionsRoute = location.pathname === '/connections'
+  const isImportsRoute = location.pathname === '/imports' || location.pathname.startsWith('/imports/')
   const isSyncLoginRoute = location.pathname === '/sync/login'
   const isSkillsImportRoute = location.pathname === '/import/skills'
   const isLegacySyncLoginRoute =
@@ -160,6 +184,14 @@ function App() {
   useEffect(() => {
     setIsDataNavOpen(isDataRoute)
   }, [isDataRoute])
+
+  useEffect(() => {
+    setIsConnectionsNavOpen(isConnectionsRoute)
+  }, [isConnectionsRoute])
+
+  useEffect(() => {
+    setIsImportsNavOpen(isImportsRoute)
+  }, [isImportsRoute])
 
   if (loading) {
     return (
@@ -252,10 +284,60 @@ function App() {
               </div>
             )}
           </div>
-          <NavLink to="/connections" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
-            <span className="nav-icon">&#9670;</span>
-            <span>{tx('平台连接', 'Connections')}</span>
-          </NavLink>
+          <div className="nav-group">
+            <button
+              type="button"
+              className={isConnectionsRoute ? 'nav-item nav-item-parent nav-item-button active' : 'nav-item nav-item-parent nav-item-button'}
+              aria-expanded={isConnectionsNavOpen}
+              aria-controls="connections-nav-submenu"
+              onClick={handleConnectionsNavToggle}
+            >
+              <span className="nav-icon">&#9670;</span>
+              <span>{tx('平台连接', 'Connections')}</span>
+              <span className={`nav-group-caret ${isConnectionsNavOpen ? 'nav-group-caret-open' : ''}`} aria-hidden="true">
+                &#9654;
+              </span>
+            </button>
+            {isConnectionsNavOpen && (
+              <div
+                id="connections-nav-submenu"
+                className="nav-submenu"
+                aria-label={tx('平台连接子菜单', 'Connections navigation submenu')}
+              >
+                <NavLink to="/connections" end className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  {tx('连接管理', 'Connections')}
+                </NavLink>
+              </div>
+            )}
+          </div>
+          {localMode && (
+            <div className="nav-group">
+              <button
+                type="button"
+                className={isImportsRoute ? 'nav-item nav-item-parent nav-item-button active' : 'nav-item nav-item-parent nav-item-button'}
+                aria-expanded={isImportsNavOpen}
+                aria-controls="imports-nav-submenu"
+                onClick={handleImportsNavToggle}
+              >
+                <span className="nav-icon">&#8681;</span>
+                <span>{tx('数据导入', 'Data Imports')}</span>
+                <span className={`nav-group-caret ${isImportsNavOpen ? 'nav-group-caret-open' : ''}`} aria-hidden="true">
+                  &#9654;
+                </span>
+              </button>
+              {isImportsNavOpen && (
+                <div
+                  id="imports-nav-submenu"
+                  className="nav-submenu"
+                  aria-label={tx('数据导入子菜单', 'Data imports navigation submenu')}
+                >
+                  <NavLink to="/imports/claude" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                    Claude
+                  </NavLink>
+                </div>
+              )}
+            </div>
+          )}
           <NavLink to="/setup/tokens" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9670;</span>
             <span>{tx('Token 管理', 'Token Manager')}</span>
@@ -298,7 +380,6 @@ function App() {
               <Route path="tokens" element={<SetupTokensPage />} />
             </Route>
             <Route path="/git-mirror" element={<GitMirrorPage />} />
-            <Route path="/migrations/claude" element={<ClaudeMigrationPage localMode={localMode} />} />
             <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
             <Route path="/data" element={<Outlet />}>
               <Route index element={<Navigate to="files/browse" replace />} />
@@ -320,6 +401,8 @@ function App() {
               <Route path="sync" element={<Navigate to="/git-mirror" replace />} />
             </Route>
             <Route path="/connections" element={<ConnectionsPage />} />
+            <Route path="/imports" element={<Navigate to="/imports/claude" replace />} />
+            <Route path="/imports/claude" element={<ClaudeMigrationPage localMode={localMode} />} />
             <Route path="/info" element={<Navigate to="/data/profile" replace />} />
             <Route path="/projects" element={<Navigate to="/data/projects" replace />} />
             <Route path="/collaborations" element={<Navigate to="/" replace />} />

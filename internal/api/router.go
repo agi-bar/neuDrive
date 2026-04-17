@@ -39,39 +39,40 @@ const (
 
 // Server holds the HTTP router and all service dependencies.
 type Server struct {
-	Router                *chi.Mux
-	Storage               string
-	UserService           *services.UserService
-	AuthService           *services.AuthService
-	ExternalAuthService   *services.ExternalAuthService
-	ConnectionService     *services.ConnectionService
-	FileTreeService       *services.FileTreeService
-	VaultService          *services.VaultService
-	MemoryService         *services.MemoryService
-	ProjectService        *services.ProjectService
-	SummaryService        *services.SummaryService
-	RoleService           *services.RoleService
-	InboxService          *services.InboxService
-	DashboardService      *services.DashboardService
-	TokenService          *services.TokenService
-	ImportService         *services.ImportService
-	ExportService         *services.ExportService
-	SyncService           *services.SyncService
-	CollaborationService  *services.CollaborationService
-	WebhookService        *services.WebhookService
-	OAuthService          *services.OAuthService
-	LocalGitSync          *localgitsync.Service
-	LocalOwnerID          uuid.UUID
-	Vault                 *vaultpkg.Vault
-	AuthHandler           *auth.Handler
-	Config                *config.Config
-	JWTSecret             string
-	GitHubClientID        string
-	GitHubClientSecret    string
-	GitHubAppClientID     string
-	GitHubAppClientSecret string
-	GitHubAppSlug         string
-	mcpSessionSources     sync.Map
+	Router                   *chi.Mux
+	Storage                  string
+	UserService              *services.UserService
+	AuthService              *services.AuthService
+	ExternalAuthService      *services.ExternalAuthService
+	ConnectionService        *services.ConnectionService
+	FileTreeService          *services.FileTreeService
+	VaultService             *services.VaultService
+	MemoryService            *services.MemoryService
+	ProjectService           *services.ProjectService
+	SummaryService           *services.SummaryService
+	RoleService              *services.RoleService
+	InboxService             *services.InboxService
+	DashboardService         *services.DashboardService
+	TokenService             *services.TokenService
+	ImportService            *services.ImportService
+	ExportService            *services.ExportService
+	SyncService              *services.SyncService
+	CollaborationService     *services.CollaborationService
+	WebhookService           *services.WebhookService
+	OAuthService             *services.OAuthService
+	LocalGitSync             *localgitsync.Service
+	LocalOwnerID             uuid.UUID
+	Vault                    *vaultpkg.Vault
+	AuthHandler              *auth.Handler
+	Config                   *config.Config
+	JWTSecret                string
+	GitHubClientID           string
+	GitHubClientSecret       string
+	GitHubAppClientID        string
+	GitHubAppClientSecret    string
+	GitHubAppSlug            string
+	mcpSessionSources        sync.Map
+	localPlatformPreviewJobs sync.Map
 }
 
 type ServerDeps struct {
@@ -336,6 +337,9 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/local/git-mirror", s.handleLocalGitMirrorGet)
 		r.Put("/api/local/git-mirror", s.handleLocalGitMirrorUpdate)
 		r.Post("/api/local/git-mirror/github/test", s.handleLocalGitMirrorGitHubTest)
+		r.Get("/api/local/platform/preview-task", s.handleLocalPlatformPreviewTask)
+		r.Post("/api/local/platform/preview-task", s.handleLocalPlatformPreviewTask)
+		r.Get("/api/local/platform/preview-cache", s.handleLocalPlatformPreviewCache)
 		r.Post("/api/local/platform/preview", s.handleLocalPlatformPreview)
 		r.Post("/api/local/platform/import", s.handleLocalPlatformImport)
 

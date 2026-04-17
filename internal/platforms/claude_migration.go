@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/agi-bar/neudrive/internal/runtimecfg"
 	"github.com/agi-bar/neudrive/internal/skillsarchive"
@@ -25,6 +26,9 @@ type ImportPreview struct {
 	Platform          string                         `json:"platform"`
 	DisplayName       string                         `json:"display_name"`
 	Mode              ImportMode                     `json:"mode"`
+	StartedAt         string                         `json:"started_at,omitempty"`
+	CompletedAt       string                         `json:"completed_at,omitempty"`
+	DurationMs        int64                          `json:"duration_ms,omitempty"`
 	Categories        []ImportPreviewCategory        `json:"categories"`
 	SensitiveFindings []sqlite.AgentSensitiveFinding `json:"sensitive_findings"`
 	VaultCandidates   []sqlite.AgentVaultCandidate   `json:"vault_candidates"`
@@ -48,6 +52,7 @@ type claudeLocalScanResult struct {
 }
 
 func PreviewImport(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode string) (*ImportPreview, error) {
+	startedAt := time.Now().UTC()
 	adapter, err := Resolve(platform)
 	if err != nil {
 		return nil, err
@@ -88,6 +93,10 @@ func PreviewImport(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, raw
 		preview.SensitiveFindings = append(preview.SensitiveFindings, payload.Claude.SensitiveFindings...)
 		preview.VaultCandidates = append(preview.VaultCandidates, payload.Claude.VaultCandidates...)
 	}
+	completedAt := time.Now().UTC()
+	preview.StartedAt = startedAt.Format(time.RFC3339)
+	preview.CompletedAt = completedAt.Format(time.RFC3339)
+	preview.DurationMs = completedAt.Sub(startedAt).Milliseconds()
 	return preview, nil
 }
 

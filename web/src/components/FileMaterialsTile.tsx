@@ -10,6 +10,7 @@ type FileMaterialsTileProps = {
   subtitle?: ReactNode
   description?: ReactNode
   path?: ReactNode
+  children?: ReactNode
   extraPills?: ReactNode
   actions?: ReactNode
   footerStart?: ReactNode
@@ -40,6 +41,7 @@ export default function FileMaterialsTile({
   subtitle,
   description,
   path,
+  children,
   extraPills,
   actions,
   footerStart,
@@ -68,6 +70,7 @@ export default function FileMaterialsTile({
       subtitle={subtitle}
       description={description}
       path={path}
+      children={children}
       pills={hasPills ? (
         <>
           {kind ? <span className="materials-tile-pill">{kind}</span> : null}

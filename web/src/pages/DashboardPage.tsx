@@ -257,7 +257,7 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
             )}
           </p>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
-            <Link to="/migrations/claude" className="btn btn-primary">
+            <Link to="/imports/claude" className="btn btn-primary">
               {tx('打开迁移报告', 'Open migration report')}
             </Link>
             <Link to="/connections" className="btn">

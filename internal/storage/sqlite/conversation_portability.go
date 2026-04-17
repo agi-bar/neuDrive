@@ -27,6 +27,7 @@ func BuildConversationExportPaths(rootPath string) map[string]string {
 }
 
 func MarshalNormalizedConversationDocument(convo NormalizedConversation, transcriptPath string, exportPaths map[string]string) ([]byte, error) {
+	messageCount := conversationMessageCount(convo)
 	document := map[string]interface{}{
 		"version":                convo.Version,
 		"source_platform":        convo.SourcePlatform,
@@ -44,6 +45,7 @@ func MarshalNormalizedConversationDocument(convo NormalizedConversation, transcr
 		"provenance":             convo.Provenance,
 		"turns":                  convo.Turns,
 		"turn_count":             convo.TurnCount,
+		"message_count":          messageCount,
 		"transcript_path":        transcriptPath,
 	}
 	if len(exportPaths) > 0 {
@@ -54,9 +56,12 @@ func MarshalNormalizedConversationDocument(convo NormalizedConversation, transcr
 
 func ConversationBundleDirectoryMetadata(convo NormalizedConversation, transcriptPath, conversationPath string, exportPaths map[string]string) map[string]interface{} {
 	description := strings.TrimSpace(conversationBundleDescription(convo))
+	title := strings.TrimSpace(convo.Title)
+	startedAt, endedAt := conversationTimeline(convo)
+	messageCount := conversationMessageCount(convo)
 	metadata := services.BundleMetadata(models.BundleSummary{
 		Kind:         services.BundleKindConversation,
-		Name:         strings.TrimSpace(convo.Title),
+		Name:         title,
 		Source:       strings.TrimSpace(convo.SourcePlatform),
 		Description:  description,
 		Status:       "archived",
@@ -65,6 +70,9 @@ func ConversationBundleDirectoryMetadata(convo NormalizedConversation, transcrip
 	})
 	if metadata == nil {
 		metadata = map[string]interface{}{}
+	}
+	if title != "" {
+		metadata["conversation_title"] = title
 	}
 	if transcriptPath != "" {
 		metadata["conversation_transcript_path"] = transcriptPath
@@ -84,11 +92,28 @@ func ConversationBundleDirectoryMetadata(convo NormalizedConversation, transcrip
 	if strings.TrimSpace(convo.ImportStrategy) != "" {
 		metadata["import_strategy"] = strings.TrimSpace(convo.ImportStrategy)
 	}
-	if convo.TurnCount > 0 {
-		metadata["turn_count"] = convo.TurnCount
+	if messageCount > 0 {
+		metadata["turn_count"] = messageCount
+		metadata["message_count"] = messageCount
+		metadata["conversation_message_count"] = messageCount
 	}
 	if strings.TrimSpace(convo.ImportedAt) != "" {
 		metadata["imported_at"] = strings.TrimSpace(convo.ImportedAt)
+	}
+	if startedAt != "" {
+		metadata["conversation_started_at"] = startedAt
+	}
+	if endedAt != "" {
+		metadata["conversation_ended_at"] = endedAt
+	}
+	if strings.TrimSpace(convo.Model) != "" {
+		metadata["conversation_model"] = strings.TrimSpace(convo.Model)
+	}
+	if strings.TrimSpace(convo.ProjectName) != "" {
+		metadata["conversation_project_name"] = strings.TrimSpace(convo.ProjectName)
+	}
+	if strings.TrimSpace(convo.SourceURL) != "" {
+		metadata["conversation_source_url"] = strings.TrimSpace(convo.SourceURL)
 	}
 	return metadata
 }
@@ -149,10 +174,44 @@ func conversationExportIntro(targetLabel string) string {
 
 func conversationBundleDescription(convo NormalizedConversation) string {
 	source := fallbackConversationSourcePlatform(convo.SourcePlatform)
-	if convo.TurnCount > 0 {
-		return fmt.Sprintf("Imported from %s with %d turns.", source, convo.TurnCount)
+	messageCount := conversationMessageCount(convo)
+	startedAt, endedAt := conversationTimeline(convo)
+	if messageCount > 0 && startedAt != "" && endedAt != "" {
+		return fmt.Sprintf("Imported from %s with %d messages from %s to %s.", source, messageCount, startedAt, endedAt)
+	}
+	if messageCount > 0 {
+		return fmt.Sprintf("Imported from %s with %d messages.", source, messageCount)
 	}
 	return fmt.Sprintf("Imported from %s.", source)
+}
+
+func conversationMessageCount(convo NormalizedConversation) int {
+	if convo.TurnCount > 0 {
+		return convo.TurnCount
+	}
+	return len(convo.Turns)
+}
+
+func conversationTimeline(convo NormalizedConversation) (string, string) {
+	startedAt := strings.TrimSpace(convo.CreatedAt)
+	if startedAt == "" {
+		for _, turn := range convo.Turns {
+			if at := strings.TrimSpace(turn.At); at != "" {
+				startedAt = at
+				break
+			}
+		}
+	}
+	endedAt := strings.TrimSpace(convo.UpdatedAt)
+	if endedAt == "" {
+		for index := len(convo.Turns) - 1; index >= 0; index-- {
+			if at := strings.TrimSpace(convo.Turns[index].At); at != "" {
+				endedAt = at
+				break
+			}
+		}
+	}
+	return startedAt, endedAt
 }
 
 func fallbackConversationSourcePlatform(platform string) string {

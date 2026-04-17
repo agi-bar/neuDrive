@@ -984,6 +984,13 @@ a:hover {
   color: var(--materials-copy);
 }
 
+.migration-timing-note {
+  margin: 14px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--materials-copy);
+}
+
 .migration-category-list,
 .migration-finding-list,
 .migration-note-list {
@@ -1631,6 +1638,49 @@ a:hover {
   -webkit-line-clamp: 1;
   min-height: calc(12px * 1.45);
   max-height: calc(12px * 1.45);
+}
+
+.conversation-meta-panel {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.conversation-meta-panel.is-compact {
+  margin-top: 12px;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+}
+
+.conversation-meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid rgba(78, 92, 148, 0.12);
+  border-radius: 16px;
+  background: rgba(246, 248, 255, 0.92);
+}
+
+.conversation-meta-label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: rgba(86, 98, 143, 0.82);
+}
+
+.conversation-meta-value {
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--materials-title);
+  word-break: break-word;
+}
+
+.conversation-meta-value.is-code {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 .materials-tile-footer {

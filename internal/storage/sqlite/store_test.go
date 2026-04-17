@@ -235,6 +235,20 @@ func TestUserStorageQuotaCountsReplacementWrites(t *testing.T) {
 	}
 }
 
+func TestSnapshotTreatsEmptyTopLevelContainersAsHandled(t *testing.T) {
+	ctx, store, userID := openTestStore(t)
+
+	for _, root := range []string{"/conversations", "/projects", "/memory", "/memory/profile", "/inbox", "/roles", "/skills"} {
+		snapshot, err := store.Snapshot(ctx, userID, root, models.TrustLevelGuest)
+		if err != nil {
+			t.Fatalf("Snapshot(%q): %v", root, err)
+		}
+		if snapshot.Path == "" {
+			t.Fatalf("Snapshot(%q) returned empty path", root)
+		}
+	}
+}
+
 func TestImportSkillDefaultsSourceMetadata(t *testing.T) {
 	ctx, store, userID := openTestStore(t)
 	fixture := newTestServiceFixture(store)

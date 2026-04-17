@@ -6,12 +6,15 @@
 (function () {
   'use strict';
 
+  const OFFICIAL_HUB_URL = 'https://www.neudrive.ai';
+
   // --- DOM References ---
   const viewLogin = document.getElementById('view-login');
   const viewConnected = document.getElementById('view-connected');
 
   const inputUrl = document.getElementById('input-url');
   const inputToken = document.getElementById('input-token');
+  const btnOfficialLogin = document.getElementById('btn-official-login');
   const btnConnect = document.getElementById('btn-connect');
   const loginMessage = document.getElementById('login-message');
 
@@ -56,6 +59,7 @@
   function showConnected(profile) {
     viewLogin.classList.add('hidden');
     viewConnected.classList.remove('hidden');
+    connectionStatus.innerHTML = '<span class="dot dot-ok"></span><span>已连接</span>';
 
     if (profile) {
       profileName.textContent = profile.name || profile.username || 'User';
@@ -73,6 +77,12 @@
     loginMessage.textContent = '';
   }
 
+  function prefillHubUrl(savedHubUrl) {
+    if (!inputUrl.value) {
+      inputUrl.value = savedHubUrl || OFFICIAL_HUB_URL;
+    }
+  }
+
   // --- Initialize ---
   async function init() {
     try {
@@ -86,15 +96,30 @@
         showLogin();
         // Pre-fill URL from storage
         const data = await chrome.storage.local.get(['hubUrl']);
-        if (data.hubUrl) inputUrl.value = data.hubUrl;
+        prefillHubUrl(data.hubUrl);
         showLoginMessage(status.error || '连接失败，请检查配置', true);
       } else {
         showLogin();
+        prefillHubUrl('');
       }
     } catch (err) {
       showLogin();
+      prefillHubUrl('');
     }
   }
+
+  btnOfficialLogin.addEventListener('click', async () => {
+    clearLoginMessage();
+    btnOfficialLogin.disabled = true;
+    try {
+      await sendMessage('startOfficialLogin');
+      showLoginMessage('已打开 neuDrive 官方登录页，完成授权后扩展会自动连接。', false);
+    } catch (err) {
+      showLoginMessage(err.message, true);
+    } finally {
+      btnOfficialLogin.disabled = false;
+    }
+  });
 
   // --- Connect ---
   btnConnect.addEventListener('click', async () => {
@@ -150,16 +175,16 @@
   // --- Quick Links ---
   function updateQuickLinks() {
     chrome.storage.local.get(['hubUrl'], data => {
-      const baseUrl = data.hubUrl || '';
-      linkDashboard.href = baseUrl + '/dashboard';
+      const baseUrl = data.hubUrl || OFFICIAL_HUB_URL;
+      linkDashboard.href = baseUrl + '/';
       linkDashboard.addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: baseUrl + '/dashboard' });
+        chrome.tabs.create({ url: baseUrl + '/' });
       });
-      linkNewToken.href = baseUrl + '/settings/tokens';
+      linkNewToken.href = baseUrl + '/setup/tokens';
       linkNewToken.addEventListener('click', (e) => {
         e.preventDefault();
-        chrome.tabs.create({ url: baseUrl + '/settings/tokens' });
+        chrome.tabs.create({ url: baseUrl + '/setup/tokens' });
       });
     });
   }
@@ -171,7 +196,17 @@
       toggleAutoInject.checked = settings.autoInject || false;
       platformCheckboxes.forEach(cb => {
         const platform = cb.dataset.platform;
-        if (settings.platforms && platform in settings.platforms) {
+        if (!settings.platforms) return;
+        if (platform === 'chat.openai.com') {
+          const chatgptEnabled = settings.platforms['chatgpt.com'];
+          if (platform in settings.platforms) {
+            cb.checked = settings.platforms[platform];
+          } else if (typeof chatgptEnabled === 'boolean') {
+            cb.checked = chatgptEnabled;
+          }
+          return;
+        }
+        if (platform in settings.platforms) {
           cb.checked = settings.platforms[platform];
         }
       });
@@ -183,6 +218,11 @@
   async function saveSettings() {
     const platforms = {};
     platformCheckboxes.forEach(cb => {
+      if (cb.dataset.platform === 'chat.openai.com') {
+        platforms['chat.openai.com'] = cb.checked;
+        platforms['chatgpt.com'] = cb.checked;
+        return;
+      }
       platforms[cb.dataset.platform] = cb.checked;
     });
 
@@ -209,6 +249,17 @@
   });
   inputUrl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') inputToken.focus();
+  });
+
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'officialLoginComplete') {
+      clearLoginMessage();
+      init();
+    } else if (message.action === 'officialLoginError') {
+      showLoginMessage(message.payload?.message || '官方登录失败，请重试。', true);
+    }
+    sendResponse({ ok: true });
+    return false;
   });
 
   // --- Start ---

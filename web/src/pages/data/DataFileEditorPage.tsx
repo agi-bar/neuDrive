@@ -3,7 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import type { EditorView } from '@codemirror/view'
 import { api, type FileNode } from '../../api'
 import { useI18n } from '../../i18n'
-import { displayNameFromPath, fileNamespaceLabel, formatDateTime, sourceLabel } from './DataShared'
+import { displayNameFromPath, fileNamespaceLabel, formatDateTime, isTextLikeFile, sourceLabel } from './DataShared'
 import '@uiw/react-markdown-preview/markdown.css'
 
 const WorkbenchCodeEditor = lazy(() => import('./WorkbenchCodeEditor'))
@@ -34,6 +34,8 @@ function isMarkdownFilePath(path: string, mimeType?: string) {
 
 function mimeTypeForPath(path: string, currentMimeType?: string) {
   if (isMarkdownFilePath(path, currentMimeType)) return 'text/markdown'
+  if ((currentMimeType || '').toLowerCase() === 'application/json' || /\.json$/i.test(path)) return 'application/json'
+  if (isTextLikeFile(path, currentMimeType)) return currentMimeType || 'text/plain'
   return 'text/plain'
 }
 

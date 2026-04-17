@@ -22,14 +22,16 @@ interface UserProfileData {
 
 interface DashboardPageProps {
   systemSettingsEnabled?: boolean
+  localMode?: boolean
 }
 
-export default function DashboardPage({ systemSettingsEnabled = false }: DashboardPageProps) {
+export default function DashboardPage({ systemSettingsEnabled = false, localMode = false }: DashboardPageProps) {
   const { locale, tx } = useI18n()
   const [stats, setStats] = useState<DashboardStats>({
     connections: 0,
     files: 0,
     projects: 0,
+    conversations: 0,
     skills: 0,
     memory: 0,
     profile: 0,
@@ -131,6 +133,7 @@ export default function DashboardPage({ systemSettingsEnabled = false }: Dashboa
     { key: 'connections', label: tx('已连接平台', 'Connected apps'), to: '/connections' },
     { key: 'files', label: tx('所有文件', 'All files'), to: '/data/files' },
     { key: 'projects', label: tx('项目', 'Projects'), to: '/data/projects' },
+    { key: 'conversations', label: tx('会话', 'Conversations'), to: '/data/conversations' },
     { key: 'skills', label: tx('技能', 'Skills'), to: '/data/skills' },
     { key: 'memory', label: 'Memory', to: '/data/memory' },
     { key: 'profile', label: tx('我的资料', 'My Profile'), to: '/data/profile' },
@@ -240,6 +243,26 @@ export default function DashboardPage({ systemSettingsEnabled = false }: Dashboa
                 <span className="pending-type">{item.type}</span>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {localMode && (
+        <div className="card">
+          <h3 className="card-title">{tx('Claude Code 迁移', 'Claude Code Migration')}</h3>
+          <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
+            {tx(
+              '先扫描本机 Claude Code 数据，再把 projects、memory、skills、会话和结构化归档迁移到 neuDrive。',
+              'Scan local Claude Code data first, then migrate projects, memory, skills, conversations, and structured archives into neuDrive.',
+            )}
+          </p>
+          <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+            <Link to="/migrations/claude" className="btn btn-primary">
+              {tx('打开迁移报告', 'Open migration report')}
+            </Link>
+            <Link to="/connections" className="btn">
+              {tx('查看平台连接', 'View connections')}
+            </Link>
           </div>
         </div>
       )}

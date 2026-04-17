@@ -616,26 +616,64 @@ func (s *Store) ensureParentDirectories(ctx context.Context, userID uuid.UUID, s
 }
 
 func (s *Store) EnsureDirectory(ctx context.Context, userID uuid.UUID, rawPath string) error {
+	return s.EnsureDirectoryWithMetadata(ctx, userID, rawPath, nil, models.TrustLevelGuest)
+}
+
+func (s *Store) EnsureDirectoryWithMetadata(ctx context.Context, userID uuid.UUID, rawPath string, metadata map[string]interface{}, minTrustLevel int) error {
 	storagePath := hubpath.NormalizeStorage(rawPath)
 	if storagePath == "/" || storagePath == "" {
 		return nil
 	}
-	row := s.db.QueryRowContext(ctx, `SELECT id FROM file_tree WHERE user_id = ? AND path = ? AND deleted_at IS NULL`, userID.String(), storagePath)
-	var existing string
-	if err := row.Scan(&existing); err == nil {
-		return nil
+	if err := s.ensureParentDirectories(ctx, userID, storagePath); err != nil {
+		return err
 	}
 	now := time.Now().UTC()
-	_, err := s.db.ExecContext(ctx,
+	minTrust := minTrustLevel
+	if minTrust <= 0 {
+		minTrust = models.TrustLevelGuest
+	}
+	meta := mergeMetadata(nil, metadata)
+	meta = services.WithSourceContextMetadata(meta, ctx)
+
+	current, err := s.readCurrentEntry(ctx, userID, storagePath)
+	if err == nil && current != nil {
+		mergedMeta := mergeMetadata(current.Metadata, meta)
+		checksum := entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", mergedMeta)
+		dirKind := services.BundleEntryKindForMetadata(mergedMeta)
+		nextTrust := current.MinTrustLevel
+		if nextTrust <= 0 || minTrust < nextTrust {
+			nextTrust = minTrust
+		}
+		_, err = s.db.ExecContext(ctx,
+			`UPDATE file_tree
+			    SET kind = ?, is_directory = 1, content = '', content_type = 'directory', metadata_json = ?,
+			        checksum = ?, min_trust_level = ?, updated_at = ?, deleted_at = NULL
+			  WHERE user_id = ? AND path = ?`,
+			dirKind,
+			encodeJSON(mergedMeta),
+			checksum,
+			nextTrust,
+			timeText(now),
+			userID.String(),
+			storagePath,
+		)
+		return err
+	}
+	if err != nil && !errors.Is(err, services.ErrEntryNotFound) {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx,
 		`INSERT OR IGNORE INTO file_tree (
 			id, user_id, path, kind, is_directory, content, content_type, metadata_json,
 			checksum, version, min_trust_level, created_at, updated_at, deleted_at
-		) VALUES (?, ?, ?, 'directory', 1, '', 'directory', '{}', ?, 1, ?, ?, ?, NULL)`,
+		) VALUES (?, ?, ?, ?, 1, '', 'directory', ?, ?, 1, ?, ?, ?, NULL)`,
 		uuid.New().String(),
 		userID.String(),
 		storagePath,
-		entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", map[string]interface{}{}),
-		models.TrustLevelGuest,
+		services.BundleEntryKindForMetadata(meta),
+		encodeJSON(meta),
+		entryChecksum(hubpath.NormalizePublic(storagePath), "", "directory", meta),
+		minTrust,
 		timeText(now),
 		timeText(now),
 	)

@@ -14,6 +14,7 @@ import {
   buildSourceFilterOptions,
   dataFileEditorRoute,
   fileNodeSource,
+  isTextLikeFile,
   matchesSourceFilter,
   sourceLabel,
 } from './DataShared'
@@ -176,8 +177,7 @@ export default function FilesBrowserPage() {
 
   const isEditableNode = useCallback((item: FileNode) => {
     if (item.is_dir) return false
-    const mimeType = item.mime_type || ''
-    return /\.md$/i.test(item.name) || mimeType.startsWith('text/')
+    return isTextLikeFile(item.name, item.mime_type)
   }, [])
 
   const openNode = useCallback((item: FileNode) => {

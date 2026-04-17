@@ -336,6 +336,8 @@ func (s *Server) setupRoutes() {
 		r.Get("/api/local/git-mirror", s.handleLocalGitMirrorGet)
 		r.Put("/api/local/git-mirror", s.handleLocalGitMirrorUpdate)
 		r.Post("/api/local/git-mirror/github/test", s.handleLocalGitMirrorGitHubTest)
+		r.Post("/api/local/platform/preview", s.handleLocalPlatformPreview)
+		r.Post("/api/local/platform/import", s.handleLocalPlatformImport)
 
 		// GPT Setup
 		r.Get("/api/gpt/setup", s.handleGPTSetup)
@@ -1136,6 +1138,7 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Content          string                 `json:"content"`
 		ContentType      string                 `json:"content_type,omitempty"`
+		IsDir            bool                   `json:"is_dir,omitempty"`
 		Source           string                 `json:"source,omitempty"`
 		SourcePlatform   string                 `json:"source_platform,omitempty"`
 		Metadata         map[string]interface{} `json:"metadata,omitempty"`
@@ -1145,6 +1148,18 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, "invalid request body")
+		return
+	}
+	ctx := s.requestSourceContext(r, "agent")
+	ctx, req.Metadata = applyExplicitSourceHints(ctx, req.Metadata, req.Source, req.SourcePlatform)
+
+	if req.IsDir {
+		entry, err := s.FileTreeService.EnsureDirectoryWithMetadata(ctx, userID, path, req.Metadata, req.MinTrustLevel)
+		if err != nil {
+			respondInternalError(w, err)
+			return
+		}
+		respondOKWithLocalGitSync(w, entry, s.syncLocalGitMirror(r.Context(), userID))
 		return
 	}
 
@@ -1157,8 +1172,6 @@ func (s *Server) handleAgentTreeWrite(w http.ResponseWriter, r *http.Request) {
 	if minTrustLevel <= 0 {
 		minTrustLevel = models.TrustLevelFull
 	}
-	ctx := s.requestSourceContext(r, "agent")
-	ctx, req.Metadata = applyExplicitSourceHints(ctx, req.Metadata, req.Source, req.SourcePlatform)
 	entry, err := s.FileTreeService.WriteEntry(ctx, userID, path, req.Content, contentType, models.FileTreeWriteOptions{
 		Metadata:         req.Metadata,
 		MinTrustLevel:    minTrustLevel,

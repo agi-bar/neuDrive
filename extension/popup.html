@@ -201,6 +201,22 @@
       gap: 8px;
     }
 
+    .helper-text {
+      font-size: 12px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+      margin-bottom: 12px;
+    }
+
+    .section-divider {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-secondary);
+      margin: 4px 0 12px;
+    }
+
     /* Profile card */
     .profile-card {
       background: var(--bg-secondary);
@@ -359,13 +375,18 @@
   <div id="view-login">
     <div class="section">
       <div class="section-title">连接配置</div>
+      <div class="helper-text">推荐先登录 neuDrive 官方版。授权完成后，扩展会自动连接到 https://www.neudrive.ai。</div>
+      <div class="btn-row" style="margin-bottom: 12px;">
+        <button class="btn btn-secondary" id="btn-official-login" style="width: 100%;">登录官方版</button>
+      </div>
+      <div class="section-divider">或手动配置</div>
       <div class="form-group">
         <label for="input-url">Hub 服务地址</label>
-        <input type="url" id="input-url" placeholder="https://neudrive.ai" />
+        <input type="url" id="input-url" placeholder="https://www.neudrive.ai" />
       </div>
       <div class="form-group">
         <label for="input-token">Scoped Token</label>
-        <input type="password" id="input-token" placeholder="aghub_xxxxxxxxxxxxxx" />
+        <input type="password" id="input-token" placeholder="ndt_xxxxxxxxxxxxxx" />
       </div>
       <button class="btn btn-primary" id="btn-connect">连接</button>
       <div id="login-message" class="message"></div>
@@ -395,7 +416,7 @@
           &#127968; 打开管理后台
         </a>
         <a class="link-item" id="link-new-token">
-          &#128273; 创建新 Token
+          &#128273; 打开 Token 管理
         </a>
       </div>
     </div>
@@ -417,7 +438,7 @@
         </div>
         <div class="platform-item">
           <input type="checkbox" id="plat-chatgpt" data-platform="chat.openai.com" checked />
-          <label for="plat-chatgpt">ChatGPT (chat.openai.com)</label>
+          <label for="plat-chatgpt">ChatGPT (chat.openai.com / chatgpt.com)</label>
         </div>
         <div class="platform-item">
           <input type="checkbox" id="plat-gemini" data-platform="gemini.google.com" checked />

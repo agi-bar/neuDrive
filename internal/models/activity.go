@@ -28,13 +28,14 @@ type DashboardPending struct {
 }
 
 type DashboardStats struct {
-	TotalConnections int                 `json:"connections"`
-	TotalFiles       int                 `json:"files"`
-	TotalMemory      int                 `json:"memory"`
-	TotalProfile     int                 `json:"profile"`
-	TotalSkills      int                 `json:"skills"`
-	TotalProjects    int                 `json:"projects"`
-	TotalInbox       int                 `json:"inbox"`
-	WeeklyActivity   []DashboardActivity `json:"weekly_activity"`
-	Pending          []DashboardPending  `json:"pending"`
+	TotalConnections   int                 `json:"connections"`
+	TotalFiles         int                 `json:"files"`
+	TotalMemory        int                 `json:"memory"`
+	TotalProfile       int                 `json:"profile"`
+	TotalConversations int                 `json:"conversations"`
+	TotalSkills        int                 `json:"skills"`
+	TotalProjects      int                 `json:"projects"`
+	TotalInbox         int                 `json:"inbox"`
+	WeeklyActivity     []DashboardActivity `json:"weekly_activity"`
+	Pending            []DashboardPending  `json:"pending"`
 }

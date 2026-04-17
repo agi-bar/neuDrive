@@ -19,6 +19,7 @@ import {
   dataFileEditorRoute,
   dataSkillBundleRoute,
   fileNodeSource,
+  isTextLikeFile,
   matchesSourceFilter,
   normalizeBundleRelativeDir,
   sourceLabel,
@@ -42,8 +43,7 @@ function bundleIdFromSkillPath(path: string) {
 
 function isEditableFile(entry: FileNode) {
   if (entry.is_dir) return false
-  const mimeType = entry.mime_type || ''
-  return /\.md$/i.test(entry.name) || mimeType.startsWith('text/')
+  return isTextLikeFile(entry.name, entry.mime_type)
 }
 
 function normalizeBundleName(value: string) {

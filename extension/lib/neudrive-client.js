@@ -143,6 +143,59 @@ class NeuDriveClient {
   }
 
   /**
+   * Write a file into the user's neuDrive tree.
+   * @param {string} path - absolute tree path (e.g. "/conversations/claude-web/demo/conversation.md")
+   * @param {string} content
+   * @param {object} options - { mimeType, metadata, minTrustLevel, source, sourcePlatform }
+   */
+  async writeFile(path, content, options = {}) {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return this._request(`/agent/tree${normalizedPath}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        content,
+        content_type: options.mimeType || 'text/plain',
+        metadata: options.metadata || {},
+        min_trust_level: options.minTrustLevel || 3,
+        source: options.source || '',
+        source_platform: options.sourcePlatform || '',
+      }),
+    });
+  }
+
+  /**
+   * Ensure a directory exists in the user's neuDrive tree.
+   * @param {string} path - absolute tree path (e.g. "/conversations/claude-web/demo")
+   * @param {object} options - { metadata, minTrustLevel, source, sourcePlatform }
+   */
+  async writeDirectory(path, options = {}) {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return this._request(`/agent/tree${normalizedPath}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        content: '',
+        content_type: 'directory',
+        is_dir: true,
+        metadata: options.metadata || {},
+        min_trust_level: options.minTrustLevel || 3,
+        source: options.source || '',
+        source_platform: options.sourcePlatform || '',
+      }),
+    });
+  }
+
+  /**
+   * Delete a file or directory subtree from the user's neuDrive tree.
+   * @param {string} path - absolute tree path
+   */
+  async deletePath(path) {
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    return this._request(`/agent/tree${normalizedPath}`, {
+      method: 'DELETE',
+    });
+  }
+
+  /**
    * Get user preferences.
    */
   async getPreferences() {

@@ -37,6 +37,34 @@ func SkillDocPath(name string) string {
 	return fmt.Sprintf("/skills/%s/SKILL.md", sanitizeSegment(name, "skill"))
 }
 
+func ConversationsRoot() string {
+	return "/conversations"
+}
+
+func ConversationPlatformDir(platform string) string {
+	return fmt.Sprintf("%s/%s/", ConversationsRoot(), sanitizeSegment(platform, "conversation"))
+}
+
+func ConversationDir(platform, key string) string {
+	return fmt.Sprintf("%s%s/", ConversationPlatformDir(platform), sanitizeSegment(key, "conversation"))
+}
+
+func ConversationTranscriptPath(platform, key string) string {
+	return path.Join(ConversationDir(platform, key), "conversation.md")
+}
+
+func ConversationDocumentPath(platform, key string) string {
+	return path.Join(ConversationDir(platform, key), "conversation.json")
+}
+
+func ConversationExportPath(platform, key, target string) string {
+	return path.Join(ConversationDir(platform, key), fmt.Sprintf("resume-%s.md", sanitizeSegment(target, "platform")))
+}
+
+func ConversationIndexPath(platform string) string {
+	return path.Join(ConversationPlatformDir(platform), "index.json")
+}
+
 func RoleSkillPath(name string) string {
 	return fmt.Sprintf("/roles/%s/SKILL.md", sanitizeSegment(name, "role"))
 }

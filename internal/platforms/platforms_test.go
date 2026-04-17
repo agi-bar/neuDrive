@@ -1,6 +1,10 @@
-package platforms
+package platforms_test
 
-import "testing"
+import (
+	"testing"
+
+	platformspkg "github.com/agi-bar/neudrive/internal/platforms"
+)
 
 func TestResolveSupportsAliases(t *testing.T) {
 	cases := map[string]string{
@@ -10,7 +14,7 @@ func TestResolveSupportsAliases(t *testing.T) {
 		"cursor": "cursor-agent",
 	}
 	for input, want := range cases {
-		adapter, err := Resolve(input)
+		adapter, err := platformspkg.Resolve(input)
 		if err != nil {
 			t.Fatalf("Resolve(%q): %v", input, err)
 		}

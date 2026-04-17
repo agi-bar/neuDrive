@@ -70,10 +70,7 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 		summary.Files = result
 		summary.LocalGit = syncInfo
 	case ImportModeAgent:
-		if err := ensureAgentImportReady(cfg, adapter.ID()); err != nil {
-			return nil, err
-		}
-		payload, err := runAgentExport(ctx, adapter.ID())
+		payload, err := PrepareAgentImportPayload(ctx, cfg, adapter.ID())
 		if err != nil {
 			return nil, err
 		}
@@ -84,10 +81,7 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 		summary.Agent = result
 		summary.LocalGit = syncInfo
 	case ImportModeAll:
-		if err := ensureAgentImportReady(cfg, adapter.ID()); err != nil {
-			return nil, err
-		}
-		payload, err := runAgentExport(ctx, adapter.ID())
+		payload, err := PrepareAgentImportPayload(ctx, cfg, adapter.ID())
 		if err != nil {
 			return nil, err
 		}
@@ -100,6 +94,30 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 		summary.LocalGit = syncInfo
 	}
 	return summary, nil
+}
+
+func PrepareAgentImportPayload(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string) (sqlite.AgentExportPayload, error) {
+	if platform != "claude-code" {
+		if err := ensureAgentImportReady(cfg, platform); err != nil {
+			return sqlite.AgentExportPayload{}, err
+		}
+		return runAgentExport(ctx, platform)
+	}
+
+	payload := sqlite.AgentExportPayload{
+		Platform: "claude-code",
+		Command:  "local-scan",
+	}
+	if agentPayload, err := runAgentExport(ctx, platform); err == nil {
+		payload = mergeAgentPayload(payload, agentPayload)
+	} else {
+		payload.Notes = append(payload.Notes, fmt.Sprintf("Agent semantic scan unavailable during import: %v", err))
+	}
+	enriched, _, err := enrichClaudePayload(payload)
+	if err != nil {
+		return sqlite.AgentExportPayload{}, err
+	}
+	return enriched, nil
 }
 
 func ensureAgentImportReady(cfg *runtimecfg.CLIConfig, platform string) error {

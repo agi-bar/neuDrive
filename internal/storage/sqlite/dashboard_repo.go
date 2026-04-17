@@ -49,6 +49,7 @@ func (r *DashboardRepo) GetStats(ctx context.Context, userID uuid.UUID) (*models
 
 	memoryPat := hubpath.NormalizeStorage("/memory/") + "%"
 	profilePat := hubpath.NormalizeStorage("/memory/profile/") + "%"
+	conversationPat := hubpath.NormalizeStorage("/conversations/") + "%"
 	if err := db.QueryRowContext(ctx,
 		`SELECT COUNT(*) FROM file_tree
 		  WHERE user_id = ? AND is_directory = 0 AND deleted_at IS NULL
@@ -83,6 +84,18 @@ func (r *DashboardRepo) GetStats(ctx context.Context, userID uuid.UUID) (*models
 		return nil, fmt.Errorf("sqlite.DashboardRepo.GetStats: skills count: %w", err)
 	}
 	stats.TotalSkills += len(systemskills.SkillSummaries())
+
+	if err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM file_tree
+		  WHERE user_id = ? AND is_directory = 1 AND deleted_at IS NULL
+		    AND path LIKE ?
+		    AND kind = ?`,
+		userID.String(),
+		conversationPat,
+		services.EntryKindConversationBundle,
+	).Scan(&stats.TotalConversations); err != nil {
+		return nil, fmt.Errorf("sqlite.DashboardRepo.GetStats: conversations count: %w", err)
+	}
 
 	projects, err := NewProjectRepo(r.Store).ListProjects(ctx, userID)
 	if err != nil {

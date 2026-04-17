@@ -1,4 +1,4 @@
-package platforms
+package platforms_test
 
 import (
 	"context"
@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	platformspkg "github.com/agi-bar/neudrive/internal/platforms"
 )
 
 type adapterContractCase struct {
@@ -133,9 +135,9 @@ func TestAdapterContracts(t *testing.T) {
 					t.Fatalf("decode cursor config: %v", err)
 				}
 				servers, _ := payload["mcpServers"].(map[string]any)
-				server, _ := servers[LocalServerName].(map[string]any)
+				server, _ := servers[platformspkg.LocalServerName].(map[string]any)
 				if server == nil {
-					t.Fatalf("expected %s entry in cursor mcp config: %s", LocalServerName, string(data))
+					t.Fatalf("expected %s entry in cursor mcp config: %s", platformspkg.LocalServerName, string(data))
 				}
 				if got, _ := server["url"].(string); got != daemonURL+"/mcp" {
 					t.Fatalf("unexpected cursor daemon url: %q", got)
@@ -147,8 +149,8 @@ func TestAdapterContracts(t *testing.T) {
 				if err != nil {
 					t.Fatalf("read cursor config after disconnect: %v", err)
 				}
-				if strings.Contains(string(data), LocalServerName) {
-					t.Fatalf("expected %s removed from cursor config: %s", LocalServerName, string(data))
+				if strings.Contains(string(data), platformspkg.LocalServerName) {
+					t.Fatalf("expected %s removed from cursor config: %s", platformspkg.LocalServerName, string(data))
 				}
 			},
 		},
@@ -159,7 +161,7 @@ func TestAdapterContracts(t *testing.T) {
 			home, cfg, daemonURL, shimLog := configurePlatformTestEnv(t)
 			ctx := context.Background()
 
-			adapter, err := Resolve(tc.id)
+			adapter, err := platformspkg.Resolve(tc.id)
 			if err != nil {
 				t.Fatalf("Resolve(%s): %v", tc.id, err)
 			}
@@ -190,7 +192,7 @@ func TestAdapterContracts(t *testing.T) {
 				t.Fatalf("expected agent mediated state for %s", tc.id)
 			}
 
-			connection, err := EnsureConnection(ctx, cfg, tc.id, "/tmp/neudrive-test", daemonURL)
+			connection, err := platformspkg.EnsureConnection(ctx, cfg, tc.id, "/tmp/neudrive-test", daemonURL)
 			if err != nil {
 				t.Fatalf("EnsureConnection(%s): %v", tc.id, err)
 			}
@@ -228,7 +230,7 @@ func TestAdapterContracts(t *testing.T) {
 			if tc.id == "claude-code" && (!status.EntrypointInstalled || status.EntrypointType != "command") {
 				t.Fatalf("expected claude command entrypoint installed: %+v", status)
 			}
-			importResult, err := ImportIntoLocalHub(ctx, cfg, tc.id)
+			importResult, err := platformspkg.ImportIntoLocalHub(ctx, cfg, tc.id)
 			if err != nil {
 				t.Fatalf("ImportIntoLocalHub(%s): %v", tc.id, err)
 			}
@@ -237,7 +239,7 @@ func TestAdapterContracts(t *testing.T) {
 			}
 
 			exportRoot := filepath.Join(t.TempDir(), "export")
-			exportResult, err := ExportFromLocalHub(ctx, cfg, tc.id, exportRoot)
+			exportResult, err := platformspkg.ExportFromLocalHub(ctx, cfg, tc.id, exportRoot)
 			if err != nil {
 				t.Fatalf("ExportFromLocalHub(%s): %v", tc.id, err)
 			}
@@ -251,7 +253,7 @@ func TestAdapterContracts(t *testing.T) {
 			}
 
 			if tc.id == "claude-code" || tc.id == "codex" {
-				agentResult, err := Import(ctx, cfg, tc.id, "agent")
+				agentResult, err := platformspkg.Import(ctx, cfg, tc.id, "agent")
 				if err != nil {
 					t.Fatalf("Import(%s, agent): %v", tc.id, err)
 				}
@@ -259,7 +261,7 @@ func TestAdapterContracts(t *testing.T) {
 					t.Fatalf("expected non-empty agent import result for %s: %+v", tc.id, agentResult)
 				}
 
-				allResult, err := Import(ctx, cfg, tc.id, "all")
+				allResult, err := platformspkg.Import(ctx, cfg, tc.id, "all")
 				if err != nil {
 					t.Fatalf("Import(%s, all): %v", tc.id, err)
 				}
@@ -268,13 +270,13 @@ func TestAdapterContracts(t *testing.T) {
 				}
 			}
 
-			if err := Disconnect(ctx, cfg, tc.id); err != nil {
+			if err := platformspkg.Disconnect(ctx, cfg, tc.id); err != nil {
 				t.Fatalf("Disconnect(%s): %v", tc.id, err)
 			}
 			if _, ok := cfg.Local.Connections[tc.id]; ok {
 				t.Fatalf("expected connection removed for %s", tc.id)
 			}
-			if err := Disconnect(ctx, cfg, tc.id); err != nil {
+			if err := platformspkg.Disconnect(ctx, cfg, tc.id); err != nil {
 				t.Fatalf("Disconnect(%s) second time: %v", tc.id, err)
 			}
 			tc.assertDisconnect(t, home)

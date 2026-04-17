@@ -33,6 +33,7 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 	skillStoragePat := hubpath.NormalizeStorage("/skills/") + "%"
 	memoryPat := hubpath.NormalizeStorage("/memory/") + "%"
 	profilePat := hubpath.NormalizeStorage("/memory/profile/") + "%"
+	conversationPat := hubpath.NormalizeStorage("/conversations/") + "%"
 
 	// Count connected entries across manual API-key connections and OAuth/MCP grants.
 	err := s.db.QueryRow(ctx,
@@ -86,6 +87,17 @@ func (s *DashboardService) GetStats(ctx context.Context, userID uuid.UUID) (*mod
 		return nil, fmt.Errorf("dashboard.GetStats: skills count: %w", err)
 	}
 	stats.TotalSkills += len(systemskills.SkillSummaries())
+
+	// Count top-level conversation bundles.
+	err = s.db.QueryRow(ctx,
+		`SELECT COUNT(*) FROM file_tree WHERE user_id = $1 AND is_directory = true AND deleted_at IS NULL
+		   AND path LIKE $2
+		   AND kind = $3`,
+		userID, conversationPat, EntryKindConversationBundle).
+		Scan(&stats.TotalConversations)
+	if err != nil {
+		return nil, fmt.Errorf("dashboard.GetStats: conversations count: %w", err)
+	}
 
 	// Count projects.
 	err = s.db.QueryRow(ctx,

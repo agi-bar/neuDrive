@@ -2,6 +2,7 @@ import { type BundleContext, type FileNode, type SkillSummary } from '../../api'
 import { getLocaleTag, type AppLocale } from '../../i18n'
 
 const ORDINARY_FILE_EXCLUDED_PREFIXES = [
+  '/conversations/',
   '/projects/',
   '/skills/',
   '/memory/',
@@ -16,6 +17,7 @@ const PROFILE_LABELS: Record<string, string> = {
 }
 
 const SYSTEM_CONTAINER_PATHS = new Set([
+  '/conversations',
   '/inbox',
   '/memory',
   '/memory/profile',
@@ -301,6 +303,15 @@ export function normalizeHubPath(path: string) {
   return `/${normalized.replace(/^\/+/, '').replace(/\/+$/, '')}`
 }
 
+export function isTextLikeFile(path: string, mimeType?: string) {
+  const normalizedMime = (mimeType || '').toLowerCase()
+  if (/\.md$/i.test(path)) return true
+  if (/\.json$/i.test(path)) return true
+  if (normalizedMime.startsWith('text/')) return true
+  if (normalizedMime === 'application/json') return true
+  return false
+}
+
 export function formatDateTime(value?: string, locale: AppLocale = 'en') {
   if (!value) return '-'
   try {
@@ -404,7 +415,7 @@ export function skillSummaryForPath(path: string, lookup: Record<string, SkillSu
   return lookup[normalizeHubPath(path)]
 }
 
-export type BundleKind = 'skill' | 'project'
+export type BundleKind = 'skill' | 'project' | 'conversation'
 
 export type BundleInfo = {
   kind: BundleKind
@@ -452,13 +463,14 @@ function metadataDescription(node: FileNode) {
 }
 
 function bundleKindValue(node: Pick<FileNode, 'kind' | 'metadata' | 'bundle_context'>): BundleKind | '' {
-  if (node.bundle_context?.kind === 'skill' || node.bundle_context?.kind === 'project') {
+  if (node.bundle_context?.kind === 'skill' || node.bundle_context?.kind === 'project' || node.bundle_context?.kind === 'conversation') {
     return node.bundle_context.kind
   }
   const bundleKind = metadataValue(node.metadata, 'bundle_kind')
-  if (bundleKind === 'skill' || bundleKind === 'project') return bundleKind
+  if (bundleKind === 'skill' || bundleKind === 'project' || bundleKind === 'conversation') return bundleKind
   if (node.kind === 'skill_bundle') return 'skill'
   if (node.kind === 'project_bundle') return 'project'
+  if (node.kind === 'conversation_bundle') return 'conversation'
   return ''
 }
 
@@ -522,6 +534,8 @@ export function bundleKindLabel(kind: BundleKind, locale: AppLocale) {
   switch (kind) {
     case 'project':
       return text(locale, '项目 Bundle', 'Project Bundle')
+    case 'conversation':
+      return text(locale, '会话 Bundle', 'Conversation Bundle')
     case 'skill':
     default:
       return text(locale, '技能 Bundle', 'Skill Bundle')
@@ -531,6 +545,9 @@ export function bundleKindLabel(kind: BundleKind, locale: AppLocale) {
 function bundleFooterEnd(bundle: BundleInfo, node: FileNode, locale: AppLocale) {
   if (bundle.kind === 'skill') {
     return bundle.readOnly ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable')
+  }
+  if (bundle.kind === 'conversation') {
+    return formatDateTime(node.updated_at || node.created_at, locale)
   }
   switch ((bundle.status || '').toLowerCase()) {
     case 'archived':
@@ -547,6 +564,9 @@ function bundleFooterEnd(bundle: BundleInfo, node: FileNode, locale: AppLocale) 
 export function bundleStatusLabel(bundle: BundleInfo, locale: AppLocale) {
   if (bundle.kind === 'skill') {
     return bundle.readOnly ? text(locale, '只读', 'Read-only') : text(locale, '可编辑', 'Editable')
+  }
+  if (bundle.kind === 'conversation') {
+    return text(locale, '已归档', 'Archived')
   }
   switch ((bundle.status || '').toLowerCase()) {
     case 'archived':
@@ -769,8 +789,21 @@ export function dataProjectBundleRoute(projectName: string, relativeDir?: string
   return relative ? `${base}?dir=${encodeURIComponent(relative)}` : base
 }
 
+export function conversationBundleKeyFromPath(path: string) {
+  return normalizeHubPath(path).replace(/^\/conversations\/?/, '')
+}
+
+export function dataConversationBundleRoute(bundlePath: string, relativeDir?: string | null) {
+  const relativeBundlePath = conversationBundleKeyFromPath(bundlePath)
+  const base = `/data/conversations/${encodeHubRoutePath(relativeBundlePath)}`
+  const relative = normalizeBundleRelativeDir(relativeDir)
+  return relative ? `${base}?dir=${encodeURIComponent(relative)}` : base
+}
+
 export function fileNamespaceLabel(path: string, locale: AppLocale = 'en') {
   switch (topLevelSegment(path)) {
+    case 'conversations':
+      return text(locale, '会话', 'Conversations')
     case 'projects':
       return text(locale, '项目', 'Projects')
     case 'skills':

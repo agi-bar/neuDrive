@@ -21,10 +21,12 @@ const FilesBrowserPage = lazy(() => import('./pages/data/FilesBrowserPage'))
 const DataFileEditorPage = lazy(() => import('./pages/data/DataFileEditorPage'))
 const DataSkillsPage = lazy(() => import('./pages/data/DataSkillsPage'))
 const DataMemoryPage = lazy(() => import('./pages/data/DataMemoryPage'))
+const DataConversationsPage = lazy(() => import('./pages/data/DataConversationsPage'))
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'))
 const SyncLoginPage = lazy(() => import('./pages/SyncLoginPage'))
 const SkillsImportPage = lazy(() => import('./pages/SkillsImportPage'))
 const GitMirrorPage = lazy(() => import('./pages/GitMirrorPage'))
+const ClaudeMigrationPage = lazy(() => import('./pages/ClaudeMigrationPage'))
 
 function App() {
   const [user, setUser] = useState<any>(null)
@@ -147,6 +149,7 @@ function App() {
     location.pathname === '/data/sync' &&
     new URLSearchParams(location.search).get('cli_login') === '1'
   const systemSettingsEnabled = !!publicConfig?.system_settings_enabled
+  const localMode = !!publicConfig?.local_mode
   const routeFallback = (
     <div className="loading-screen">
       <div className="loading-spinner" />
@@ -237,6 +240,9 @@ function App() {
                 <NavLink to="/data/projects" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   {tx('项目', 'Projects')}
                 </NavLink>
+                <NavLink to="/data/conversations" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                  {tx('会话', 'Conversations')}
+                </NavLink>
                 <NavLink to="/data/skills" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                   {tx('技能', 'Skills')}
                 </NavLink>
@@ -280,7 +286,7 @@ function App() {
       <main className="main-content">
         <Suspense fallback={routeFallback}>
           <Routes>
-            <Route path="/" element={<DashboardPage systemSettingsEnabled={systemSettingsEnabled} />} />
+            <Route path="/" element={<DashboardPage systemSettingsEnabled={systemSettingsEnabled} localMode={localMode} />} />
             <Route path="/setup" element={<SetupPage />}>
               <Route index element={<Navigate to="web-apps" replace />} />
               <Route path="web-apps" element={<SetupWebAppsPage />} />
@@ -292,6 +298,7 @@ function App() {
               <Route path="tokens" element={<SetupTokensPage />} />
             </Route>
             <Route path="/git-mirror" element={<GitMirrorPage />} />
+            <Route path="/migrations/claude" element={<ClaudeMigrationPage localMode={localMode} />} />
             <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
             <Route path="/data" element={<Outlet />}>
               <Route index element={<Navigate to="files/browse" replace />} />
@@ -301,6 +308,8 @@ function App() {
               <Route path="files/*" element={<FilesBrowserPage />} />
               <Route path="projects" element={<ProjectsPage />} />
               <Route path="projects/:projectName" element={<ProjectsPage />} />
+              <Route path="conversations" element={<DataConversationsPage />} />
+              <Route path="conversations/*" element={<DataConversationsPage />} />
               <Route path="skills" element={<DataSkillsPage />} />
               <Route path="skills/:bundleKey" element={<DataSkillsPage />} />
               <Route path="memory" element={<DataMemoryPage />} />

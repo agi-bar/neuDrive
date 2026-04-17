@@ -7,8 +7,11 @@
   "host_permissions": [
     "https://claude.ai/*",
     "https://chat.openai.com/*",
+    "https://chatgpt.com/*",
     "https://gemini.google.com/*",
-    "https://kimi.moonshot.cn/*"
+    "https://kimi.moonshot.cn/*",
+    "https://www.neudrive.ai/*",
+    "https://neudrive.ai/*"
   ],
   "background": {
     "service_worker": "background.js"
@@ -17,8 +20,11 @@
     "matches": [
       "https://claude.ai/*",
       "https://chat.openai.com/*",
+      "https://chatgpt.com/*",
       "https://gemini.google.com/*",
-      "https://kimi.moonshot.cn/*"
+      "https://kimi.moonshot.cn/*",
+      "https://www.neudrive.ai/*",
+      "https://neudrive.ai/*"
     ],
     "js": ["content.js"],
     "css": ["content.css"]

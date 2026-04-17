@@ -66,6 +66,10 @@ func normalize(raw string) string {
 
 	trimmed := strings.TrimPrefix(cleaned, "/")
 	switch {
+	case trimmed == "conversations" || strings.HasPrefix(trimmed, "conversations/"):
+		trimmed = "conversations" + strings.TrimPrefix(trimmed, "conversations")
+	case trimmed == "memory/conversations" || strings.HasPrefix(trimmed, "memory/conversations/"):
+		trimmed = "conversations" + strings.TrimPrefix(trimmed, "memory/conversations")
 	case trimmed == "skills" || strings.HasPrefix(trimmed, "skills/"):
 		trimmed = "skills" + strings.TrimPrefix(trimmed, "skills")
 	case trimmed == ".skills" || strings.HasPrefix(trimmed, ".skills/"):

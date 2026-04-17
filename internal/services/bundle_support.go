@@ -10,16 +10,18 @@ import (
 )
 
 const (
-	BundleKindSkill   = "skill"
-	BundleKindProject = "project"
+	BundleKindSkill        = "skill"
+	BundleKindProject      = "project"
+	BundleKindConversation = "conversation"
 
-	EntryKindSkillBundle   = "skill_bundle"
-	EntryKindProjectBundle = "project_bundle"
+	EntryKindSkillBundle        = "skill_bundle"
+	EntryKindProjectBundle      = "project_bundle"
+	EntryKindConversationBundle = "conversation_bundle"
 )
 
 func IsDirectoryLikeKind(kind string) bool {
 	switch strings.TrimSpace(kind) {
-	case "", "directory", EntryKindSkillBundle, EntryKindProjectBundle:
+	case "", "directory", EntryKindSkillBundle, EntryKindProjectBundle, EntryKindConversationBundle:
 		return true
 	default:
 		return false
@@ -32,9 +34,15 @@ func bundleEntryKind(bundleKind string) string {
 		return EntryKindSkillBundle
 	case BundleKindProject:
 		return EntryKindProjectBundle
+	case BundleKindConversation:
+		return EntryKindConversationBundle
 	default:
 		return "directory"
 	}
+}
+
+func BundleEntryKindForMetadata(metadata map[string]interface{}) string {
+	return bundleEntryKind(metadataString(metadata, "bundle_kind"))
 }
 
 func BundleMetadata(summary models.BundleSummary) map[string]interface{} {
@@ -95,7 +103,7 @@ func BundleSummaryFromMetadata(rawPath string, metadata map[string]interface{}, 
 	bundleKind := strings.TrimSpace(metadataString(metadata, "bundle_kind"))
 	if bundleKind == "" {
 		switch strings.TrimSpace(metadataString(metadata, "bundle_type")) {
-		case BundleKindSkill, BundleKindProject:
+		case BundleKindSkill, BundleKindProject, BundleKindConversation:
 			bundleKind = strings.TrimSpace(metadataString(metadata, "bundle_type"))
 		default:
 			return nil

@@ -20,6 +20,7 @@ import {
   dataProjectBundleRoute,
   fileNodeSource,
   getMaterialsSortOptions,
+  isTextLikeFile,
   matchesSourceFilter,
   normalizeBundleRelativeDir,
   projectSource,
@@ -276,8 +277,7 @@ export default function ProjectsPage() {
           openBundleFolder(entry.path)
           return
         }
-        const mimeType = entry.mime_type || ''
-        if (/\.md$/i.test(entry.name) || mimeType.startsWith('text/')) {
+        if (isTextLikeFile(entry.name, entry.mime_type)) {
           openFileEditor(entry.path)
         }
         return
@@ -387,8 +387,7 @@ export default function ProjectsPage() {
                     bundleLabel: currentBundleContext.name,
                     locale,
                   })
-                  const mimeType = entry.mime_type || ''
-                  const editable = /\.md$/i.test(entry.name) || mimeType.startsWith('text/')
+                  const editable = isTextLikeFile(entry.name, entry.mime_type)
                   return (
                     <FileMaterialsTile
                       key={entry.path}

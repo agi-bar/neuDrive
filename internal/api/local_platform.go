@@ -390,6 +390,7 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 			return nil, err
 		}
 		result.ProfileCategories++
+		result.Imported++
 		result.Paths = append(result.Paths, hubpath.ProfilePath(category))
 	}
 
@@ -404,6 +405,7 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 			return nil, err
 		}
 		result.MemoryItems++
+		result.Imported++
 		if entry != nil {
 			result.Paths = append(result.Paths, entry.Path)
 		} else {
@@ -438,37 +440,49 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 			return nil, err
 		}
 		result.Projects++
+		result.Imported++
 		result.Paths = append(result.Paths, hubpath.ProjectContextPath(name))
+	}
+
+	if payload.Claude != nil {
+		if err := s.importClaudeLocalInventory(ctx, userID, platform, *payload.Claude, result); err != nil {
+			return nil, err
+		}
 	}
 
 	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "automations.json", payload.Automations); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Automations)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "tools.json", payload.Tools); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Tools)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "connections.json", payload.Connections); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Connections)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "archives.json", payload.Archives); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Archives)
 		result.Paths = append(result.Paths, written)
 	}
 	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "unsupported.json", payload.Unsupported); err != nil {
 		return nil, err
 	} else if written != "" {
 		result.Artifacts++
+		result.Archived += len(payload.Unsupported)
 		result.Paths = append(result.Paths, written)
 	}
 	if content := renderAgentNotes(payload.Notes); strings.TrimSpace(content) != "" {
@@ -485,6 +499,7 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 			return nil, err
 		}
 		result.Artifacts++
+		result.Archived++
 		result.Paths = append(result.Paths, target)
 	}
 

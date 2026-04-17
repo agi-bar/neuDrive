@@ -1,4 +1,4 @@
-package platforms
+package platforms_test
 
 import (
 	"context"

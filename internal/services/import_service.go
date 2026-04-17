@@ -482,7 +482,7 @@ func (s *ImportService) ImportClaudeData(ctx context.Context, userID uuid.UUID, 
 		}
 	}
 
-	// 2. Import conversations.json → /memory/conversations/{name}.md
+	// 2. Import conversations.json → /conversations/claude-web/{bundle}/conversation.md
 	if data, ok := fileMap["conversations.json"]; ok {
 		var convos []claudeConversation
 		if err := json.Unmarshal(data, &convos); err == nil {
@@ -530,7 +530,27 @@ func (s *ImportService) ImportClaudeData(ctx context.Context, userID uuid.UUID, 
 				if len(c.CreatedAt) >= 10 {
 					date = c.CreatedAt[:10]
 				}
-				path := fmt.Sprintf("/memory/conversations/%s-%s.md", date, safeName)
+				rootPath := fmt.Sprintf("/conversations/claude-web/%s-%s", date, safeName)
+				path := rootPath + "/conversation.md"
+				dirMetadata := mergeMetadata(
+					BundleMetadata(models.BundleSummary{
+						Kind:         BundleKindConversation,
+						Name:         c.Name,
+						Source:       "claude-web",
+						Description:  fmt.Sprintf("Imported from Claude Web export with %d turns.", len(c.ChatMessages)),
+						Status:       "archived",
+						PrimaryPath:  path,
+						Capabilities: []string{"transcript"},
+					}),
+					map[string]interface{}{
+						"source_platform":              "claude-web",
+						"conversation_transcript_path": path,
+						"turn_count":                   len(c.ChatMessages),
+					},
+				)
+				if _, err := s.fileTree.EnsureDirectoryWithMetadata(ctx, userID, rootPath, dirMetadata, models.TrustLevelFull); err != nil {
+					continue
+				}
 
 				if _, err := s.fileTree.WriteEntry(ctx, userID, path, sb.String(), "text/markdown", models.FileTreeWriteOptions{
 					Metadata:      WithSourceMetadata(nil, "claude-web"),

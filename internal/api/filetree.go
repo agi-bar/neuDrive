@@ -448,13 +448,31 @@ func (s *Server) bundleContextForDirectory(ctx context.Context, userID uuid.UUID
 	if s.FileTreeService == nil {
 		return nil
 	}
-	context := services.BundleContextForPath(currentPath, func(path string) (*models.FileTreeEntry, error) {
-		entry, err := s.FileTreeService.Read(ctx, userID, path, trustLevel)
-		if err != nil {
-			return nil, err
-		}
-		return s.renderSystemSkillEntry(ctx, userID, trustLevel, entry), nil
-	})
+	context := services.BundleContextForPath(
+		currentPath,
+		func(path string) (*models.FileTreeEntry, error) {
+			entry, err := s.FileTreeService.Read(ctx, userID, path, trustLevel)
+			if err != nil {
+				return nil, err
+			}
+			return s.renderSystemSkillEntry(ctx, userID, trustLevel, entry), nil
+		},
+		func(path string) ([]models.FileTreeEntry, error) {
+			entries, err := s.FileTreeService.List(ctx, userID, path, trustLevel)
+			if err != nil {
+				return nil, err
+			}
+			rendered := make([]models.FileTreeEntry, 0, len(entries))
+			for idx := range entries {
+				renderedEntry := s.renderSystemSkillEntry(ctx, userID, trustLevel, &entries[idx])
+				if renderedEntry == nil {
+					continue
+				}
+				rendered = append(rendered, *renderedEntry)
+			}
+			return rendered, nil
+		},
+	)
 	return apiBundleContext(context)
 }
 

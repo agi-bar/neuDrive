@@ -175,7 +175,54 @@ func BundleContextFromSummary(summary models.BundleSummary, currentPath string) 
 	}
 }
 
-func BundleContextForPath(currentPath string, readDirectory func(path string) (*models.FileTreeEntry, error)) *models.BundleContext {
+func bundleSummaryForDirectoryPath(
+	currentPath string,
+	readDirectory func(path string) (*models.FileTreeEntry, error),
+	listDirectory func(path string) ([]models.FileTreeEntry, error),
+) *models.BundleSummary {
+	var entry *models.FileTreeEntry
+	if readDirectory != nil {
+		if dirEntry, err := readDirectory(currentPath); err == nil && dirEntry != nil && dirEntry.IsDirectory {
+			entry = dirEntry
+			if summary := BundleSummaryFromMetadata(dirEntry.Path, dirEntry.Metadata, dirEntry.MinTrustLevel); summary != nil {
+				return summary
+			}
+		}
+	}
+
+	if listDirectory == nil {
+		return nil
+	}
+
+	descendants, err := listDirectory(currentPath)
+	if err != nil {
+		return nil
+	}
+
+	dirPath := currentPath
+	var dirMetadata map[string]interface{}
+	minTrust := 0
+	if entry != nil {
+		dirPath = entry.Path
+		dirMetadata = entry.Metadata
+		minTrust = entry.MinTrustLevel
+	}
+
+	summary := bundleSummaryFromDescendants(dirPath, dirMetadata, descendants)
+	if summary == nil {
+		return nil
+	}
+	if summary.MinTrustLevel <= 0 {
+		summary.MinTrustLevel = minTrust
+	}
+	return summary
+}
+
+func BundleContextForPath(
+	currentPath string,
+	readDirectory func(path string) (*models.FileTreeEntry, error),
+	listDirectory func(path string) ([]models.FileTreeEntry, error),
+) *models.BundleContext {
 	current := strings.TrimSuffix(hubpath.NormalizePublic(currentPath), "/")
 	if current == "" || current == "/" {
 		return nil
@@ -183,11 +230,8 @@ func BundleContextForPath(currentPath string, readDirectory func(path string) (*
 	original := current
 
 	for {
-		entry, err := readDirectory(current)
-		if err == nil && entry != nil && entry.IsDirectory {
-			if summary := BundleSummaryFromMetadata(entry.Path, entry.Metadata, entry.MinTrustLevel); summary != nil {
-				return BundleContextFromSummary(*summary, original)
-			}
+		if summary := bundleSummaryForDirectoryPath(current, readDirectory, listDirectory); summary != nil {
+			return BundleContextFromSummary(*summary, original)
 		}
 		if current == "/" {
 			break

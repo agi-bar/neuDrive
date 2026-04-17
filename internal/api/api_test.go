@@ -62,6 +62,74 @@ func TestBodySizeLimitForPath(t *testing.T) {
 	})
 }
 
+func TestTreeSyntheticConversationBundleGetsBundleContext(t *testing.T) {
+	now := time.Date(2026, 4, 17, 4, 0, 0, 0, time.UTC)
+	fileTree := services.NewFileTreeServiceWithRepo(stubFileTreeRepo{
+		readFn: func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) (*models.FileTreeEntry, error) {
+			return nil, services.ErrEntryNotFound
+		},
+		listFn: func(ctx context.Context, userID uuid.UUID, path string, trustLevel int) ([]models.FileTreeEntry, error) {
+			switch path {
+			case "/conversations/claude-web/demo":
+				return []models.FileTreeEntry{
+					{
+						Path:          "/conversations/claude-web/demo/conversation.md",
+						Kind:          "file",
+						Content:       "# Demo Conversation\n\nArchived transcript body.",
+						ContentType:   "text/markdown",
+						Metadata:      map[string]interface{}{"source": "claude-web"},
+						MinTrustLevel: models.TrustLevelGuest,
+						CreatedAt:     now,
+						UpdatedAt:     now,
+					},
+				}, nil
+			default:
+				return nil, services.ErrEntryNotFound
+			}
+		},
+	})
+	ts, _ := newTestServerWithFileTree(fileTree)
+	defer ts.Close()
+
+	resp, err := authGet(ts, "/api/tree/conversations/claude-web/demo")
+	if err != nil {
+		t.Fatalf("GET synthetic conversation bundle: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	body := parseJSON(resp)
+	if got := body["path"]; got != "/conversations/claude-web/demo/" {
+		t.Fatalf("path = %v, want /conversations/claude-web/demo/", got)
+	}
+	bundleContext, ok := body["bundle_context"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("expected bundle_context, got %+v", body["bundle_context"])
+	}
+	if got := bundleContext["kind"]; got != "conversation" {
+		t.Fatalf("bundle_context.kind = %v, want conversation", got)
+	}
+	if got := bundleContext["path"]; got != "/conversations/claude-web/demo" {
+		t.Fatalf("bundle_context.path = %v, want /conversations/claude-web/demo", got)
+	}
+	if got := bundleContext["primary_path"]; got != "/conversations/claude-web/demo/conversation.md" {
+		t.Fatalf("bundle_context.primary_path = %v", got)
+	}
+
+	children, ok := body["children"].([]interface{})
+	if !ok || len(children) != 1 {
+		t.Fatalf("children = %+v, want one child", body["children"])
+	}
+	child, ok := children[0].(map[string]interface{})
+	if !ok {
+		t.Fatalf("child = %+v, want object", children[0])
+	}
+	if got := child["name"]; got != "conversation.md" {
+		t.Fatalf("child name = %v, want conversation.md", got)
+	}
+}
+
 // ---------------------------------------------------------------------------
 // 2. Auth flow
 // ---------------------------------------------------------------------------

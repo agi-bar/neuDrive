@@ -21,6 +21,7 @@ const FilesBrowserPage = lazy(() => import('./pages/data/FilesBrowserPage'))
 const DataFileEditorPage = lazy(() => import('./pages/data/DataFileEditorPage'))
 const DataSkillsPage = lazy(() => import('./pages/data/DataSkillsPage'))
 const DataMemoryPage = lazy(() => import('./pages/data/DataMemoryPage'))
+const ClaudeImportPage = lazy(() => import('./pages/ClaudeImportPage'))
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'))
 const SyncLoginPage = lazy(() => import('./pages/SyncLoginPage'))
 const SkillsImportPage = lazy(() => import('./pages/SkillsImportPage'))
@@ -248,7 +249,7 @@ function App() {
               </div>
             )}
           </div>
-          <NavLink to="/connections" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+          <NavLink to="/connections" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
             <span className="nav-icon">&#9670;</span>
             <span>{tx('平台连接', 'Connections')}</span>
           </NavLink>
@@ -296,6 +297,7 @@ function App() {
             <Route path="/git-mirror" element={<GitMirrorPage />} />
             <Route path="/migrations/claude" element={<ClaudeMigrationPage localMode={localMode} />} />
             <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
+            <Route path="/connections/import/claude" element={<ClaudeImportPage />} />
             <Route path="/data" element={<Outlet />}>
               <Route index element={<Navigate to="files/browse" replace />} />
               <Route path="files/edit/*" element={<DataFileEditorPage />} />

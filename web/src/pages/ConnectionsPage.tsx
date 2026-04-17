@@ -159,6 +159,8 @@ export default function ConnectionsPage() {
       description: tx('在 Claude、ChatGPT、Cursor、Windsurf 等图形界面里，把 neuDrive 添加成远程 MCP Server。', 'Add neuDrive as a remote MCP server in Claude, ChatGPT, Cursor, Windsurf, and other graphical apps.'),
       route: '/setup/web-apps',
       iconClassName: 'icon-device',
+      footerStart: tx('连接设置', 'Setup'),
+      footerEnd: tx('打开说明', 'Open guide'),
     },
     {
       key: 'cloud',
@@ -167,6 +169,8 @@ export default function ConnectionsPage() {
       description: tx('给 Claude Code、Codex CLI、Gemini CLI、Cursor Agent 配置远程 HTTP MCP 和浏览器授权。', 'Configure remote HTTP MCP and browser auth for Claude Code, Codex CLI, Gemini CLI, and Cursor Agent.'),
       route: '/setup/cloud',
       iconClassName: 'icon-sync',
+      footerStart: tx('连接设置', 'Setup'),
+      footerEnd: tx('打开说明', 'Open guide'),
     },
     {
       key: 'local',
@@ -175,6 +179,21 @@ export default function ConnectionsPage() {
       description: tx('通过本地 stdio MCP binary 和 scoped token 接入，适合本机开发或内网环境。', 'Connect through a local stdio MCP binary and scoped token for local development or internal networks.'),
       route: '/setup/local',
       iconClassName: 'icon-file',
+      footerStart: tx('连接设置', 'Setup'),
+      footerEnd: tx('打开说明', 'Open guide'),
+    },
+    {
+      key: 'claude-import',
+      title: tx('Claude 官方导出', 'Claude Official Export'),
+      subtitle: tx('数据导入', 'Data import'),
+      description: tx(
+        '上传 Claude Settings 导出的官方 ZIP，把 memory、conversations 和 project docs 导入 neuDrive。',
+        'Upload the official ZIP exported from Claude Settings to import memory, conversations, and project docs into neuDrive.',
+      ),
+      route: '/connections/import/claude',
+      iconClassName: 'icon-file',
+      footerStart: tx('数据导入', 'Import'),
+      footerEnd: tx('打开导入页', 'Open importer'),
     },
     {
       key: 'advanced',
@@ -183,6 +202,8 @@ export default function ConnectionsPage() {
       description: tx('查看完整命令、环境变量和更底层的配置方式，适合需要自定义接法的场景。', 'Review full commands, environment variables, and lower-level configuration for custom integrations.'),
       route: '/setup/advanced',
       iconClassName: 'icon-stack',
+      footerStart: tx('连接设置', 'Setup'),
+      footerEnd: tx('打开说明', 'Open guide'),
     },
     {
       key: 'gpt-actions',
@@ -191,6 +212,8 @@ export default function ConnectionsPage() {
       description: tx('在自定义 GPT 中通过 OpenAPI 和 Bearer Token 连接 neuDrive。', 'Connect neuDrive to a custom GPT with OpenAPI and a Bearer token.'),
       route: '/setup/gpt-actions',
       iconClassName: 'icon-mail',
+      footerStart: tx('连接设置', 'Setup'),
+      footerEnd: tx('打开说明', 'Open guide'),
     },
   ] as const
 
@@ -324,8 +347,8 @@ export default function ConnectionsPage() {
       <section className="materials-section">
         <div className="materials-section-head">
           <div>
-            <h3 className="materials-section-title">{tx('添加连接', 'Add connection')}</h3>
-            <p className="materials-section-copy">{tx('先选择一种接法，再进入对应说明页完成连接。独立 token 的生成和管理请放到下面的 Token 管理页。', 'Pick a connection method first, then follow its setup guide. Create and manage standalone tokens from the Token Manager page below.')}</p>
+            <h3 className="materials-section-title">{tx('连接与导入', 'Connections and Imports')}</h3>
+            <p className="materials-section-copy">{tx('先选择一种接法进入对应说明页，或直接打开平台数据导入入口。独立 token 的生成和管理请放到下面的 Token 管理页。', 'Pick a connection flow to open its setup guide, or jump directly into a platform import entry. Create and manage standalone tokens from the Token Manager page below.')}</p>
           </div>
           <MaterialsSectionToolbar count={showSetupCards ? setupEntryCards.length : undefined}>
             <button
@@ -348,8 +371,8 @@ export default function ConnectionsPage() {
                 subtitle={entry.subtitle}
                 description={entry.description}
                 path={entry.route}
-                footerStart={tx('连接设置', 'Setup')}
-                footerEnd={tx('打开说明', 'Open guide')}
+                footerStart={entry.footerStart}
+                footerEnd={entry.footerEnd}
                 onOpen={() => navigate(entry.route)}
               />
             ))}

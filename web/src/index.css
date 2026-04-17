@@ -506,6 +506,58 @@ a:hover {
   margin-top: 6px;
 }
 
+.claude-import-input {
+  display: none;
+}
+
+.claude-import-dropzone {
+  margin-top: 18px;
+  padding: 28px 20px;
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.84), rgba(241, 245, 249, 0.92));
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease, transform 0.2s ease;
+}
+
+.claude-import-dropzone:hover {
+  border-color: var(--color-primary);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(232, 235, 247, 0.92));
+}
+
+.claude-import-dropzone.is-dragging {
+  border-color: var(--color-primary);
+  background: linear-gradient(180deg, rgba(236, 253, 245, 0.96), rgba(224, 242, 254, 0.92));
+  transform: translateY(-1px);
+}
+
+.claude-import-dropzone.is-disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.claude-import-dropzone-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.claude-import-dropzone-copy {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--color-text-secondary);
+}
+
+.claude-import-file-meta {
+  margin-top: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-subtle);
+}
+
 @media (max-width: 640px) {
   .sync-login-card {
     padding: 28px 20px;

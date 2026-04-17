@@ -264,12 +264,24 @@ async function doRefreshToken(): Promise<AuthResponse | null> {
 // Core request function with automatic 401 refresh
 // ---------------------------------------------------------------------------
 
+function hasExplicitContentType(headers?: HeadersInit) {
+  if (!headers) return false
+  if (headers instanceof Headers) {
+    return headers.has('Content-Type')
+  }
+  if (Array.isArray(headers)) {
+    return headers.some(([key]) => key.toLowerCase() === 'content-type')
+  }
+  return Object.keys(headers).some((key) => key.toLowerCase() === 'content-type')
+}
+
 async function requestWithMetadata<T>(path: string, options?: RequestInit): Promise<RequestEnvelope<T>> {
   const token = localStorage.getItem('token')
+  const explicitContentType = hasExplicitContentType(options?.headers)
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(!explicitContentType && !(options?.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
@@ -291,7 +303,7 @@ async function requestWithMetadata<T>(path: string, options?: RequestInit): Prom
       const retryRes = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
-          'Content-Type': 'application/json',
+          ...(!explicitContentType && !(options?.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
           Authorization: `Bearer ${refreshResult.access_token}`,
           ...options?.headers,
         },
@@ -337,16 +349,12 @@ async function requestEnvelope<T>(path: string, options?: RequestInit): Promise<
 }
 
 async function agentRequest<T>(path: string, token: string, options?: RequestInit): Promise<T> {
-  const hasExplicitContentType =
-    !!options?.headers &&
-    typeof options.headers === 'object' &&
-    !Array.isArray(options.headers) &&
-    'Content-Type' in options.headers
+  const explicitContentType = hasExplicitContentType(options?.headers)
   const res = await fetch(path, {
     ...options,
     headers: {
       Authorization: `Bearer ${token}`,
-      ...(!hasExplicitContentType && !(options?.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
+      ...(!explicitContentType && !(options?.body instanceof FormData) ? { 'Content-Type': 'application/json' } : {}),
       ...options?.headers,
     },
   })
@@ -574,6 +582,14 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ skills }),
     }),
+  importClaudeData: (file: File) => {
+    const formData = new FormData()
+    formData.append('file', file)
+    return request<ClaudeDataImportResult>('/import/claude-data', {
+      method: 'POST',
+      body: formData,
+    })
+  },
   importClaudeMemory: (memories: ClaudeMemoryItem[]) =>
     request<ImportResult>('/import/claude-memory', {
       method: 'POST',
@@ -837,6 +853,13 @@ export interface ImportResult {
   skipped: number
   errors?: string[]
   skills?: string[]
+}
+
+export interface ClaudeDataImportResult {
+  memories_imported: number
+  conversations_imported: number
+  projects_imported: number
+  files_written: number
 }
 
 // ---------------------------------------------------------------------------

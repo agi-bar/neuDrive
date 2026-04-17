@@ -16,6 +16,21 @@ If you are currently running on a local development address such as `http://loca
 
 These paths are best when the connection is created from a graphical interface, including browser-based Apps / Connectors and desktop applications such as Cursor and Windsurf.
 
+If you want neuDrive inside an existing chat page as a sidecar rather than through native MCP / Apps, start with the [Browser Extension Guide](./browser-extension.md).
+
+### Browser Extension (Chrome / Edge)
+
+Use the extension when you want a lightweight in-page workflow on top of Claude, ChatGPT, Gemini, or Kimi.
+
+Current scope:
+
+- Official neuDrive login or manual `Hub URL + token`
+- Context injection into the current chat box
+- Current conversation import for Claude Web and ChatGPT Web
+- Batch conversation import for Claude Web
+
+Full install and usage instructions: [Browser Extension Guide](./browser-extension.md)
+
 ### Claude Connectors
 
 1. Sign in to the Claude web app and open `Settings -> Connectors -> Go to Customize`.
@@ -86,6 +101,8 @@ Good first prompts:
 - `Please read my neuDrive profile, skills, and recent project context, then summarize what is already there.`
 
 If the client is already looking at a specific workspace, repo, or conversation, it can use that local context while writing into neuDrive. For large file sets or binary assets, prefer [Bundle Sync](./sync.md) after the first setup.
+
+If you need to migrate a large Claude conversation history, the dashboard's official Claude export ZIP importer is usually more complete than browser-side batch import.
 
 ## CLI Apps
 

@@ -201,6 +201,191 @@ body[data-theme="dark"] :root {
   gap: 8px;
 }
 
+.neudrive-main-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.neudrive-batch-page {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 12px;
+  border: 1px solid var(--ah-border);
+  border-radius: 10px;
+  background: var(--ah-bg-secondary);
+}
+
+.neudrive-batch-page-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-bottom: 10px;
+  margin-bottom: 10px;
+  background: var(--ah-bg-secondary);
+  border-bottom: 1px solid var(--ah-border);
+}
+
+.neudrive-batch-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid var(--ah-border);
+  border-radius: 999px;
+  background: var(--ah-bg);
+  color: var(--ah-text);
+  font-size: 12px;
+  font-family: var(--ah-font);
+  cursor: pointer;
+}
+
+.neudrive-batch-back:disabled {
+  cursor: not-allowed;
+  opacity: 0.72;
+}
+
+.neudrive-batch-page-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ah-text);
+}
+
+.neudrive-batch-page-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.neudrive-batch-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.neudrive-batch-select-all {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ah-text);
+}
+
+.neudrive-batch-summary {
+  font-size: 12px;
+  color: var(--ah-text-secondary);
+  text-align: right;
+}
+
+.neudrive-batch-hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ah-text-secondary);
+}
+
+.neudrive-batch-empty {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ah-text-secondary);
+  padding: 10px 12px;
+  border: 1px dashed var(--ah-border);
+  border-radius: 8px;
+  background: var(--ah-bg);
+}
+
+.neudrive-batch-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--ah-border);
+  border-radius: 8px;
+  background: var(--ah-bg);
+}
+
+.neudrive-batch-progress-bar {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.18);
+  overflow: hidden;
+}
+
+.neudrive-batch-progress-fill {
+  width: 0%;
+  height: 100%;
+  background: var(--ah-primary);
+  transition: width 0.2s ease;
+}
+
+.neudrive-batch-progress-text {
+  font-size: 12px;
+  color: var(--ah-text);
+}
+
+.neudrive-batch-warning {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #b45309;
+}
+
+.neudrive-batch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 182px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.neudrive-batch-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--ah-border);
+  border-radius: 8px;
+  background: var(--ah-bg);
+}
+
+.neudrive-batch-item-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  width: 100%;
+  cursor: pointer;
+}
+
+.neudrive-batch-item-checkbox {
+  margin: 2px 0 0;
+}
+
+.neudrive-batch-item-index {
+  min-width: 18px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ah-text-secondary);
+}
+
+.neudrive-batch-item-title {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ah-text);
+  word-break: break-word;
+}
+
+.neudrive-batch-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .neudrive-btn {
   display: flex;
   align-items: center;

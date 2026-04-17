@@ -36,14 +36,17 @@ neuDrive 给每个人一个 Hub。Claude、ChatGPT、Codex、Cursor、Copilot、
 
 按你的接入方式选第一个合适的入口：
 
-1. **Web / Desktop Apps**：最快接入 Claude、ChatGPT、Cursor、Windsurf 等图形界面，并使用官方云服务 + 浏览器授权。[查看文档](docs/setup.zh-CN.md#web-and-desktop-apps)
-2. **CLI Apps**：使用 Claude Code、Codex CLI、Gemini CLI、Cursor Agent，通过 Remote HTTP MCP + OAuth 接入。[查看文档](docs/setup.zh-CN.md#cli-apps)
-3. **本地模式**：仓库内本地开发、局域网环境，或者当前还没有公网 HTTPS 地址。[查看文档](docs/setup.zh-CN.md#local-mode)
-4. **高级模式 / GPT Actions / Adapters**：通用 MCP 客户端、自定义 GPT、Feishu / webhook 等更进阶的接法。[查看文档](docs/setup.zh-CN.md#advanced-mode)
+1. **浏览器插件**：面向 Chrome / Edge，在 Claude、ChatGPT、Gemini、Kimi 页面里完成官方登录、上下文注入和对话导入。[查看文档](docs/browser-extension.zh-CN.md)
+2. **Web / Desktop Apps**：最快接入 Claude、ChatGPT、Cursor、Windsurf 等图形界面，并使用官方云服务 + 浏览器授权。[查看文档](docs/setup.zh-CN.md#web-and-desktop-apps)
+3. **CLI Apps**：使用 Claude Code、Codex CLI、Gemini CLI、Cursor Agent，通过 Remote HTTP MCP + OAuth 接入。[查看文档](docs/setup.zh-CN.md#cli-apps)
+4. **本地模式**：仓库内本地开发、局域网环境，或者当前还没有公网 HTTPS 地址。[查看文档](docs/setup.zh-CN.md#local-mode)
+5. **高级模式 / GPT Actions / Adapters**：通用 MCP 客户端、自定义 GPT、Feishu / webhook 等更进阶的接法。[查看文档](docs/setup.zh-CN.md#advanced-mode)
 
 ## Web / Desktop Apps
 
 如果你是从 Claude 网页版、ChatGPT、Cursor 或 Windsurf 这类图形界面发起连接，先看这一节。
+
+如果你更希望在现有聊天网页里直接使用一个 sidecar，而不是通过 MCP / Apps 原生接入，优先看[浏览器插件指南](docs/browser-extension.zh-CN.md)。
 
 ### Claude Connectors
 
@@ -106,6 +109,7 @@ neu login
 
 先看这些：
 
+- [浏览器插件指南](docs/browser-extension.zh-CN.md)
 - [接入说明](docs/setup.zh-CN.md)
 - [CLI 使用手册](docs/cli.zh-CN.md)
 - [详细参考](docs/reference.zh-CN.md)
@@ -113,6 +117,7 @@ neu login
 英文文档：
 
 - [README](README.md)
+- [Browser Extension Guide](docs/browser-extension.md)
 - [Setup Guide](docs/setup.md)
 - [CLI Guide](docs/cli.md)
 - [Reference](docs/reference.md)

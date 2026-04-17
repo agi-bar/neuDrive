@@ -16,6 +16,21 @@
 
 这一类适合通过图形界面完成连接的场景，包括浏览器里的 Apps / Connectors，以及像 Cursor、Windsurf 这样的桌面应用。
 
+如果你更想在现有聊天网页里直接挂一个 sidecar，而不是走原生 MCP / Apps 接入，先看[浏览器插件指南](./browser-extension.zh-CN.md)。
+
+### 浏览器插件（Chrome / Edge）
+
+如果你想直接在 Claude、ChatGPT、Gemini、Kimi 页面里使用 neuDrive，推荐先用浏览器插件。
+
+当前能力包括：
+
+- 使用 neuDrive 官方登录，或手动配置 `Hub URL + token`
+- 把 neuDrive 上下文注入当前聊天输入框
+- 在 Claude Web 和 ChatGPT Web 导入当前对话
+- 在 Claude Web 批量导入多条对话
+
+完整安装与使用说明见：[浏览器插件指南](./browser-extension.zh-CN.md)
+
 ### Claude Connectors
 
 1. 登录 Claude 网页应用，进入 `Settings -> Connectors -> Go to Customize`。
@@ -86,6 +101,8 @@ Windsurf 当前主要通过配置文件接入远程 MCP：
 - `请读取我在 neuDrive 中已有的 profile、skills 和最近的项目上下文，并告诉我里面已经有什么内容。`
 
 如果客户端当前已经打开了某个工作区、仓库或对话，它通常可以直接利用这些本地上下文，把内容写进 neuDrive。遇到大文件集合或二进制资源时，建议完成首次接入后改用 [Bundle Sync](./sync.md)。
+
+如果你需要迁移大量 Claude 历史对话，dashboard 里的 Claude 官方导出 ZIP 导入器通常会比浏览器侧批量导入更完整、更稳定。
 
 ## CLI Apps
 

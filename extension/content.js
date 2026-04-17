@@ -92,7 +92,14 @@
   let isConnected = false;
   let manualConfigVisible = false;
   let importInFlight = false;
+  let claudeBatchPreviewRefs = [];
+  let claudeBatchPreviewTimer = null;
+  let claudeBatchSelection = {};
+  let claudeBatchDefaultSelected = true;
+  let claudeBatchViewVisible = false;
   const supportsConversationImport = ['claude.ai', 'chat.openai.com', 'chatgpt.com'].includes(hostname);
+  const supportsClaudeConversationBatchImport = hostname === 'claude.ai';
+  const IMPORT_ACTIONS = ['import-current-conversation', 'confirm-batch-import', 'load-more-conversations'];
 
   // --- UI Creation ---
 
@@ -114,11 +121,58 @@
   function createPanel() {
     const panel = document.createElement('div');
     panel.id = 'neudrive-panel';
-    const importAction = supportsConversationImport ? `
-          <button class="neudrive-btn neudrive-btn-primary-lite" data-action="import-current-conversation">
-            <span class="neudrive-btn-icon">&#8681;</span>
-            导入当前对话
+    const mainImportActions = supportsConversationImport ? `
+      <button class="neudrive-btn neudrive-btn-primary-lite" data-action="import-current-conversation">
+        <span class="neudrive-btn-icon">&#8681;</span>
+        导入当前对话
+      </button>
+      ${supportsClaudeConversationBatchImport ? `
+      <button class="neudrive-btn" data-action="open-batch-import">
+        <span class="neudrive-btn-icon">&#9776;</span>
+        批量导入对话
+      </button>
+      ` : ''}
+    ` : '';
+    const batchImportView = supportsClaudeConversationBatchImport ? `
+      <div id="neudrive-batch-page" class="neudrive-batch-page" style="display:none;">
+        <div class="neudrive-batch-page-top">
+          <button id="neudrive-batch-back" class="neudrive-batch-back" type="button">
+            <span class="neudrive-btn-icon">&#8592;</span>
+            返回
           </button>
+          <div class="neudrive-batch-page-title">批量导入 Claude 对话</div>
+        </div>
+        <div class="neudrive-batch-page-body">
+          <p class="neudrive-batch-hint">滚动 Claude 左侧栏时，当前可抓取的会话列表会自动变化。默认全选；你也可以手动取消部分会话。</p>
+          <div class="neudrive-batch-toolbar">
+            <label class="neudrive-batch-select-all">
+              <input id="neudrive-batch-select-all" type="checkbox" />
+              <span>全选</span>
+            </label>
+            <div id="neudrive-batch-summary" class="neudrive-batch-summary">正在读取当前列表…</div>
+          </div>
+          <div id="neudrive-batch-progress" class="neudrive-batch-progress" style="display:none;">
+            <div class="neudrive-batch-progress-bar">
+              <div id="neudrive-batch-progress-fill" class="neudrive-batch-progress-fill"></div>
+            </div>
+            <div id="neudrive-batch-progress-text" class="neudrive-batch-progress-text"></div>
+            <div id="neudrive-batch-warning" class="neudrive-batch-warning">导入进行中，请不要关闭当前页面、切换账号或刷新 Claude。</div>
+          </div>
+          <div id="neudrive-batch-empty" class="neudrive-batch-empty" style="display:none;">当前还没有抓到可导入的对话。先展开 Claude 左侧栏，或点“尽量加载更多历史”。</div>
+          <div id="neudrive-batch-list" class="neudrive-batch-list" style="display:none;"></div>
+          <p id="neudrive-batch-status" class="neudrive-inline-message" style="display:none;"></p>
+          <div class="neudrive-batch-actions">
+            <button class="neudrive-btn" data-action="load-more-conversations">
+              <span class="neudrive-btn-icon">&#8645;</span>
+              尽量加载更多历史
+            </button>
+            <button class="neudrive-btn neudrive-btn-primary-lite" data-action="confirm-batch-import">
+              <span class="neudrive-btn-icon">&#10003;</span>
+              确认导入
+            </button>
+          </div>
+        </div>
+      </div>
     ` : '';
     panel.innerHTML = `
       <div class="neudrive-panel-header">
@@ -129,20 +183,23 @@
         <div id="neudrive-status" class="neudrive-status">检查连接中...</div>
         <div id="neudrive-profile" class="neudrive-profile" style="display:none;"></div>
         <div id="neudrive-actions" class="neudrive-actions" style="display:none;">
-          ${importAction}
-          <button class="neudrive-btn" data-action="inject-preferences">
-            <span class="neudrive-btn-icon">&#9881;</span>
-            注入偏好
-          </button>
-          <button class="neudrive-btn" data-action="inject-project">
-            <span class="neudrive-btn-icon">&#128193;</span>
-            注入项目上下文
-          </button>
-          <button class="neudrive-btn" data-action="inject-skills">
-            <span class="neudrive-btn-icon">&#9889;</span>
-            注入技能
-          </button>
-          <p id="neudrive-action-status" class="neudrive-inline-message" style="display:none;"></p>
+          <div id="neudrive-main-actions" class="neudrive-main-actions">
+            ${mainImportActions}
+            <button class="neudrive-btn" data-action="inject-preferences">
+              <span class="neudrive-btn-icon">&#9881;</span>
+              注入偏好
+            </button>
+            <button class="neudrive-btn" data-action="inject-project">
+              <span class="neudrive-btn-icon">&#128193;</span>
+              注入项目上下文
+            </button>
+            <button class="neudrive-btn" data-action="inject-skills">
+              <span class="neudrive-btn-icon">&#9889;</span>
+              注入技能
+            </button>
+            <p id="neudrive-action-status" class="neudrive-inline-message" style="display:none;"></p>
+          </div>
+          ${batchImportView}
         </div>
         <div id="neudrive-not-connected" style="display:none;">
           <p id="neudrive-hint" class="neudrive-hint">首次使用可以直接登录 neuDrive 官方版，或手动填写 Hub URL 和 Token。</p>
@@ -180,6 +237,11 @@
     panel.querySelectorAll('.neudrive-btn[data-action]').forEach(btn => {
       btn.addEventListener('click', () => handleInjectAction(btn.dataset.action));
     });
+    if (supportsClaudeConversationBatchImport) {
+      panel.querySelector('#neudrive-batch-back').addEventListener('click', closeBatchImportPage);
+      panel.querySelector('#neudrive-batch-select-all').addEventListener('change', handleBatchSelectAllChange);
+      panel.querySelector('#neudrive-batch-list').addEventListener('change', handleBatchItemSelectionChange);
+    }
     panel.querySelector('#neudrive-btn-official-login').addEventListener('click', handleOfficialLogin);
     panel.querySelector('#neudrive-btn-manual-toggle').addEventListener('click', () => toggleManualConfig());
     panel.querySelector('#neudrive-btn-manual-connect').addEventListener('click', handleManualConnect);
@@ -203,6 +265,11 @@
   }
 
   function togglePanel() {
+    if (panelVisible && importInFlight && claudeBatchViewVisible) {
+      showBatchStatus('批量导入进行中，请先等待当前任务完成。', true);
+      showToast('批量导入进行中，请先等待当前任务完成。', 3200);
+      return;
+    }
     panelVisible = !panelVisible;
     const panel = document.getElementById('neudrive-panel');
     const fab = document.getElementById('neudrive-fab');
@@ -213,8 +280,50 @@
       fab.classList.toggle('neudrive-fab-active', panelVisible);
     }
     if (panelVisible) {
+      updateBatchViewVisibility();
       refreshStatus();
+      startClaudeBatchPreviewSync();
+    } else {
+      stopClaudeBatchPreviewSync();
     }
+  }
+
+  function updateBatchViewVisibility() {
+    const mainActionsEl = document.getElementById('neudrive-main-actions');
+    const batchPageEl = document.getElementById('neudrive-batch-page');
+    if (mainActionsEl) {
+      mainActionsEl.style.display = claudeBatchViewVisible ? 'none' : 'flex';
+    }
+    if (batchPageEl) {
+      batchPageEl.style.display = claudeBatchViewVisible ? 'flex' : 'none';
+    }
+  }
+
+  function openBatchImportPage() {
+    if (!supportsClaudeConversationBatchImport) {
+      return;
+    }
+    claudeBatchViewVisible = true;
+    claudeBatchDefaultSelected = true;
+    claudeBatchSelection = {};
+    updateBatchViewVisibility();
+    clearBatchStatus();
+    setBatchProgress(null);
+    refreshClaudeBatchPreview();
+    startClaudeBatchPreviewSync();
+  }
+
+  function closeBatchImportPage() {
+    if (importInFlight) {
+      showBatchStatus('正在导入中，请等待当前任务完成。', true);
+      return;
+    }
+    claudeBatchViewVisible = false;
+    updateBatchViewVisibility();
+    clearBatchStatus();
+    setBatchProgress(null);
+    stopClaudeBatchPreviewSync();
+    showActionStatus('', false);
   }
 
   // --- Status & Profile ---
@@ -246,18 +355,23 @@
         notConnectedEl.style.display = 'none';
         toggleManualConfig(false);
         showManualMessage('', false);
+        if (claudeBatchViewVisible) {
+          refreshClaudeBatchPreview();
+        }
       } else if (status.configured && !status.connected) {
         statusEl.innerHTML = '<span class="neudrive-dot neudrive-dot-err"></span> 连接失败';
         profileEl.style.display = 'none';
         actionsEl.style.display = 'none';
         notConnectedEl.style.display = 'block';
         hintEl.textContent = status.error || '当前保存的连接不可用。你可以重新登录官方版，或改用手动配置。';
+        renderClaudeBatchPreview([]);
       } else {
         statusEl.innerHTML = '<span class="neudrive-dot neudrive-dot-off"></span> 未配置';
         profileEl.style.display = 'none';
         actionsEl.style.display = 'none';
         notConnectedEl.style.display = 'block';
         hintEl.textContent = '首次使用可以直接登录 neuDrive 官方版，或手动填写 Hub URL 和 Token。';
+        renderClaudeBatchPreview([]);
       }
     } catch (err) {
       statusEl.innerHTML = '<span class="neudrive-dot neudrive-dot-err"></span> 错误';
@@ -279,19 +393,91 @@
     messageEl.className = `neudrive-inline-message ${isError ? 'neudrive-inline-message-error' : 'neudrive-inline-message-success'}`;
   }
 
+  function showBatchStatus(text, isError) {
+    const messageEl = document.getElementById('neudrive-batch-status');
+    if (!messageEl) return;
+    if (!text) {
+      messageEl.style.display = 'none';
+      messageEl.textContent = '';
+      messageEl.className = 'neudrive-inline-message';
+      return;
+    }
+    messageEl.style.display = 'block';
+    messageEl.textContent = text;
+    messageEl.className = `neudrive-inline-message ${isError ? 'neudrive-inline-message-error' : 'neudrive-inline-message-success'}`;
+  }
+
+  function clearBatchStatus() {
+    showBatchStatus('', false);
+  }
+
+  function setBatchProgress(progress) {
+    const progressEl = document.getElementById('neudrive-batch-progress');
+    const fillEl = document.getElementById('neudrive-batch-progress-fill');
+    const textEl = document.getElementById('neudrive-batch-progress-text');
+    const warningEl = document.getElementById('neudrive-batch-warning');
+    if (!progressEl || !fillEl || !textEl || !warningEl) {
+      return;
+    }
+
+    if (!progress || !progress.visible) {
+      progressEl.style.display = 'none';
+      fillEl.style.width = '0%';
+      textEl.textContent = '';
+      warningEl.style.display = 'none';
+      return;
+    }
+
+    const total = Math.max(0, Number(progress.total || 0));
+    const current = Math.max(0, Math.min(total || 0, Number(progress.current || 0)));
+    const ratio = total > 0 ? current / total : 0;
+    progressEl.style.display = 'flex';
+    fillEl.style.width = `${Math.max(0, Math.min(100, Math.round(ratio * 100)))}%`;
+    textEl.textContent = progress.message || '';
+    warningEl.style.display = progress.showWarning ? 'block' : 'none';
+  }
+
   function setActionBusy(action, busy, busyLabel) {
-    const button = document.querySelector(`.neudrive-btn[data-action="${action}"]`);
-    if (!button) return;
-    if (!button.dataset.defaultHtml) {
-      button.dataset.defaultHtml = button.innerHTML;
+    const buttons = Array.from(document.querySelectorAll('.neudrive-btn[data-action]'));
+    buttons.forEach(button => {
+      const buttonAction = button.dataset.action;
+      if (!buttonAction) return;
+      if (!button.dataset.defaultHtml) {
+        button.dataset.defaultHtml = button.innerHTML;
+      }
+      if (IMPORT_ACTIONS.includes(action) && IMPORT_ACTIONS.includes(buttonAction)) {
+        button.disabled = busy;
+        button.classList.toggle('neudrive-btn-busy', busy && buttonAction === action);
+        button.innerHTML = (busy && buttonAction === action)
+          ? `<span class="neudrive-btn-icon">&#8987;</span>${busyLabel || '处理中...'}`
+          : button.dataset.defaultHtml;
+        return;
+      }
+      if (buttonAction !== action) {
+        return;
+      }
+      button.disabled = busy;
+      button.classList.toggle('neudrive-btn-busy', busy);
+      button.innerHTML = busy
+        ? `<span class="neudrive-btn-icon">&#8987;</span>${busyLabel || '处理中...'}`
+        : button.dataset.defaultHtml;
+    });
+    updateBatchSelectionControlsState();
+  }
+
+  function updateBatchSelectionControlsState() {
+    const selectAll = document.getElementById('neudrive-batch-select-all');
+    const backButton = document.getElementById('neudrive-batch-back');
+    const itemCheckboxes = Array.from(document.querySelectorAll('.neudrive-batch-item-checkbox'));
+    if (selectAll) {
+      selectAll.disabled = importInFlight;
     }
-    button.disabled = busy;
-    button.classList.toggle('neudrive-btn-busy', busy);
-    if (busy) {
-      button.innerHTML = `<span class="neudrive-btn-icon">&#8987;</span>${busyLabel || '处理中...'}`;
-    } else {
-      button.innerHTML = button.dataset.defaultHtml;
+    if (backButton) {
+      backButton.disabled = importInFlight;
     }
+    itemCheckboxes.forEach(checkbox => {
+      checkbox.disabled = importInFlight;
+    });
   }
 
   async function preloadManualConfig() {
@@ -382,6 +568,10 @@
       let contextText = '';
 
       switch (action) {
+        case 'open-batch-import': {
+          openBatchImportPage();
+          return;
+        }
         case 'import-current-conversation': {
           if (importInFlight) {
             showActionStatus('正在导入当前对话，请稍候…', false);
@@ -395,6 +585,89 @@
           const result = await importCurrentConversation();
           showActionStatus(`已导入 ${result.turnCount} 条消息，主文件已整理成可读 transcript。`, false);
           showToast(`已导入 ${result.turnCount} 条消息`, 4200);
+          return;
+        }
+        case 'confirm-batch-import': {
+          if (importInFlight) {
+            showBatchStatus('已有批量导入任务在进行中，请稍候…', false);
+            showToast('已有批量导入任务在进行中，请稍候…', 3200);
+            return;
+          }
+          const selectedRefs = getSelectedClaudeBatchRefs();
+          if (selectedRefs.length === 0) {
+            throw new Error('当前没有选中任何对话。');
+          }
+          importInFlight = true;
+          setActionBusy(action, true, '批量导入中...');
+          clearBatchStatus();
+          setBatchProgress({
+            visible: true,
+            current: 0,
+            total: selectedRefs.length,
+            message: `准备导入 0/${selectedRefs.length} 个对话…`,
+            showWarning: true,
+          });
+          showToast(`准备导入 ${selectedRefs.length} 个对话…`, 3200);
+          const result = await importClaudeConversationBatch(selectedRefs, {
+            action,
+            onProgress({ completedCount, totalCount, currentRef, overrideMessage }) {
+              const label = currentRef?.title || currentRef?.conversationId || '';
+              setBatchProgress({
+                visible: true,
+                current: completedCount,
+                total: totalCount,
+                message: overrideMessage || `正在导入 ${completedCount}/${totalCount}：${truncateMiddle(label, 34)}`,
+                showWarning: true,
+              });
+            },
+          });
+          const summary = formatConversationBatchSummary(result);
+          showBatchStatus(summary, result.failureCount > 0);
+          setBatchProgress({
+            visible: true,
+            current: result.totalCount,
+            total: result.totalCount,
+            message: summary,
+            showWarning: false,
+          });
+          showToast(summary, 4600);
+          return;
+        }
+        case 'load-more-conversations': {
+          if (importInFlight) {
+            showBatchStatus('已有导入或扫描任务在进行中，请稍候…', false);
+            showToast('已有导入或扫描任务在进行中，请稍候…', 3200);
+            return;
+          }
+          importInFlight = true;
+          setActionBusy(action, true, '加载更多中...');
+          clearBatchStatus();
+          setBatchProgress({
+            visible: true,
+            current: 0,
+            total: 1,
+            message: '正在滚动 Claude 侧栏，尽量把更多历史对话加载出来…',
+            showWarning: false,
+          });
+          showToast('正在滚动 Claude 侧栏，尽量把更多历史对话加载出来…', 3200);
+          const discovery = await collectAllClaudeConversationRefs({
+            onProgress(refCount) {
+              setBatchProgress({
+                visible: true,
+                current: 0,
+                total: 1,
+                message: `正在扫描 Claude 侧栏，当前列表里已有 ${refCount} 个对话…`,
+                showWarning: false,
+              });
+            },
+          });
+          renderClaudeBatchPreview(discovery.refs);
+          const summary = discovery.usedAutoScroll
+            ? `当前待导入列表里有 ${discovery.refs.length} 个对话。确认后再点“确认导入”。`
+            : `当前待导入列表里有 ${discovery.refs.length} 个对话。`;
+          showBatchStatus(summary, false);
+          setBatchProgress(null);
+          showToast(summary, 4200);
           return;
         }
         case 'inject-preferences': {
@@ -433,14 +706,18 @@
       }
     } catch (err) {
       console.error('[NeuDrive] Inject failed:', err);
-      if (action === 'import-current-conversation') {
+      if (action === 'confirm-batch-import' || action === 'load-more-conversations') {
+        showBatchStatus(`导入失败：${err.message}`, true);
+        setBatchProgress(null);
+      } else if (IMPORT_ACTIONS.includes(action)) {
         showActionStatus(`导入失败：${err.message}`, true);
       }
       showToast('注入失败: ' + err.message);
     } finally {
-      if (action === 'import-current-conversation') {
+      if (IMPORT_ACTIONS.includes(action)) {
         importInFlight = false;
         setActionBusy(action, false);
+        refreshClaudeBatchPreview();
       }
     }
   }
@@ -490,6 +767,117 @@
     return sendMessage('importCurrentConversation', payload);
   }
 
+  async function importClaudeConversationBatch(refs, { action, onProgress } = {}) {
+    if (hostname !== 'claude.ai') {
+      throw new Error('批量导入目前仅支持 Claude Web');
+    }
+    if (refs.length === 0) {
+      throw new Error('没有在 Claude 侧栏里发现可导入的对话。请先展开左侧栏，再重试。');
+    }
+
+    const organizations = await fetchClaudeOrganizations();
+    if (organizations.length === 0) {
+      throw new Error('未找到 Claude organization');
+    }
+
+    let successCount = 0;
+    let failureCount = 0;
+    let turnCount = 0;
+    const failures = [];
+    const interConversationDelayMs = 900;
+
+    for (let index = 0; index < refs.length; index += 1) {
+      const ref = refs[index];
+      const shortTitle = truncateMiddle(ref.title || ref.conversationId, 42);
+      onProgress?.({
+        completedCount: index,
+        totalCount: refs.length,
+        currentRef: ref,
+      });
+      if (!claudeBatchViewVisible) {
+        showBatchStatus(`正在导入 ${index + 1}/${refs.length}：${shortTitle}`, false);
+      }
+
+      try {
+        const result = await importSingleClaudeConversationWithRetry(ref, organizations, {
+          onRateLimit({ delayMs, source }) {
+            const sourceLabel = source === 'claude' ? 'Claude' : 'neuDrive';
+            const waitSeconds = Math.ceil(delayMs / 1000);
+            const message = `${sourceLabel} 触发限流，等待 ${waitSeconds} 秒后重试… (${index + 1}/${refs.length})`;
+            showBatchStatus(message, false);
+            onProgress?.({
+              completedCount: index,
+              totalCount: refs.length,
+              currentRef: ref,
+              overrideMessage: message,
+            });
+          },
+        });
+        successCount += 1;
+        turnCount += Number(result?.turnCount || 0);
+      } catch (err) {
+        const failureInfo = classifyClaudeBatchImportError(err);
+        failureCount += 1;
+        failures.push({
+          conversationId: ref.conversationId,
+          title: ref.title || '',
+          kind: failureInfo.kind,
+          message: failureInfo.message,
+        });
+        console.warn('[NeuDrive] Claude batch import failed for conversation:', ref.conversationId, err);
+      }
+
+      if (index < refs.length - 1) {
+        await wait(interConversationDelayMs);
+      }
+    }
+
+    onProgress?.({
+      completedCount: refs.length,
+      totalCount: refs.length,
+      currentRef: refs[refs.length - 1] || null,
+    });
+
+    if (failureCount > 0 && successCount === 0) {
+      throw new Error(`共发现 ${refs.length} 个对话，但全部导入失败。第一条错误：${failures[0]?.message || '未知错误'}`);
+    }
+
+    return {
+      action,
+      totalCount: refs.length,
+      successCount,
+      failureCount,
+      turnCount,
+      failures,
+    };
+  }
+
+  async function importSingleClaudeConversationWithRetry(ref, organizations, { onRateLimit } = {}) {
+    const retryDelays = [4000, 8000, 12000];
+
+    for (let attempt = 0; attempt <= retryDelays.length; attempt += 1) {
+      try {
+        const payload = await buildClaudeConversationImportPayloadForConversation(ref, organizations);
+        return await sendMessage('importCurrentConversation', payload);
+      } catch (err) {
+        if (!isRateLimitError(err) || attempt >= retryDelays.length) {
+          throw err;
+        }
+        const delayMs = retryDelays[attempt];
+        onRateLimit?.({
+          attempt: attempt + 1,
+          maxAttempts: retryDelays.length + 1,
+          delayMs,
+          source: inferRateLimitSource(err),
+          error: err,
+        });
+        await wait(delayMs + Math.floor(Math.random() * 400));
+      }
+    }
+
+    throw new Error('批量导入重试失败');
+  }
+
   function buildChatGPTConversationImportPayload() {
     const turns = collectConversationTurns();
     if (turns.length === 0) {
@@ -534,6 +922,22 @@
     }
 
     const organizations = await fetchClaudeOrganizations();
+    return buildClaudeConversationImportPayloadForConversation({
+      conversationId,
+      title: getConversationTitle(),
+      url: window.location.href,
+    }, organizations);
+  }
+
+  async function buildClaudeConversationImportPayloadForConversation(ref, organizationsInput) {
+    const conversationId = ref?.conversationId || '';
+    if (!conversationId) {
+      throw new Error('缺少 Claude conversation id');
+    }
+
+    const organizations = Array.isArray(organizationsInput) && organizationsInput.length > 0
+      ? organizationsInput
+      : await fetchClaudeOrganizations();
     if (organizations.length === 0) {
       throw new Error('未找到 Claude organization');
     }
@@ -559,16 +963,20 @@
           throw new Error('Claude API 返回了会话，但没有可归档的消息内容');
         }
 
+        const title = sanitizeImportText(conversation?.name) || sanitizeImportText(ref?.title) || getConversationTitle();
+        const url = ref?.url || buildClaudeConversationUrl(conversationId);
+        const messageCount = Array.isArray(conversation?.chat_messages) ? conversation.chat_messages.length : turns.length;
+
         return {
           sourcePlatform: 'claude-web',
-          title: sanitizeImportText(conversation?.name) || getConversationTitle(),
-          url: window.location.href,
+          title,
+          url,
           conversationId,
           importStrategy: 'claude-api',
           normalizedConversation: buildNormalizedConversation({
             sourcePlatform: 'claude-web',
-            title: sanitizeImportText(conversation?.name) || getConversationTitle(),
-            url: window.location.href,
+            title,
+            url,
             conversationId,
             importStrategy: 'claude-api',
             model: conversation?.model || '',
@@ -577,7 +985,7 @@
             provenance: {
               organization_id: orgId,
               branch_message_count: branchMessages.length,
-              message_count: Array.isArray(conversation?.chat_messages) ? conversation.chat_messages.length : turns.length,
+              message_count: messageCount,
             },
             turns: branchMessages
               .map((message, index) => buildNormalizedTurnFromClaudeMessage(message, index))
@@ -586,7 +994,7 @@
           extraMetadata: {
             organization_id: orgId,
             branch_message_count: branchMessages.length,
-            message_count: Array.isArray(conversation?.chat_messages) ? conversation.chat_messages.length : turns.length,
+            message_count: messageCount,
             created_at: conversation?.created_at || '',
             updated_at: conversation?.updated_at || '',
             model: conversation?.model || '',
@@ -597,7 +1005,7 @@
       }
     }
 
-    throw lastError || new Error('无法通过 Claude API 获取当前会话');
+    throw lastError || new Error('无法通过 Claude API 获取会话');
   }
 
   async function fetchClaudeOrganizations() {
@@ -969,6 +1377,374 @@
     if (hostname === 'claude.ai') return 'claude-web';
     if (hostname === 'chat.openai.com' || hostname === 'chatgpt.com') return 'chatgpt-web';
     return hostname;
+  }
+
+  function startClaudeBatchPreviewSync() {
+    if (!supportsClaudeConversationBatchImport || claudeBatchPreviewTimer || !claudeBatchViewVisible) {
+      return;
+    }
+    refreshClaudeBatchPreview();
+    claudeBatchPreviewTimer = window.setInterval(() => {
+      refreshClaudeBatchPreview();
+    }, 1200);
+  }
+
+  function stopClaudeBatchPreviewSync() {
+    if (!claudeBatchPreviewTimer) {
+      return;
+    }
+    window.clearInterval(claudeBatchPreviewTimer);
+    claudeBatchPreviewTimer = null;
+  }
+
+  function refreshClaudeBatchPreview() {
+    if (!supportsClaudeConversationBatchImport) {
+      return;
+    }
+    const refs = panelVisible && isConnected && claudeBatchViewVisible
+      ? (importInFlight ? claudeBatchPreviewRefs : collectLoadedClaudeConversationRefs())
+      : [];
+    renderClaudeBatchPreview(refs);
+  }
+
+  function renderClaudeBatchPreview(refs) {
+    if (!supportsClaudeConversationBatchImport) {
+      return;
+    }
+    claudeBatchPreviewRefs = Array.isArray(refs) ? refs.slice() : [];
+    syncClaudeBatchSelection(claudeBatchPreviewRefs);
+
+    const summaryEl = document.getElementById('neudrive-batch-summary');
+    const emptyEl = document.getElementById('neudrive-batch-empty');
+    const listEl = document.getElementById('neudrive-batch-list');
+    const importButton = document.querySelector('.neudrive-btn[data-action="confirm-batch-import"]');
+    const selectAll = document.getElementById('neudrive-batch-select-all');
+    if (!summaryEl || !emptyEl || !listEl || !importButton || !selectAll) {
+      return;
+    }
+
+    const count = claudeBatchPreviewRefs.length;
+    const selectedRefs = getSelectedClaudeBatchRefs();
+    const selectedCount = selectedRefs.length;
+    summaryEl.textContent = count > 0
+      ? `已选 ${selectedCount}/${count} 个对话`
+      : '当前还没有抓到可导入对话';
+    emptyEl.style.display = count === 0 ? 'block' : 'none';
+    listEl.style.display = count > 0 ? 'flex' : 'none';
+    importButton.disabled = importInFlight || selectedCount === 0;
+    selectAll.checked = count > 0 && selectedCount === count;
+    selectAll.indeterminate = selectedCount > 0 && selectedCount < count;
+
+    if (count === 0) {
+      listEl.innerHTML = '';
+      updateBatchSelectionControlsState();
+      return;
+    }
+
+    listEl.innerHTML = claudeBatchPreviewRefs
+      .map((ref, index) => `
+        <div class="neudrive-batch-item" title="${escapeHtml(ref.title || ref.conversationId)}">
+          <label class="neudrive-batch-item-label">
+            <input
+              class="neudrive-batch-item-checkbox"
+              type="checkbox"
+              data-conversation-id="${escapeHtml(ref.conversationId)}"
+              ${claudeBatchSelection[ref.conversationId] ? 'checked' : ''}
+            />
+            <span class="neudrive-batch-item-index">${index + 1}</span>
+            <span class="neudrive-batch-item-title">${escapeHtml(ref.title || ref.conversationId)}</span>
+          </label>
+        </div>
+      `)
+      .join('');
+    updateBatchSelectionControlsState();
+  }
+
+  function syncClaudeBatchSelection(refs) {
+    const nextSelection = {};
+    refs.forEach(ref => {
+      if (Object.prototype.hasOwnProperty.call(claudeBatchSelection, ref.conversationId)) {
+        nextSelection[ref.conversationId] = Boolean(claudeBatchSelection[ref.conversationId]);
+      } else {
+        nextSelection[ref.conversationId] = claudeBatchDefaultSelected;
+      }
+    });
+    claudeBatchSelection = nextSelection;
+  }
+
+  function getSelectedClaudeBatchRefs() {
+    return claudeBatchPreviewRefs.filter(ref => Boolean(claudeBatchSelection[ref.conversationId]));
+  }
+
+  function handleBatchSelectAllChange(event) {
+    const checked = Boolean(event.target?.checked);
+    claudeBatchDefaultSelected = checked;
+    claudeBatchPreviewRefs.forEach(ref => {
+      claudeBatchSelection[ref.conversationId] = checked;
+    });
+    renderClaudeBatchPreview(claudeBatchPreviewRefs);
+  }
+
+  function handleBatchItemSelectionChange(event) {
+    const checkbox = event.target;
+    if (!(checkbox instanceof HTMLInputElement) || checkbox.type !== 'checkbox') {
+      return;
+    }
+    const conversationId = checkbox.dataset.conversationId || '';
+    if (!conversationId) {
+      return;
+    }
+    claudeBatchSelection[conversationId] = checkbox.checked;
+    renderClaudeBatchPreview(claudeBatchPreviewRefs);
+  }
+
+  function collectLoadedClaudeConversationRefs() {
+    if (hostname !== 'claude.ai') {
+      return [];
+    }
+
+    const refs = [];
+    const seen = new Set();
+    const anchors = Array.from(document.querySelectorAll('a[href^="/chat/"], a[href*="://claude.ai/chat/"]'));
+
+    anchors.forEach(anchor => {
+      if (!isLikelyClaudeSidebarLink(anchor)) {
+        return;
+      }
+      const ref = buildClaudeConversationRefFromAnchor(anchor);
+      if (!ref || seen.has(ref.conversationId)) {
+        return;
+      }
+      seen.add(ref.conversationId);
+      refs.push(ref);
+    });
+
+    const currentConversationId = getConversationId();
+    if (currentConversationId && !seen.has(currentConversationId)) {
+      refs.unshift({
+        conversationId: currentConversationId,
+        title: getConversationTitle(),
+        url: window.location.href,
+      });
+    }
+
+    return refs;
+  }
+
+  async function collectAllClaudeConversationRefs({ onProgress } = {}) {
+    const initialRefs = collectLoadedClaudeConversationRefs();
+    onProgress?.(initialRefs.length);
+
+    const scrollContainer = findClaudeSidebarScrollContainer();
+    if (!scrollContainer) {
+      return {
+        refs: initialRefs,
+        usedAutoScroll: false,
+      };
+    }
+
+    const initialScrollTop = scrollContainer.scrollTop;
+    let refs = initialRefs;
+    let stalePasses = 0;
+    let previousCount = refs.length;
+    let previousHeight = scrollContainer.scrollHeight;
+
+    for (let attempt = 0; attempt < 45 && stalePasses < 4; attempt += 1) {
+      const step = Math.max(320, Math.floor(scrollContainer.clientHeight * 0.85));
+      const maxTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+      const nextTop = Math.min(maxTop, scrollContainer.scrollTop + step);
+      const moved = nextTop !== scrollContainer.scrollTop;
+      scrollContainer.scrollTop = nextTop;
+      scrollContainer.dispatchEvent(new Event('scroll', { bubbles: true }));
+      await wait(420);
+
+      refs = collectLoadedClaudeConversationRefs();
+      onProgress?.(refs.length);
+
+      const countChanged = refs.length !== previousCount;
+      const heightChanged = scrollContainer.scrollHeight !== previousHeight;
+      const atBottom = scrollContainer.scrollTop + scrollContainer.clientHeight >= scrollContainer.scrollHeight - 12;
+
+      if (countChanged || heightChanged || moved && !atBottom) {
+        stalePasses = 0;
+      } else {
+        stalePasses += 1;
+      }
+
+      previousCount = refs.length;
+      previousHeight = scrollContainer.scrollHeight;
+    }
+
+    scrollContainer.scrollTop = initialScrollTop;
+    return {
+      refs,
+      usedAutoScroll: true,
+    };
+  }
+
+  function findClaudeSidebarScrollContainer() {
+    const refs = collectLoadedClaudeConversationRefs();
+    const anchors = refs.length > 0
+      ? refs
+        .map(ref => document.querySelector(`a[href$="/chat/${CSS.escape(ref.conversationId)}"], a[href="/chat/${CSS.escape(ref.conversationId)}"]`))
+        .filter(Boolean)
+      : Array.from(document.querySelectorAll('a[href^="/chat/"], a[href*="://claude.ai/chat/"]')).filter(isLikelyClaudeSidebarLink);
+
+    for (const anchor of anchors) {
+      let current = anchor.parentElement;
+      while (current && current !== document.body) {
+        if (isScrollableContainer(current)) {
+          return current;
+        }
+        current = current.parentElement;
+      }
+    }
+
+    return Array.from(document.querySelectorAll('aside, nav, [role="navigation"], [class*="sidebar"], [class*="Sidebar"]'))
+      .find(isScrollableContainer) || null;
+  }
+
+  function isScrollableContainer(element) {
+    if (!element) return false;
+    const style = window.getComputedStyle(element);
+    const overflowY = style.overflowY;
+    const scrollable = overflowY === 'auto' || overflowY === 'scroll' || overflowY === 'overlay';
+    return scrollable && element.scrollHeight > element.clientHeight + 24 && element.clientHeight > 120;
+  }
+
+  function isLikelyClaudeSidebarLink(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      return false;
+    }
+    const url = buildClaudeConversationRefFromAnchor(anchor);
+    if (!url) {
+      return false;
+    }
+    return Boolean(
+      anchor.closest('aside, nav, [role="navigation"], [data-testid*="sidebar"], [class*="sidebar"], [class*="Sidebar"]')
+      || anchor.parentElement?.querySelector('svg')
+      || anchor.getAttribute('aria-current') === 'page'
+    );
+  }
+
+  function buildClaudeConversationRefFromAnchor(anchor) {
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      return null;
+    }
+    let url;
+    try {
+      url = new URL(anchor.href, window.location.origin);
+    } catch {
+      return null;
+    }
+    if (url.origin !== window.location.origin) {
+      return null;
+    }
+    const match = url.pathname.match(/^\/chat\/([a-z0-9_-]{8,})$/i);
+    if (!match) {
+      return null;
+    }
+    const title = sanitizeImportText(
+      anchor.getAttribute('aria-label')
+      || anchor.getAttribute('title')
+      || anchor.textContent
+      || ''
+    ).replace(/\n+/g, ' ').trim();
+    return {
+      conversationId: match[1],
+      title: title || `Claude conversation ${match[1]}`,
+      url: url.toString(),
+    };
+  }
+
+  function buildClaudeConversationUrl(conversationId) {
+    return `${window.location.origin}/chat/${encodeURIComponent(conversationId)}`;
+  }
+
+  function truncateMiddle(text, maxLength) {
+    const value = String(text || '');
+    if (value.length <= maxLength) {
+      return value;
+    }
+    const sideLength = Math.max(8, Math.floor((maxLength - 1) / 2));
+    return `${value.slice(0, sideLength)}…${value.slice(-sideLength)}`;
+  }
+
+  function formatConversationBatchSummary(result) {
+    const importedPart = `已导入 ${result.successCount}/${result.totalCount} 个对话`;
+    const turnPart = result.turnCount > 0 ? `，共 ${result.turnCount} 条消息` : '';
+    const failureDetails = summarizeBatchFailures(result.failures || []);
+    if (result.failureCount === 0) {
+      return `${importedPart}${turnPart}。`;
+    }
+    return `${importedPart}${turnPart}，失败 ${result.failureCount} 个${failureDetails ? `（${failureDetails}）` : ''}。`;
+  }
+
+  function summarizeBatchFailures(failures) {
+    const items = Array.isArray(failures) ? failures : [];
+    if (items.length === 0) {
+      return '';
+    }
+    const counts = items.reduce((acc, item) => {
+      const key = item?.kind || 'other';
+      acc[key] = (acc[key] || 0) + 1;
+      return acc;
+    }, {});
+    const parts = [];
+    if (counts.rate_limit) {
+      parts.push(`限流 ${counts.rate_limit} 个`);
+    }
+    if (counts.forbidden) {
+      parts.push(`不可访问 ${counts.forbidden} 个`);
+    }
+    if (counts.other) {
+      parts.push(`其他错误 ${counts.other} 个`);
+    }
+    return parts.join('，');
+  }
+
+  function classifyClaudeBatchImportError(err) {
+    const status = getErrorStatus(err);
+    if (status === 429 || isRateLimitError(err)) {
+      return {
+        kind: 'rate_limit',
+        message: '触发限流，自动重试后仍然失败',
+      };
+    }
+    if (status === 403) {
+      return {
+        kind: 'forbidden',
+        message: '当前登录态无法读取这个 Claude 会话，可能是旧会话、其他 workspace，或 Claude 暂时拒绝访问',
+      };
+    }
+    return {
+      kind: 'other',
+      message: err?.message || '未知错误',
+    };
+  }
+
+  function isRateLimitError(err) {
+    const message = String(err?.message || '').toLowerCase();
+    const status = getErrorStatus(err);
+    return status === 429 || message.includes('rate limit');
+  }
+
+  function inferRateLimitSource(err) {
+    const message = String(err?.message || '').toLowerCase();
+    if (message.includes('读取 claude 会话失败')) {
+      return 'claude';
+    }
+    return 'neudrive';
+  }
+
+  function getErrorStatus(err) {
+    const message = String(err?.message || '');
+    const match = message.match(/\b(4\d{2}|5\d{2})\b/);
+    return match ? Number(match[1]) : 0;
+  }
+
+  function wait(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
   }
 
   // --- Chat Input Interaction ---

@@ -32,14 +32,17 @@ Hosted service examples in this repo use:
 
 Choose the first path that matches how you want to connect:
 
-1. **Web / Desktop Apps**: fastest path for Claude, ChatGPT, Cursor, and Windsurf through hosted neuDrive with browser auth. [Open guide](docs/setup.md#web-and-desktop-apps)
-2. **CLI Apps**: Claude Code, Codex CLI, Gemini CLI, and Cursor Agent with remote HTTP MCP + OAuth. [Open guide](docs/setup.md#cli-apps)
-3. **Local Mode**: repo-first local development, LAN setups, or any environment without a public HTTPS URL yet. [Open guide](docs/setup.md#local-mode)
-4. **Advanced Mode / GPT Actions / Adapters**: generic HTTP MCP clients, custom GPTs, and webhook-style integrations such as Feishu. [Open guide](docs/setup.md#advanced-mode)
+1. **Browser Extension**: Chrome / Edge sidecar for Claude, ChatGPT, Gemini, and Kimi with hosted login, context injection, and conversation import. [Open guide](docs/browser-extension.md)
+2. **Web / Desktop Apps**: fastest path for Claude, ChatGPT, Cursor, and Windsurf through hosted neuDrive with browser auth. [Open guide](docs/setup.md#web-and-desktop-apps)
+3. **CLI Apps**: Claude Code, Codex CLI, Gemini CLI, and Cursor Agent with remote HTTP MCP + OAuth. [Open guide](docs/setup.md#cli-apps)
+4. **Local Mode**: repo-first local development, LAN setups, or any environment without a public HTTPS URL yet. [Open guide](docs/setup.md#local-mode)
+5. **Advanced Mode / GPT Actions / Adapters**: generic HTTP MCP clients, custom GPTs, and webhook-style integrations such as Feishu. [Open guide](docs/setup.md#advanced-mode)
 
 ## Web and Desktop Apps
 
 Use this when the connection starts from a graphical interface such as Claude web, ChatGPT, Cursor, or Windsurf.
+
+If you want a lighter-weight sidecar experience inside existing chat pages instead of MCP / Apps, use the [Browser Extension Guide](docs/browser-extension.md).
 
 ### Claude Connectors
 
@@ -102,6 +105,7 @@ This opens a browser login flow, saves the hosted `official` profile locally, an
 
 Start here:
 
+- [Browser Extension Guide](docs/browser-extension.md)
 - [Setup Guide](docs/setup.md)
 - [CLI Guide](docs/cli.md)
 - [Reference](docs/reference.md)
@@ -109,6 +113,7 @@ Start here:
 Chinese docs:
 
 - [Chinese README](README.zh-CN.md)
+- [Chinese Browser Extension Guide](docs/browser-extension.zh-CN.md)
 - [Chinese Setup Guide](docs/setup.zh-CN.md)
 - [Chinese CLI Guide](docs/cli.zh-CN.md)
 - [Chinese Reference](docs/reference.zh-CN.md)

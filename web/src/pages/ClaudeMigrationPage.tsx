@@ -335,6 +335,9 @@ export default function ClaudeMigrationPage({
             <Link to="/" className="btn btn-primary">
               {tx("返回概览", "Back to overview")}
             </Link>
+            <Link to="/imports/claude-export" className="btn">
+              {tx("Claude 导出 ZIP", "Claude Export ZIP")}
+            </Link>
             <Link to="/connections" className="btn">
               {tx("查看连接", "View connections")}
             </Link>
@@ -394,6 +397,9 @@ export default function ClaudeMigrationPage({
               </div>
             </div>
             <div className="page-actions">
+              <Link to="/imports/claude-export" className="btn">
+                {tx("Claude 导出 ZIP", "Claude Export ZIP")}
+              </Link>
               <button
                 className="btn"
                 type="button"

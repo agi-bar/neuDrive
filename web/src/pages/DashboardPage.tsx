@@ -260,6 +260,9 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
             <Link to="/imports/claude" className="btn btn-primary">
               {tx('打开迁移报告', 'Open migration report')}
             </Link>
+            <Link to="/imports/claude-export" className="btn">
+              {tx('导入 Claude 官方导出', 'Import Claude official export')}
+            </Link>
             <Link to="/connections" className="btn">
               {tx('查看平台连接', 'View connections')}
             </Link>

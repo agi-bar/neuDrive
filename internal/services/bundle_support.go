@@ -232,6 +232,9 @@ func bundleSummaryFromDescendants(dirPath string, dirMetadata map[string]interfa
 	if summary := projectBundleSummaryFromDescendants(dirPath, dirMetadata, descendants); summary != nil {
 		return summary
 	}
+	if summary := conversationBundleSummaryFromDescendants(dirPath, dirMetadata, descendants); summary != nil {
+		return summary
+	}
 	return BundleSummaryFromMetadata(dirPath, dirMetadata, 0)
 }
 
@@ -358,6 +361,149 @@ func projectBundleSummaryFromDescendants(dirPath string, dirMetadata map[string]
 		Capabilities:  uniqueSortedStrings(capabilities),
 		MinTrustLevel: minTrust,
 	}
+}
+
+func conversationBundleSummaryFromDescendants(dirPath string, dirMetadata map[string]interface{}, descendants []models.FileTreeEntry) *models.BundleSummary {
+	publicDir := strings.TrimSuffix(hubpath.NormalizePublic(dirPath), "/")
+	if !strings.HasPrefix(publicDir, "/conversations/") {
+		return nil
+	}
+
+	transcriptPath := publicDir + "/conversation.md"
+	sidecarPath := publicDir + "/conversation.json"
+	claudeResumePath := publicDir + "/resume-claude.md"
+	chatGPTResumePath := publicDir + "/resume-chatgpt.md"
+
+	var transcriptEntry *models.FileTreeEntry
+	var sidecarEntry *models.FileTreeEntry
+	var claudeResumeEntry *models.FileTreeEntry
+	var chatGPTResumeEntry *models.FileTreeEntry
+
+	for idx := range descendants {
+		publicPath := hubpath.NormalizePublic(descendants[idx].Path)
+		switch publicPath {
+		case transcriptPath:
+			transcriptEntry = &descendants[idx]
+		case sidecarPath:
+			sidecarEntry = &descendants[idx]
+		case claudeResumePath:
+			claudeResumeEntry = &descendants[idx]
+		case chatGPTResumePath:
+			chatGPTResumeEntry = &descendants[idx]
+		}
+	}
+
+	if transcriptEntry == nil && sidecarEntry == nil && claudeResumeEntry == nil && chatGPTResumeEntry == nil {
+		return BundleSummaryFromMetadata(dirPath, dirMetadata, 0)
+	}
+
+	source := firstNonEmpty(
+		EntrySourceFromMetadata(dirMetadata),
+		func() string {
+			if transcriptEntry != nil {
+				return EntrySource(transcriptEntry)
+			}
+			return ""
+		}(),
+		func() string {
+			if sidecarEntry != nil {
+				return EntrySource(sidecarEntry)
+			}
+			return ""
+		}(),
+		conversationSourceFromPath(publicDir),
+	)
+
+	name := firstNonEmpty(
+		metadataString(dirMetadata, "conversation_title"),
+		metadataString(dirMetadata, "bundle_name"),
+		func() string {
+			if transcriptEntry != nil {
+				return firstMarkdownHeading(transcriptEntry.Content)
+			}
+			return ""
+		}(),
+		pathpkg.Base(publicDir),
+	)
+
+	capabilities := []string{}
+	if transcriptEntry != nil {
+		capabilities = append(capabilities, "transcript")
+	}
+	if sidecarEntry != nil {
+		capabilities = append(capabilities, "normalized")
+	}
+	if claudeResumeEntry != nil {
+		capabilities = append(capabilities, "resume-claude")
+	}
+	if chatGPTResumeEntry != nil {
+		capabilities = append(capabilities, "resume-chatgpt")
+	}
+
+	minTrust := 0
+	for _, entry := range []*models.FileTreeEntry{transcriptEntry, sidecarEntry, claudeResumeEntry, chatGPTResumeEntry} {
+		if entry != nil {
+			minTrust = maxInt(minTrust, entry.MinTrustLevel)
+		}
+	}
+
+	primaryPath := metadataString(dirMetadata, "bundle_primary_path")
+	if primaryPath == "" {
+		switch {
+		case transcriptEntry != nil:
+			primaryPath = transcriptPath
+		case sidecarEntry != nil:
+			primaryPath = sidecarPath
+		case claudeResumeEntry != nil:
+			primaryPath = claudeResumePath
+		case chatGPTResumeEntry != nil:
+			primaryPath = chatGPTResumePath
+		}
+	}
+
+	return &models.BundleSummary{
+		Kind:          BundleKindConversation,
+		Name:          name,
+		Path:          publicDir,
+		Source:        source,
+		Description:   metadataString(dirMetadata, "description"),
+		PrimaryPath:   primaryPath,
+		Capabilities:  uniqueSortedStrings(capabilities),
+		MinTrustLevel: minTrust,
+	}
+}
+
+func conversationSourceFromPath(publicDir string) string {
+	trimmed := strings.TrimPrefix(strings.TrimPrefix(publicDir, "/"), "conversations/")
+	parts := strings.Split(trimmed, "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	return parts[0]
+}
+
+func firstMarkdownHeading(markdown string) string {
+	lines := strings.Split(markdown, "\n")
+	inFrontmatter := false
+
+	for idx, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if idx == 0 && trimmed == "---" {
+			inFrontmatter = true
+			continue
+		}
+		if inFrontmatter {
+			if trimmed == "---" {
+				inFrontmatter = false
+			}
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			return strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+		}
+	}
+
+	return ""
 }
 
 func skillBundleCapabilities(dirPath string, descendants []models.FileTreeEntry) []string {

@@ -282,6 +282,7 @@ func (c *Client) ImportAgentExport(ctx context.Context, platform string, payload
 	} else if written != "" {
 		result.Artifacts++
 		result.Archived += len(payload.Unsupported)
+		result.Blocked += len(payload.Unsupported)
 		result.Paths = append(result.Paths, written)
 	}
 	if content := renderNotes(payload.Notes); strings.TrimSpace(content) != "" {
@@ -332,6 +333,10 @@ func (c *Client) writeAgentArtifact(ctx context.Context, platform, filename stri
 func isEmptyPayload(payload any) bool {
 	switch typed := payload.(type) {
 	case []AgentRecord:
+		return len(typed) == 0
+	case []AgentSensitiveFinding:
+		return len(typed) == 0
+	case []AgentVaultCandidate:
 		return len(typed) == 0
 	default:
 		return payload == nil

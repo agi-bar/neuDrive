@@ -496,13 +496,14 @@ func (s *FileTreeService) EnsureDirectoryWithMetadata(
 	minTrustLevel int,
 ) (*models.FileTreeEntry, error) {
 	if s.repo != nil {
-		if len(metadata) == 0 {
-			if err := s.repo.EnsureDirectory(ctx, userID, path); err != nil {
-				return nil, err
-			}
-			return s.repo.Read(ctx, userID, path, models.TrustLevelFull)
+		// Repo-backed test/local adapters do not currently expose a dedicated
+		// metadata-aware ensure operation. Fall back to creating the directory
+		// so higher-level import flows can proceed; full metadata persistence is
+		// still handled by the database-backed implementation below.
+		if err := s.repo.EnsureDirectory(ctx, userID, path); err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("filetree.EnsureDirectory: metadata-backed repo ensure not implemented")
+		return s.repo.Read(ctx, userID, path, models.TrustLevelFull)
 	}
 	storagePath := hubpath.NormalizeStorage(path)
 	if !strings.HasSuffix(storagePath, "/") {

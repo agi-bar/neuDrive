@@ -338,13 +338,11 @@ async function writeConversationArchiveSplit({
   await deleteConversationArchiveRoot(rootPath);
   const transcriptPath = `${rootPath}/conversation.md`;
   const conversationPath = `${rootPath}/conversation.json`;
-  const exportPaths = buildConversationExportPaths(rootPath);
   await ensureConversationArchiveDirectory({
     rootPath,
     conversation: normalizedConversation,
     transcriptPath,
     conversationPath,
-    exportPaths,
     sourcePlatform,
     metadata: extraMetadata,
   });
@@ -359,32 +357,12 @@ async function writeConversationArchiveSplit({
     },
   });
 
-  for (const target of CONVERSATION_EXPORT_TARGETS) {
-    const exportPath = exportPaths[target];
-    if (!exportPath) continue;
-    await writePortableArtifact({
-      basePath: exportPath,
-      content: renderConversationContinuationMarkdown(normalizedConversation, target),
-      mimeType: 'text/markdown',
-      sourcePlatform,
-      metadata: {
-        ...extraMetadata,
-        import_kind: 'conversation_archive_export',
-        storage_mode: 'compact',
-        target_platform: target,
-        transcript_path: transcriptEntry.path,
-        conversation_path: conversationPath,
-      },
-    });
-  }
-
   const conversationEntry = await writePortableArtifact({
     basePath: conversationPath,
     content: JSON.stringify({
       ...normalizedConversation,
       message_count: normalizedConversation.turn_count || (Array.isArray(normalizedConversation.turns) ? normalizedConversation.turns.length : 0),
       transcript_path: transcriptEntry.path,
-      exports: exportPaths,
     }) + '\n',
     mimeType: 'application/json',
     sourcePlatform,
@@ -398,7 +376,6 @@ async function writeConversationArchiveSplit({
   return {
     path: transcriptEntry.path,
     conversationPath: conversationEntry.path,
-    exportPaths,
     turnCount: normalizedConversation.turns.length,
     title,
     storageMode: 'compact',
@@ -564,19 +541,11 @@ function buildConversationSplitRoot(sourcePlatform, baseName) {
   return `/conversations/${sourcePlatform}/${baseName}-compact`;
 }
 
-function buildConversationExportPaths(rootPath) {
-  return {
-    claude: `${rootPath}/resume-claude.md`,
-    chatgpt: `${rootPath}/resume-chatgpt.md`,
-  };
-}
-
 async function ensureConversationArchiveDirectory({
   rootPath,
   conversation,
   transcriptPath,
   conversationPath,
-  exportPaths,
   sourcePlatform,
   metadata,
 }) {
@@ -586,7 +555,7 @@ async function ensureConversationArchiveDirectory({
     sourcePlatform,
     metadata: {
       ...metadata,
-      ...buildConversationBundleMetadata(conversation, transcriptPath, conversationPath, exportPaths),
+      ...buildConversationBundleMetadata(conversation, transcriptPath, conversationPath),
     },
   });
 }
@@ -788,9 +757,7 @@ function normalizedConversationToMarkdown(conversation, options = {}) {
   return lines.join('\n').trim() + '\n';
 }
 
-const CONVERSATION_EXPORT_TARGETS = ['claude', 'chatgpt'];
-
-function buildConversationBundleMetadata(conversation, transcriptPath, conversationPath, exportPaths) {
+function buildConversationBundleMetadata(conversation, transcriptPath, conversationPath) {
   const messageCount = getConversationMessageCount(conversation);
   const timeline = getConversationTimeline(conversation);
   return {
@@ -814,10 +781,9 @@ function buildConversationBundleMetadata(conversation, transcriptPath, conversat
     description: conversationBundleDescription(conversation),
     status: 'archived',
     bundle_primary_path: transcriptPath,
-    bundle_capabilities: ['transcript', 'normalized', 'exports'],
+    bundle_capabilities: ['transcript', 'normalized'],
     conversation_transcript_path: transcriptPath,
     conversation_path: conversationPath,
-    conversation_exports: exportPaths,
   };
 }
 
@@ -860,98 +826,6 @@ function getConversationTimeline(conversation) {
   }
 
   return { startedAt, endedAt };
-}
-
-function renderConversationContinuationMarkdown(conversation, target) {
-  const normalizedTarget = normalizeConversationExportTarget(target);
-  const targetLabel = conversationExportTargetLabel(normalizedTarget);
-  const title = conversation.title || 'Conversation';
-  const lines = [
-    '---',
-    `title: "${escapeYaml(`Resume ${title} in ${targetLabel}`)}"`,
-    `target_platform: "${escapeYaml(normalizedTarget)}"`,
-    `source_platform: "${escapeYaml(conversation.source_platform || '')}"`,
-    `generated_from: "${escapeYaml(conversation.version || 'neudrive.conversation/v1')}"`,
-    `turn_count: ${Array.isArray(conversation.turns) ? conversation.turns.length : 0}`,
-  ];
-
-  if (conversation.source_conversation_id) {
-    lines.push(`source_conversation_id: "${escapeYaml(conversation.source_conversation_id)}"`);
-  }
-  if (conversation.project_name) {
-    lines.push(`project_name: "${escapeYaml(conversation.project_name)}"`);
-  }
-
-  lines.push('---', '', `# Resume ${title} in ${targetLabel}`, '');
-  lines.push(`Paste the prompt below into a new ${targetLabel} conversation or project chat when you want to continue from this archived context.`);
-  lines.push('');
-  lines.push('## Resume Prompt', '');
-  lines.push(`Continue the conversation below. It was imported into neuDrive from \`${conversation.source_platform || 'unknown-platform'}\`.`);
-  lines.push('- Preserve speaker order and chronology.');
-  lines.push('- Treat tool calls and tool results as historical context unless the user explicitly asks to rerun them.');
-  lines.push('- Do not restate the full transcript unless asked.');
-  lines.push('- Continue naturally from the latest turn or respond to the next user message.');
-  lines.push('');
-  lines.push('## Transcript', '', '```text', normalizedConversationToPortableTranscript(conversation), '```');
-  return lines.join('\n').trim() + '\n';
-}
-
-function normalizeConversationExportTarget(target) {
-  return String(target || '').toLowerCase() === 'chatgpt' ? 'chatgpt' : 'claude';
-}
-
-function conversationExportTargetLabel(target) {
-  return normalizeConversationExportTarget(target) === 'chatgpt' ? 'ChatGPT' : 'Claude';
-}
-
-function normalizedConversationToPortableTranscript(conversation) {
-  const turns = Array.isArray(conversation.turns) ? conversation.turns : [];
-  const blocks = turns.map(turn => {
-    const headerParts = [capitalize(turn.role || 'turn')];
-    if (turn.at) headerParts.push(turn.at);
-    if (turn.source_message_kind) headerParts.push(turn.source_message_kind);
-    const body = (turn.parts || [])
-      .map(renderPortableConversationPart)
-      .filter(Boolean)
-      .join('\n\n')
-      .trim();
-    if (!body) return '';
-    return `[${headerParts.join(' | ')}]\n${body}`;
-  }).filter(Boolean);
-
-  return blocks.length > 0 ? blocks.join('\n\n') : '[Conversation]\n(no turns captured)';
-}
-
-function renderPortableConversationPart(part) {
-  if (!part || typeof part !== 'object') {
-    return '';
-  }
-
-  switch (part.type) {
-    case 'text':
-    case '':
-      return sanitizeBlockText(part.text || '');
-    case 'thinking':
-      return part.text ? `Thinking:\n${sanitizeBlockText(part.text)}` : '';
-    case 'tool_call': {
-      const lines = [`Tool call: ${part.name || 'tool'}`];
-      if (part.args_text) {
-        lines.push('Args:');
-        lines.push(part.args_text);
-      }
-      return lines.join('\n');
-    }
-    case 'tool_result':
-      return part.text ? `Tool result:\n${sanitizeBlockText(part.text)}` : 'Tool result captured.';
-    case 'attachment': {
-      const meta = [];
-      if (part.file_name) meta.push(`name=${part.file_name}`);
-      if (part.mime_type) meta.push(`mime=${part.mime_type}`);
-      return meta.length ? `Attachment: ${meta.join(', ')}` : 'Attachment captured.';
-    }
-    default:
-      return part.text ? `${capitalize(part.type || 'content')}:\n${sanitizeBlockText(part.text)}` : '';
-  }
 }
 
 function renderNormalizedTurnText(turn, options = {}) {

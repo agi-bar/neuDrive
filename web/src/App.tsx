@@ -22,6 +22,7 @@ const DataFileEditorPage = lazy(() => import('./pages/data/DataFileEditorPage'))
 const DataSkillsPage = lazy(() => import('./pages/data/DataSkillsPage'))
 const DataMemoryPage = lazy(() => import('./pages/data/DataMemoryPage'))
 const DataConversationsPage = lazy(() => import('./pages/data/DataConversationsPage'))
+const ClaudeImportPage = lazy(() => import('./pages/ClaudeImportPage'))
 const SystemSettingsPage = lazy(() => import('./pages/SystemSettingsPage'))
 const SyncLoginPage = lazy(() => import('./pages/SyncLoginPage'))
 const SkillsImportPage = lazy(() => import('./pages/SkillsImportPage'))
@@ -332,7 +333,10 @@ function App() {
                   aria-label={tx('数据导入子菜单', 'Data imports navigation submenu')}
                 >
                   <NavLink to="/imports/claude" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
-                    Claude
+                    {tx('Claude Code', 'Claude Code')}
+                  </NavLink>
+                  <NavLink to="/imports/claude-export" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                    {tx('Claude 导出 ZIP', 'Claude Export ZIP')}
                   </NavLink>
                 </div>
               )}
@@ -381,6 +385,7 @@ function App() {
             </Route>
             <Route path="/git-mirror" element={<GitMirrorPage />} />
             <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
+            <Route path="/connections/import/claude" element={<ClaudeImportPage />} />
             <Route path="/data" element={<Outlet />}>
               <Route index element={<Navigate to="files/browse" replace />} />
               <Route path="files/edit/*" element={<DataFileEditorPage />} />
@@ -403,6 +408,7 @@ function App() {
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/imports" element={<Navigate to="/imports/claude" replace />} />
             <Route path="/imports/claude" element={<ClaudeMigrationPage localMode={localMode} />} />
+            <Route path="/imports/claude-export" element={<ClaudeImportPage />} />
             <Route path="/info" element={<Navigate to="/data/profile" replace />} />
             <Route path="/projects" element={<Navigate to="/data/projects" replace />} />
             <Route path="/collaborations" element={<Navigate to="/" replace />} />

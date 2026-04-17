@@ -273,10 +273,17 @@ async function requestWithMetadata<T>(
   options?: RequestInit,
 ): Promise<RequestEnvelope<T>> {
   const token = localStorage.getItem("token");
+  const hasExplicitContentType =
+    !!options?.headers &&
+    typeof options.headers === "object" &&
+    !Array.isArray(options.headers) &&
+    "Content-Type" in options.headers;
   const res = await fetch(`${API_BASE}${path}`, {
     ...options,
     headers: {
-      "Content-Type": "application/json",
+      ...(!hasExplicitContentType && !(options?.body instanceof FormData)
+        ? { "Content-Type": "application/json" }
+        : {}),
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options?.headers,
     },
@@ -298,7 +305,9 @@ async function requestWithMetadata<T>(
       const retryRes = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers: {
-          "Content-Type": "application/json",
+          ...(!hasExplicitContentType && !(options?.body instanceof FormData)
+            ? { "Content-Type": "application/json" }
+            : {}),
           Authorization: `Bearer ${refreshResult.access_token}`,
           ...options?.headers,
         },
@@ -650,6 +659,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ memories }),
     }),
+  importClaudeData: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return request<ClaudeDataImportResult>('/import/claude-data', {
+      method: 'POST',
+      body: form,
+    })
+  },
   importProfile: (profile: ImportProfileRequest) =>
     request<ImportResult>("/import/profile", {
       method: "POST",
@@ -1084,6 +1101,13 @@ export interface LocalPlatformImportSummary {
   mode: "agent" | "files" | "all";
   files?: LocalPlatformFilesImportResult;
   agent?: LocalPlatformAgentImportResult;
+}
+
+export interface ClaudeDataImportResult {
+  memories_imported: number;
+  conversations_imported: number;
+  projects_imported: number;
+  files_written: number;
 }
 
 // ---------------------------------------------------------------------------

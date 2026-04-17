@@ -15,7 +15,6 @@ import {
   bundleBrowsePath,
   bundleInfoFromNode,
   bundleRelativeDirFromPath,
-  conversationBundleKeyFromPath,
   dataConversationBundleRoute,
   dataFileEditorRoute,
   fileNodeSource,
@@ -30,24 +29,16 @@ import {
   type MaterialsSortKey,
 } from './DataShared'
 
-function exportFilePath(bundlePath: string, target: 'claude' | 'chatgpt') {
-  return `${bundlePath.replace(/\/+$/, '')}/resume-${target}.md`
-}
-
 function transcriptFilePath(bundlePath: string) {
   return `${bundlePath.replace(/\/+$/, '')}/conversation.md`
 }
 
-function triggerTextDownload(content: string, filename: string) {
-  const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const anchor = document.createElement('a')
-  anchor.href = url
-  anchor.download = filename
-  document.body.appendChild(anchor)
-  anchor.click()
-  document.body.removeChild(anchor)
-  URL.revokeObjectURL(url)
+function isConversationBundleNode(node: FileNode | null | undefined) {
+  return Boolean(node?.is_dir && bundleInfoFromNode(node)?.kind === 'conversation')
+}
+
+function isLegacyConversationExportFile(node: FileNode) {
+  return !node.is_dir && (node.name === 'resume-claude.md' || node.name === 'resume-chatgpt.md')
 }
 
 type ConversationBundleMeta = {
@@ -220,7 +211,6 @@ export default function DataConversationsPage() {
   const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
   const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
   const [sourceFilter, setSourceFilter] = useState('all')
-  const [exportingTarget, setExportingTarget] = useState<string | null>(null)
   const { closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
 
   const load = useCallback(async () => {
@@ -240,12 +230,27 @@ export default function DataConversationsPage() {
         return
       }
 
-      const snapshot = await api.getTreeSnapshot('/conversations')
-      const nextBundles = snapshot.entries.filter((entry) => {
-        if (!entry.is_dir) return false
-        return bundleInfoFromNode(entry)?.kind === 'conversation'
-      })
-      setBundles(nextBundles)
+      const rootNode = await api.getTree('/conversations')
+      const rootChildren = rootNode.children || []
+      const nextBundlesByPath = new Map<string, FileNode>()
+
+      for (const child of rootChildren) {
+        if (isConversationBundleNode(child)) {
+          nextBundlesByPath.set(child.path, child)
+        }
+      }
+
+      const platformDirs = rootChildren.filter((child) => child.is_dir && !isConversationBundleNode(child))
+      const platformResults = await Promise.allSettled(platformDirs.map((child) => api.getTree(child.path)))
+      for (const result of platformResults) {
+        if (result.status !== 'fulfilled') continue
+        for (const child of result.value.children || []) {
+          if (!isConversationBundleNode(child)) continue
+          nextBundlesByPath.set(child.path, child)
+        }
+      }
+
+      setBundles(Array.from(nextBundlesByPath.values()))
       setBundleNode(null)
       setBundleRootNode(null)
       setSelectedBundlePath(null)
@@ -273,7 +278,10 @@ export default function DataConversationsPage() {
   const currentConversationMeta = bundleRootNode
     ? conversationBundleMeta(bundleRootNode)
     : (bundleNode ? conversationBundleMeta(bundleNode) : null)
-  const bundleEntries = bundleNode?.children || []
+  const bundleEntries = useMemo(
+    () => (bundleNode?.children || []).filter((entry) => !isLegacyConversationExportFile(entry)),
+    [bundleNode?.children],
+  )
   const selectedDeletePath = isBundleView ? selectedEntryPath : selectedBundlePath
   const canDeleteSelection = Boolean(selectedDeletePath)
 
@@ -307,8 +315,8 @@ export default function DataConversationsPage() {
         getName: (entry) => entry.name,
         getUpdatedAt: (entry) => entry.updated_at || entry.created_at,
         groupComparator: (left, right) => {
-          const leftPriority = left.name === 'conversation.md' ? -3 : left.name === 'resume-claude.md' ? -2 : left.name === 'resume-chatgpt.md' ? -1 : 0
-          const rightPriority = right.name === 'conversation.md' ? -3 : right.name === 'resume-claude.md' ? -2 : right.name === 'resume-chatgpt.md' ? -1 : 0
+          const leftPriority = left.name === 'conversation.md' ? -1 : 0
+          const rightPriority = right.name === 'conversation.md' ? -1 : 0
           if (leftPriority !== rightPriority) return leftPriority - rightPriority
           if (left.is_dir !== right.is_dir) return left.is_dir ? -1 : 1
           return 0
@@ -349,20 +357,6 @@ export default function DataConversationsPage() {
     }
   }, [closeMenu, tx])
 
-  const handleExport = useCallback(async (bundlePath: string, target: 'claude' | 'chatgpt') => {
-    const exportPath = exportFilePath(bundlePath, target)
-    setExportingTarget(`${bundlePath}:${target}`)
-    setError('')
-    try {
-      const node = await api.getTree(exportPath)
-      triggerTextDownload(node.content || '', `${conversationBundleKeyFromPath(bundlePath).replace(/\//g, '-')}-resume-${target}.md`)
-    } catch (err: any) {
-      setError(err.message || tx('导出文件不存在', 'Export file is missing'))
-    } finally {
-      setExportingTarget(null)
-    }
-  }, [tx])
-
   if (loading) {
     return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   }
@@ -395,7 +389,7 @@ export default function DataConversationsPage() {
             </nav>
             <div className="materials-kicker">neuDrive Data</div>
             <h2 className="materials-title">{currentBundleContext?.name || tx('会话 Bundle', 'Conversation Bundle')}</h2>
-            <p className="materials-subtitle">{tx('会话现在作为一等 bundle 管理：可读转录、规范化 sidecar，以及 Claude / ChatGPT 续聊导出都放在同一个目录。', 'Conversations now live as first-class bundles: readable transcript, normalized sidecar, and Claude / ChatGPT resume exports stay in one directory.')}</p>
+          <p className="materials-subtitle">{tx('会话现在作为一等 bundle 管理：可读转录和规范化 sidecar 都放在同一个目录。', 'Conversations now live as first-class bundles: the readable transcript and normalized sidecar stay in one directory.')}</p>
             {currentConversationMeta ? (
               <ConversationMetaPanel entries={buildConversationMetaEntries(currentConversationMeta, locale, true)} />
             ) : null}
@@ -412,7 +406,7 @@ export default function DataConversationsPage() {
             <div className="materials-section-head">
               <div>
                 <h3 className="materials-section-title">{tx('Bundle 内容', 'Bundle contents')}</h3>
-                <p className="materials-section-copy">{tx('直接浏览会话归档里的 transcript、sidecar 和导出稿。', 'Browse the transcript, sidecar, and resume exports directly inside the conversation archive.')}</p>
+                <p className="materials-section-copy">{tx('直接浏览会话归档里的 transcript 和 normalized sidecar。', 'Browse the transcript and normalized sidecar directly inside the conversation archive.')}</p>
               </div>
               <MaterialsSectionToolbar
                 count={filteredBundleEntries.length}
@@ -424,20 +418,6 @@ export default function DataConversationsPage() {
               >
                 <button className="btn btn-sm materials-toolbar-control" onClick={() => navigate(dataFileEditorRoute(transcriptPath))}>
                   {tx('打开转录', 'Open transcript')}
-                </button>
-                <button
-                  className="btn btn-sm materials-toolbar-control"
-                  onClick={() => void handleExport(currentBundlePath, 'claude')}
-                  disabled={exportingTarget === `${currentBundlePath}:claude`}
-                >
-                  {exportingTarget === `${currentBundlePath}:claude` ? tx('导出中...', 'Exporting...') : tx('导出到 Claude', 'Export to Claude')}
-                </button>
-                <button
-                  className="btn btn-sm materials-toolbar-control"
-                  onClick={() => void handleExport(currentBundlePath, 'chatgpt')}
-                  disabled={exportingTarget === `${currentBundlePath}:chatgpt`}
-                >
-                  {exportingTarget === `${currentBundlePath}:chatgpt` ? tx('导出中...', 'Exporting...') : tx('导出到 ChatGPT', 'Export to ChatGPT')}
                 </button>
                 <button
                   className="btn btn-sm materials-toolbar-control is-danger"
@@ -561,7 +541,7 @@ export default function DataConversationsPage() {
         <div className="materials-hero-copy">
           <div className="materials-kicker">neuDrive Data</div>
           <h2 className="materials-title">{tx('会话', 'Conversations')}</h2>
-          <p className="materials-subtitle">{tx('Conversation 现在和 Projects、Skills、Memory 并列，是一等 neuDrive 域。每张卡片都是一个 bundle，里面包含 transcript、normalized sidecar 和平台续聊导出。', 'Conversations now sit alongside Projects, Skills, and Memory as a first-class neuDrive domain. Each card is a bundle that contains the transcript, normalized sidecar, and platform resume exports.')}</p>
+          <p className="materials-subtitle">{tx('Conversation 现在和 Projects、Skills、Memory 并列，是一等 neuDrive 域。每张卡片都是一个 bundle，里面包含 transcript 和 normalized sidecar。', 'Conversations now sit alongside Projects, Skills, and Memory as a first-class neuDrive domain. Each card is a bundle that contains the transcript and normalized sidecar.')}</p>
         </div>
       </section>
 
@@ -571,7 +551,7 @@ export default function DataConversationsPage() {
         <div className="materials-section-head">
           <div>
             <h3 className="materials-section-title">{tx('Conversation Library', 'Conversation Library')}</h3>
-            <p className="materials-section-copy">{tx('统一浏览 conversation bundles，并直接导出到 Claude 或 ChatGPT。', 'Browse conversation bundles and export directly to Claude or ChatGPT.')}</p>
+            <p className="materials-section-copy">{tx('统一浏览 conversation bundles，并查看 transcript 与 normalized sidecar。', 'Browse conversation bundles and inspect the transcript and normalized sidecar.')}</p>
           </div>
           <MaterialsSectionToolbar
             count={filteredBundles.length}
@@ -627,26 +607,6 @@ export default function DataConversationsPage() {
                   footerStart={tile.footerStart}
                   footerEnd={tile.footerEnd}
                   selected={selectedBundlePath === bundle.path}
-                  actions={(
-                    <>
-                      <button
-                        type="button"
-                        className="btn btn-sm materials-toolbar-control"
-                        onClick={() => void handleExport(bundlePath, 'claude')}
-                        disabled={exportingTarget === `${bundlePath}:claude`}
-                      >
-                        {exportingTarget === `${bundlePath}:claude` ? tx('导出中...', 'Exporting...') : tx('导出到 Claude', 'Export to Claude')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn-sm materials-toolbar-control"
-                        onClick={() => void handleExport(bundlePath, 'chatgpt')}
-                        disabled={exportingTarget === `${bundlePath}:chatgpt`}
-                      >
-                        {exportingTarget === `${bundlePath}:chatgpt` ? tx('导出中...', 'Exporting...') : tx('导出到 ChatGPT', 'Export to ChatGPT')}
-                      </button>
-                    </>
-                  )}
                   children={<ConversationMetaPanel entries={metaEntries} compact />}
                   menuOpen={isMenuOpen(bundle.path)}
                   menuButtonAriaLabel={tx(`打开 ${tile.node.name} 的工具菜单`, `Open tools menu for ${tile.node.name}`)}

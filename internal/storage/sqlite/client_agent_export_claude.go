@@ -165,17 +165,16 @@ func (c *Client) importClaudeConversations(ctx context.Context, platform string,
 		return nil
 	}
 	type manifestEntry struct {
-		RootPath         string            `json:"root_path"`
-		TranscriptPath   string            `json:"transcript_path"`
-		ConversationPath string            `json:"conversation_path"`
-		ExportPaths      map[string]string `json:"exports,omitempty"`
-		Title            string            `json:"title"`
-		SessionID        string            `json:"session_id,omitempty"`
-		ProjectName      string            `json:"project_name,omitempty"`
-		StartedAt        string            `json:"started_at,omitempty"`
-		MessageCount     int               `json:"message_count"`
-		SourcePaths      []string          `json:"source_paths,omitempty"`
-		Exactness        string            `json:"exactness,omitempty"`
+		RootPath         string   `json:"root_path"`
+		TranscriptPath   string   `json:"transcript_path"`
+		ConversationPath string   `json:"conversation_path"`
+		Title            string   `json:"title"`
+		SessionID        string   `json:"session_id,omitempty"`
+		ProjectName      string   `json:"project_name,omitempty"`
+		StartedAt        string   `json:"started_at,omitempty"`
+		MessageCount     int      `json:"message_count"`
+		SourcePaths      []string `json:"source_paths,omitempty"`
+		Exactness        string   `json:"exactness,omitempty"`
 	}
 	manifest := make([]manifestEntry, 0, len(conversations))
 	importedAt := time.Now().UTC().Format(time.RFC3339)
@@ -187,8 +186,7 @@ func (c *Client) importClaudeConversations(ctx context.Context, platform string,
 		rootPath := claudeConversationArchiveRoot(convo)
 		transcriptPath := path.Join(rootPath, "conversation.md")
 		conversationPath := path.Join(rootPath, "conversation.json")
-		exportPaths := BuildConversationExportPaths(rootPath)
-		if err := c.store.EnsureDirectoryWithMetadata(ctx, c.userID, rootPath, ConversationBundleDirectoryMetadata(normalized, transcriptPath, conversationPath, exportPaths), models.TrustLevelWork); err != nil {
+		if err := c.store.EnsureDirectoryWithMetadata(ctx, c.userID, rootPath, ConversationBundleDirectoryMetadata(normalized, transcriptPath, conversationPath), models.TrustLevelWork); err != nil {
 			return err
 		}
 		transcript := renderNormalizedConversationMarkdown(normalized)
@@ -210,29 +208,7 @@ func (c *Client) importClaudeConversations(ctx context.Context, platform string,
 		}); err != nil {
 			return err
 		}
-		for _, target := range []string{ConversationExportTargetClaude, ConversationExportTargetChatGPT} {
-			exportPath := exportPaths[target]
-			if exportPath == "" {
-				continue
-			}
-			if _, err := c.store.WriteEntry(ctx, c.userID, exportPath, RenderConversationContinuationMarkdown(normalized, target), "text/markdown", models.FileTreeWriteOptions{
-				Kind:          "file",
-				MinTrustLevel: models.TrustLevelWork,
-				Metadata: mergeConversationMetadata(metadata, map[string]interface{}{
-					"import_kind":       "conversation_archive_export",
-					"storage_mode":      "canonical",
-					"target_platform":   target,
-					"transcript_path":   transcriptPath,
-					"conversation_path": conversationPath,
-				}),
-			}); err != nil {
-				return err
-			}
-			result.Artifacts++
-			result.Archived++
-			result.Paths = append(result.Paths, exportPath)
-		}
-		conversationJSON, err := MarshalNormalizedConversationDocument(normalized, transcriptPath, exportPaths)
+		conversationJSON, err := MarshalNormalizedConversationDocument(normalized, transcriptPath)
 		if err != nil {
 			return err
 		}
@@ -253,7 +229,6 @@ func (c *Client) importClaudeConversations(ctx context.Context, platform string,
 			RootPath:         rootPath,
 			TranscriptPath:   transcriptPath,
 			ConversationPath: conversationPath,
-			ExportPaths:      exportPaths,
 			Title:            strings.TrimSpace(convo.Name),
 			SessionID:        strings.TrimSpace(convo.SessionID),
 			ProjectName:      strings.TrimSpace(convo.ProjectName),

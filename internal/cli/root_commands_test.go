@@ -135,6 +135,7 @@ func TestRootCommandsUsageAndExitCodes(t *testing.T) {
 		{name: "disconnect missing", args: []string{"disconnect"}, want: 2, substr: "usage: neudrive disconnect <platform>", stream: "stderr"},
 		{name: "import missing", args: []string{"import"}, want: 0, substr: "Bring local files or platform exports into neuDrive.", stream: "stdout"},
 		{name: "import zip invalid mode", args: []string{"import", "platform", "claude", "--zip", "skills.zip", "--mode", "agent"}, want: 2, substr: "--zip can only be combined with --mode files", stream: "stderr"},
+		{name: "import dry run zip invalid", args: []string{"import", "platform", "claude", "--zip", "skills.zip", "--dry-run"}, want: 2, substr: "--dry-run is not supported with --zip", stream: "stderr"},
 		{name: "token missing", args: []string{"token"}, want: 0, substr: "Create short-lived tokens for sync or prepared skills upload workflows.", stream: "stdout"},
 		{name: "export missing", args: []string{"export"}, want: 2, substr: "usage: neudrive export <platform> [--output DIR]", stream: "stderr"},
 		{name: "browse extra", args: []string{"browse", "/one", "/two"}, want: 2, substr: "usage: neudrive browse [--print-url] [/route]", stream: "stderr"},

@@ -159,17 +159,16 @@ func (s *Server) importClaudeConversations(ctx context.Context, userID uuid.UUID
 		return nil
 	}
 	type manifestEntry struct {
-		RootPath         string            `json:"root_path"`
-		TranscriptPath   string            `json:"transcript_path"`
-		ConversationPath string            `json:"conversation_path"`
-		ExportPaths      map[string]string `json:"exports,omitempty"`
-		Title            string            `json:"title"`
-		SessionID        string            `json:"session_id,omitempty"`
-		ProjectName      string            `json:"project_name,omitempty"`
-		StartedAt        string            `json:"started_at,omitempty"`
-		MessageCount     int               `json:"message_count"`
-		SourcePaths      []string          `json:"source_paths,omitempty"`
-		Exactness        string            `json:"exactness,omitempty"`
+		RootPath         string   `json:"root_path"`
+		TranscriptPath   string   `json:"transcript_path"`
+		ConversationPath string   `json:"conversation_path"`
+		Title            string   `json:"title"`
+		SessionID        string   `json:"session_id,omitempty"`
+		ProjectName      string   `json:"project_name,omitempty"`
+		StartedAt        string   `json:"started_at,omitempty"`
+		MessageCount     int      `json:"message_count"`
+		SourcePaths      []string `json:"source_paths,omitempty"`
+		Exactness        string   `json:"exactness,omitempty"`
 	}
 	manifest := make([]manifestEntry, 0, len(conversations))
 	importedAt := time.Now().UTC().Format(time.RFC3339)
@@ -181,8 +180,7 @@ func (s *Server) importClaudeConversations(ctx context.Context, userID uuid.UUID
 		rootPath := claudeConversationArchiveRoot(convo)
 		transcriptPath := path.Join(rootPath, "conversation.md")
 		conversationPath := path.Join(rootPath, "conversation.json")
-		exportPaths := sqlitestorage.BuildConversationExportPaths(rootPath)
-		if _, err := s.FileTreeService.EnsureDirectoryWithMetadata(ctx, userID, rootPath, sqlitestorage.ConversationBundleDirectoryMetadata(normalized, transcriptPath, conversationPath, exportPaths), models.TrustLevelWork); err != nil {
+		if _, err := s.FileTreeService.EnsureDirectoryWithMetadata(ctx, userID, rootPath, sqlitestorage.ConversationBundleDirectoryMetadata(normalized, transcriptPath, conversationPath), models.TrustLevelWork); err != nil {
 			return err
 		}
 		transcript := renderNormalizedConversationMarkdown(normalized)
@@ -204,29 +202,7 @@ func (s *Server) importClaudeConversations(ctx context.Context, userID uuid.UUID
 		}); err != nil {
 			return err
 		}
-		for _, target := range []string{sqlitestorage.ConversationExportTargetClaude, sqlitestorage.ConversationExportTargetChatGPT} {
-			exportPath := exportPaths[target]
-			if exportPath == "" {
-				continue
-			}
-			if _, err := s.FileTreeService.WriteEntry(ctx, userID, exportPath, sqlitestorage.RenderConversationContinuationMarkdown(normalized, target), "text/markdown", models.FileTreeWriteOptions{
-				Kind:          "file",
-				MinTrustLevel: models.TrustLevelWork,
-				Metadata: mergeConversationMetadata(metadata, map[string]interface{}{
-					"import_kind":       "conversation_archive_export",
-					"storage_mode":      "canonical",
-					"target_platform":   target,
-					"transcript_path":   transcriptPath,
-					"conversation_path": conversationPath,
-				}),
-			}); err != nil {
-				return err
-			}
-			result.Artifacts++
-			result.Archived++
-			result.Paths = append(result.Paths, exportPath)
-		}
-		conversationJSON, err := sqlitestorage.MarshalNormalizedConversationDocument(normalized, transcriptPath, exportPaths)
+		conversationJSON, err := sqlitestorage.MarshalNormalizedConversationDocument(normalized, transcriptPath)
 		if err != nil {
 			return err
 		}
@@ -247,7 +223,6 @@ func (s *Server) importClaudeConversations(ctx context.Context, userID uuid.UUID
 			RootPath:         rootPath,
 			TranscriptPath:   transcriptPath,
 			ConversationPath: conversationPath,
-			ExportPaths:      exportPaths,
 			Title:            strings.TrimSpace(convo.Name),
 			SessionID:        strings.TrimSpace(convo.SessionID),
 			ProjectName:      strings.TrimSpace(convo.ProjectName),

@@ -65,8 +65,6 @@ func TestImportAgentExportClaudeConversationWritesCanonicalArchive(t *testing.T)
 	rootPath := "/conversations/claude-code/2026-04-16-demo-chat-sess-123-compact"
 	transcriptPath := rootPath + "/conversation.md"
 	conversationPath := rootPath + "/conversation.json"
-	claudeResumePath := rootPath + "/resume-claude.md"
-	chatGPTResumePath := rootPath + "/resume-chatgpt.md"
 	indexPath := "/conversations/claude-code/index.json"
 
 	root, err := store.Read(ctx, user.ID, rootPath, models.TrustLevelWork)
@@ -112,37 +110,11 @@ func TestImportAgentExportClaudeConversationWritesCanonicalArchive(t *testing.T)
 		`"import_strategy": "claude-code-local-scan"`,
 		`"source_conversation_id": "sess-123"`,
 		`"transcript_path": "` + transcriptPath + `"`,
-		`"exports": {`,
-		`"claude": "` + claudeResumePath + `"`,
-		`"chatgpt": "` + chatGPTResumePath + `"`,
 		`"message_count": 2`,
 	} {
 		if !strings.Contains(conversation.Content, want) {
 			t.Fatalf("conversation sidecar missing %s: %q", want, conversation.Content)
 		}
-	}
-
-	claudeResume, err := store.Read(ctx, user.ID, claudeResumePath, models.TrustLevelWork)
-	if err != nil {
-		t.Fatalf("Read Claude resume export: %v", err)
-	}
-	for _, want := range []string{
-		"# Resume Demo Chat in Claude",
-		"## Resume Prompt",
-		"[User | 2026-04-16T20:00:01Z | message]",
-		"[Assistant | 2026-04-16T20:00:02Z | message]",
-	} {
-		if !strings.Contains(claudeResume.Content, want) {
-			t.Fatalf("Claude resume export missing %s: %q", want, claudeResume.Content)
-		}
-	}
-
-	chatGPTResume, err := store.Read(ctx, user.ID, chatGPTResumePath, models.TrustLevelWork)
-	if err != nil {
-		t.Fatalf("Read ChatGPT resume export: %v", err)
-	}
-	if !strings.Contains(chatGPTResume.Content, "# Resume Demo Chat in ChatGPT") {
-		t.Fatalf("ChatGPT resume export missing title: %q", chatGPTResume.Content)
 	}
 
 	index, err := store.Read(ctx, user.ID, indexPath, models.TrustLevelWork)
@@ -153,8 +125,6 @@ func TestImportAgentExportClaudeConversationWritesCanonicalArchive(t *testing.T)
 		`"root_path": "` + rootPath + `"`,
 		`"transcript_path": "` + transcriptPath + `"`,
 		`"conversation_path": "` + conversationPath + `"`,
-		`"claude": "` + claudeResumePath + `"`,
-		`"chatgpt": "` + chatGPTResumePath + `"`,
 	} {
 		if !strings.Contains(index.Content, want) {
 			t.Fatalf("index missing %s: %q", want, index.Content)
@@ -208,7 +178,6 @@ func TestImportAgentExportClaudeConversationPreservesStructuredParts(t *testing.
 	rootPath := "/conversations/claude-code/2026-04-16-structured-demo-structured-123-compact"
 	transcriptPath := rootPath + "/conversation.md"
 	conversationPath := rootPath + "/conversation.json"
-	claudeResumePath := rootPath + "/resume-claude.md"
 
 	transcript, err := store.Read(ctx, user.ID, transcriptPath, models.TrustLevelWork)
 	if err != nil {
@@ -236,20 +205,6 @@ func TestImportAgentExportClaudeConversationPreservesStructuredParts(t *testing.
 	} {
 		if !strings.Contains(conversation.Content, want) {
 			t.Fatalf("conversation sidecar missing %s: %q", want, conversation.Content)
-		}
-	}
-
-	claudeResume, err := store.Read(ctx, user.ID, claudeResumePath, models.TrustLevelWork)
-	if err != nil {
-		t.Fatalf("Read Claude resume export: %v", err)
-	}
-	for _, want := range []string{
-		"Thinking:",
-		"Tool call: bash",
-		"Tool result:",
-	} {
-		if !strings.Contains(claudeResume.Content, want) {
-			t.Fatalf("Claude resume export missing %s: %q", want, claudeResume.Content)
 		}
 	}
 }

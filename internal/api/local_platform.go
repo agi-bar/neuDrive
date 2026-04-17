@@ -483,6 +483,7 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 	} else if written != "" {
 		result.Artifacts++
 		result.Archived += len(payload.Unsupported)
+		result.Blocked += len(payload.Unsupported)
 		result.Paths = append(result.Paths, written)
 	}
 	if content := renderAgentNotes(payload.Notes); strings.TrimSpace(content) != "" {

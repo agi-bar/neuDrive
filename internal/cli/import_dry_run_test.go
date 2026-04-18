@@ -39,6 +39,39 @@ func TestImportPlatformClaudeDryRunPreview(t *testing.T) {
 	}
 }
 
+func TestImportPlatformCodexDryRunPreviewHandlesLargeSessionIndex(t *testing.T) {
+	home := configureIsolatedCLIEnv(t)
+	writeCLITestFile(t, filepath.Join(home, ".codex", "AGENTS.md"), "# Local Rules\n\nKeep answers short.\n")
+	writeCLITestFile(t, filepath.Join(home, ".codex", "memories", "team.md"), "Remember the dry-run fixture.\n")
+	writeCLITestFile(t, filepath.Join(home, ".codex", "config.toml"), "model = \"gpt-5.4\"\n")
+	writeCLITestFile(t, filepath.Join(home, ".agents", "skills", "sample", "SKILL.md"), "# Sample\n")
+	longTitle := strings.Repeat("x", 70<<10)
+	longInstructions := strings.Repeat("base-instructions ", 10<<10)
+	writeCLITestFile(t, filepath.Join(home, ".codex", "session_index.jsonl"), "{\"id\":\"session-001\",\"thread_name\":\""+longTitle+"\",\"updated_at\":\"2026-04-18T10:05:00Z\"}\n")
+	writeCLITestFile(t, filepath.Join(home, ".codex", "sessions", "2026", "04", "18", "session-001.jsonl"), strings.Join([]string{
+		"{\"timestamp\":\"2026-04-18T10:00:00Z\",\"type\":\"session_meta\",\"payload\":{\"id\":\"session-001\",\"timestamp\":\"2026-04-18T10:00:00Z\",\"cwd\":\"/Users/demo/workspace/neudrive\",\"originator\":\"Codex Desktop\",\"cli_version\":\"0.118.0\",\"source\":\"desktop\",\"model_provider\":\"openai\",\"base_instructions\":{\"text\":\"" + longInstructions + "\"}}}",
+		`{"timestamp":"2026-04-18T10:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Plan the dry run."}]}}`,
+		`{"timestamp":"2026-04-18T10:00:02Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Use the deterministic preview path."}]}}`,
+	}, "\n")+"\n")
+
+	stdout, stderr, code := captureRunForTest(t, func() int {
+		return Run([]string{"import", "platform", "codex", "--dry-run", "--mode", "agent"})
+	})
+	if code != 0 {
+		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
+	}
+	for _, needle := range []string{
+		"Codex CLI migration preview (mode=agent)",
+		"conversations:",
+		"bundles:",
+		"Next command: neudrive import platform codex --mode agent",
+	} {
+		if !strings.Contains(stdout, needle) {
+			t.Fatalf("expected %q in stdout=%q stderr=%q", needle, stdout, stderr)
+		}
+	}
+}
+
 func installClaudeDryRunShim(t *testing.T) {
 	t.Helper()
 	binDir := t.TempDir()

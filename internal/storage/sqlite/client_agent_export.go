@@ -27,6 +27,7 @@ type AgentExportPayload struct {
 	SensitiveFindings []AgentSensitiveFinding `json:"sensitive_findings,omitempty"`
 	VaultCandidates   []AgentVaultCandidate   `json:"vault_candidates,omitempty"`
 	Claude            *ClaudeInventory        `json:"claude,omitempty"`
+	Codex             *CodexInventory         `json:"codex,omitempty"`
 	Notes             []string                `json:"notes,omitempty"`
 }
 
@@ -69,6 +70,11 @@ type ClaudeInventory struct {
 	Files             []ClaudeFileRecord      `json:"files,omitempty"`
 	SensitiveFindings []AgentSensitiveFinding `json:"sensitive_findings,omitempty"`
 	VaultCandidates   []AgentVaultCandidate   `json:"vault_candidates,omitempty"`
+}
+
+type CodexInventory struct {
+	Bundles       []ClaudeBundle       `json:"bundles,omitempty"`
+	Conversations []ClaudeConversation `json:"conversations,omitempty"`
 }
 
 type ClaudeProjectSnapshot struct {
@@ -247,6 +253,11 @@ func (c *Client) ImportAgentExport(ctx context.Context, platform string, payload
 
 	if payload.Claude != nil {
 		if err := c.importClaudeInventory(ctx, platform, *payload.Claude, result); err != nil {
+			return nil, err
+		}
+	}
+	if payload.Codex != nil {
+		if err := c.importCodexInventory(ctx, platform, *payload.Codex, result); err != nil {
 			return nil, err
 		}
 	}

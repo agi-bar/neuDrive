@@ -227,6 +227,9 @@ func TestSQLiteSharedServerLocalPlatformImportClaude(t *testing.T) {
 
 	for _, target := range []string{
 		hubpath.ConversationIndexPath("claude-code"),
+		"/platforms/claude-code/agent/automations.json",
+		"/platforms/claude-code/agent/tools.json",
+		"/platforms/claude-code/agent/connections.json",
 		"/platforms/claude-code/agent/sensitive-findings.json",
 		"/skills/release-helper/SKILL.md",
 	} {
@@ -248,7 +251,14 @@ func createClaudeDashboardFixture(t *testing.T) string {
 	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "CLAUDE.md"), "# Global Rules\n\nBe explicit about risks.\n")
 	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "agent-memory", "team.md"), "Remember the release checklist.\n")
 	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "settings.local.json"), "{\n  \"api_key\": \"sk-test-secret\",\n  \"theme\": \"compact\"\n}\n")
+	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", ".credentials.json"), "{\n  \"refresh_token\": \"secret-refresh\"\n}\n")
 	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "skills", "release-helper", "SKILL.md"), "# Release Helper\n\nUse this skill to package releases.\n")
+	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "scheduled-tasks", "daily.toml"), "name = \"Daily release\"\nrrule = \"FREQ=DAILY;BYHOUR=9;BYMINUTE=0\"\nstatus = \"ACTIVE\"\n")
+	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "output-styles", "release.md"), "Be crisp and list risks first.\n")
+	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "plugins", "installed_plugins.json"), "[{\"name\":\"release-helper\",\"version\":\"1.0.0\",\"description\":\"Release support\"}]\n")
+	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "todos", "todo.md"), "skip\n")
+	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "plans", "plan.md"), "skip\n")
+	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "channels", "main.md"), "skip\n")
 	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "projects", "demo-session", "memory", "remember.md"), "Document the migration choices.\n")
 	writeClaudeDashboardFixtureFile(t, filepath.Join(home, ".claude", "projects", "demo-session", "session.jsonl"), strings.Join([]string{
 		`{"type":"user","timestamp":"2026-04-15T10:00:00Z","message":{"role":"user","content":"Plan the release migration."}}`,

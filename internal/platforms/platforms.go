@@ -349,7 +349,7 @@ func (a *codexAdapter) init() *codexAdapter {
 			codexEntrypointDir,
 			nil,
 			[]string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import platform codex", "$neudrive token create --kind sync --purpose backup", "$neudrive status"},
-			[]string{"connections", "skills", "profile", "memory", "projects", "automations", "archives"},
+			[]string{"connections", "skills", "profile", "memory", "projects", "automations", "tools", "archives"},
 			[]Source{
 				{Domain: "profile", Label: "config.toml", Path: expandUser("~/.codex/config.toml")},
 				{Domain: "profile", Label: "AGENTS.md", Path: expandUser("~/.codex/AGENTS.md")},
@@ -363,11 +363,6 @@ func (a *codexAdapter) init() *codexAdapter {
 				{Domain: "projects", Label: "history.jsonl", Path: expandUser("~/.codex/history.jsonl")},
 				{Domain: "projects", Label: "session_index.jsonl", Path: expandUser("~/.codex/session_index.jsonl")},
 				{Domain: "archives", Label: "archived_sessions", Path: expandUser("~/.codex/archived_sessions"), IsDir: true},
-				{Domain: "archives", Label: "shell_snapshots", Path: expandUser("~/.codex/shell_snapshots"), IsDir: true},
-				{Domain: "archives", Label: "worktrees", Path: expandUser("~/.codex/worktrees"), IsDir: true},
-				{Domain: "archives", Label: "logs_2.sqlite", Path: expandUser("~/.codex/logs_2.sqlite")},
-				{Domain: "archives", Label: "state_5.sqlite", Path: expandUser("~/.codex/state_5.sqlite")},
-				{Domain: "archives", Label: "global_state", Path: expandUser("~/.codex/.codex-global-state.json")},
 			},
 			"supported",
 		)}
@@ -571,14 +566,10 @@ func claudeSources() []Source {
 		{Domain: "skills", Label: "commands", Path: expandUser("~/.claude/commands"), IsDir: true},
 		{Domain: "skills", Label: "rules", Path: expandUser("~/.claude/rules"), IsDir: true},
 		{Domain: "tools", Label: "plugins", Path: expandUser("~/.claude/plugins"), IsDir: true},
-		{Domain: "prompts", Label: "plans", Path: expandUser("~/.claude/plans"), IsDir: true},
 		{Domain: "prompts", Label: "history", Path: expandUser("~/.claude/history.jsonl")},
 		{Domain: "automations", Label: "scheduled-tasks", Path: expandUser("~/.claude/scheduled-tasks"), IsDir: true},
-		{Domain: "archives", Label: "todos", Path: expandUser("~/.claude/todos"), IsDir: true},
-		{Domain: "archives", Label: "channels", Path: expandUser("~/.claude/channels"), IsDir: true},
 		{Domain: "archives", Label: "output-styles", Path: expandUser("~/.claude/output-styles"), IsDir: true},
 		{Domain: "archives", Label: "hooks", Path: expandUser("~/.claude/hooks"), IsDir: true},
-		{Domain: "secrets", Label: "credentials", Path: expandUser("~/.claude/.credentials.json")},
 	}
 }
 

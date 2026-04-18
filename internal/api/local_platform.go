@@ -449,6 +449,11 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 			return nil, err
 		}
 	}
+	if payload.Codex != nil {
+		if err := s.importCodexLocalInventory(ctx, userID, platform, *payload.Codex, result); err != nil {
+			return nil, err
+		}
+	}
 
 	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "automations.json", payload.Automations); err != nil {
 		return nil, err

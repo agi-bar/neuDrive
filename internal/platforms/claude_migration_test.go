@@ -34,6 +34,15 @@ func TestScanLocalClaudeMigrationBuildsTypedInventory(t *testing.T) {
 	if len(scan.Inventory.Projects) == 0 {
 		t.Fatal("expected Claude project snapshots")
 	}
+	if len(scan.Automations) == 0 {
+		t.Fatal("expected scheduled task metadata")
+	}
+	if len(scan.Tools) == 0 {
+		t.Fatal("expected plugin metadata")
+	}
+	if len(scan.Connections) == 0 {
+		t.Fatal("expected connection metadata")
+	}
 	project := scan.Inventory.Projects[0]
 	if strings.TrimSpace(project.Context) == "" {
 		t.Fatalf("expected project context, got %+v", project)
@@ -48,14 +57,32 @@ func TestScanLocalClaudeMigrationBuildsTypedInventory(t *testing.T) {
 		t.Fatal("expected vault candidates from settings.local.json")
 	}
 	redacted := false
-	for _, file := range scan.Inventory.Files {
-		if strings.Contains(file.Path, "settings.local.json") && strings.Contains(file.Content, "[REDACTED]") {
+	excluded := []string{"credentials.json", "todos", "plans", "channels", "plugins/installed_plugins.json"}
+	for _, finding := range scan.Inventory.SensitiveFindings {
+		if strings.Contains(finding.RedactedExample, "[REDACTED]") {
 			redacted = true
 			break
 		}
 	}
+	for _, file := range scan.Inventory.Files {
+		for _, needle := range excluded {
+			if strings.Contains(file.Path, needle) {
+				t.Fatalf("expected excluded runtime file to stay out of agent archives: %s", file.Path)
+			}
+		}
+	}
 	if !redacted {
-		t.Fatal("expected archived settings.local.json to be redacted")
+		t.Fatal("expected sensitive findings to redact settings.local.json")
+	}
+	styleFound := false
+	for _, rule := range scan.ProfileRules {
+		if strings.Contains(rule.Title, "Output style: release.md") {
+			styleFound = true
+			break
+		}
+	}
+	if !styleFound {
+		t.Fatal("expected output style to be promoted into profile rules")
 	}
 }
 
@@ -186,8 +213,16 @@ func createClaudeMigrationFixtureTree(t *testing.T) string {
 	writeFixtureFile(t, filepath.Join(home, ".claude", "CLAUDE.local.md"), "# Local Rules\n\nFavor terse updates.\n")
 	writeFixtureFile(t, filepath.Join(home, ".claude", "agent-memory", "team.md"), "Remember the release checklist.\n")
 	writeFixtureFile(t, filepath.Join(home, ".claude", "settings.local.json"), "{\n  \"api_key\": \"sk-test-secret\",\n  \"theme\": \"compact\"\n}\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", ".credentials.json"), "{\n  \"refresh_token\": \"secret-refresh\"\n}\n")
 	writeFixtureFile(t, filepath.Join(home, ".claude", "skills", "release-helper", "SKILL.md"), "# Release Helper\n\nUse this skill to package releases.\n")
 	writeFixtureFile(t, filepath.Join(home, ".claude", "skills", "release-helper", "scripts", "ship.sh"), "#!/bin/sh\necho release\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", "scheduled-tasks", "daily.toml"), "name = \"Daily release\"\nrrule = \"FREQ=DAILY;BYHOUR=9;BYMINUTE=0\"\nstatus = \"ACTIVE\"\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", "output-styles", "release.md"), "Be crisp and list risks first.\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", "hooks", "preflight.sh"), "#!/bin/sh\necho preflight\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", "plugins", "installed_plugins.json"), "[{\"name\":\"release-helper\",\"version\":\"1.0.0\",\"description\":\"Release support\"}]\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", "todos", "todo.md"), "skip\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", "plans", "plan.md"), "skip\n")
+	writeFixtureFile(t, filepath.Join(home, ".claude", "channels", "main.md"), "skip\n")
 	writeFixtureFile(t, filepath.Join(home, ".claude", "projects", "demo-session", "memory", "remember.md"), "Document the migration choices.\n")
 	writeFixtureFile(t, filepath.Join(home, ".claude", "projects", "demo-session", "session.jsonl"), strings.Join([]string{
 		`{"type":"user","timestamp":"2026-04-15T10:00:00Z","message":{"role":"user","content":"Plan the release migration."}}`,

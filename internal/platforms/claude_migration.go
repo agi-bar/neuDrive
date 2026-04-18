@@ -47,6 +47,9 @@ type ImportPreviewCategory struct {
 type claudeLocalScanResult struct {
 	ProfileRules []sqlite.AgentProfileRule
 	MemoryItems  []sqlite.AgentMemoryItem
+	Automations  []sqlite.AgentRecord
+	Tools        []sqlite.AgentRecord
+	Connections  []sqlite.AgentRecord
 	Inventory    sqlite.ClaudeInventory
 	Notes        []string
 }
@@ -124,6 +127,9 @@ func mergeClaudeScanIntoPayload(payload sqlite.AgentExportPayload, scan *claudeL
 	}
 	payload.ProfileRules = appendUniqueProfileRules(payload.ProfileRules, scan.ProfileRules)
 	payload.MemoryItems = appendUniqueMemoryItems(payload.MemoryItems, scan.MemoryItems)
+	payload.Automations = appendUniqueAgentRecords(payload.Automations, scan.Automations)
+	payload.Tools = appendUniqueAgentRecords(payload.Tools, scan.Tools)
+	payload.Connections = appendUniqueAgentRecords(payload.Connections, scan.Connections)
 	if payload.Claude == nil {
 		payload.Claude = &sqlite.ClaudeInventory{}
 	}
@@ -148,6 +154,12 @@ func mergeAgentPayload(base, extra sqlite.AgentExportPayload) sqlite.AgentExport
 			base.Claude = &sqlite.ClaudeInventory{}
 		}
 		base.Claude = mergeClaudeInventory(base.Claude, extra.Claude)
+	}
+	if extra.Codex != nil {
+		if base.Codex == nil {
+			base.Codex = &sqlite.CodexInventory{}
+		}
+		base.Codex = mergeCodexInventory(base.Codex, extra.Codex)
 	}
 	if strings.TrimSpace(base.Platform) == "" {
 		base.Platform = extra.Platform
@@ -175,6 +187,22 @@ func mergeClaudeInventory(base, extra *sqlite.ClaudeInventory) *sqlite.ClaudeInv
 	base.Files = append(base.Files, extra.Files...)
 	base.SensitiveFindings = append(base.SensitiveFindings, extra.SensitiveFindings...)
 	base.VaultCandidates = append(base.VaultCandidates, extra.VaultCandidates...)
+	return base
+}
+
+func mergeCodexInventory(base, extra *sqlite.CodexInventory) *sqlite.CodexInventory {
+	if base == nil && extra == nil {
+		return nil
+	}
+	if base == nil {
+		copyValue := *extra
+		return &copyValue
+	}
+	if extra == nil {
+		return base
+	}
+	base.Bundles = append(base.Bundles, extra.Bundles...)
+	base.Conversations = append(base.Conversations, extra.Conversations...)
 	return base
 }
 
@@ -208,6 +236,14 @@ func buildImportPreviewCategories(mode ImportMode, sources []Source, payload sql
 		}
 		if len(payload.Claude.Files) > 0 {
 			categories = append(categories, ImportPreviewCategory{Name: "structured_archives", Archived: len(payload.Claude.Files), Discovered: len(payload.Claude.Files)})
+		}
+	}
+	if payload.Codex != nil {
+		if len(payload.Codex.Bundles) > 0 {
+			categories = append(categories, ImportPreviewCategory{Name: "bundles", Importable: len(payload.Codex.Bundles), Discovered: len(payload.Codex.Bundles)})
+		}
+		if len(payload.Codex.Conversations) > 0 {
+			categories = append(categories, ImportPreviewCategory{Name: "conversations", Importable: len(payload.Codex.Conversations), Discovered: len(payload.Codex.Conversations)})
 		}
 	}
 	archived := len(payload.Automations) + len(payload.Tools) + len(payload.Connections) + len(payload.Archives)
@@ -312,27 +348,30 @@ func scanLocalClaudeMigration() (*claudeLocalScanResult, error) {
 		if err := scanClaudeProjectRoot(&result.Inventory, root, &result.Notes); err != nil {
 			return nil, err
 		}
+		if err := scanClaudeProjectConnections(result, root); err != nil {
+			return nil, err
+		}
+	}
+	if err := scanClaudeConnectionManifests(result, expandUser("~/.claude.json"), expandUser("~/.claude/settings.json"), expandUser("~/.claude/settings.local.json")); err != nil {
+		return nil, err
+	}
+	if err := scanClaudeSensitiveFileFindings(&result.Inventory, expandUser("~/.claude/settings.local.json")); err != nil {
+		return nil, err
+	}
+	if err := scanClaudeSensitiveFileFindings(&result.Inventory, expandUser("~/.claude/.credentials.json")); err != nil {
+		return nil, err
+	}
+	if err := scanClaudeScheduledTasks(result, expandUser("~/.claude/scheduled-tasks")); err != nil {
+		return nil, err
+	}
+	if err := scanClaudePlugins(result, expandUser("~/.claude/plugins")); err != nil {
+		return nil, err
+	}
+	if err := scanClaudeOutputStyles(result, expandUser("~/.claude/output-styles")); err != nil {
+		return nil, err
 	}
 
-	if err := archiveClaudeRuntimeFile(&result.Inventory, expandUser("~/.claude.json"), "agent/settings/claude.json"); err != nil {
-		return nil, err
-	}
-	if err := archiveClaudeRuntimeFile(&result.Inventory, expandUser("~/.claude/settings.json"), "agent/settings/settings.json"); err != nil {
-		return nil, err
-	}
-	if err := archiveClaudeRuntimeFile(&result.Inventory, expandUser("~/.claude/settings.local.json"), "agent/settings/settings.local.json"); err != nil {
-		return nil, err
-	}
-	if err := archiveClaudeRuntimeFile(&result.Inventory, expandUser("~/.claude/.credentials.json"), "agent/runtime/credentials.json"); err != nil {
-		return nil, err
-	}
 	if err := archiveClaudeRuntimeFile(&result.Inventory, expandUser("~/.claude/history.jsonl"), "agent/runtime/history.jsonl"); err != nil {
-		return nil, err
-	}
-	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/todos"), "agent/runtime/todos", &result.Notes); err != nil {
-		return nil, err
-	}
-	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/plans"), "agent/runtime/plans", &result.Notes); err != nil {
 		return nil, err
 	}
 	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/agent-memory"), "agent/runtime/agent-memory", &result.Notes); err != nil {
@@ -341,19 +380,10 @@ func scanLocalClaudeMigration() (*claudeLocalScanResult, error) {
 	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/scheduled-tasks"), "agent/runtime/scheduled-tasks", &result.Notes); err != nil {
 		return nil, err
 	}
-	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/channels"), "agent/runtime/channels", &result.Notes); err != nil {
-		return nil, err
-	}
 	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/output-styles"), "agent/runtime/output-styles", &result.Notes); err != nil {
 		return nil, err
 	}
 	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/hooks"), "agent/runtime/hooks", &result.Notes); err != nil {
-		return nil, err
-	}
-	if err := archiveClaudeRuntimeTree(&result.Inventory, expandUser("~/.claude/plugins"), "agent/runtime/plugins", &result.Notes); err != nil {
-		return nil, err
-	}
-	if err := archiveClaudeRuntimeFile(&result.Inventory, expandUser("~/.claude/plugins/installed_plugins.json"), "agent/runtime/plugins/installed_plugins.json"); err != nil {
 		return nil, err
 	}
 
@@ -803,6 +833,305 @@ func preferredClaudeMessageText(message sqlite.ClaudeConversationMessage) string
 	return strings.TrimSpace(message.Content)
 }
 
+func scanClaudeConnectionManifests(result *claudeLocalScanResult, paths ...string) error {
+	for _, candidate := range paths {
+		if err := appendClaudeConnectionRecord(result, candidate, "", "global"); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func scanClaudeProjectConnections(result *claudeLocalScanResult, root string) error {
+	projectName := normalizeClaudeName(filepath.Base(root), "claude-project")
+	pairs := []struct {
+		name string
+		path string
+	}{
+		{name: projectName + "-mcp", path: filepath.Join(root, ".mcp.json")},
+		{name: projectName + "-settings", path: filepath.Join(root, ".claude", "settings.json")},
+		{name: projectName + "-settings-local", path: filepath.Join(root, ".claude", "settings.local.json")},
+	}
+	for _, pair := range pairs {
+		if err := appendClaudeConnectionRecord(result, pair.path, pair.name, "project"); err != nil {
+			return err
+		}
+	}
+	if err := scanClaudeSensitiveFileFindings(&result.Inventory, filepath.Join(root, ".claude", "settings.local.json")); err != nil {
+		return err
+	}
+	return nil
+}
+
+func appendClaudeConnectionRecord(result *claudeLocalScanResult, sourcePath, name, scope string) error {
+	data, err := os.ReadFile(sourcePath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil
+	}
+	recordName := strings.TrimSpace(name)
+	if recordName == "" {
+		recordName = strings.TrimSuffix(filepath.Base(sourcePath), filepath.Ext(sourcePath))
+	}
+	mcpServers := extractCodexObjectKeys(payload["mcpServers"])
+	topKeys := extractCodexObjectKeys(payload)
+	lines := []string{"Observed Claude connection manifest."}
+	if scope != "" {
+		lines = append(lines, "- Scope: "+scope)
+	}
+	if len(mcpServers) > 0 {
+		lines = append(lines, "- MCP servers: "+strings.Join(mcpServers, ", "))
+	}
+	if len(topKeys) > 0 {
+		lines = append(lines, "- Top-level keys: "+strings.Join(topKeys, ", "))
+	}
+	result.Connections = append(result.Connections, sqlite.AgentRecord{
+		Name:        recordName,
+		Content:     strings.Join(lines, "\n"),
+		Exactness:   "exact",
+		SourcePaths: []string{sourcePath},
+		Confidence:  1,
+		Metadata: map[string]interface{}{
+			"scope":          scope,
+			"mcp_servers":    mcpServers,
+			"top_level_keys": topKeys,
+		},
+	})
+	return nil
+}
+
+func scanClaudeScheduledTasks(result *claudeLocalScanResult, dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	return filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		metadata, ok, err := readLooseStructuredMetadata(path)
+		if err != nil || !ok {
+			return err
+		}
+		lines := []string{"Observed Claude scheduled task metadata."}
+		if metadata["name"] != "" {
+			lines = append(lines, "- Name: "+metadata["name"])
+		}
+		if metadata["schedule"] != "" {
+			lines = append(lines, "- Schedule: "+metadata["schedule"])
+		}
+		if metadata["status"] != "" {
+			lines = append(lines, "- Status: "+metadata["status"])
+		}
+		result.Automations = append(result.Automations, sqlite.AgentRecord{
+			Name:        firstNonEmptyString(metadata["name"], strings.TrimSuffix(info.Name(), filepath.Ext(info.Name()))),
+			Content:     strings.Join(lines, "\n"),
+			Exactness:   "exact",
+			SourcePaths: []string{path},
+			Confidence:  1,
+			Metadata: map[string]interface{}{
+				"kind":     firstNonEmptyString(metadata["kind"], "scheduled-task"),
+				"name":     metadata["name"],
+				"schedule": metadata["schedule"],
+				"status":   metadata["status"],
+			},
+		})
+		return nil
+	})
+}
+
+func scanClaudePlugins(result *claudeLocalScanResult, dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	return filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() || strings.ToLower(filepath.Ext(info.Name())) != ".json" {
+			return nil
+		}
+		records, err := readClaudePluginRecords(path)
+		if err != nil {
+			return err
+		}
+		for _, record := range records {
+			key := record.Name + "|" + strings.Join(record.SourcePaths, ",")
+			if _, ok := seen[key]; ok {
+				continue
+			}
+			seen[key] = struct{}{}
+			result.Tools = append(result.Tools, record)
+		}
+		return nil
+	})
+}
+
+func scanClaudeOutputStyles(result *claudeLocalScanResult, dir string) error {
+	info, err := os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		return nil
+	}
+	return filepath.Walk(dir, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if ext := strings.ToLower(filepath.Ext(info.Name())); ext != ".md" && ext != ".txt" {
+			return nil
+		}
+		content, ok, err := readTextFile(path)
+		if err != nil || !ok || strings.TrimSpace(content) == "" {
+			return err
+		}
+		rel, err := filepath.Rel(dir, path)
+		if err != nil {
+			return err
+		}
+		result.ProfileRules = append(result.ProfileRules, sqlite.AgentProfileRule{
+			Title:       "Output style: " + filepath.ToSlash(rel),
+			Content:     strings.TrimSpace(content),
+			Exactness:   "exact",
+			SourcePaths: []string{path},
+			Confidence:  1,
+		})
+		return nil
+	})
+}
+
+func scanClaudeSensitiveFileFindings(inventory *sqlite.ClaudeInventory, path string) error {
+	content, ok, err := readTextFile(path)
+	if err != nil || !ok || strings.TrimSpace(content) == "" {
+		return err
+	}
+	_, findings, candidates := redactSensitiveText(path, content)
+	inventory.SensitiveFindings = append(inventory.SensitiveFindings, findings...)
+	inventory.VaultCandidates = append(inventory.VaultCandidates, candidates...)
+	return nil
+}
+
+func readLooseStructuredMetadata(path string) (map[string]string, bool, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	metadata := map[string]string{}
+	var payload map[string]interface{}
+	if err := json.Unmarshal(data, &payload); err == nil {
+		metadata["name"] = firstNonEmptyString(payload["name"], payload["title"])
+		metadata["kind"] = firstNonEmptyString(payload["kind"], payload["type"])
+		metadata["status"] = firstNonEmptyString(payload["status"])
+		metadata["schedule"] = firstNonEmptyString(payload["schedule"], payload["rrule"], payload["cron"])
+		return metadata, true, nil
+	}
+	content := string(data)
+	scanner := bufio.NewScanner(strings.NewReader(content))
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "[") {
+			continue
+		}
+		sep := strings.Index(line, "=")
+		if sep <= 0 {
+			sep = strings.Index(line, ":")
+		}
+		if sep <= 0 {
+			continue
+		}
+		key := strings.TrimSpace(line[:sep])
+		value := strings.TrimSpace(line[sep+1:])
+		switch strings.ToLower(key) {
+		case "name", "title":
+			metadata["name"] = parseCodexStringValue(value)
+		case "kind", "type":
+			metadata["kind"] = parseCodexStringValue(value)
+		case "status":
+			metadata["status"] = parseCodexStringValue(value)
+		case "schedule", "rrule", "cron":
+			metadata["schedule"] = parseCodexStringValue(value)
+		}
+	}
+	return metadata, len(metadata) > 0, scanner.Err()
+}
+
+func readClaudePluginRecords(path string) ([]sqlite.AgentRecord, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var payload interface{}
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, nil
+	}
+	records := []sqlite.AgentRecord{}
+	appendRecord := func(name string, value map[string]interface{}) {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			return
+		}
+		version := firstNonEmptyString(value["version"])
+		description := firstNonEmptyString(value["description"], value["summary"])
+		lines := []string{"Observed Claude plugin metadata."}
+		if version != "" {
+			lines = append(lines, "- Version: "+version)
+		}
+		if description != "" {
+			lines = append(lines, "- Description: "+description)
+		}
+		records = append(records, sqlite.AgentRecord{
+			Name:        name,
+			Content:     strings.Join(lines, "\n"),
+			Exactness:   "exact",
+			SourcePaths: []string{path},
+			Confidence:  1,
+			Metadata: map[string]interface{}{
+				"version":     version,
+				"description": description,
+			},
+		})
+	}
+	switch typed := payload.(type) {
+	case []interface{}:
+		for _, item := range typed {
+			if entry, ok := item.(map[string]interface{}); ok {
+				appendRecord(firstNonEmptyString(entry["name"], entry["display_name"]), entry)
+			}
+		}
+	case map[string]interface{}:
+		if name := firstNonEmptyString(typed["name"], typed["display_name"]); name != "" {
+			appendRecord(name, typed)
+			break
+		}
+		for key, value := range typed {
+			entry, ok := value.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			appendRecord(firstNonEmptyString(entry["name"], entry["display_name"], key), entry)
+		}
+	}
+	return records, nil
+}
+
 func scanClaudeProjectRoot(inventory *sqlite.ClaudeInventory, root string, notes *[]string) error {
 	root = strings.TrimSpace(root)
 	if root == "" {
@@ -853,9 +1182,6 @@ func scanClaudeProjectRoot(inventory *sqlite.ClaudeInventory, root string, notes
 		source string
 		target string
 	}{
-		{filepath.Join(root, ".mcp.json"), filepath.Join("agent/projects", projectName, "mcp.json")},
-		{filepath.Join(root, ".claude", "settings.json"), filepath.Join("agent/projects", projectName, "settings.json")},
-		{filepath.Join(root, ".claude", "settings.local.json"), filepath.Join("agent/projects", projectName, "settings.local.json")},
 		{filepath.Join(root, ".claude", "output-styles", "default.md"), filepath.Join("agent/projects", projectName, "output-style-default.md")},
 	} {
 		if err := archiveClaudeRuntimeFile(inventory, pair.source, pair.target); err != nil {

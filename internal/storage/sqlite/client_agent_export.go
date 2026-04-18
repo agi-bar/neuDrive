@@ -14,18 +14,20 @@ import (
 )
 
 type AgentExportPayload struct {
-	Platform     string               `json:"platform,omitempty"`
-	Command      string               `json:"command,omitempty"`
-	ProfileRules []AgentProfileRule   `json:"profile_rules,omitempty"`
-	MemoryItems  []AgentMemoryItem    `json:"memory_items,omitempty"`
-	Projects     []AgentProjectRecord `json:"projects,omitempty"`
-	Automations  []AgentRecord        `json:"automations,omitempty"`
-	Tools        []AgentRecord        `json:"tools,omitempty"`
-	Connections  []AgentRecord        `json:"connections,omitempty"`
-	Archives     []AgentRecord        `json:"archives,omitempty"`
-	Unsupported  []AgentRecord        `json:"unsupported,omitempty"`
-	Claude       *ClaudeInventory     `json:"claude,omitempty"`
-	Notes        []string             `json:"notes,omitempty"`
+	Platform          string                  `json:"platform,omitempty"`
+	Command           string                  `json:"command,omitempty"`
+	ProfileRules      []AgentProfileRule      `json:"profile_rules,omitempty"`
+	MemoryItems       []AgentMemoryItem       `json:"memory_items,omitempty"`
+	Projects          []AgentProjectRecord    `json:"projects,omitempty"`
+	Automations       []AgentRecord           `json:"automations,omitempty"`
+	Tools             []AgentRecord           `json:"tools,omitempty"`
+	Connections       []AgentRecord           `json:"connections,omitempty"`
+	Archives          []AgentRecord           `json:"archives,omitempty"`
+	Unsupported       []AgentRecord           `json:"unsupported,omitempty"`
+	SensitiveFindings []AgentSensitiveFinding `json:"sensitive_findings,omitempty"`
+	VaultCandidates   []AgentVaultCandidate   `json:"vault_candidates,omitempty"`
+	Claude            *ClaudeInventory        `json:"claude,omitempty"`
+	Notes             []string                `json:"notes,omitempty"`
 }
 
 type AgentProfileRule struct {
@@ -283,6 +285,22 @@ func (c *Client) ImportAgentExport(ctx context.Context, platform string, payload
 		result.Artifacts++
 		result.Archived += len(payload.Unsupported)
 		result.Blocked += len(payload.Unsupported)
+		result.Paths = append(result.Paths, written)
+	}
+	if written, err := c.writeAgentArtifact(ctx, platform, "sensitive-findings.json", payload.SensitiveFindings); err != nil {
+		return nil, err
+	} else if written != "" {
+		result.Artifacts++
+		result.Archived += len(payload.SensitiveFindings)
+		result.SensitiveFindings += len(payload.SensitiveFindings)
+		result.Paths = append(result.Paths, written)
+	}
+	if written, err := c.writeAgentArtifact(ctx, platform, "vault-candidates.json", payload.VaultCandidates); err != nil {
+		return nil, err
+	} else if written != "" {
+		result.Artifacts++
+		result.Archived += len(payload.VaultCandidates)
+		result.VaultCandidates += len(payload.VaultCandidates)
 		result.Paths = append(result.Paths, written)
 	}
 	if content := renderNotes(payload.Notes); strings.TrimSpace(content) != "" {

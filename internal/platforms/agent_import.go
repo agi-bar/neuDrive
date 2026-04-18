@@ -97,6 +97,21 @@ func Import(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode st
 }
 
 func PrepareAgentImportPayload(ctx context.Context, cfg *runtimecfg.CLIConfig, platform string) (sqlite.AgentExportPayload, error) {
+	if platform == "codex" {
+		payload := sqlite.AgentExportPayload{
+			Platform: platform,
+			Command:  "local-scan",
+			Notes: []string{
+				"Codex import uses neuDrive's deterministic local inventory mapping; live agent semantic scan is skipped by default.",
+			},
+		}
+		enriched, _, err := enrichCodexPayload(payload)
+		if err != nil {
+			return sqlite.AgentExportPayload{}, err
+		}
+		return enriched, nil
+	}
+
 	if platform != "claude-code" {
 		if err := ensureAgentImportReady(cfg, platform); err != nil {
 			return sqlite.AgentExportPayload{}, err
@@ -104,20 +119,27 @@ func PrepareAgentImportPayload(ctx context.Context, cfg *runtimecfg.CLIConfig, p
 		return runAgentExport(ctx, platform)
 	}
 
-	payload := sqlite.AgentExportPayload{
-		Platform: "claude-code",
-		Command:  "local-scan",
-	}
-	if agentPayload, err := runAgentExport(ctx, platform); err == nil {
-		payload = mergeAgentPayload(payload, agentPayload)
+	payload := sqlite.AgentExportPayload{Platform: platform, Command: "local-scan"}
+	if err := ensureAgentImportReady(cfg, platform); err == nil {
+		if agentPayload, runErr := runAgentExport(ctx, platform); runErr == nil {
+			payload = mergeAgentPayload(payload, agentPayload)
+		} else {
+			payload.Notes = append(payload.Notes, fmt.Sprintf("Agent semantic scan unavailable during import: %v", runErr))
+		}
 	} else {
 		payload.Notes = append(payload.Notes, fmt.Sprintf("Agent semantic scan unavailable during import: %v", err))
 	}
-	enriched, _, err := enrichClaudePayload(payload)
-	if err != nil {
-		return sqlite.AgentExportPayload{}, err
+
+	switch platform {
+	case "claude-code":
+		enriched, _, err := enrichClaudePayload(payload)
+		if err != nil {
+			return sqlite.AgentExportPayload{}, err
+		}
+		return enriched, nil
+	default:
+		return payload, nil
 	}
-	return enriched, nil
 }
 
 func ensureAgentImportReady(cfg *runtimecfg.CLIConfig, platform string) error {
@@ -335,23 +357,24 @@ func agentExportSchema() map[string]interface{} {
 		"type":                 "object",
 		"additionalProperties": false,
 		"properties": map[string]interface{}{
-			"platform":      map[string]interface{}{"type": "string"},
-			"command":       map[string]interface{}{"type": "string"},
-			"profile_rules": exportArraySchema([]string{"title", "content", "exactness", "source_paths", "confidence"}),
-			"memory_items":  exportArraySchema([]string{"title", "content", "exactness", "source_paths", "confidence"}),
-			"projects":      exportArraySchema([]string{"name", "context", "exactness", "source_paths"}),
-			"automations":   exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
-			"tools":         exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
-			"connections":   exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
-			"archives":      exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
-			"unsupported":   exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
-			"claude":        claudeInventorySchema(),
+			"platform":           map[string]interface{}{"type": "string"},
+			"command":            map[string]interface{}{"type": "string"},
+			"profile_rules":      exportArraySchema([]string{"title", "content", "exactness", "source_paths", "confidence"}),
+			"memory_items":       exportArraySchema([]string{"title", "content", "exactness", "source_paths", "confidence"}),
+			"projects":           exportArraySchema([]string{"name", "context", "exactness", "source_paths"}),
+			"automations":        exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
+			"tools":              exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
+			"connections":        exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
+			"archives":           exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
+			"unsupported":        exportArraySchema([]string{"name", "content", "exactness", "source_paths", "confidence", "metadata"}),
+			"sensitive_findings": claudeSensitiveFindingSchemaArray(),
+			"vault_candidates":   claudeVaultCandidateSchemaArray(),
 			"notes": map[string]interface{}{
 				"type":  "array",
 				"items": map[string]interface{}{"type": "string"},
 			},
 		},
-		"required": []string{"platform", "command", "profile_rules", "memory_items", "projects", "automations", "tools", "connections", "archives", "unsupported", "notes"},
+		"required": []string{"platform", "command", "profile_rules", "memory_items", "projects", "automations", "tools", "connections", "archives", "unsupported", "sensitive_findings", "vault_candidates", "notes"},
 	}
 }
 
@@ -367,6 +390,7 @@ func claudeInventorySchema() map[string]interface{} {
 			"sensitive_findings": claudeSensitiveFindingSchemaArray(),
 			"vault_candidates":   claudeVaultCandidateSchemaArray(),
 		},
+		"required": []string{"projects", "bundles", "conversations", "files", "sensitive_findings", "vault_candidates"},
 	}
 }
 
@@ -518,6 +542,7 @@ func exportArraySchema(fields []string) map[string]interface{} {
 				"type":                 "object",
 				"additionalProperties": false,
 				"properties":           map[string]interface{}{},
+				"required":             []string{},
 			}
 		default:
 			properties[field] = map[string]interface{}{"type": "string"}

@@ -65,10 +65,14 @@ func TestAdapterContracts(t *testing.T) {
 			id:            "codex",
 			displayName:   "Codex CLI",
 			configRel:     filepath.Join(".codex", "config.toml"),
-			expectedFiles: 3,
+			expectedFiles: 7,
 			expectedExports: []string{
+				filepath.Join("connections", "auth.json"),
 				filepath.Join("profile", "config.toml"),
 				filepath.Join("profile", "AGENTS.md"),
+				filepath.Join("profile", "rules", "default.rules"),
+				filepath.Join("projects", "session_index.jsonl"),
+				filepath.Join("projects", "sessions", "2026", "04", "16", "session-001.jsonl"),
 				filepath.Join("skills", "skills", "sample", "SKILL.md"),
 			},
 			assertConnect: func(t *testing.T, home, daemonURL, logText string, _ string) {

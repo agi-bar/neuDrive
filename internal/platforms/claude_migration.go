@@ -78,8 +78,16 @@ func PreviewImport(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, raw
 		}
 		payload = mergeClaudeScanIntoPayload(payload, scan)
 		preview.Notes = append(preview.Notes, scan.Notes...)
+	} else if adapter.ID() == "codex" {
+		scan, err := scanLocalCodexMigration()
+		if err != nil {
+			return nil, err
+		}
+		payload = mergeCodexScanIntoPayload(payload, scan)
+		preview.Notes = append(preview.Notes, scan.Notes...)
+		preview.Notes = append(preview.Notes, "Codex preview uses neuDrive's deterministic local inventory mapping; live agent semantic scan is skipped by default.")
 	}
-	if mode != ImportModeFiles && supportsAgentMediatedImport(adapter.ID()) {
+	if adapter.ID() != "codex" && mode != ImportModeFiles && supportsAgentMediatedImport(adapter.ID()) {
 		agentPayload, err := runAgentExport(ctx, adapter.ID())
 		if err != nil {
 			preview.Notes = append(preview.Notes, fmt.Sprintf("Agent semantic scan unavailable: %v", err))
@@ -89,6 +97,8 @@ func PreviewImport(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, raw
 	}
 
 	preview.Categories = buildImportPreviewCategories(mode, sources, payload)
+	preview.SensitiveFindings = append(preview.SensitiveFindings, payload.SensitiveFindings...)
+	preview.VaultCandidates = append(preview.VaultCandidates, payload.VaultCandidates...)
 	if payload.Claude != nil {
 		preview.SensitiveFindings = append(preview.SensitiveFindings, payload.Claude.SensitiveFindings...)
 		preview.VaultCandidates = append(preview.VaultCandidates, payload.Claude.VaultCandidates...)
@@ -125,12 +135,14 @@ func mergeAgentPayload(base, extra sqlite.AgentExportPayload) sqlite.AgentExport
 	base.ProfileRules = appendUniqueProfileRules(base.ProfileRules, extra.ProfileRules)
 	base.MemoryItems = appendUniqueMemoryItems(base.MemoryItems, extra.MemoryItems)
 	base.Projects = appendUniqueProjects(base.Projects, extra.Projects)
-	base.Automations = append(base.Automations, extra.Automations...)
-	base.Tools = append(base.Tools, extra.Tools...)
-	base.Connections = append(base.Connections, extra.Connections...)
-	base.Archives = append(base.Archives, extra.Archives...)
-	base.Unsupported = append(base.Unsupported, extra.Unsupported...)
-	base.Notes = append(base.Notes, extra.Notes...)
+	base.Automations = appendUniqueAgentRecords(base.Automations, extra.Automations)
+	base.Tools = appendUniqueAgentRecords(base.Tools, extra.Tools)
+	base.Connections = appendUniqueAgentRecords(base.Connections, extra.Connections)
+	base.Archives = appendUniqueAgentRecords(base.Archives, extra.Archives)
+	base.Unsupported = appendUniqueAgentRecords(base.Unsupported, extra.Unsupported)
+	base.SensitiveFindings = appendUniqueSensitiveFindings(base.SensitiveFindings, extra.SensitiveFindings)
+	base.VaultCandidates = appendUniqueVaultCandidates(base.VaultCandidates, extra.VaultCandidates)
+	base.Notes = appendUniqueStrings(base.Notes, extra.Notes)
 	if extra.Claude != nil {
 		if base.Claude == nil {
 			base.Claude = &sqlite.ClaudeInventory{}
@@ -1245,6 +1257,69 @@ func appendUniqueProjects(base, extra []sqlite.AgentProjectRecord) []sqlite.Agen
 			continue
 		}
 		seen[item.Name] = struct{}{}
+		base = append(base, item)
+	}
+	return base
+}
+
+func appendUniqueAgentRecords(base, extra []sqlite.AgentRecord) []sqlite.AgentRecord {
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		seen[item.Name+"|"+strings.Join(item.SourcePaths, ",")] = struct{}{}
+	}
+	for _, item := range extra {
+		key := item.Name + "|" + strings.Join(item.SourcePaths, ",")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		base = append(base, item)
+	}
+	return base
+}
+
+func appendUniqueSensitiveFindings(base, extra []sqlite.AgentSensitiveFinding) []sqlite.AgentSensitiveFinding {
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		seen[item.Title+"|"+strings.Join(item.SourcePaths, ",")] = struct{}{}
+	}
+	for _, item := range extra {
+		key := item.Title + "|" + strings.Join(item.SourcePaths, ",")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		base = append(base, item)
+	}
+	return base
+}
+
+func appendUniqueVaultCandidates(base, extra []sqlite.AgentVaultCandidate) []sqlite.AgentVaultCandidate {
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		seen[item.Scope+"|"+strings.Join(item.SourcePaths, ",")] = struct{}{}
+	}
+	for _, item := range extra {
+		key := item.Scope + "|" + strings.Join(item.SourcePaths, ",")
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		base = append(base, item)
+	}
+	return base
+}
+
+func appendUniqueStrings(base, extra []string) []string {
+	seen := map[string]struct{}{}
+	for _, item := range base {
+		seen[item] = struct{}{}
+	}
+	for _, item := range extra {
+		if _, ok := seen[item]; ok {
+			continue
+		}
+		seen[item] = struct{}{}
 		base = append(base, item)
 	}
 	return base

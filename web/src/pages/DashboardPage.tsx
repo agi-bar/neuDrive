@@ -249,19 +249,25 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
 
       {localMode && (
         <div className="card">
-          <h3 className="card-title">{tx('Claude Code 迁移', 'Claude Code Migration')}</h3>
+          <h3 className="card-title">{tx('本地平台迁移', 'Local Platform Migration')}</h3>
           <p style={{ marginBottom: '1rem', color: 'var(--color-text-secondary, #888)' }}>
             {tx(
-              '先扫描本机 Claude Code 数据，再把 projects、memory、skills、会话和结构化归档迁移到 neuDrive。',
-              'Scan local Claude Code data first, then migrate projects, memory, skills, conversations, and structured archives into neuDrive.',
+              'Claude Code 和 Codex CLI 现在都支持本地扫描迁移；ChatGPT 当前主路径仍然是浏览器扩展导入对话。',
+              'Claude Code and Codex CLI now support local scan-and-migrate flows. ChatGPT currently still imports conversations through the browser extension path.',
             )}
           </p>
           <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
             <Link to="/imports/claude" className="btn btn-primary">
-              {tx('打开迁移报告', 'Open migration report')}
+              {tx('Claude 迁移报告', 'Claude migration report')}
+            </Link>
+            <Link to="/imports/codex" className="btn">
+              {tx('Codex 迁移报告', 'Codex migration report')}
             </Link>
             <Link to="/imports/claude-export" className="btn">
               {tx('导入 Claude 官方导出', 'Import Claude official export')}
+            </Link>
+            <Link to="/setup/web-apps" className="btn">
+              {tx('ChatGPT Web 接入', 'ChatGPT web setup')}
             </Link>
             <Link to="/connections" className="btn">
               {tx('查看平台连接', 'View connections')}

@@ -486,6 +486,22 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 		result.Blocked += len(payload.Unsupported)
 		result.Paths = append(result.Paths, written)
 	}
+	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "sensitive-findings.json", payload.SensitiveFindings); err != nil {
+		return nil, err
+	} else if written != "" {
+		result.Artifacts++
+		result.Archived += len(payload.SensitiveFindings)
+		result.SensitiveFindings += len(payload.SensitiveFindings)
+		result.Paths = append(result.Paths, written)
+	}
+	if written, err := s.writeLocalAgentArtifact(ctx, userID, platform, "vault-candidates.json", payload.VaultCandidates); err != nil {
+		return nil, err
+	} else if written != "" {
+		result.Artifacts++
+		result.Archived += len(payload.VaultCandidates)
+		result.VaultCandidates += len(payload.VaultCandidates)
+		result.Paths = append(result.Paths, written)
+	}
 	if content := renderAgentNotes(payload.Notes); strings.TrimSpace(content) != "" {
 		target := filepath.ToSlash(filepath.Join("/platforms", platform, "agent", "notes.md"))
 		if _, err := s.FileTreeService.WriteEntry(ctx, userID, target, content, "text/markdown", models.FileTreeWriteOptions{

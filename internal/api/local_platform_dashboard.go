@@ -214,6 +214,7 @@ func (s *Server) handleLocalPlatformImport(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	if err != nil {
+		slog.Warn("local platform import failed", "platform", adapter.ID(), "mode", mode, "error", err)
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}

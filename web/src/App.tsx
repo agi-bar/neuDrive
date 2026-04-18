@@ -335,6 +335,9 @@ function App() {
                   <NavLink to="/imports/claude" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                     {tx('Claude Code', 'Claude Code')}
                   </NavLink>
+                  <NavLink to="/imports/codex" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
+                    {tx('Codex CLI', 'Codex CLI')}
+                  </NavLink>
                   <NavLink to="/imports/claude-export" className={({ isActive }) => isActive ? 'nav-subitem active' : 'nav-subitem'}>
                     {tx('Claude 导出 ZIP', 'Claude Export ZIP')}
                   </NavLink>
@@ -407,7 +410,8 @@ function App() {
             </Route>
             <Route path="/connections" element={<ConnectionsPage />} />
             <Route path="/imports" element={<Navigate to="/imports/claude" replace />} />
-            <Route path="/imports/claude" element={<ClaudeMigrationPage localMode={localMode} />} />
+            <Route path="/imports/claude" element={<ClaudeMigrationPage localMode={localMode} officialExportPath="/imports/claude-export" />} />
+            <Route path="/imports/codex" element={<ClaudeMigrationPage localMode={localMode} platform="codex" displayName="Codex CLI" />} />
             <Route path="/imports/claude-export" element={<ClaudeImportPage />} />
             <Route path="/info" element={<Navigate to="/data/profile" replace />} />
             <Route path="/projects" element={<Navigate to="/data/projects" replace />} />

@@ -13,6 +13,9 @@ type MigrationMode = "agent" | "files" | "all";
 
 interface ClaudeMigrationPageProps {
   localMode?: boolean;
+  platform?: "claude" | "codex";
+  displayName?: string;
+  officialExportPath?: string;
 }
 
 const modeOptions: MigrationMode[] = ["agent", "all", "files"];
@@ -115,6 +118,9 @@ function categoryLabel(name: string, tx: (zh: string, en: string) => string) {
 
 export default function ClaudeMigrationPage({
   localMode = false,
+  platform = "claude",
+  displayName = "Claude Code",
+  officialExportPath,
 }: ClaudeMigrationPageProps) {
   const { locale, tx } = useI18n();
   const [mode, setMode] = useState<MigrationMode>("agent");
@@ -140,7 +146,7 @@ export default function ClaudeMigrationPage({
     setTaskStatus(null);
     setPreview(null);
     void api
-      .getLocalPlatformImportPreviewTask({ platform: "claude", mode })
+      .getLocalPlatformImportPreviewTask({ platform, mode })
       .then((data) => {
         if (cancelled) return;
         setTaskStatus(data.status || null);
@@ -159,7 +165,7 @@ export default function ClaudeMigrationPage({
     return () => {
       cancelled = true;
     };
-  }, [localMode, mode]);
+  }, [localMode, mode, platform]);
 
   useEffect(() => {
     if (!previewing || !taskStatus?.started_at) return;
@@ -177,7 +183,7 @@ export default function ClaudeMigrationPage({
     let cancelled = false;
     const interval = window.setInterval(() => {
       void api
-        .getLocalPlatformImportPreviewTask({ platform: "claude", mode })
+        .getLocalPlatformImportPreviewTask({ platform, mode })
         .then((data) => {
           if (cancelled) return;
           setTaskStatus(data.status || null);
@@ -189,7 +195,7 @@ export default function ClaudeMigrationPage({
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [localMode, mode, previewing]);
+  }, [localMode, mode, platform, previewing]);
 
   const handleRefresh = async () => {
     setError("");
@@ -197,7 +203,7 @@ export default function ClaudeMigrationPage({
     setLoadingPreviewTask(true);
     try {
       const data = await api.startLocalPlatformImportPreviewTask({
-        platform: "claude",
+        platform,
         mode,
       });
       setTaskStatus(data.status || null);
@@ -223,15 +229,15 @@ export default function ClaudeMigrationPage({
     setSuccess("");
     try {
       const response = await api.importLocalPlatform({
-        platform: "claude",
+        platform,
         mode,
       });
       setResult(response.data);
       setSyncInfo(response.localGitSync || null);
       setSuccess(
         tx(
-          "Claude Code 数据已导入到 neuDrive。",
-          "Claude Code data has been imported into neuDrive.",
+          `${displayName} 数据已导入到 neuDrive。`,
+          `${displayName} data has been imported into neuDrive.`,
         ),
       );
     } catch (err: any) {
@@ -242,25 +248,35 @@ export default function ClaudeMigrationPage({
   };
 
   const totalDiscovered =
-    preview?.categories.reduce(
+    (Array.isArray(preview?.categories) ? preview.categories : []).reduce(
       (sum, category) => sum + (category.discovered || 0),
       0,
     ) || 0;
   const totalImportable =
-    preview?.categories.reduce(
+    (Array.isArray(preview?.categories) ? preview.categories : []).reduce(
       (sum, category) => sum + (category.importable || 0),
       0,
     ) || 0;
   const totalArchived =
-    preview?.categories.reduce(
+    (Array.isArray(preview?.categories) ? preview.categories : []).reduce(
       (sum, category) => sum + (category.archived || 0),
       0,
     ) || 0;
   const totalBlocked =
-    preview?.categories.reduce(
+    (Array.isArray(preview?.categories) ? preview.categories : []).reduce(
       (sum, category) => sum + (category.blocked || 0),
       0,
     ) || 0;
+  const previewCategories = Array.isArray(preview?.categories)
+    ? preview.categories
+    : [];
+  const previewSensitiveFindings = Array.isArray(preview?.sensitive_findings)
+    ? preview.sensitive_findings
+    : [];
+  const previewVaultCandidates = Array.isArray(preview?.vault_candidates)
+    ? preview.vault_candidates
+    : [];
+  const previewNotes = Array.isArray(preview?.notes) ? preview.notes : [];
   const importPaths = result?.agent?.paths || result?.files?.paths || [];
   const lastScanAt = preview?.completed_at || preview?.started_at || "";
   const statusCompletedAt =
@@ -306,11 +322,11 @@ export default function ClaudeMigrationPage({
     <div className="page materials-page">
       <div className="page-header">
         <div>
-          <h2>Claude</h2>
+          <h2>{displayName}</h2>
           <p className="page-subtitle">
             {tx(
-              "本地扫描并迁移 Claude Code 数据，再决定只做语义迁移，还是顺带保留完整原始快照。",
-              "Scan and migrate local Claude Code data, then decide whether to do semantic migration only or keep the full raw snapshot as well.",
+              `本地扫描并迁移 ${displayName} 数据，再决定只做语义迁移，还是顺带保留完整原始快照。`,
+              `Scan and migrate local ${displayName} data, then decide whether to do semantic migration only or keep the full raw snapshot as well.`,
             )}
           </p>
         </div>
@@ -320,8 +336,8 @@ export default function ClaudeMigrationPage({
         <div className="card">
           <div className="alert alert-warn">
             {tx(
-              "这个页面只在本地模式下可用，因为它需要直接扫描当前机器上的 Claude Code 文件。",
-              "This page is only available in local mode because it needs to scan Claude Code files on this machine directly.",
+              `这个页面只在本地模式下可用，因为它需要直接扫描当前机器上的 ${displayName} 文件。`,
+              `This page is only available in local mode because it needs to scan ${displayName} files on this machine directly.`,
             )}
           </div>
           <div
@@ -335,9 +351,11 @@ export default function ClaudeMigrationPage({
             <Link to="/" className="btn btn-primary">
               {tx("返回概览", "Back to overview")}
             </Link>
-            <Link to="/imports/claude-export" className="btn">
-              {tx("Claude 导出 ZIP", "Claude Export ZIP")}
-            </Link>
+            {officialExportPath ? (
+              <Link to={officialExportPath} className="btn">
+                {tx("Claude 导出 ZIP", "Claude Export ZIP")}
+              </Link>
+            ) : null}
             <Link to="/connections" className="btn">
               {tx("查看连接", "View connections")}
             </Link>
@@ -378,8 +396,8 @@ export default function ClaudeMigrationPage({
                     <div className="migration-mode-copy">
                       {option === "agent" &&
                         tx(
-                          "推荐。把可提升的数据迁成一等 neuDrive 内容。",
-                          "Recommended. Promote durable Claude data into first-class neuDrive content.",
+                          `推荐。把可提升的 ${displayName} 数据迁成一等 neuDrive 内容。`,
+                          `Recommended. Promote durable ${displayName} data into first-class neuDrive content.`,
                         )}
                       {option === "all" &&
                         tx(
@@ -397,9 +415,11 @@ export default function ClaudeMigrationPage({
               </div>
             </div>
             <div className="page-actions">
-              <Link to="/imports/claude-export" className="btn">
-                {tx("Claude 导出 ZIP", "Claude Export ZIP")}
-              </Link>
+              {officialExportPath ? (
+                <Link to={officialExportPath} className="btn">
+                  {tx("Claude 导出 ZIP", "Claude Export ZIP")}
+                </Link>
+              ) : null}
               <button
                 className="btn"
                 type="button"
@@ -448,7 +468,7 @@ export default function ClaudeMigrationPage({
             </div>
             <div className="stat-card">
               <div className="stat-value">
-                {preview?.sensitive_findings.length || 0}
+                {previewSensitiveFindings.length}
               </div>
               <div className="stat-label">
                 {tx("敏感项", "Sensitive findings")}
@@ -456,7 +476,7 @@ export default function ClaudeMigrationPage({
             </div>
             <div className="stat-card">
               <div className="stat-value">
-                {preview?.vault_candidates.length || 0}
+                {previewVaultCandidates.length}
               </div>
               <div className="stat-label">
                 {tx("Vault 候选", "Vault candidates")}
@@ -474,7 +494,7 @@ export default function ClaudeMigrationPage({
                   {tx("按迁移口径统计", "Grouped by migration outcome")}
                 </span>
               </div>
-              {!preview || preview.categories.length === 0 ? (
+              {!preview || previewCategories.length === 0 ? (
                 <p className="dashboard-empty-copy">
                   {previewing
                     ? tx("扫描中...", "Scanning...")
@@ -484,7 +504,7 @@ export default function ClaudeMigrationPage({
                 </p>
               ) : (
                 <div className="migration-category-list">
-                  {preview.categories.map((category) => (
+                  {previewCategories.map((category) => (
                     <div
                       key={category.name}
                       className="migration-category-item"
@@ -515,7 +535,7 @@ export default function ClaudeMigrationPage({
               </div>
               <pre className="migration-command">
                 {preview?.next_command ||
-                  "neu import platform claude --dry-run --mode agent"}
+                  `neu import platform ${platform} --dry-run --mode agent`}
               </pre>
               <div className="migration-preview-totals">
                 <span>
@@ -541,9 +561,9 @@ export default function ClaudeMigrationPage({
                   )}
                 </span>
               </div>
-              {preview?.sensitive_findings.length ? (
+              {previewSensitiveFindings.length ? (
                 <div className="migration-finding-list">
-                  {preview.sensitive_findings.slice(0, 6).map((finding) => (
+                  {previewSensitiveFindings.slice(0, 6).map((finding) => (
                     <div
                       key={`${finding.title}-${finding.redacted_example || ""}`}
                       className="migration-finding-item"
@@ -588,9 +608,9 @@ export default function ClaudeMigrationPage({
                   {tx("后续可以单独处理", "Follow up separately when needed")}
                 </span>
               </div>
-              {preview?.vault_candidates.length ? (
+              {previewVaultCandidates.length ? (
                 <div className="migration-finding-list">
-                  {preview.vault_candidates.slice(0, 6).map((candidate) => (
+                  {previewVaultCandidates.slice(0, 6).map((candidate) => (
                     <div
                       key={candidate.scope}
                       className="migration-finding-item"
@@ -612,11 +632,11 @@ export default function ClaudeMigrationPage({
             </div>
           </div>
 
-          {preview?.notes.length ? (
+          {previewNotes.length ? (
             <div className="card">
               <h3 className="card-title">{tx("扫描备注", "Scan notes")}</h3>
               <div className="migration-note-list">
-                {preview.notes.map((note) => (
+                {previewNotes.map((note) => (
                   <div key={note} className="migration-note-item">
                     {note}
                   </div>

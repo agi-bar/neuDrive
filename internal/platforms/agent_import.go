@@ -292,8 +292,12 @@ func runClaudeAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error
 	}
 	defer os.RemoveAll(tempDir)
 
+	schema, err := json.Marshal(agentExportSchema())
+	if err != nil {
+		return sqlite.AgentExportPayload{}, err
+	}
 	prompt := buildAgentExportPrompt("Claude Code", "claude-entry-reference", "claude-portability-reference", skillDoc, commandDoc, platformDoc, portabilityDoc)
-	cmd := exec.CommandContext(ctx, "claude", "-p", prompt)
+	cmd := exec.CommandContext(ctx, "claude", "-p", "--output-format", "json", "--json-schema", string(schema), prompt)
 	cmd.Dir = tempDir
 	output, stderr, err := runCommandJSON(cmd)
 	if err != nil {
@@ -568,27 +572,66 @@ func runCommandJSON(cmd *exec.Cmd) ([]byte, string, error) {
 
 func decodeAgentExportPayload(payloadBytes []byte) (sqlite.AgentExportPayload, error) {
 	raw := strings.TrimSpace(string(payloadBytes))
+	return decodeAgentExportPayloadString(raw, 0)
+}
+
+func decodeAgentExportPayloadString(raw string, depth int) (sqlite.AgentExportPayload, error) {
+	const maxDecodeDepth = 4
 	var payload sqlite.AgentExportPayload
-	if err := json.Unmarshal([]byte(raw), &payload); err == nil {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return payload, fmt.Errorf("invalid json payload")
+	}
+	if depth > maxDecodeDepth {
+		return payload, fmt.Errorf("invalid json payload")
+	}
+	if err := json.Unmarshal([]byte(raw), &payload); err == nil && isMeaningfulAgentExportPayload(payload) {
 		return payload, nil
+	}
+	var wrapper map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(raw), &wrapper); err == nil {
+		if structured := bytes.TrimSpace(wrapper["structured_output"]); len(structured) > 0 && !bytes.Equal(structured, []byte("null")) {
+			return decodeAgentExportPayloadString(string(structured), depth+1)
+		}
+		if result := bytes.TrimSpace(wrapper["result"]); len(result) > 0 && !bytes.Equal(result, []byte("null")) {
+			var resultString string
+			if err := json.Unmarshal(result, &resultString); err == nil {
+				return decodeAgentExportPayloadString(resultString, depth+1)
+			}
+			return decodeAgentExportPayloadString(string(result), depth+1)
+		}
 	}
 	if strings.HasPrefix(raw, "```") {
 		raw = strings.TrimPrefix(raw, "```json")
 		raw = strings.TrimPrefix(raw, "```")
 		raw = strings.TrimSuffix(raw, "```")
 		raw = strings.TrimSpace(raw)
-		if err := json.Unmarshal([]byte(raw), &payload); err == nil {
-			return payload, nil
-		}
+		return decodeAgentExportPayloadString(raw, depth+1)
 	}
 	start := strings.Index(raw, "{")
 	end := strings.LastIndex(raw, "}")
 	if start >= 0 && end > start {
-		if err := json.Unmarshal([]byte(raw[start:end+1]), &payload); err == nil {
-			return payload, nil
-		}
+		return decodeAgentExportPayloadString(raw[start:end+1], depth+1)
 	}
 	return payload, fmt.Errorf("invalid json payload")
+}
+
+func isMeaningfulAgentExportPayload(payload sqlite.AgentExportPayload) bool {
+	return strings.TrimSpace(payload.Platform) != "" ||
+		strings.TrimSpace(payload.Command) != "" ||
+		len(payload.ProfileRules) > 0 ||
+		len(payload.MemoryItems) > 0 ||
+		len(payload.Projects) > 0 ||
+		len(payload.Automations) > 0 ||
+		len(payload.Tools) > 0 ||
+		len(payload.Connections) > 0 ||
+		len(payload.Archives) > 0 ||
+		len(payload.Unsupported) > 0 ||
+		len(payload.SensitiveFindings) > 0 ||
+		len(payload.VaultCandidates) > 0 ||
+		payload.Claude != nil ||
+		payload.Codex != nil ||
+		len(payload.Notes) > 0
 }
 
 func supportsAgentMediatedImport(platform string) bool {

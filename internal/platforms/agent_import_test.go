@@ -6,6 +6,46 @@ func TestAgentExportSchemaUsesStrictObjectRequirements(t *testing.T) {
 	assertStrictObjectSchema(t, "agentExportSchema", agentExportSchema())
 }
 
+func TestDecodeAgentExportPayloadAcceptsClaudeStructuredOutputEnvelope(t *testing.T) {
+	payload, err := decodeAgentExportPayload([]byte(`{
+  "type": "result",
+  "structured_output": {
+    "platform": "claude-code",
+    "command": "export",
+    "profile_rules": [],
+    "memory_items": [],
+    "projects": [],
+    "automations": [],
+    "tools": [],
+    "connections": [],
+    "archives": [],
+    "unsupported": [],
+    "sensitive_findings": [],
+    "vault_candidates": [],
+    "notes": ["structured envelope"]
+  }
+}`))
+	if err != nil {
+		t.Fatalf("decodeAgentExportPayload(structured_output): %v", err)
+	}
+	if payload.Platform != "claude-code" || len(payload.Notes) != 1 || payload.Notes[0] != "structured envelope" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
+func TestDecodeAgentExportPayloadAcceptsClaudeResultEnvelope(t *testing.T) {
+	payload, err := decodeAgentExportPayload([]byte(`{
+  "type": "result",
+  "result": "{\"platform\":\"claude-code\",\"command\":\"export\",\"profile_rules\":[],\"memory_items\":[],\"projects\":[],\"automations\":[],\"tools\":[],\"connections\":[],\"archives\":[],\"unsupported\":[],\"sensitive_findings\":[],\"vault_candidates\":[],\"notes\":[\"result envelope\"]}"
+}`))
+	if err != nil {
+		t.Fatalf("decodeAgentExportPayload(result): %v", err)
+	}
+	if payload.Platform != "claude-code" || len(payload.Notes) != 1 || payload.Notes[0] != "result envelope" {
+		t.Fatalf("unexpected payload: %+v", payload)
+	}
+}
+
 func assertStrictObjectSchema(t *testing.T, path string, node interface{}) {
 	t.Helper()
 

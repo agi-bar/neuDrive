@@ -147,10 +147,33 @@ export interface PublicConfig {
   github_enabled?: boolean;
   github_app_enabled?: boolean;
   github_app_slug?: string;
+  billing_enabled?: boolean;
   storage?: string;
   local_mode?: boolean;
   system_settings_enabled?: boolean;
   git_mirror_execution_mode?: "local" | "hosted";
+}
+
+export interface BillingPlan {
+  code: 'free' | 'pro'
+  name: string
+  currency: string
+  price_cents: number
+  interval: string
+  storage_limit_bytes: number
+}
+
+export interface BillingStatus {
+  current_plan: 'free' | 'pro'
+  entitlement_status: 'active' | 'grace'
+  subscription_status?: string
+  used_bytes: number
+  limit_bytes: number
+  usage_measured_at?: string
+  account_read_only: boolean
+  plans: BillingPlan[]
+  can_checkout: boolean
+  can_manage_portal: boolean
 }
 
 export interface DashboardStats {
@@ -229,6 +252,95 @@ export interface LocalGitSyncInfo {
 export interface RequestEnvelope<T> {
   data: T;
   localGitSync?: LocalGitSyncInfo;
+}
+
+export interface BillingRedirectDetail {
+  code?: string
+  message: string
+  plan?: string
+  upgrade_url?: string
+  used_bytes?: number
+  limit_bytes?: number
+  retry_after_sec?: number
+}
+
+type APIErrorPayload = {
+  code?: string
+  message?: string
+  error?: string
+  plan?: string
+  upgrade_url?: string
+  used_bytes?: number
+  delta_bytes?: number
+  limit_bytes?: number
+  retry_after_sec?: number
+}
+
+export const BILLING_REDIRECT_EVENT = 'neudrive:billing-redirect'
+
+export class BillingAPIError extends Error {
+  code?: string
+  plan?: string
+  upgrade_url?: string
+  used_bytes?: number
+  delta_bytes?: number
+  limit_bytes?: number
+  retry_after_sec?: number
+
+  constructor(payload: APIErrorPayload, fallbackMessage: string) {
+    super(payload.message || payload.error || fallbackMessage)
+    this.name = 'BillingAPIError'
+    this.code = payload.code
+    this.plan = payload.plan
+    this.upgrade_url = payload.upgrade_url
+    this.used_bytes = payload.used_bytes
+    this.delta_bytes = payload.delta_bytes
+    this.limit_bytes = payload.limit_bytes
+    this.retry_after_sec = payload.retry_after_sec
+  }
+}
+
+function extractAPIErrorPayload(raw: any): APIErrorPayload {
+  if (!raw || typeof raw !== 'object') {
+    return {}
+  }
+  if (raw.error && typeof raw.error === 'object') {
+    return raw.error as APIErrorPayload
+  }
+  if (typeof raw.error === 'string') {
+    return { ...raw, message: raw.message || raw.error }
+  }
+  return raw as APIErrorPayload
+}
+
+function buildAPIError(payload: any, fallbackMessage: string): BillingAPIError {
+  return new BillingAPIError(extractAPIErrorPayload(payload), fallbackMessage)
+}
+
+export function buildAPIErrorFromPayload(payload: any, fallbackMessage: string): BillingAPIError {
+  return buildAPIError(payload, fallbackMessage)
+}
+
+export async function buildAPIErrorFromResponse(res: Response): Promise<BillingAPIError> {
+  const payload = await res.json().catch(() => ({ error: res.statusText }))
+  return buildAPIError(payload, res.statusText)
+}
+
+export function notifyBillingRedirect(error: unknown) {
+  if (!(error instanceof BillingAPIError)) return
+  if (error.code !== 'quota_exceeded' && error.code !== 'account_read_only') return
+  if (typeof window === 'undefined') return
+  window.dispatchEvent(new CustomEvent<BillingRedirectDetail>(BILLING_REDIRECT_EVENT, {
+    detail: {
+      code: error.code,
+      message: error.message,
+      plan: error.plan,
+      upgrade_url: error.upgrade_url,
+      used_bytes: error.used_bytes,
+      limit_bytes: error.limit_bytes,
+      retry_after_sec: error.retry_after_sec,
+    },
+  }))
 }
 
 // ---------------------------------------------------------------------------
@@ -313,10 +425,9 @@ async function requestWithMetadata<T>(
         },
       });
       if (!retryRes.ok) {
-        const err = await retryRes
-          .json()
-          .catch(() => ({ error: retryRes.statusText }));
-        throw new Error(err.message || err.error || retryRes.statusText);
+        const err = await buildAPIErrorFromResponse(retryRes)
+        notifyBillingRedirect(err)
+        throw err
       }
       const retryJson = await retryRes.json();
       if (retryJson && retryJson.ok === true && retryJson.data !== undefined) {
@@ -331,8 +442,9 @@ async function requestWithMetadata<T>(
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.message || err.error || res.statusText);
+    const err = await buildAPIErrorFromResponse(res)
+    notifyBillingRedirect(err)
+    throw err
   }
   const json = await res.json();
   // Unwrap APISuccess envelope: {ok: true, data: {...}} → return data
@@ -378,8 +490,9 @@ async function agentRequest<T>(
     },
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.message || err.error || res.statusText);
+    const err = await buildAPIErrorFromResponse(res)
+    notifyBillingRedirect(err)
+    throw err
   }
   if (res.status === 204) {
     return undefined as T;
@@ -398,8 +511,9 @@ async function agentRequestBytes(path: string, token: string): Promise<Blob> {
     },
   });
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: res.statusText }));
-    throw new Error(err.message || err.error || res.statusText);
+    const err = await buildAPIErrorFromResponse(res)
+    notifyBillingRedirect(err)
+    throw err
   }
   return res.blob();
 }
@@ -479,6 +593,19 @@ export const api = {
   // Dashboard
   getStats: () => request<DashboardStats>("/dashboard/stats"),
 
+  // Billing
+  getBillingStatus: () => request<BillingStatus>('/billing/status'),
+
+  createBillingCheckout: () =>
+    request<{ ok: true; checkout_url: string }>('/billing/checkout', {
+      method: 'POST',
+    }),
+
+  createBillingPortal: () =>
+    request<{ ok: true; portal_url: string }>('/billing/portal', {
+      method: 'POST',
+    }),
+
   // Connections
   getConnections: () =>
     request<{ connections: ConnectionResponse[] }>("/connections").then(
@@ -554,8 +681,9 @@ export const api = {
       },
     );
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.message || err.error || res.statusText);
+      const err = await buildAPIErrorFromResponse(res)
+      notifyBillingRedirect(err)
+      throw err
     }
     const blob = await res.blob();
     const filename = parseDownloadFilename(
@@ -691,8 +819,9 @@ export const api = {
       },
     });
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: res.statusText }));
-      throw new Error(err.error || res.statusText);
+      const err = await buildAPIErrorFromResponse(res)
+      notifyBillingRedirect(err)
+      throw err
     }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
@@ -751,8 +880,9 @@ export const api = {
       body: formData,
     }).then(async (res) => {
       if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }));
-        throw new Error(err.error || res.statusText);
+        const err = await buildAPIErrorFromResponse(res)
+        notifyBillingRedirect(err)
+        throw err
       }
       return res.json() as Promise<ImportResult>;
     });

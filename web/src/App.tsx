@@ -1,11 +1,13 @@
 import { Suspense, lazy, useState, useEffect, useCallback } from 'react'
 import { Routes, Route, NavLink, Navigate, Outlet, useNavigate, useLocation } from 'react-router-dom'
-import { api } from './api'
+import { api, BILLING_REDIRECT_EVENT, type BillingRedirectDetail, type PublicConfig } from './api'
 import LanguageToggle from './components/LanguageToggle'
 import { useI18n } from './i18n'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
+const BillingPage = lazy(() => import('./pages/BillingPage'))
+const BillingSuccessPage = lazy(() => import('./pages/BillingSuccessPage'))
 const ConnectionsPage = lazy(() => import('./pages/ConnectionsPage'))
 const InfoPage = lazy(() => import('./pages/InfoPage'))
 const ProjectsPage = lazy(() => import('./pages/ProjectsPage'))
@@ -31,7 +33,7 @@ const ClaudeMigrationPage = lazy(() => import('./pages/ClaudeMigrationPage'))
 
 function App() {
   const [user, setUser] = useState<any>(null)
-  const [publicConfig, setPublicConfig] = useState<any>({})
+  const [publicConfig, setPublicConfig] = useState<PublicConfig>({})
   const [loading, setLoading] = useState(true)
   const { tx } = useI18n()
   const navigate = useNavigate()
@@ -173,6 +175,7 @@ function App() {
   const isLegacySyncLoginRoute =
     location.pathname === '/data/sync' &&
     new URLSearchParams(location.search).get('cli_login') === '1'
+  const billingEnabled = !!publicConfig?.billing_enabled
   const systemSettingsEnabled = !!publicConfig?.system_settings_enabled
   const localMode = !!publicConfig?.local_mode
   const routeFallback = (
@@ -193,6 +196,24 @@ function App() {
   useEffect(() => {
     setIsImportsNavOpen(isImportsRoute)
   }, [isImportsRoute])
+
+  useEffect(() => {
+    const onBillingRedirect = (event: Event) => {
+      if (!billingEnabled) return
+      const detail = (event as CustomEvent<BillingRedirectDetail>).detail
+      const params = new URLSearchParams()
+      if (detail?.code) {
+        params.set('reason', detail.code)
+      }
+      params.set('ts', String(Date.now()))
+      navigate(`/billing?${params.toString()}`)
+    }
+
+    window.addEventListener(BILLING_REDIRECT_EVENT, onBillingRedirect as EventListener)
+    return () => {
+      window.removeEventListener(BILLING_REDIRECT_EVENT, onBillingRedirect as EventListener)
+    }
+  }, [billingEnabled, navigate])
 
   if (loading) {
     return (
@@ -353,6 +374,12 @@ function App() {
             <span className="nav-icon">&#8645;</span>
             <span>{tx('Git Mirror', 'Git Mirror')}</span>
           </NavLink>
+          {billingEnabled && (
+            <NavLink to="/billing" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
+              <span className="nav-icon">&#36;</span>
+              <span>{tx('Billing', 'Billing')}</span>
+            </NavLink>
+          )}
           {systemSettingsEnabled && (
             <NavLink to="/settings" end className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <span className="nav-icon">&#9881;</span>
@@ -375,7 +402,16 @@ function App() {
       <main className="main-content">
         <Suspense fallback={routeFallback}>
           <Routes>
-            <Route path="/" element={<DashboardPage systemSettingsEnabled={systemSettingsEnabled} localMode={localMode} />} />
+            <Route
+              path="/"
+              element={
+                <DashboardPage
+                  systemSettingsEnabled={systemSettingsEnabled}
+                  localMode={localMode}
+                  billingEnabled={billingEnabled}
+                />
+              }
+            />
             <Route path="/setup" element={<SetupPage />}>
               <Route index element={<Navigate to="web-apps" replace />} />
               <Route path="web-apps" element={<SetupWebAppsPage />} />
@@ -387,6 +423,8 @@ function App() {
               <Route path="tokens" element={<SetupTokensPage />} />
             </Route>
             <Route path="/git-mirror" element={<GitMirrorPage />} />
+            <Route path="/billing" element={billingEnabled ? <BillingPage /> : <Navigate to="/" replace />} />
+            <Route path="/billing/success" element={billingEnabled ? <BillingSuccessPage /> : <Navigate to="/" replace />} />
             <Route path="/settings" element={systemSettingsEnabled ? <SystemSettingsPage /> : <Navigate to="/" replace />} />
             <Route path="/connections/import/claude" element={<ClaudeImportPage />} />
             <Route path="/data" element={<Outlet />}>

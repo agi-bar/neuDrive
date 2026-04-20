@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import LanguageToggle from '../components/LanguageToggle'
 import { useI18n } from '../i18n'
-import type { ImportResult } from '../api'
+import {
+  buildAPIErrorFromPayload,
+  buildAPIErrorFromResponse,
+  notifyBillingRedirect,
+  type ImportResult,
+} from '../api'
 import { dataFileBrowseRoute } from './data/DataShared'
 
 interface SkillsImportRequest {
@@ -111,8 +116,9 @@ function uploadSkillsArchive(
         return
       }
 
-      const message = payload?.message || payload?.error || xhr.statusText || 'upload failed'
-      reject(new Error(message))
+      const error = buildAPIErrorFromPayload(payload, xhr.statusText || 'upload failed')
+      notifyBillingRedirect(error)
+      reject(error)
     }
 
     const formData = new FormData()
@@ -131,7 +137,11 @@ async function validateUploadToken(token: string): Promise<AgentUploadAuthInfo> 
 
   const payload = await res.json().catch(() => null)
   if (!res.ok) {
-    throw new Error(payload?.message || payload?.error || res.statusText || 'token validation failed')
+    const error = payload
+      ? buildAPIErrorFromPayload(payload, res.statusText || 'token validation failed')
+      : await buildAPIErrorFromResponse(res)
+    notifyBillingRedirect(error)
+    throw error
   }
   const data = payload && payload.ok === true && payload.data !== undefined ? payload.data : payload
   return data as AgentUploadAuthInfo

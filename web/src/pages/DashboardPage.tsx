@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { api, type DashboardStats, type FileNode } from '../api'
+import { api, type BillingStatus, type DashboardStats, type FileNode } from '../api'
 import { useI18n } from '../i18n'
+import { formatBillingStorage, resolvePlan } from './BillingShared'
 import {
   formatDateTime,
   isProfileEntry,
-  isVisibleFileEntry,
   isProfilePreviewEntry,
+  isVisibleFileEntry,
   profileLabelFromPath,
-  sourceLabel,
   sortNodesByRecent,
+  sourceLabel,
   summarizeNodeContent,
 } from './data/DataShared'
 
@@ -23,9 +24,14 @@ interface UserProfileData {
 interface DashboardPageProps {
   systemSettingsEnabled?: boolean
   localMode?: boolean
+  billingEnabled?: boolean
 }
 
-export default function DashboardPage({ systemSettingsEnabled = false, localMode = false }: DashboardPageProps) {
+export default function DashboardPage({
+  systemSettingsEnabled = false,
+  localMode = false,
+  billingEnabled = false,
+}: DashboardPageProps) {
   const { locale, tx } = useI18n()
   const [stats, setStats] = useState<DashboardStats>({
     connections: 0,
@@ -41,6 +47,8 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
   const [profile, setProfile] = useState<UserProfileData | null>(null)
   const [recentProfileEntries, setRecentProfileEntries] = useState<FileNode[]>([])
   const [recentFiles, setRecentFiles] = useState<FileNode[]>([])
+  const [billingStatus, setBillingStatus] = useState<BillingStatus | null>(null)
+  const [billingError, setBillingError] = useState('')
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [exporting, setExporting] = useState(false)
@@ -48,45 +56,60 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
   const [exportSuccess, setExportSuccess] = useState('')
 
   useEffect(() => {
-    loadDashboard()
-  }, [])
+    const loadDashboard = async () => {
+      setLoading(true)
+      try {
+        const [statsData, profileData, profileSnapshotData, rootSnapshotData, billingData] = await Promise.allSettled([
+          api.getStats(),
+          api.getProfile(),
+          api.getTreeSnapshot('/memory/profile'),
+          api.getTreeSnapshot('/'),
+          billingEnabled ? api.getBillingStatus() : Promise.resolve(null),
+        ])
 
-  const loadDashboard = async () => {
-    try {
-      const [statsData, profileData, profileSnapshotData, rootSnapshotData] = await Promise.allSettled([
-        api.getStats(),
-        api.getProfile(),
-        api.getTreeSnapshot('/memory/profile'),
-        api.getTreeSnapshot('/'),
-      ])
+        if (statsData.status === 'fulfilled') {
+          setStats(statsData.value)
+        } else {
+          setError(statsData.reason?.message || tx('加载概览失败', 'Failed to load overview'))
+        }
 
-      if (statsData.status === 'fulfilled') {
-        setStats(statsData.value)
-      } else {
-        setError(statsData.reason?.message || tx('加载概览失败', 'Failed to load overview'))
+        if (profileData.status === 'fulfilled') {
+          setProfile(profileData.value || null)
+        }
+
+        if (profileSnapshotData.status === 'fulfilled') {
+          const entries = sortNodesByRecent(profileSnapshotData.value.entries.filter(isProfilePreviewEntry)).slice(0, 2)
+          setRecentProfileEntries(entries)
+        }
+
+        if (rootSnapshotData.status === 'fulfilled') {
+          const files = sortNodesByRecent(
+            rootSnapshotData.value.entries.filter((entry) => isVisibleFileEntry(entry) && !isProfileEntry(entry)),
+          ).slice(0, 2)
+          setRecentFiles(files)
+        }
+
+        if (billingEnabled) {
+          if (billingData.status === 'fulfilled' && billingData.value) {
+            setBillingStatus(billingData.value)
+            setBillingError('')
+          } else if (billingData.status === 'rejected') {
+            setBillingStatus(null)
+            setBillingError(billingData.reason?.message || tx('加载 Billing 状态失败', 'Failed to load billing status'))
+          }
+        } else {
+          setBillingStatus(null)
+          setBillingError('')
+        }
+      } catch (err: any) {
+        setError(err?.message || tx('加载概览失败', 'Failed to load overview'))
+      } finally {
+        setLoading(false)
       }
-
-      if (profileData.status === 'fulfilled') {
-        setProfile(profileData.value || null)
-      }
-
-      if (profileSnapshotData.status === 'fulfilled') {
-        const entries = sortNodesByRecent(profileSnapshotData.value.entries.filter(isProfilePreviewEntry)).slice(0, 2)
-        setRecentProfileEntries(entries)
-      }
-
-      if (rootSnapshotData.status === 'fulfilled') {
-        const files = sortNodesByRecent(
-          rootSnapshotData.value.entries.filter((entry) => isVisibleFileEntry(entry) && !isProfileEntry(entry)),
-        ).slice(0, 2)
-        setRecentFiles(files)
-      }
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
     }
-  }
+
+    void loadDashboard()
+  }, [billingEnabled, tx])
 
   const handleExportZip = async () => {
     setExporting(true)
@@ -96,7 +119,7 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
       await api.exportZip()
       setExportSuccess(tx('ZIP 文件已开始下载。', 'The ZIP download has started.'))
     } catch (err: any) {
-      setExportError(err.message || tx('导出失败', 'Export failed'))
+      setExportError(err?.message || tx('导出失败', 'Export failed'))
     } finally {
       setExporting(false)
     }
@@ -110,16 +133,16 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
       const data = await api.exportJSON()
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `neudrive-export-${new Date().toISOString().slice(0, 10)}.json`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `neudrive-export-${new Date().toISOString().slice(0, 10)}.json`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
       URL.revokeObjectURL(url)
       setExportSuccess(tx('JSON 文件已开始下载。', 'The JSON download has started.'))
     } catch (err: any) {
-      setExportError(err.message || tx('导出失败', 'Export failed'))
+      setExportError(err?.message || tx('导出失败', 'Export failed'))
     } finally {
       setExporting(false)
     }
@@ -140,13 +163,22 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
   ] as const
 
   const hasPending = stats.pending && stats.pending.length > 0
+  const currentPlan = resolvePlan(billingStatus?.plans || [], billingStatus?.current_plan || 'free')
+  const usagePercent = billingStatus && billingStatus.limit_bytes > 0
+    ? Math.min(100, Math.round((billingStatus.used_bytes / billingStatus.limit_bytes) * 100))
+    : 0
 
   return (
     <div className="page materials-page">
       <div className="page-header">
         <div>
           <h2>{tx('概览', 'Overview')}</h2>
-          <p className="page-subtitle">{tx('用和文件管理器同一套视觉语言，快速查看 Hub 的连接、文件、资料和同步状态。', 'Use the same visual language as the file browser to quickly review connections, files, profile data, and sync status.')}</p>
+          <p className="page-subtitle">
+            {tx(
+              '用和文件管理器同一套视觉语言，快速查看 Hub 的连接、文件、资料和同步状态。',
+              'Use the same visual language as the file browser to quickly review connections, files, profile data, and sync status.',
+            )}
+          </p>
         </div>
       </div>
 
@@ -181,7 +213,10 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
             <div>
               <div className="dashboard-profile-name">{profile?.display_name || tx('未设置显示名称', 'No display name set')}</div>
               <div className="dashboard-profile-meta">
-                {tx('首页只显示最近更新的 2 项资料，完整内容请到“我的资料”页面查看和编辑。', 'This page only shows the two most recently updated profile entries. Open My Profile to view and edit everything.')}
+                {tx(
+                  '首页只显示最近更新的 2 项资料，完整内容请到“我的资料”页面查看和编辑。',
+                  'This page only shows the two most recently updated profile entries. Open My Profile to view and edit everything.',
+                )}
               </div>
             </div>
           </div>
@@ -211,7 +246,10 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
           </div>
 
           <div className="dashboard-profile-meta dashboard-preview-meta">
-            {tx('首页只显示最近改过的 2 个文档，完整列表请到“文件管理器”查看。', 'This page only shows the two most recently edited documents. Open the File Browser for the full list.')}
+            {tx(
+              '首页只显示最近改过的 2 个文档，完整列表请到“文件管理器”查看。',
+              'This page only shows the two most recently edited documents. Open the File Browser for the full list.',
+            )}
           </div>
 
           {recentFiles.length > 0 ? (
@@ -230,14 +268,46 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
             <p className="dashboard-empty-copy">{tx('还没有文件内容。', 'No files yet.')}</p>
           )}
         </div>
+
+        {billingEnabled && (
+          <div className="card dashboard-card">
+            <div className="card-header">
+              <h3 className="card-title">{tx('Billing', 'Billing')}</h3>
+              <Link to="/billing" className="dashboard-card-link">{tx('打开', 'Open')}</Link>
+            </div>
+
+            {billingError && <div className="alert alert-warn">{billingError}</div>}
+
+            {!billingError && billingStatus && (
+              <>
+                <div className="billing-dashboard-plan">
+                  <div className="billing-dashboard-name">{currentPlan?.name || billingStatus.current_plan}</div>
+                  <div className="billing-dashboard-meta">
+                    {tx('已用', 'Used')}: {formatBillingStorage(billingStatus.used_bytes, locale)} / {formatBillingStorage(billingStatus.limit_bytes, locale)}
+                  </div>
+                </div>
+                <div className="billing-meter">
+                  <div className="billing-meter-fill" style={{ width: `${usagePercent}%` }} />
+                </div>
+                <div className="dashboard-profile-meta">
+                  {billingStatus.account_read_only
+                    ? tx('当前账户因空间超额处于只读状态。', 'This account is currently read-only because it is over its storage limit.')
+                    : billingStatus.entitlement_status === 'grace'
+                      ? tx('当前处于宽限期，可在 Billing 页面续费或恢复订阅。', 'This account is currently in a grace period. Renew or manage the subscription from Billing.')
+                      : tx('从这里快速查看套餐和空间使用情况。', 'Use Billing to review plan details and storage usage.')}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {hasPending && (
         <div className="card">
           <h3 className="card-title">{tx('待处理', 'Pending')}</h3>
           <div className="pending-list">
-            {stats.pending.map((item, i) => (
-              <div key={i} className="pending-item">
+            {stats.pending.map((item, index) => (
+              <div key={index} className="pending-item">
                 <span className="pending-badge">{item.count}</span>
                 <span className="pending-message">{item.message}</span>
                 <span className="pending-type">{item.type}</span>
@@ -280,8 +350,8 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
         <div className="card">
           <h3 className="card-title">{tx('本周活动', 'This week')}</h3>
           <div className="activity-list">
-            {stats.weekly_activity.map((item, i) => (
-              <div key={i} className="activity-row">
+            {stats.weekly_activity.map((item, index) => (
+              <div key={index} className="activity-row">
                 <span className="activity-platform">{item.platform}</span>
                 <div className="activity-bar-container">
                   <div
@@ -314,18 +384,10 @@ export default function DashboardPage({ systemSettingsEnabled = false, localMode
               {tx('打开系统设置', 'Open System Settings')}
             </Link>
           )}
-          <button
-            className="btn btn-primary"
-            disabled={exporting}
-            onClick={handleExportZip}
-          >
+          <button className="btn btn-primary" disabled={exporting} onClick={() => { void handleExportZip() }}>
             {exporting ? tx('导出中...', 'Exporting...') : tx('导出数据 (ZIP)', 'Export data (ZIP)')}
           </button>
-          <button
-            className="btn"
-            disabled={exporting}
-            onClick={handleExportJSON}
-          >
+          <button className="btn" disabled={exporting} onClick={() => { void handleExportJSON() }}>
             {tx('导出数据 (JSON)', 'Export data (JSON)')}
           </button>
         </div>

@@ -744,6 +744,7 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"github_enabled":          s.GitHubClientID != "",
 		"github_app_enabled":      s.GitHubAppClientID != "",
 		"github_app_slug":         s.GitHubAppSlug,
+		"billing_enabled":         s.billingEnabled(),
 		"system_settings_enabled": s.systemSettingsEnabled(),
 	}
 	if s.Storage != "" {
@@ -766,6 +767,13 @@ func (s *Server) systemSettingsEnabled() bool {
 		return true
 	}
 	return s.Config.EnableSystemSettings
+}
+
+func (s *Server) billingEnabled() bool {
+	if s.Config == nil {
+		return false
+	}
+	return s.Config.EnableBilling
 }
 
 // ---------------------------------------------------------------------------

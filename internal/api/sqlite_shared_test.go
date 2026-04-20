@@ -292,6 +292,9 @@ func TestPublicConfigUsesLocalModeInsteadOfStorageBackend(t *testing.T) {
 			t.Fatalf("expected %q in config payload: %s", expected, string(payload.Data))
 		}
 	}
+	if !bytes.Contains(payload.Data, []byte(`"billing_enabled":false`)) {
+		t.Fatalf("expected billing flag to default false in config payload: %s", string(payload.Data))
+	}
 }
 
 func TestSQLiteSharedServerSystemSettingsDisabledBlocksLocalSettingsAPI(t *testing.T) {
@@ -327,6 +330,36 @@ func TestSQLiteSharedServerSystemSettingsDisabledBlocksLocalSettingsAPI(t *testi
 	}
 	if !bytes.Contains(payload.Data, []byte(`"system_settings_enabled":false`)) {
 		t.Fatalf("expected disabled system settings in public config: %s", string(payload.Data))
+	}
+	if !bytes.Contains(payload.Data, []byte(`"billing_enabled":false`)) {
+		t.Fatalf("expected disabled billing flag in public config: %s", string(payload.Data))
+	}
+}
+
+func TestPublicConfigExposesBillingFlagWhenEnabled(t *testing.T) {
+	cfg := &config.Config{
+		JWTSecret:      testJWTSecret,
+		VaultMasterKey: strings.Repeat("0", 64),
+		CORSOrigins:    []string{"http://localhost:3000"},
+		RateLimit:      100,
+		MaxBodySize:    10 * 1024 * 1024,
+		PublicBaseURL:  "http://127.0.0.1:0",
+		EnableBilling:  true,
+	}
+	ts, _, _, _, _ := newTestHTTPServerWithConfig(t, cfg)
+
+	resp, err := http.Get(ts.URL + "/api/config")
+	if err != nil {
+		t.Fatalf("GET /api/config: %v", err)
+	}
+	defer resp.Body.Close()
+
+	var payload testEnvelope
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		t.Fatalf("decode config payload: %v", err)
+	}
+	if !bytes.Contains(payload.Data, []byte(`"billing_enabled":true`)) {
+		t.Fatalf("expected enabled billing flag in public config: %s", string(payload.Data))
 	}
 }
 

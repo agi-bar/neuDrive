@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { api, type BillingStatus } from '../api'
+import { api, type BillingStatus, type PaidBillingPlanCode } from '../api'
 import { useI18n } from '../i18n'
 import { billingReasonMessage, formatBillingPrice, formatBillingStorage, resolvePlan } from './BillingShared'
 
@@ -9,7 +9,7 @@ export default function BillingPage() {
   const location = useLocation()
   const [status, setStatus] = useState<BillingStatus | null>(null)
   const [loading, setLoading] = useState(true)
-  const [busy, setBusy] = useState<'checkout' | 'portal' | ''>('')
+  const [busy, setBusy] = useState<PaidBillingPlanCode | 'portal' | ''>('')
   const [error, setError] = useState('')
 
   const reason = useMemo(() => new URLSearchParams(location.search).get('reason'), [location.search])
@@ -47,12 +47,12 @@ export default function BillingPage() {
     ? Math.min(100, Math.round((status.used_bytes / status.limit_bytes) * 100))
     : 0
 
-  const handleCheckout = async () => {
+  const handleCheckout = async (planCode: PaidBillingPlanCode) => {
     if (!status?.can_checkout || busy) return
-    setBusy('checkout')
+    setBusy(planCode)
     setError('')
     try {
-      const response = await api.createBillingCheckout()
+      const response = await api.createBillingCheckout(planCode)
       window.location.assign(response.checkout_url)
     } catch (err: any) {
       setError(err?.message || tx('创建支付链接失败', 'Failed to create checkout session'))
@@ -127,11 +127,6 @@ export default function BillingPage() {
             )}
 
             <div className="billing-actions">
-              {status.can_checkout && (
-                <button className="btn btn-primary" onClick={() => { void handleCheckout() }} disabled={busy !== ''}>
-                  {busy === 'checkout' ? tx('跳转中...', 'Redirecting...') : tx('升级到 Pro', 'Upgrade to Pro')}
-                </button>
-              )}
               {status.can_manage_portal && (
                 <button className="btn btn-primary" onClick={() => { void handlePortal() }} disabled={busy !== ''}>
                   {busy === 'portal' ? tx('打开中...', 'Opening...') : tx('管理订阅', 'Manage billing')}
@@ -146,6 +141,7 @@ export default function BillingPage() {
           <div className="billing-plan-grid">
             {status.plans.map((plan) => {
               const isCurrent = plan.code === status.current_plan
+              const checkoutPlanCode = plan.code === 'pro_yearly' ? 'pro_yearly' : 'pro_monthly'
               return (
                 <div key={plan.code} className={`billing-plan-card${isCurrent ? ' is-current' : ''}`}>
                   <div className="billing-plan-card-head">
@@ -158,6 +154,21 @@ export default function BillingPage() {
                   <p className="billing-plan-copy">
                     {tx('存储空间', 'Storage')}: {formatBillingStorage(plan.storage_limit_bytes, locale)}
                   </p>
+                  {status.can_checkout && plan.code !== 'free' && (
+                    <div className="billing-actions">
+                      <button
+                        className="btn btn-primary"
+                        onClick={() => { void handleCheckout(checkoutPlanCode) }}
+                        disabled={busy !== ''}
+                      >
+                        {busy === plan.code
+                          ? tx('跳转中...', 'Redirecting...')
+                          : plan.interval === 'year'
+                            ? tx('订阅年付', 'Subscribe Yearly')
+                            : tx('订阅月付', 'Subscribe Monthly')}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )
             })}

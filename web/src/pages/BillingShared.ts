@@ -26,6 +26,8 @@ export function formatBillingPrice(plan: BillingPlan | undefined, locale: Locale
   }).format(plan.price_cents / 100)
   const interval = plan.interval === 'month'
     ? (locale === 'zh-CN' ? '月' : 'month')
+    : plan.interval === 'year'
+      ? (locale === 'zh-CN' ? '年' : 'year')
     : plan.interval
   return `${value} / ${interval}`
 }

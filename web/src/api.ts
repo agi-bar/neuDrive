@@ -155,7 +155,7 @@ export interface PublicConfig {
 }
 
 export interface BillingPlan {
-  code: 'free' | 'pro'
+  code: BillingPlanCode
   name: string
   currency: string
   price_cents: number
@@ -163,8 +163,11 @@ export interface BillingPlan {
   storage_limit_bytes: number
 }
 
+export type BillingPlanCode = 'free' | 'pro_monthly' | 'pro_yearly'
+export type PaidBillingPlanCode = Exclude<BillingPlanCode, 'free'>
+
 export interface BillingStatus {
-  current_plan: 'free' | 'pro'
+  current_plan: BillingPlanCode
   entitlement_status: 'active' | 'grace'
   subscription_status?: string
   used_bytes: number
@@ -596,9 +599,10 @@ export const api = {
   // Billing
   getBillingStatus: () => request<BillingStatus>('/billing/status'),
 
-  createBillingCheckout: () =>
+  createBillingCheckout: (planCode?: PaidBillingPlanCode) =>
     request<{ ok: true; checkout_url: string }>('/billing/checkout', {
       method: 'POST',
+      ...(planCode ? { body: JSON.stringify({ plan_code: planCode }) } : {}),
     }),
 
   createBillingPortal: () =>

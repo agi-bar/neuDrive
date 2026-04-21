@@ -41,6 +41,9 @@ function App() {
   const [isDataNavOpen, setIsDataNavOpen] = useState(false)
   const [isConnectionsNavOpen, setIsConnectionsNavOpen] = useState(false)
   const [isImportsNavOpen, setIsImportsNavOpen] = useState(false)
+  const systemSettingsEnabled = !!publicConfig?.system_settings_enabled
+  const localMode = !!publicConfig?.local_mode
+  const importsHomePath = localMode ? '/imports/claude' : '/imports/claude-export'
 
   const checkAuth = useCallback(async () => {
     const clearAuthParamsFromURL = () => {
@@ -160,7 +163,7 @@ function App() {
     setIsImportsNavOpen((current) => {
       const next = !current
       if (next) {
-        navigate('/imports/claude')
+        navigate(importsHomePath)
       }
       return next
     })
@@ -176,8 +179,6 @@ function App() {
     location.pathname === '/data/sync' &&
     new URLSearchParams(location.search).get('cli_login') === '1'
   const billingEnabled = !!publicConfig?.billing_enabled
-  const systemSettingsEnabled = !!publicConfig?.system_settings_enabled
-  const localMode = !!publicConfig?.local_mode
   const routeFallback = (
     <div className="loading-screen">
       <div className="loading-spinner" />
@@ -447,10 +448,24 @@ function App() {
               <Route path="sync" element={<Navigate to="/git-mirror" replace />} />
             </Route>
             <Route path="/connections" element={<ConnectionsPage />} />
-            <Route path="/imports" element={<Navigate to="/imports/claude" replace />} />
-            <Route path="/imports/claude" element={<ClaudeMigrationPage localMode={localMode} officialExportPath="/imports/claude-export" />} />
-            <Route path="/imports/codex" element={<ClaudeMigrationPage localMode={localMode} platform="codex" displayName="Codex CLI" />} />
-            <Route path="/imports/claude-export" element={<ClaudeImportPage />} />
+            <Route path="/imports" element={<Navigate to={importsHomePath} replace />} />
+            <Route
+              path="/imports/claude"
+              element={
+                localMode
+                  ? <ClaudeMigrationPage localMode={localMode} officialExportPath="/imports/claude-export" />
+                  : <Navigate to="/imports/claude-export" replace />
+              }
+            />
+            <Route
+              path="/imports/codex"
+              element={
+                localMode
+                  ? <ClaudeMigrationPage localMode={localMode} platform="codex" displayName="Codex CLI" />
+                  : <Navigate to="/imports/claude-export" replace />
+              }
+            />
+            <Route path="/imports/claude-export" element={<ClaudeImportPage localMode={localMode} />} />
             <Route path="/info" element={<Navigate to="/data/profile" replace />} />
             <Route path="/projects" element={<Navigate to="/data/projects" replace />} />
             <Route path="/collaborations" element={<Navigate to="/" replace />} />

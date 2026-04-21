@@ -20,9 +20,14 @@ function formatFileSize(bytes: number, locale: 'zh-CN' | 'en') {
   return `${value.toFixed(value >= 10 || unitIndex === 0 ? 0 : 1)} ${units[unitIndex]}`
 }
 
-export default function ClaudeImportPage() {
+interface ClaudeImportPageProps {
+  localMode?: boolean
+}
+
+export default function ClaudeImportPage({ localMode = false }: ClaudeImportPageProps) {
   const { locale, tx } = useI18n()
   const navigate = useNavigate()
+  const importsHomePath = localMode ? '/imports/claude' : '/imports/claude-export'
   const inputRef = useRef<HTMLInputElement | null>(null)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [isDragging, setIsDragging] = useState(false)
@@ -78,7 +83,7 @@ export default function ClaudeImportPage() {
       <section className="materials-hero">
         <div className="materials-hero-copy">
           <nav aria-label={tx('面包屑', 'Breadcrumbs')} className="materials-breadcrumbs">
-            <Link to="/imports/claude">{tx('数据导入', 'Data Imports')}</Link>
+            <Link to={localMode ? importsHomePath : '/'}>{tx(localMode ? '数据导入' : '概览', localMode ? 'Data Imports' : 'Overview')}</Link>
             <span>/</span>
             <span>{tx('Claude 官方导出', 'Claude Official Export')}</span>
           </nav>
@@ -92,9 +97,11 @@ export default function ClaudeImportPage() {
           </p>
         </div>
         <div className="materials-actions">
-          <Link className="btn" to="/imports/claude">
-            {tx('Claude Code 扫描迁移', 'Claude Code Migration')}
-          </Link>
+          {localMode && (
+            <Link className="btn" to={importsHomePath}>
+              {tx('Claude Code 扫描迁移', 'Claude Code Migration')}
+            </Link>
+          )}
           <button className="btn" type="button" disabled={busy} onClick={chooseFile}>
             {tx('选择 ZIP', 'Choose ZIP')}
           </button>

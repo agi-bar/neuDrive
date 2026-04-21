@@ -117,6 +117,85 @@ func TestNormalizeAuthRedirectURLRejectsUnsafeAuthLoops(t *testing.T) {
 	}
 }
 
+func TestAuthSuccessRedirectRejectsUnsafeTargets(t *testing.T) {
+	server := &Server{}
+	authResp := &models.AuthResponse{
+		AccessToken:  "access-token",
+		RefreshToken: "refresh-token",
+	}
+
+	cases := []string{
+		"",
+		"/login?redirect=%2Fprojects",
+		"/api/auth/providers/pocket/callback?code=demo&state=abc",
+		"https://neudrive.example.com/api/auth/providers/pocket/callback?code=demo&state=abc",
+	}
+
+	for _, target := range cases {
+		redirected := server.authSuccessRedirect(target, authResp)
+		parsed, err := url.Parse(redirected)
+		if err != nil {
+			t.Fatalf("parse redirected url %q: %v", redirected, err)
+		}
+		if parsed.Path != "/" {
+			t.Fatalf("target %q redirected to unsafe path %q", target, parsed.Path)
+		}
+		if got := parsed.Query().Get("auth_token"); got != authResp.AccessToken {
+			t.Fatalf("target %q auth_token = %q, want %q", target, got, authResp.AccessToken)
+		}
+		if got := parsed.Query().Get("auth_refresh"); got != authResp.RefreshToken {
+			t.Fatalf("target %q auth_refresh = %q, want %q", target, got, authResp.RefreshToken)
+		}
+	}
+}
+
+func TestAuthErrorRedirectDropsUnsafeRedirectTarget(t *testing.T) {
+	server := &Server{}
+
+	cases := []string{
+		"",
+		"/login?redirect=%2Fprojects",
+		"/api/auth/providers/pocket/callback?code=demo&state=abc",
+		"https://neudrive.example.com/api/auth/providers/pocket/callback?code=demo&state=abc",
+	}
+
+	for _, target := range cases {
+		redirected := server.authErrorRedirect(target, "boom")
+		parsed, err := url.Parse(redirected)
+		if err != nil {
+			t.Fatalf("parse redirected url %q: %v", redirected, err)
+		}
+		if parsed.Path != "/login" {
+			t.Fatalf("target %q error redirected to %q, want /login", target, parsed.Path)
+		}
+		if got := parsed.Query().Get("redirect"); got != "" {
+			t.Fatalf("target %q kept unsafe redirect %q", target, got)
+		}
+		if got := parsed.Query().Get("error"); got != "boom" {
+			t.Fatalf("target %q error = %q, want boom", target, got)
+		}
+	}
+}
+
+func TestAuthErrorRedirectPreservesSafeRedirectTarget(t *testing.T) {
+	server := &Server{}
+
+	redirected := server.authErrorRedirect("/projects/demo", "boom")
+	parsed, err := url.Parse(redirected)
+	if err != nil {
+		t.Fatalf("parse redirected url %q: %v", redirected, err)
+	}
+	if parsed.Path != "/login" {
+		t.Fatalf("error redirected to %q, want /login", parsed.Path)
+	}
+	if got := parsed.Query().Get("redirect"); got != "/projects/demo" {
+		t.Fatalf("redirect = %q, want /projects/demo", got)
+	}
+	if got := parsed.Query().Get("error"); got != "boom" {
+		t.Fatalf("error = %q, want boom", got)
+	}
+}
+
 func TestAuthProviderStartPocketLoginWrapsAuthorizeURL(t *testing.T) {
 	var issuer string
 	discovery := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

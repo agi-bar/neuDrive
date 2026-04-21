@@ -118,11 +118,16 @@ func isUnsafeAuthRedirectPath(raw string) bool {
 	return false
 }
 
-func (s *Server) authSuccessRedirect(target string, authResp *models.AuthResponse) string {
+func sanitizeAuthCompletionRedirect(target string) string {
 	redirectURL := strings.TrimSpace(target)
-	if redirectURL == "" {
-		redirectURL = "/"
+	if redirectURL == "" || isUnsafeAuthRedirectPath(redirectURL) {
+		return "/"
 	}
+	return redirectURL
+}
+
+func (s *Server) authSuccessRedirect(target string, authResp *models.AuthResponse) string {
+	redirectURL := sanitizeAuthCompletionRedirect(target)
 	parsed, err := url.Parse(redirectURL)
 	if err != nil {
 		parsed = &url.URL{Path: "/"}
@@ -140,7 +145,7 @@ func (s *Server) authErrorRedirect(target, message string) string {
 		return "/login"
 	}
 	query := parsed.Query()
-	if redirect := strings.TrimSpace(target); redirect != "" && redirect != "/login" {
+	if redirect := sanitizeAuthCompletionRedirect(target); redirect != "/" {
 		query.Set("redirect", redirect)
 	}
 	if msg := strings.TrimSpace(message); msg != "" {

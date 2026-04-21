@@ -98,6 +98,25 @@ func TestNormalizeAuthRedirectURLRejectsForeignOrigins(t *testing.T) {
 	}
 }
 
+func TestNormalizeAuthRedirectURLRejectsUnsafeAuthLoops(t *testing.T) {
+	server := &Server{Config: &config.Config{PublicBaseURL: "https://neudrive.example.com"}}
+	req := httptest.NewRequest(http.MethodGet, "https://neudrive.example.com/login", nil)
+
+	cases := []string{
+		"/login",
+		"/login?redirect=%2Fprojects",
+		"/api/auth/providers/pocket/callback?code=demo&state=abc",
+		"https://neudrive.example.com/login?redirect=%2Fprojects",
+		"https://neudrive.example.com/api/auth/providers/pocket/callback?code=demo&state=abc",
+	}
+
+	for _, raw := range cases {
+		if got := server.normalizeAuthRedirectURL(req, raw); got != "/" {
+			t.Fatalf("expected %q to be normalized to /, got %q", raw, got)
+		}
+	}
+}
+
 func TestAuthProviderStartPocketLoginWrapsAuthorizeURL(t *testing.T) {
 	var issuer string
 	discovery := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

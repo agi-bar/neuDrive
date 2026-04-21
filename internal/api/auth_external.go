@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"path"
 	"strings"
 
 	"github.com/agi-bar/neudrive/internal/models"
@@ -80,6 +81,9 @@ func (s *Server) normalizeAuthRedirectURL(r *http.Request, raw string) string {
 		return "/"
 	}
 	if strings.HasPrefix(raw, "/") {
+		if isUnsafeAuthRedirectPath(raw) {
+			return "/"
+		}
 		return raw
 	}
 	target, err := url.Parse(raw)
@@ -91,9 +95,27 @@ func (s *Server) normalizeAuthRedirectURL(r *http.Request, raw string) string {
 		return "/"
 	}
 	if strings.EqualFold(target.Scheme, base.Scheme) && strings.EqualFold(target.Host, base.Host) {
+		if isUnsafeAuthRedirectPath(target.RequestURI()) {
+			return "/"
+		}
 		return target.String()
 	}
 	return "/"
+}
+
+func isUnsafeAuthRedirectPath(raw string) bool {
+	target, err := url.Parse(raw)
+	if err != nil {
+		return true
+	}
+	cleanPath := path.Clean(strings.TrimSpace(target.Path))
+	if cleanPath == "/login" {
+		return true
+	}
+	if strings.HasPrefix(cleanPath, "/api/auth/providers/") && strings.HasSuffix(cleanPath, "/callback") {
+		return true
+	}
+	return false
 }
 
 func (s *Server) authSuccessRedirect(target string, authResp *models.AuthResponse) string {

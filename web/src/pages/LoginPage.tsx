@@ -43,7 +43,7 @@ export default function LoginPage() {
       setLoadingAction(loadingKey)
       setError('')
       const params = new URLSearchParams(window.location.search)
-      const redirect = params.get('redirect') || '/'
+      const redirect = sanitizeLoginRedirect(params.get('redirect'))
       const resp = await api.startAuthProvider(provider.id, redirect, action)
       window.location.assign(resp.authorization_url)
     } catch (err: any) {
@@ -122,4 +122,32 @@ export default function LoginPage() {
       </div>
     </div>
   )
+}
+
+function sanitizeLoginRedirect(raw: string | null): string {
+  const redirect = (raw || '').trim()
+  if (!redirect) {
+    return '/'
+  }
+
+  try {
+    const target = redirect.startsWith('/')
+      ? new URL(redirect, window.location.origin)
+      : new URL(redirect)
+    const sameOrigin = target.origin === window.location.origin
+    const path = target.pathname
+    if (
+      sameOrigin &&
+      (
+        path === '/login' ||
+        (path.startsWith('/api/auth/providers/') && path.endsWith('/callback'))
+      )
+    ) {
+      return '/'
+    }
+  } catch {
+    return '/'
+  }
+
+  return redirect
 }

@@ -79,7 +79,7 @@ neu help write
 
 | 命令 | 作用 | 示例 |
 |------|------|------|
-| `neu import platform <platform> [--mode ...] [--dry-run] [--zip FILE]` | 导入 Codex、Claude 等平台数据 | `neu import platform claude --dry-run --mode agent` |
+| `neu import <platform> [--dry-run] [--raw] [--zip FILE]` | 导入 Codex、Claude 等平台数据 | `neu import claude --dry-run` |
 | `neu import skill <dir> [--name NAME]` | 导入一个本地 skill 目录 | `neu import skill ./demo-skill` |
 | `neu import profile <file> [--category ...]` | 导入 profile 文档 | `neu import profile ./preferences.md --category preferences` |
 | `neu import memory <file-or-dir>` | 导入 memory 内容 | `neu import memory ./notes` |

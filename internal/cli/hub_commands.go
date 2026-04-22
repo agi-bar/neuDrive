@@ -20,6 +20,7 @@ import (
 	"github.com/agi-bar/neudrive/internal/api"
 	"github.com/agi-bar/neudrive/internal/localgitsync"
 	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neudrive/internal/platforms"
 )
 
 type hubCommandOptions struct {
@@ -399,8 +400,6 @@ func runHubImport(args []string) int {
 		return 0
 	}
 	switch normalizeExternalCategory(args[0]) {
-	case "platform":
-		return runHubImportPlatform(args[1:])
 	case "skill":
 		return runHubImportSkill(args[1:])
 	case "profile":
@@ -409,18 +408,20 @@ func runHubImport(args []string) int {
 		return runHubImportMemory(args[1:])
 	case "project":
 		return runHubImportProject(args[1:])
+	case "platform":
+		target := "<platform>"
+		if len(args) > 1 && !strings.HasPrefix(strings.TrimSpace(args[1]), "-") {
+			target = strings.TrimSpace(args[1])
+		}
+		fmt.Fprintf(os.Stderr, "`import platform` has been removed; use `%s` instead\n", renderCLIText("neudrive import "+target))
+		return 2
 	default:
-		fmt.Fprintf(os.Stderr, "unknown import category %q\n", args[0])
+		if _, err := platforms.Resolve(args[0]); err == nil {
+			return runLegacyImport(args)
+		}
+		fmt.Fprintf(os.Stderr, "unknown import target %q\n", args[0])
 		return 2
 	}
-}
-
-func runHubImportPlatform(args []string) int {
-	if len(args) == 0 || isExplicitHelpRequest(args) {
-		printHelpTopic("import")
-		return 0
-	}
-	return runLegacyImport(args)
 }
 
 func runHubImportSkill(args []string) int {

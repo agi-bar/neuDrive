@@ -55,6 +55,7 @@ type claudeLocalScanResult struct {
 }
 
 func PreviewImport(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, rawMode string) (*ImportPreview, error) {
+	_ = ctx
 	startedAt := time.Now().UTC()
 	adapter, err := Resolve(platform)
 	if err != nil {
@@ -90,15 +91,6 @@ func PreviewImport(ctx context.Context, cfg *runtimecfg.CLIConfig, platform, raw
 		preview.Notes = append(preview.Notes, scan.Notes...)
 		preview.Notes = append(preview.Notes, "Codex preview uses neuDrive's deterministic local inventory mapping; live agent semantic scan is skipped by default.")
 	}
-	if adapter.ID() != "codex" && mode != ImportModeFiles && supportsAgentMediatedImport(adapter.ID()) {
-		agentPayload, err := runAgentExport(ctx, adapter.ID())
-		if err != nil {
-			preview.Notes = append(preview.Notes, fmt.Sprintf("Agent semantic scan unavailable: %v", err))
-		} else {
-			payload = mergeAgentPayload(payload, agentPayload)
-		}
-	}
-
 	preview.Categories = buildImportPreviewCategories(mode, sources, payload)
 	preview.SensitiveFindings = append(preview.SensitiveFindings, payload.SensitiveFindings...)
 	preview.VaultCandidates = append(preview.VaultCandidates, payload.VaultCandidates...)
@@ -292,7 +284,12 @@ func suggestedImportCommand(platform string, mode ImportMode) string {
 	if platform == "claude-code" {
 		name = "claude"
 	}
-	return fmt.Sprintf("neudrive import platform %s --mode %s", name, mode)
+	switch mode {
+	case ImportModeAll:
+		return fmt.Sprintf("neudrive import %s --raw", name)
+	default:
+		return fmt.Sprintf("neudrive import %s", name)
+	}
 }
 
 func scanLocalClaudeMigration() (*claudeLocalScanResult, error) {

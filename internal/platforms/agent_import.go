@@ -43,7 +43,7 @@ func ParseImportMode(platform, raw string) (ImportMode, error) {
 	switch ImportMode(mode) {
 	case ImportModeAgent, ImportModeFiles, ImportModeAll:
 		if !supportsAgentMediatedImport(platform) && ImportMode(mode) != ImportModeFiles {
-			return "", fmt.Errorf("agent-mediated import is currently supported only for codex and claude; use --mode files for %s", platform)
+			return "", fmt.Errorf("semantic import is currently supported only for codex and claude; use a raw snapshot import for %s", platform)
 		}
 		return ImportMode(mode), nil
 	default:
@@ -112,34 +112,25 @@ func PrepareAgentImportPayload(ctx context.Context, cfg *runtimecfg.CLIConfig, p
 		return enriched, nil
 	}
 
+	if platform == "claude-code" {
+		payload := sqlite.AgentExportPayload{
+			Platform: platform,
+			Command:  "local-scan",
+		}
+		enriched, _, err := enrichClaudePayload(payload)
+		if err != nil {
+			return sqlite.AgentExportPayload{}, err
+		}
+		return enriched, nil
+	}
+
 	if platform != "claude-code" {
 		if err := ensureAgentImportReady(cfg, platform); err != nil {
 			return sqlite.AgentExportPayload{}, err
 		}
 		return runAgentExport(ctx, platform)
 	}
-
-	payload := sqlite.AgentExportPayload{Platform: platform, Command: "local-scan"}
-	if err := ensureAgentImportReady(cfg, platform); err == nil {
-		if agentPayload, runErr := runAgentExport(ctx, platform); runErr == nil {
-			payload = mergeAgentPayload(payload, agentPayload)
-		} else {
-			payload.Notes = append(payload.Notes, fmt.Sprintf("Agent semantic scan unavailable during import: %v", runErr))
-		}
-	} else {
-		payload.Notes = append(payload.Notes, fmt.Sprintf("Agent semantic scan unavailable during import: %v", err))
-	}
-
-	switch platform {
-	case "claude-code":
-		enriched, _, err := enrichClaudePayload(payload)
-		if err != nil {
-			return sqlite.AgentExportPayload{}, err
-		}
-		return enriched, nil
-	default:
-		return payload, nil
-	}
+	return sqlite.AgentExportPayload{}, fmt.Errorf("agent-mediated import is not supported for %s", platform)
 }
 
 func ensureAgentImportReady(cfg *runtimecfg.CLIConfig, platform string) error {
@@ -198,8 +189,6 @@ func runAgentExport(ctx context.Context, platform string) (sqlite.AgentExportPay
 	switch platform {
 	case "codex":
 		return runCodexAgentExport(ctx)
-	case "claude-code":
-		return runClaudeAgentExport(ctx)
 	default:
 		return sqlite.AgentExportPayload{}, fmt.Errorf("agent-mediated import is not supported for %s", platform)
 	}
@@ -261,59 +250,6 @@ func runCodexAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error)
 	}
 	if strings.TrimSpace(payload.Platform) == "" {
 		payload.Platform = "codex"
-	}
-	if strings.TrimSpace(payload.Command) == "" {
-		payload.Command = "export"
-	}
-	return payload, nil
-}
-
-func runClaudeAgentExport(ctx context.Context) (sqlite.AgentExportPayload, error) {
-	skillDoc, err := readSystemDoc("/skills/neudrive/SKILL.md")
-	if err != nil {
-		return sqlite.AgentExportPayload{}, err
-	}
-	commandDoc, err := readSystemDoc("/skills/neudrive/commands/export.md")
-	if err != nil {
-		return sqlite.AgentExportPayload{}, err
-	}
-	platformDoc, err := readSystemDoc("/skills/neudrive/references/platforms/claude.md")
-	if err != nil {
-		return sqlite.AgentExportPayload{}, err
-	}
-	portabilityDoc, err := readSystemDoc("/skills/portability/claude/SKILL.md")
-	if err != nil {
-		return sqlite.AgentExportPayload{}, err
-	}
-
-	tempDir, err := os.MkdirTemp("", "neudrive-claude-export-*")
-	if err != nil {
-		return sqlite.AgentExportPayload{}, err
-	}
-	defer os.RemoveAll(tempDir)
-
-	schema, err := json.Marshal(agentExportSchema())
-	if err != nil {
-		return sqlite.AgentExportPayload{}, err
-	}
-	prompt := buildAgentExportPrompt("Claude Code", "claude-entry-reference", "claude-portability-reference", skillDoc, commandDoc, platformDoc, portabilityDoc)
-	cmd := exec.CommandContext(ctx, "claude", "-p", "--output-format", "json", "--json-schema", string(schema), prompt)
-	cmd.Dir = tempDir
-	output, stderr, err := runCommandJSON(cmd)
-	if err != nil {
-		trimmed := strings.TrimSpace(stderr)
-		if trimmed != "" {
-			return sqlite.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w: %s", err, trimmed)
-		}
-		return sqlite.AgentExportPayload{}, fmt.Errorf("claude -p failed: %w", err)
-	}
-
-	payload, err := decodeAgentExportPayload(output)
-	if err != nil {
-		return sqlite.AgentExportPayload{}, fmt.Errorf("decode claude export payload: %w", err)
-	}
-	if strings.TrimSpace(payload.Platform) == "" {
-		payload.Platform = "claude-code"
 	}
 	if strings.TrimSpace(payload.Command) == "" {
 		payload.Command = "export"

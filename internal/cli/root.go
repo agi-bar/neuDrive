@@ -534,19 +534,24 @@ func runDisconnect(args []string) int {
 
 func runLegacyImport(args []string) int {
 	if isHelpArg(args) || len(args) == 0 {
-		fmt.Println(usageLine("import <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]"))
+		fmt.Println(usageLine("import <platform> [--dry-run] [--raw] [--zip FILE]"))
 		return 0
 	}
 	platform := strings.TrimSpace(args[0])
 	if platform == "" || strings.HasPrefix(platform, "-") {
-		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]"))
+		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--dry-run] [--raw] [--zip FILE]"))
+		return 2
+	}
+	if _, err := platforms.Resolve(platform); err != nil {
+		fmt.Fprintf(os.Stderr, "unknown platform %q\n", platform)
 		return 2
 	}
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	fs.SetOutput(os.Stderr)
-	mode := fs.String("mode", "", "import mode: agent, files, all")
 	dryRun := fs.Bool("dry-run", false, "scan and preview the import without writing anything")
+	raw := fs.Bool("raw", false, "include the raw platform snapshot under /platforms as well")
 	zipPath := fs.String("zip", "", "Claude skills zip exported from the web app")
+	mode := fs.String("mode", "", "deprecated import mode")
 	if err := fs.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0
@@ -554,16 +559,29 @@ func runLegacyImport(args []string) int {
 		return 2
 	}
 	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]"))
+		fmt.Fprintln(os.Stderr, usageLine("import <platform> [--dry-run] [--raw] [--zip FILE]"))
 		return 2
 	}
-	if strings.TrimSpace(*zipPath) != "" && strings.TrimSpace(*mode) != "" && strings.TrimSpace(*mode) != string(platforms.ImportModeFiles) {
-		fmt.Fprintln(os.Stderr, "--zip can only be combined with --mode files")
+	if strings.TrimSpace(*mode) != "" {
+		fmt.Fprintf(
+			os.Stderr,
+			"--mode has been removed; use `%s` for the default import or `%s` to include the raw snapshot\n",
+			renderCLIText("neudrive import "+platform),
+			renderCLIText("neudrive import "+platform+" --raw"),
+		)
+		return 2
+	}
+	if *raw && strings.TrimSpace(*zipPath) != "" {
+		fmt.Fprintln(os.Stderr, "--raw cannot be combined with --zip")
 		return 2
 	}
 	if *dryRun && strings.TrimSpace(*zipPath) != "" {
 		fmt.Fprintln(os.Stderr, "--dry-run is not supported with --zip")
 		return 2
+	}
+	selectedMode := string(platforms.ImportModeAgent)
+	if *raw {
+		selectedMode = string(platforms.ImportModeAll)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
@@ -577,7 +595,7 @@ func runLegacyImport(args []string) int {
 		return 1
 	}
 	if *dryRun {
-		preview, err := platforms.PreviewImport(ctx, cfg, platform, *mode)
+		preview, err := platforms.PreviewImport(ctx, cfg, platform, selectedMode)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "preview %s import: %v\n", platform, err)
 			return 1
@@ -603,7 +621,7 @@ func runLegacyImport(args []string) int {
 	if strings.TrimSpace(*zipPath) != "" {
 		result, err = platforms.ImportSkillsZip(ctx, cfg, platform, *zipPath)
 	} else {
-		result, err = platforms.Import(ctx, cfg, platform, *mode)
+		result, err = platforms.Import(ctx, cfg, platform, selectedMode)
 	}
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "import %s: %v\n", platform, err)
@@ -618,27 +636,24 @@ func runLegacyImport(args []string) int {
 			platform,
 		)
 	case result.Agent != nil && result.Files != nil:
-		fmt.Printf("Imported %s using mode=%s: %s plus %d raw files (%d bytes) into /platforms/%s.\n",
+		fmt.Printf("Imported %s: %s plus %d raw files (%d bytes) into /platforms/%s.\n",
 			platform,
-			result.Mode,
 			renderAgentImportSummary(result.Agent),
 			result.Files.Files,
 			result.Files.Bytes,
 			result.Platform,
 		)
 	case result.Agent != nil:
-		fmt.Printf("Imported %s using mode=%s: %s.\n",
+		fmt.Printf("Imported %s: %s.\n",
 			platform,
-			result.Mode,
 			renderAgentImportSummary(result.Agent),
 		)
 	case result.Files != nil:
-		fmt.Printf("Imported %d files (%d bytes) from %s into /platforms/%s using mode=%s.\n",
+		fmt.Printf("Imported %d raw files (%d bytes) from %s into /platforms/%s.\n",
 			result.Files.Files,
 			result.Files.Bytes,
 			platform,
 			result.Platform,
-			result.Mode,
 		)
 	}
 	printLocalGitSyncMessage(result.LocalGit)
@@ -650,9 +665,9 @@ func renderImportPreview(preview *platforms.ImportPreview) string {
 		return ""
 	}
 	var b strings.Builder
-	fmt.Fprintf(&b, "%s migration preview (mode=%s)\n", preview.DisplayName, preview.Mode)
+	fmt.Fprintf(&b, "%s migration preview\n", preview.DisplayName)
 	if len(preview.Categories) == 0 {
-		b.WriteString("- No Claude-local data categories were discovered.\n")
+		b.WriteString("- No local data categories were discovered.\n")
 	} else {
 		for _, category := range preview.Categories {
 			parts := []string{}

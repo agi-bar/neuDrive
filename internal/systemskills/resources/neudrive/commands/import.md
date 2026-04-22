@@ -4,7 +4,7 @@ Use this command when the user wants to bring local or platform data into neuDri
 
 ## Public Forms
 
-- `neudrive import platform <platform> [--mode agent|files|all] [--zip FILE]`
+- `neudrive import <platform> [--dry-run] [--raw] [--zip FILE]`
 - `neudrive import skill <local-dir> [--name NAME]`
 - `neudrive import profile <local-file> [--category preferences|relationships|principles]`
 - `neudrive import memory <local-file-or-dir>`
@@ -12,6 +12,6 @@ Use this command when the user wants to bring local or platform data into neuDri
 
 ## Notes
 
-- Categories come after the verb.
+- Platform names can appear directly after `import`; other categories still use the explicit noun form like `import skill` or `import memory`.
 - A leading `/` is optional when the user writes category-like paths.
 - If the user already enabled local Git Mirror, remind them that later Hub writes and imports are mirrored there automatically, but GitHub push still requires normal Git credentials and repo setup in that directory.

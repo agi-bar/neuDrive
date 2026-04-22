@@ -21,17 +21,17 @@ func TestImportPlatformClaudeDryRunPreview(t *testing.T) {
 	installClaudeDryRunShim(t)
 
 	stdout, stderr, code := captureRunForTest(t, func() int {
-		return Run([]string{"import", "platform", "claude", "--dry-run", "--mode", "agent"})
+		return Run([]string{"import", "claude", "--dry-run"})
 	})
 	if code != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	for _, needle := range []string{
-		"Claude Code migration preview (mode=agent)",
+		"Claude Code migration preview",
 		"conversations:",
 		"Sensitive findings: 1",
 		"Vault candidates: 1",
-		"Next command: neudrive import platform claude --mode agent",
+		"Next command: neudrive import claude",
 	} {
 		if !strings.Contains(stdout, needle) {
 			t.Fatalf("expected %q in stdout=%q stderr=%q", needle, stdout, stderr)
@@ -55,16 +55,16 @@ func TestImportPlatformCodexDryRunPreviewHandlesLargeSessionIndex(t *testing.T) 
 	}, "\n")+"\n")
 
 	stdout, stderr, code := captureRunForTest(t, func() int {
-		return Run([]string{"import", "platform", "codex", "--dry-run", "--mode", "agent"})
+		return Run([]string{"import", "codex", "--dry-run"})
 	})
 	if code != 0 {
 		t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 	for _, needle := range []string{
-		"Codex CLI migration preview (mode=agent)",
+		"Codex CLI migration preview",
 		"conversations:",
 		"bundles:",
-		"Next command: neudrive import platform codex --mode agent",
+		"Next command: neudrive import codex",
 	} {
 		if !strings.Contains(stdout, needle) {
 			t.Fatalf("expected %q in stdout=%q stderr=%q", needle, stdout, stderr)

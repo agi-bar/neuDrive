@@ -285,7 +285,7 @@ func (a *claudeAdapter) init() *claudeAdapter {
 			"command",
 			claudeCommandEntrypoint,
 			[]string{"claude"},
-			[]string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import platform claude", "/neudrive token create --kind sync --purpose backup", "/neudrive status"},
+				[]string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import claude", "/neudrive token create --kind sync --purpose backup", "/neudrive status"},
 			[]string{"connections", "profile", "memory", "skills", "projects", "prompts", "tools", "automations", "archives", "secrets"},
 			claudeSources(),
 			"supported",
@@ -325,7 +325,7 @@ func (a *claudeAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, 
 	connection.EntrypointType = "command"
 	connection.EntrypointPath = commandPath
 	connection.ManagedPaths = append(managedPaths, commandPath)
-	connection.ChatUsage = []string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import platform claude", "/neudrive token create --kind sync --purpose backup", "/neudrive status"}
+	connection.ChatUsage = []string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import claude", "/neudrive token create --kind sync --purpose backup", "/neudrive status"}
 	_ = skillPath
 	return connection, nil
 }
@@ -348,7 +348,7 @@ func (a *codexAdapter) init() *codexAdapter {
 			"skill",
 			codexEntrypointDir,
 			nil,
-			[]string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import platform codex", "$neudrive token create --kind sync --purpose backup", "$neudrive status"},
+				[]string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import codex", "$neudrive token create --kind sync --purpose backup", "$neudrive status"},
 			[]string{"connections", "skills", "profile", "memory", "projects", "automations", "tools", "archives"},
 			[]Source{
 				{Domain: "profile", Label: "config.toml", Path: expandUser("~/.codex/config.toml")},
@@ -406,7 +406,7 @@ func (a *codexAdapter) Connect(ctx context.Context, cfg *runtimecfg.CLIConfig, e
 	connection.EntrypointType = "skill"
 	connection.EntrypointPath = skillPath
 	connection.ManagedPaths = managedPaths
-	connection.ChatUsage = []string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import platform codex", "$neudrive token create --kind sync --purpose backup", "$neudrive status"}
+	connection.ChatUsage = []string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import codex", "$neudrive token create --kind sync --purpose backup", "$neudrive status"}
 	return connection, nil
 }
 func (a *codexAdapter) Disconnect(ctx context.Context, cfg *runtimecfg.CLIConfig) error {
@@ -712,7 +712,7 @@ func installManagedClaudeCommand(targetPath string) (string, error) {
 		"",
 		"Treat the first argument after `/neudrive` as the subcommand.",
 		"Supported subcommands: `ls`, `read`, `write`, `search`, `create`, `log`, `import`, `token`, `stats`, `export`, `status`, `help`.",
-		"Examples: `/neudrive ls`, `/neudrive read profile/preferences`, `/neudrive import platform claude`, `/neudrive status`.",
+		"Examples: `/neudrive ls`, `/neudrive read profile/preferences`, `/neudrive import claude`, `/neudrive status`.",
 		"Use `/neudrive help` or `/neudrive help import` when the user needs guidance on the command surface.",
 		"Use the Git Mirror page in neuDrive when the user wants a repo-backed mirror of the Hub.",
 		"",

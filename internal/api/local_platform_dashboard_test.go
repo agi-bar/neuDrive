@@ -42,7 +42,7 @@ func TestLocalPlatformPreviewCacheRoundTrip(t *testing.T) {
 			{Name: "conversations", Discovered: 12, Importable: 12},
 		},
 		Notes:       []string{"cached preview"},
-		NextCommand: "neudrive import platform claude --mode agent",
+		NextCommand: "neudrive import claude",
 	}
 
 	if err := server.writeLocalPlatformPreviewCache(ctx, user.ID, "claude-code", platforms.ImportModeAgent, preview); err != nil {
@@ -101,7 +101,7 @@ func TestLocalPlatformPreviewTaskLifecycle(t *testing.T) {
 			Categories: []platforms.ImportPreviewCategory{
 				{Name: "conversations", Discovered: 5, Importable: 5},
 			},
-			NextCommand: "neudrive import platform claude --mode agent",
+			NextCommand: "neudrive import claude",
 		}, nil
 	}
 	t.Cleanup(func() { previewImportFunc = originalPreviewImportFunc })

@@ -82,28 +82,29 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		SeeAlso:   []string{"create", "read", "write"},
 		SortOrder: 70,
 	},
-	"import": {
-		Key:     "import",
-		Summary: "Bring local files or platform exports into neuDrive.",
-		Usage: []string{
-			"neudrive import platform <platform> [--mode agent|files|all] [--dry-run] [--zip FILE]",
-			"neudrive import skill <local-dir> [--name NAME]",
-			"neudrive import profile <local-file> [--category preferences|relationships|principles]",
-			"neudrive import memory <local-file-or-dir>",
-			"neudrive import project <local-file-or-dir> [--name NAME]",
+		"import": {
+			Key:     "import",
+			Summary: "Bring local files or platform exports into neuDrive.",
+			Usage: []string{
+				"neudrive import <platform> [--dry-run] [--raw] [--zip FILE]",
+				"neudrive import skill <local-dir> [--name NAME]",
+				"neudrive import profile <local-file> [--category preferences|relationships|principles]",
+				"neudrive import memory <local-file-or-dir>",
+				"neudrive import project <local-file-or-dir> [--name NAME]",
+			},
+			Examples: []string{
+				"neudrive import codex",
+				"neudrive import claude --dry-run",
+				"neudrive import claude --raw",
+				"neudrive import skill ./demo-skill",
+				"neudrive import profile ./profile.json",
+				"neudrive import memory ./notes/",
+				"neudrive import project ./demo-project --name imported",
+			},
+			Notes:     []string{"Import platform names directly, such as `import claude` or `import codex`.", "If local Git Mirror is enabled, successful imports keep syncing into that mirror automatically.", "Use `--raw` when you want the normal import plus the raw platform snapshot under `/platforms`.", "Use `import skill/profile/memory/project ...` for direct local content.", "For Claude local migration, start with `import claude --dry-run` to get a preflight inventory before writing anything."},
+			SeeAlso:   []string{"write", "platform"},
+			SortOrder: 80,
 		},
-		Examples: []string{
-			"neudrive import platform codex",
-			"neudrive import platform claude --dry-run --mode agent",
-			"neudrive import skill ./demo-skill",
-			"neudrive import profile ./profile.json",
-			"neudrive import memory ./notes/",
-			"neudrive import project ./demo-project --name imported",
-		},
-		Notes:     []string{"Import categories come after the verb so the command shape matches `ls/read/write`.", "If local Git Mirror is enabled, successful imports keep syncing into that mirror automatically.", "Use `import platform ...` for Claude/Codex platform capture flows and `import skill/profile/memory/project ...` for direct local content.", "For Claude local migration, start with `import platform claude --dry-run --mode agent` to get a preflight inventory before writing anything."},
-		SeeAlso:   []string{"write", "platform"},
-		SortOrder: 80,
-	},
 	"token": {
 		Key:       "token",
 		Summary:   "Create short-lived tokens for sync or prepared skills upload workflows.",
@@ -145,7 +146,7 @@ var cliHelpTopics = map[string]cliHelpTopic{
 		Summary:   "Show detailed status and routing hints for one platform adapter.",
 		Usage:     []string{"neudrive platform show <platform>"},
 		Examples:  []string{"neudrive platform show codex", "neudrive platform show claude"},
-		Notes:     []string{"Use this before `connect` or `import platform` when you need to confirm the adapter shape.", "The `Chat usage` line is the authoritative embedded command syntax for that platform."},
+		Notes:     []string{"Use this before `connect` or `import <platform>` when you need to confirm the adapter shape.", "The `Chat usage` line is the authoritative embedded command syntax for that platform."},
 		SeeAlso:   []string{"platform ls", "connect", "import"},
 		SortOrder: 122,
 	},
@@ -337,7 +338,7 @@ Public commands:
   neudrive search <query> [path]                     Search Hub content
   neudrive create <category> <name>                  Create a first-class Hub object
   neudrive log <path> --action ACTION --summary ...  Append a project log entry
-  neudrive import <category> <src>                   Import local or platform data
+  neudrive import <platform-or-category> ...         Import local or platform data
   neudrive token create --kind sync|skills-upload    Create a short-lived workflow token
   neudrive stats                                     Show a quick Hub summary
 

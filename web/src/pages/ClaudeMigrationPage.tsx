@@ -9,7 +9,7 @@ import {
 } from "../api";
 import { useI18n } from "../i18n";
 
-type MigrationMode = "agent" | "files" | "all";
+type MigrationMode = "agent" | "all";
 
 interface ClaudeMigrationPageProps {
   localMode?: boolean;
@@ -18,7 +18,7 @@ interface ClaudeMigrationPageProps {
   officialExportPath?: string;
 }
 
-const modeOptions: MigrationMode[] = ["agent", "all", "files"];
+const modeOptions: MigrationMode[] = ["agent", "all"];
 
 function formatBytes(bytes: number | undefined, locale: "zh-CN" | "en") {
   if (!Number.isFinite(bytes) || !bytes || bytes <= 0)
@@ -322,13 +322,13 @@ export default function ClaudeMigrationPage({
     <div className="page materials-page">
       <div className="page-header">
         <div>
-          <h2>{displayName}</h2>
-          <p className="page-subtitle">
-            {tx(
-              `本地扫描并迁移 ${displayName} 数据，再决定只做语义迁移，还是顺带保留完整原始快照。`,
-              `Scan and migrate local ${displayName} data, then decide whether to do semantic migration only or keep the full raw snapshot as well.`,
-            )}
-          </p>
+            <h2>{displayName}</h2>
+            <p className="page-subtitle">
+              {tx(
+                `本地扫描并迁移 ${displayName} 数据。默认导入会重建可提升的数据；如果需要，也可以顺带保留完整原始快照。`,
+                `Scan and migrate local ${displayName} data. The default import rebuilds the promotable data, and you can also keep the full raw snapshot when needed.`,
+              )}
+            </p>
         </div>
       </div>
 
@@ -373,8 +373,8 @@ export default function ClaudeMigrationPage({
               </h3>
               <p className="materials-subtitle">
                 {tx(
-                  "推荐先用语义迁移模式检查 projects、memory、skills、会话和敏感项，再决定要不要把原始平台快照一起带进来。",
-                  "Start with semantic migration mode to inspect projects, memory, skills, conversations, and sensitive findings, then decide whether to include the raw platform snapshot too.",
+                  "推荐先用默认导入预览检查 projects、memory、skills、会话和敏感项；如果还想保留平台原始文件，再打开原始快照选项。",
+                  "Start with the default import preview to inspect projects, memory, skills, conversations, and sensitive findings; enable the raw snapshot option only when you also want the original platform files.",
                 )}
               </p>
               <div className="migration-mode-grid">
@@ -387,27 +387,20 @@ export default function ClaudeMigrationPage({
                   >
                     <div className="migration-mode-title">
                       {option === "agent" &&
-                        tx("语义迁移", "Semantic migration")}
+                        tx("默认导入", "Default import")}
                       {option === "all" &&
-                        tx("迁移 + 原始快照", "Migration + raw snapshot")}
-                      {option === "files" &&
-                        tx("仅原始快照", "Raw snapshot only")}
+                        tx("导入 + 原始快照", "Import + raw snapshot")}
                     </div>
                     <div className="migration-mode-copy">
                       {option === "agent" &&
                         tx(
-                          `推荐。把可提升的 ${displayName} 数据迁成一等 neuDrive 内容。`,
-                          `Recommended. Promote durable ${displayName} data into first-class neuDrive content.`,
+                          `推荐。把可提升的 ${displayName} 数据导入成一等 neuDrive 内容。`,
+                          `Recommended. Import durable ${displayName} data as first-class neuDrive content.`,
                         )}
                       {option === "all" &&
                         tx(
-                          "同时保留 /platforms 下的原始文件证据。",
-                          "Keep the raw files under /platforms as well.",
-                        )}
-                      {option === "files" &&
-                        tx(
-                          "只做文件级备份，不做语义重建。",
-                          "Do a file-level backup only, without semantic reconstruction.",
+                          "同时把原始平台文件保留在 /platforms 下。",
+                          "Keep the raw platform files under /platforms as well.",
                         )}
                     </div>
                   </button>
@@ -535,7 +528,7 @@ export default function ClaudeMigrationPage({
               </div>
               <pre className="migration-command">
                 {preview?.next_command ||
-                  `neu import platform ${platform} --dry-run --mode agent`}
+                  `neu import ${platform} --dry-run`}
               </pre>
               <div className="migration-preview-totals">
                 <span>

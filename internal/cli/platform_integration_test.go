@@ -73,8 +73,8 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("expected codex status chat usage in output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "codex")
-	if !strings.Contains(stdout, "Imported codex using mode=agent") {
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex")
+	if !strings.Contains(stdout, "Imported codex:") {
 		t.Fatalf("unexpected import output: %s", stdout)
 	}
 
@@ -93,14 +93,9 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("unexpected read output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "codex", "--mode", "files")
-	if !strings.Contains(stdout, "using mode=files") {
-		t.Fatalf("unexpected files import output: %s", stdout)
-	}
-
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "codex", "--mode", "all")
-	if !strings.Contains(stdout, "using mode=all") {
-		t.Fatalf("unexpected all import output: %s", stdout)
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "codex", "--raw")
+	if !strings.Contains(stdout, "plus") || !strings.Contains(stdout, "raw files") {
+		t.Fatalf("unexpected raw import output: %s", stdout)
 	}
 
 	mustRunAgenthub(t, binary, env, "connect", "claude")
@@ -119,8 +114,8 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		t.Fatalf("expected claude status chat usage in output: %s", stdout)
 	}
 
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "claude")
-	if !strings.Contains(stdout, "Imported claude using mode=agent") {
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude")
+	if !strings.Contains(stdout, "Imported claude:") {
 		t.Fatalf("unexpected claude import output: %s", stdout)
 	}
 	claudeSkillsZip := filepath.Join(workDir, "claude-web-skills.zip")
@@ -129,7 +124,7 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 		"claude-web-skill/helper.py":       []byte("print('hello from claude web zip')\n"),
 		"claude-web-skill/assets/logo.png": []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0x00},
 	})
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "claude", "--zip", claudeSkillsZip)
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude", "--zip", claudeSkillsZip)
 	if !strings.Contains(stdout, "Imported 3 files") || !strings.Contains(stdout, "into /skills using claude") {
 		t.Fatalf("unexpected claude zip import output: %s", stdout)
 	}
@@ -141,9 +136,9 @@ func TestAgenthubPlatformCommands_LocalSQLiteFixture(t *testing.T) {
 	if !strings.Contains(stdout, "file\tskill/claude-web-skill/assets/logo.png") {
 		t.Fatalf("expected imported claude web binary asset: %s", stdout)
 	}
-	stdout, _ = mustRunAgenthub(t, binary, env, "import", "platform", "claude", "--mode", "all")
-	if !strings.Contains(stdout, "Imported claude using mode=all") {
-		t.Fatalf("unexpected claude all import output: %s", stdout)
+	stdout, _ = mustRunAgenthub(t, binary, env, "import", "claude", "--raw")
+	if !strings.Contains(stdout, "plus") || !strings.Contains(stdout, "raw files") {
+		t.Fatalf("unexpected claude raw import output: %s", stdout)
 	}
 
 	exportDir := filepath.Join(workDir, "codex-export")

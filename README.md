@@ -12,6 +12,12 @@ English | [简体中文](README.zh-CN.md)
 
 neuDrive gives one person one hub. Claude, ChatGPT, Codex, Cursor, Gemini, Feishu, and other agents can share identity, memory, skills, secrets, and communication through that hub instead of rebuilding context on every platform.
 
+```bash
+neu browse
+```
+
+![neuDrive dashboard](docs/assets/dashboard.png)
+
 Your identity, preferences, secrets, and skills follow the person, not the platform.
 
 Why people use it:

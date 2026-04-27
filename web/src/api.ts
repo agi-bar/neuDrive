@@ -165,15 +165,25 @@ export interface BillingPlan {
 
 export type BillingPlanCode = 'free' | 'pro_monthly' | 'pro_yearly'
 export type PaidBillingPlanCode = Exclude<BillingPlanCode, 'free'>
+export type BillingAccessSource = 'free' | 'stripe' | 'promo_code'
+
+export interface BillingPromo {
+  state: 'active' | 'scheduled'
+  name: string
+  starts_at: string
+  ends_at: string
+}
 
 export interface BillingStatus {
   current_plan: BillingPlanCode
   entitlement_status: 'active' | 'grace'
   subscription_status?: string
+  access_source: BillingAccessSource
   used_bytes: number
   limit_bytes: number
   usage_measured_at?: string
   account_read_only: boolean
+  promo?: BillingPromo
   plans: BillingPlan[]
   can_checkout: boolean
   can_manage_portal: boolean
@@ -608,6 +618,12 @@ export const api = {
   createBillingPortal: () =>
     request<{ ok: true; portal_url: string }>('/billing/portal', {
       method: 'POST',
+    }),
+
+  redeemBillingCode: (code: string) =>
+    request<{ ok: true; status: BillingStatus }>('/billing/redeem-code', {
+      method: 'POST',
+      body: JSON.stringify({ code }),
     }),
 
   // Connections

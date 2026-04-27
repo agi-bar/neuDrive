@@ -167,6 +167,10 @@ export default function DashboardPage({
   const usagePercent = billingStatus && billingStatus.limit_bytes > 0
     ? Math.min(100, Math.round((billingStatus.used_bytes / billingStatus.limit_bytes) * 100))
     : 0
+  const isPromoAccess = billingStatus?.access_source === 'promo_code' && billingStatus?.promo?.state === 'active'
+  const dashboardPlanName = isPromoAccess
+    ? tx('Pro（兑换码）', 'Pro (Promo code)')
+    : currentPlan?.name || billingStatus?.current_plan || 'free'
 
   return (
     <div className="page materials-page">
@@ -281,7 +285,7 @@ export default function DashboardPage({
             {!billingError && billingStatus && (
               <>
                 <div className="billing-dashboard-plan">
-                  <div className="billing-dashboard-name">{currentPlan?.name || billingStatus.current_plan}</div>
+                  <div className="billing-dashboard-name">{dashboardPlanName}</div>
                   <div className="billing-dashboard-meta">
                     {tx('已用', 'Used')}: {formatBillingStorage(billingStatus.used_bytes, locale)} / {formatBillingStorage(billingStatus.limit_bytes, locale)}
                   </div>
@@ -290,7 +294,17 @@ export default function DashboardPage({
                   <div className="billing-meter-fill" style={{ width: `${usagePercent}%` }} />
                 </div>
                 <div className="dashboard-profile-meta">
-                  {billingStatus.account_read_only
+                  {billingStatus.promo?.state === 'scheduled'
+                    ? tx(
+                      `兑换码权益已排期，将于 ${formatDateTime(billingStatus.promo.starts_at, locale)} 开始。`,
+                      `Promo access is scheduled and starts on ${formatDateTime(billingStatus.promo.starts_at, locale)}.`,
+                    )
+                    : isPromoAccess
+                      ? tx(
+                        `当前通过兑换码使用 Pro，将于 ${formatDateTime(billingStatus.promo?.ends_at || '', locale)} 结束。`,
+                        `Pro promo access is active until ${formatDateTime(billingStatus.promo?.ends_at || '', locale)}.`,
+                      )
+                    : billingStatus.account_read_only
                     ? tx('当前账户因空间超额处于只读状态。', 'This account is currently read-only because it is over its storage limit.')
                     : billingStatus.entitlement_status === 'grace'
                       ? tx('当前处于宽限期，可在 Billing 页面续费或恢复订阅。', 'This account is currently in a grace period. Renew or manage the subscription from Billing.')

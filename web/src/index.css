@@ -5291,6 +5291,7 @@ a:hover {
 }
 
 .billing-summary-card,
+.billing-redeem-card,
 .billing-success-card {
   background: var(--color-surface, #fff);
   border: 1px solid var(--color-border, #e5e7eb);
@@ -5317,6 +5318,10 @@ a:hover {
   padding: 0 24px;
   font-size: 18px;
   font-weight: 700;
+}
+
+.billing-promo-alert {
+  margin-top: 18px;
 }
 
 .billing-kicker {
@@ -5377,6 +5382,27 @@ a:hover {
   margin-top: 20px;
 }
 
+.billing-redeem-card {
+  margin-top: 20px;
+}
+
+.billing-redeem-form {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 18px;
+}
+
+.billing-redeem-form .input {
+  flex: 1 1 auto;
+  min-height: 52px;
+  font-size: 16px;
+}
+
+.billing-redeem-form .btn {
+  flex: 0 0 auto;
+}
+
 .billing-plan-card {
   background: var(--color-surface, #fff);
   border: 1px solid var(--color-border, #e5e7eb);
@@ -5413,5 +5439,10 @@ a:hover {
   .billing-actions {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .billing-redeem-form {
+    flex-direction: column;
+    align-items: stretch;
   }
 }

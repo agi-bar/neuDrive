@@ -105,7 +105,7 @@ export default function BillingPage() {
 
   const handleRedeem = async () => {
     const code = redeemCode.trim()
-    if (!code || busy || status?.promo) return
+    if (!code || busy) return
     setBusy('redeem')
     setError('')
     setRedeemFeedback('')
@@ -192,44 +192,6 @@ export default function BillingPage() {
                   {busy === 'portal' ? tx('打开中...', 'Opening...') : tx('管理订阅', 'Manage billing')}
                 </button>
               )}
-              <Link to="/" className="btn">
-                {tx('返回概览', 'Back to overview')}
-              </Link>
-            </div>
-          </div>
-
-          <div className="billing-redeem-card">
-            <div className="billing-plan-card-head">
-              <div>
-                <h3 className="card-title">{tx('Redeem code', 'Redeem code')}</h3>
-                <div className="billing-plan-copy">
-                  {status.promo
-                    ? tx('每个账号同一时间只能持有一个进行中的兑换码权益。', 'Only one active or scheduled promo can be held per account at a time.')
-                    : tx('输入官方托管发放的兑换码，领取 3 个月免费 Pro。', 'Enter a hosted promo code to unlock 3 months of free Pro access.')}
-                </div>
-              </div>
-            </div>
-
-            {redeemFeedback && (
-              <div className={`alert ${redeemSucceeded ? 'alert-success' : 'alert-warn'}`}>{redeemFeedback}</div>
-            )}
-
-            <div className="billing-redeem-form">
-              <input
-                type="text"
-                className="input"
-                placeholder={tx('输入兑换码', 'Enter promo code')}
-                value={redeemCode}
-                onChange={(event) => setRedeemCode(event.target.value)}
-                disabled={busy !== '' || Boolean(status.promo)}
-              />
-              <button
-                className="btn btn-primary"
-                onClick={() => { void handleRedeem() }}
-                disabled={busy !== '' || !redeemCode.trim() || Boolean(status.promo)}
-              >
-                {busy === 'redeem' ? tx('兑换中...', 'Redeeming...') : tx('立即兑换', 'Redeem')}
-              </button>
             </div>
           </div>
 
@@ -267,6 +229,35 @@ export default function BillingPage() {
                 </div>
               )
             })}
+            <div className="billing-plan-card billing-redeem-card">
+              <div className="billing-plan-card-head">
+                <div>
+                  <h3 className="card-title">{tx('Redeem code', 'Redeem code')}</h3>
+                </div>
+              </div>
+
+              {redeemFeedback && (
+                <div className={`alert ${redeemSucceeded ? 'alert-success' : 'alert-warn'}`}>{redeemFeedback}</div>
+              )}
+
+              <div className="billing-redeem-form">
+                <input
+                  type="text"
+                  className="input"
+                  placeholder={tx('输入兑换码', 'Enter promo code')}
+                  value={redeemCode}
+                  onChange={(event) => setRedeemCode(event.target.value)}
+                  disabled={busy !== ''}
+                />
+                <button
+                  className="btn btn-primary"
+                  onClick={() => { void handleRedeem() }}
+                  disabled={busy !== '' || !redeemCode.trim()}
+                >
+                  {busy === 'redeem' ? tx('兑换中...', 'Redeeming...') : tx('立即兑换', 'Redeem')}
+                </button>
+              </div>
+            </div>
           </div>
         </>
       )}

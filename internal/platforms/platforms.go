@@ -285,7 +285,7 @@ func (a *claudeAdapter) init() *claudeAdapter {
 			"command",
 			claudeCommandEntrypoint,
 			[]string{"claude"},
-				[]string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import claude", "/neudrive token create --kind sync --purpose backup", "/neudrive status"},
+			[]string{"/neudrive ls", "/neudrive read profile/preferences", "/neudrive write memory \"Remember this\"", "/neudrive create project demo", "/neudrive import claude", "/neudrive token create --kind sync --purpose backup", "/neudrive status"},
 			[]string{"connections", "profile", "memory", "skills", "projects", "prompts", "tools", "automations", "archives", "secrets"},
 			claudeSources(),
 			"supported",
@@ -348,7 +348,7 @@ func (a *codexAdapter) init() *codexAdapter {
 			"skill",
 			codexEntrypointDir,
 			nil,
-				[]string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import codex", "$neudrive token create --kind sync --purpose backup", "$neudrive status"},
+			[]string{"$neudrive ls", "$neudrive read profile/preferences", "$neudrive write memory \"Remember this\"", "$neudrive create project demo", "$neudrive import codex", "$neudrive token create --kind sync --purpose backup", "$neudrive status"},
 			[]string{"connections", "skills", "profile", "memory", "projects", "automations", "tools", "archives"},
 			[]Source{
 				{Domain: "profile", Label: "config.toml", Path: expandUser("~/.codex/config.toml")},

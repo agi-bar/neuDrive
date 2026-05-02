@@ -342,7 +342,7 @@ export default function SetupPage() {
     },
   }, null, 2)
 
-  const gptTokenText = newToken || tx('在 Token 管理页创建一个新的 Bearer Token 后填入这里', 'Create a new Bearer token in Token Manager and paste it here')
+  const gptTokenText = newToken || tx('在 Developer Access 创建一个新的 Bearer Token 后填入这里', 'Create a new Bearer token in Developer Access and paste it here')
 
   const handleCreateToken = useCallback(async () => {
     setManualCreating(true)

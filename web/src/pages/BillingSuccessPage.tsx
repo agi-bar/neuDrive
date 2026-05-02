@@ -11,6 +11,7 @@ export default function BillingSuccessPage() {
   const [error, setError] = useState('')
 
   useEffect(() => {
+    localStorage.removeItem('neudrive.postSignupIntent')
     let cancelled = false
     const load = async () => {
       setLoading(true)
@@ -75,11 +76,11 @@ export default function BillingSuccessPage() {
         )}
 
         <div className="billing-actions">
-          <Link to="/billing" className="btn btn-primary">
-            {tx('查看 Billing', 'Open billing')}
+          <Link to="/onboarding" className="btn btn-primary">
+            {tx('继续接入向导', 'Continue onboarding')}
           </Link>
-          <Link to="/" className="btn">
-            {tx('回到概览', 'Back to overview')}
+          <Link to="/settings/billing" className="btn">
+            {tx('查看 Billing', 'Open billing')}
           </Link>
         </div>
       </div>

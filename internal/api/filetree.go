@@ -28,6 +28,7 @@ type FileNode struct {
 	Checksum      string         `json:"checksum,omitempty"`
 	Metadata      interface{}    `json:"metadata,omitempty"`
 	BundleContext *BundleContext `json:"bundle_context,omitempty"`
+	MinTrustLevel int            `json:"min_trust_level,omitempty"`
 	Children      []*FileNode    `json:"children,omitempty"`
 	CreatedAt     string         `json:"created_at,omitempty"`
 	UpdatedAt     string         `json:"updated_at,omitempty"`
@@ -273,20 +274,21 @@ func fileTreeEntryToNode(e *models.FileTreeEntry) *FileNode {
 		}
 	}
 	node := &FileNode{
-		Path:      publicPath,
-		Name:      hubpath.BaseName(publicPath),
-		IsDir:     e.IsDirectory,
-		Source:    services.EntrySource(e),
-		Kind:      e.Kind,
-		Content:   e.Content,
-		MimeType:  e.ContentType,
-		Size:      size,
-		Version:   e.Version,
-		Checksum:  e.Checksum,
-		Metadata:  e.Metadata,
-		CreatedAt: e.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt: e.UpdatedAt.Format("2006-01-02T15:04:05Z"),
-		DeletedAt: deletedAt,
+		Path:          publicPath,
+		Name:          hubpath.BaseName(publicPath),
+		IsDir:         e.IsDirectory,
+		Source:        services.EntrySource(e),
+		Kind:          e.Kind,
+		Content:       e.Content,
+		MimeType:      e.ContentType,
+		Size:          size,
+		Version:       e.Version,
+		Checksum:      e.Checksum,
+		Metadata:      e.Metadata,
+		MinTrustLevel: e.MinTrustLevel,
+		CreatedAt:     e.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:     e.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		DeletedAt:     deletedAt,
 	}
 	if e.IsDirectory {
 		if summary := services.BundleSummaryFromMetadata(e.Path, e.Metadata, e.MinTrustLevel); summary != nil {

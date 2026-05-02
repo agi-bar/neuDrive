@@ -1,666 +1,197 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api, type FileNode } from '../../api'
-import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
-import FileMaterialsTile from '../../components/FileMaterialsTile'
-import ResourceActionMenu from '../../components/ResourceActionMenu'
-import ResourceConfirmDialog from '../../components/ResourceConfirmDialog'
-import SourceFilterBar from '../../components/SourceFilterBar'
-import useResourceCardMenu from '../../hooks/useResourceCardMenu'
-import useTreeDeleteDialog from '../../hooks/useTreeDeleteDialog'
-import { useI18n, type AppLocale } from '../../i18n'
-import {
-  buildFileTileModel,
-  buildSourceFilterOptions,
-  bundleBrowsePath,
-  bundleInfoFromNode,
-  bundleRelativeDirFromPath,
-  dataConversationBundleRoute,
-  dataFileEditorRoute,
-  fileNodeSource,
-  formatDateTime,
-  getMaterialsSortOptions,
-  isTextLikeFile,
-  matchesSourceFilter,
-  normalizeBundleRelativeDir,
-  sortMaterialsItems,
-  sourceLabel,
-  type MaterialsSortDir,
-  type MaterialsSortKey,
-} from './DataShared'
+import { useI18n } from '../../i18n'
+import { dataFileEditorRoute, formatDateTime, sourceLabel } from './DataShared'
 
-function transcriptFilePath(bundlePath: string) {
-  return `${bundlePath.replace(/\/+$/, '')}/conversation.md`
+function isConversation(node: FileNode) {
+  return node.bundle_context?.kind === 'conversation' || node.path.startsWith('/conversations/')
 }
 
-function isConversationBundleNode(node: FileNode | null | undefined) {
-  return Boolean(node?.is_dir && bundleInfoFromNode(node)?.kind === 'conversation')
+function titleFor(node: FileNode) {
+  return String(node.metadata?.conversation_title || node.bundle_context?.name || node.name)
 }
 
-function isLegacyConversationExportFile(node: FileNode) {
-  return !node.is_dir && (node.name === 'resume-claude.md' || node.name === 'resume-chatgpt.md')
+function transcriptPath(node: FileNode) {
+  return node.is_dir ? `${node.path.replace(/\/+$/, '')}/conversation.md` : node.path
 }
 
-type ConversationBundleMeta = {
-  title: string
-  source: string
-  sourceConversationId: string
-  messageCount: number
-  startedAt: string
-  endedAt: string
-  importedAt: string
-  model: string
-  projectName: string
-  sourceUrl: string
-  description: string
-}
-
-type ConversationMetaEntry = {
-  label: string
-  value: string
-  code?: boolean
-}
-
-function metadataString(metadata: Record<string, any> | undefined, key: string) {
-  const value = metadata?.[key]
-  return typeof value === 'string' ? value.trim() : ''
-}
-
-function metadataNumber(metadata: Record<string, any> | undefined, key: string) {
-  const value = metadata?.[key]
-  if (typeof value === 'number' && Number.isFinite(value)) return value
-  if (typeof value === 'string') {
-    const parsed = Number(value)
-    if (Number.isFinite(parsed)) return parsed
-  }
-  return 0
-}
-
-function conversationBundleMeta(node: FileNode): ConversationBundleMeta {
-  const bundle = bundleInfoFromNode(node)
-  const metadata = node.metadata
-  return {
-    title: bundle?.name || metadataString(metadata, 'conversation_title') || node.name,
-    source: bundle?.source || fileNodeSource(node),
-    sourceConversationId: metadataString(metadata, 'source_conversation_id'),
-    messageCount:
-      metadataNumber(metadata, 'conversation_message_count')
-      || metadataNumber(metadata, 'message_count')
-      || metadataNumber(metadata, 'turn_count'),
-    startedAt: metadataString(metadata, 'conversation_started_at') || node.created_at || '',
-    endedAt: metadataString(metadata, 'conversation_ended_at') || node.updated_at || node.created_at || '',
-    importedAt: metadataString(metadata, 'imported_at') || node.updated_at || node.created_at || '',
-    model: metadataString(metadata, 'conversation_model'),
-    projectName: metadataString(metadata, 'conversation_project_name'),
-    sourceUrl: metadataString(metadata, 'conversation_source_url'),
-    description: metadataString(metadata, 'description') || bundle?.description || '',
-  }
-}
-
-function conversationMessageCountLabel(count: number, locale: AppLocale) {
-  if (count <= 0) return locale === 'zh-CN' ? '消息数未知' : 'Message count unknown'
-  return locale === 'zh-CN' ? `${count} 条消息` : `${count} messages`
-}
-
-function conversationTimeSpanLabel(meta: ConversationBundleMeta, locale: AppLocale) {
-  const startedAt = meta.startedAt ? formatDateTime(meta.startedAt, locale) : ''
-  const endedAt = meta.endedAt ? formatDateTime(meta.endedAt, locale) : ''
-  if (startedAt && endedAt) {
-    if (startedAt === endedAt) return startedAt
-    return locale === 'zh-CN' ? `${startedAt} 至 ${endedAt}` : `${startedAt} to ${endedAt}`
-  }
-  return startedAt || endedAt
-}
-
-function conversationCardDescription(meta: ConversationBundleMeta, fallbackDescription: string | undefined, locale: AppLocale) {
-  const details = [
-    meta.model,
-    meta.projectName ? (locale === 'zh-CN' ? `项目 ${meta.projectName}` : `Project ${meta.projectName}`) : '',
-    meta.sourceConversationId ? (locale === 'zh-CN' ? `来源 ID ${meta.sourceConversationId}` : `Source ID ${meta.sourceConversationId}`) : '',
-  ].filter(Boolean)
-  if (details.length > 0) return details.join(' · ')
-  return fallbackDescription || meta.description
-}
-
-function buildConversationMetaEntries(meta: ConversationBundleMeta, locale: AppLocale, detailed = false): ConversationMetaEntry[] {
-  const entries: ConversationMetaEntry[] = []
-  const timeSpan = conversationTimeSpanLabel(meta, locale)
-  if (detailed && meta.source) {
-    entries.push({
-      label: locale === 'zh-CN' ? '来源平台' : 'Source',
-      value: sourceLabel(meta.source, locale),
-    })
-  }
-  if (detailed && timeSpan) {
-    entries.push({
-      label: locale === 'zh-CN' ? '时间跨度' : 'Time span',
-      value: timeSpan,
-    })
-  }
-  if (meta.messageCount > 0 || detailed) {
-    entries.push({
-      label: locale === 'zh-CN' ? '消息数' : 'Messages',
-      value: conversationMessageCountLabel(meta.messageCount, locale),
-    })
-  }
-  if (meta.importedAt) {
-    entries.push({
-      label: locale === 'zh-CN' ? '导入时间' : 'Imported',
-      value: formatDateTime(meta.importedAt, locale),
-    })
-  }
-  if (detailed && meta.model) {
-    entries.push({
-      label: locale === 'zh-CN' ? '模型' : 'Model',
-      value: meta.model,
-    })
-  }
-  if (detailed && meta.projectName) {
-    entries.push({
-      label: locale === 'zh-CN' ? '项目' : 'Project',
-      value: meta.projectName,
-    })
-  }
-  if (detailed && meta.sourceConversationId) {
-    entries.push({
-      label: locale === 'zh-CN' ? '来源 ID' : 'Source ID',
-      value: meta.sourceConversationId,
-      code: true,
-    })
-  }
-  return entries
-}
-
-function ConversationMetaPanel({ entries, compact = false }: { entries: ConversationMetaEntry[]; compact?: boolean }) {
-  if (entries.length === 0) return null
-  return (
-    <div className={`conversation-meta-panel${compact ? ' is-compact' : ''}`}>
-      {entries.map((entry) => (
-        <div key={`${entry.label}:${entry.value}`} className="conversation-meta-item">
-          <span className="conversation-meta-label">{entry.label}</span>
-          {entry.code ? (
-            <code className="conversation-meta-value is-code">{entry.value}</code>
-          ) : (
-            <span className="conversation-meta-value">{entry.value}</span>
-          )}
-        </div>
-      ))}
-    </div>
-  )
+function summaryFor(node: FileNode) {
+  const summary = node.metadata?.summary || node.metadata?.description || node.bundle_context?.description
+  if (typeof summary === 'string' && summary.trim()) return summary.trim()
+  return 'Ready to reuse as memory, project context, or a replay prompt.'
 }
 
 export default function DataConversationsPage() {
   const { locale, tx } = useI18n()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const params = useParams()
-  const bundleWildcard = (params['*'] || '').trim()
-  const query = useMemo(() => new URLSearchParams(location.search), [location.search])
-  const currentRelativeDir = normalizeBundleRelativeDir(query.get('dir'))
-  const currentBundlePath = bundleWildcard ? `/conversations/${decodeURIComponent(bundleWildcard).replace(/^\/+/, '')}` : ''
-  const currentBrowsePath = currentBundlePath ? bundleBrowsePath(currentBundlePath, currentRelativeDir) : ''
-  const isBundleView = Boolean(currentBundlePath)
-
-  const [bundles, setBundles] = useState<FileNode[]>([])
-  const [bundleNode, setBundleNode] = useState<FileNode | null>(null)
-  const [bundleRootNode, setBundleRootNode] = useState<FileNode | null>(null)
+  const [items, setItems] = useState<FileNode[]>([])
+  const [selected, setSelected] = useState<FileNode | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [selectedBundlePath, setSelectedBundlePath] = useState<string | null>(null)
-  const [selectedEntryPath, setSelectedEntryPath] = useState<string | null>(null)
-  const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
-  const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
-  const [sourceFilter, setSourceFilter] = useState('all')
-  const { closeMenu, isMenuOpen, toggleMenu } = useResourceCardMenu()
+  const [copied, setCopied] = useState('')
 
-  const load = useCallback(async () => {
+  const load = async () => {
     setLoading(true)
     setError('')
     try {
-      if (isBundleView) {
-        const [node, rootNode] = await Promise.all([
-          api.getTree(currentBrowsePath),
-          currentBrowsePath === currentBundlePath ? Promise.resolve<FileNode | null>(null) : api.getTree(currentBundlePath),
-        ])
-        setBundleNode(node)
-        setBundleRootNode(rootNode || node)
-        setBundles([])
-        setSelectedEntryPath(null)
-        closeMenu()
-        return
-      }
-
-      const rootNode = await api.getTree('/conversations')
-      const rootChildren = rootNode.children || []
-      const nextBundlesByPath = new Map<string, FileNode>()
-
-      for (const child of rootChildren) {
-        if (isConversationBundleNode(child)) {
-          nextBundlesByPath.set(child.path, child)
-        }
-      }
-
-      const platformDirs = rootChildren.filter((child) => child.is_dir && !isConversationBundleNode(child))
-      const platformResults = await Promise.allSettled(platformDirs.map((child) => api.getTree(child.path)))
-      for (const result of platformResults) {
-        if (result.status !== 'fulfilled') continue
-        for (const child of result.value.children || []) {
-          if (!isConversationBundleNode(child)) continue
-          nextBundlesByPath.set(child.path, child)
-        }
-      }
-
-      setBundles(Array.from(nextBundlesByPath.values()))
-      setBundleNode(null)
-      setBundleRootNode(null)
-      setSelectedBundlePath(null)
-      closeMenu()
+      const snapshot = await api.getTreeSnapshot('/conversations')
+      const conversations = snapshot.entries
+        .filter(isConversation)
+        .filter((entry) => entry.is_dir || entry.name.endsWith('.md'))
+        .sort((a, b) => new Date(b.updated_at || b.created_at || 0).getTime() - new Date(a.updated_at || a.created_at || 0).getTime())
+      setItems(conversations)
+      setSelected((current) => current || conversations[0] || null)
     } catch (err: any) {
-      setError(err.message || tx('加载会话失败', 'Failed to load conversations'))
+      setError(err?.message || tx('加载会话失败', 'Failed to load conversations'))
     } finally {
       setLoading(false)
     }
-  }, [closeMenu, currentBrowsePath, currentBundlePath, isBundleView, tx])
-
-  const {
-    closeDialog: closeDeleteDialog,
-    confirmDelete,
-    dialog: deleteDialog,
-    requestDelete,
-    submitting: deleteSubmitting,
-  } = useTreeDeleteDialog({ tx, onDeleted: load })
+  }
 
   useEffect(() => {
     void load()
-  }, [load])
+  }, [])
 
-  const currentBundleContext = bundleNode?.bundle_context || bundleRootNode?.bundle_context
-  const currentConversationMeta = bundleRootNode
-    ? conversationBundleMeta(bundleRootNode)
-    : (bundleNode ? conversationBundleMeta(bundleNode) : null)
-  const bundleEntries = useMemo(
-    () => (bundleNode?.children || []).filter((entry) => !isLegacyConversationExportFile(entry)),
-    [bundleNode?.children],
-  )
-  const selectedDeletePath = isBundleView ? selectedEntryPath : selectedBundlePath
-  const canDeleteSelection = Boolean(selectedDeletePath)
+  const statusFor = (node: FileNode) => {
+    const hasSummary = Boolean(node.metadata?.summary || node.metadata?.description || node.bundle_context?.description)
+    return hasSummary ? 'Has summary' : 'Imported'
+  }
 
-  const sortOptions = getMaterialsSortOptions(locale)
-  const sortedBundles = useMemo(
-    () =>
-      sortMaterialsItems({
-        items: bundles,
-        sortKey,
-        sortDir,
-        getName: (bundle) => bundleInfoFromNode(bundle)?.name || bundle.name,
-        getUpdatedAt: (bundle) => bundle.updated_at || bundle.created_at,
-      }),
-    [bundles, sortDir, sortKey],
-  )
-  const filteredBundles = useMemo(
-    () => sortedBundles.filter((bundle) => matchesSourceFilter(fileNodeSource(bundle), sourceFilter)),
-    [sortedBundles, sourceFilter],
-  )
-  const bundleSourceOptions = useMemo(
-    () => buildSourceFilterOptions(bundles, fileNodeSource, locale),
-    [bundles, locale],
-  )
+  const copyReplayPrompt = async (node: FileNode) => {
+    const prompt = `Replay this neuDrive conversation into the current agent as reusable context: ${transcriptPath(node)}. Extract the key decisions, preferences, and next actions before answering.`
+    await navigator.clipboard?.writeText(prompt)
+    setCopied(node.path)
+    window.setTimeout(() => setCopied(''), 1600)
+  }
 
-  const sortedBundleEntries = useMemo(
-    () =>
-      sortMaterialsItems({
-        items: bundleEntries,
-        sortKey,
-        sortDir,
-        getName: (entry) => entry.name,
-        getUpdatedAt: (entry) => entry.updated_at || entry.created_at,
-        groupComparator: (left, right) => {
-          const leftPriority = left.name === 'conversation.md' ? -1 : 0
-          const rightPriority = right.name === 'conversation.md' ? -1 : 0
-          if (leftPriority !== rightPriority) return leftPriority - rightPriority
-          if (left.is_dir !== right.is_dir) return left.is_dir ? -1 : 1
-          return 0
-        },
-      }),
-    [bundleEntries, sortDir, sortKey],
-  )
-  const filteredBundleEntries = useMemo(
-    () => sortedBundleEntries.filter((entry) => matchesSourceFilter(fileNodeSource(entry), sourceFilter)),
-    [sortedBundleEntries, sourceFilter],
-  )
-  const entrySourceOptions = useMemo(
-    () => buildSourceFilterOptions(bundleEntries, fileNodeSource, locale),
-    [bundleEntries, locale],
-  )
-
-  const openConversationBundle = useCallback((bundlePath: string, relativeDir = '') => {
-    closeMenu()
-    navigate(dataConversationBundleRoute(bundlePath, relativeDir))
-  }, [closeMenu, navigate])
-
-  const openFileEditor = useCallback((path: string) => {
-    closeMenu()
-    navigate(dataFileEditorRoute(path))
-  }, [closeMenu, navigate])
-
-  const openBundleFolder = useCallback((path: string) => {
-    if (!currentBundlePath) return
-    openConversationBundle(currentBundlePath, bundleRelativeDirFromPath(currentBundlePath, path))
-  }, [currentBundlePath, openConversationBundle])
-
-  const handleDownloadZip = useCallback(async (path: string) => {
-    closeMenu()
+  const convertToMemory = async (node: FileNode) => {
+    const safeName = titleFor(node).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 48) || 'conversation-memory'
     try {
-      await api.downloadTreeZip(path)
+      await api.writeTree(`/memory/${safeName}.md`, {
+        content: `# ${titleFor(node)}\n\nSource conversation: ${transcriptPath(node)}\n\n${summaryFor(node)}\n`,
+        mimeType: 'text/markdown',
+        metadata: { source: 'conversation', source_path: node.path },
+        minTrustLevel: node.min_trust_level || node.bundle_context?.min_trust_level || 3,
+      })
+      setError(tx('已创建 Memory 条目。', 'Memory entry created.'))
     } catch (err: any) {
-      setError(err.message || tx('下载 ZIP 失败', 'Failed to download ZIP'))
+      setError(err?.message || tx('创建 Memory 失败', 'Failed to create memory'))
     }
-  }, [closeMenu, tx])
-
-  if (loading) {
-    return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
   }
 
-  if (isBundleView) {
-    const relativeSegments = currentRelativeDir.split('/').filter(Boolean)
-    const transcriptPath = transcriptFilePath(currentBundlePath)
-
-    return (
-      <div className="page materials-page">
-        <section className="materials-hero">
-          <div className="materials-hero-copy">
-            <nav aria-label={tx('面包屑', 'Breadcrumbs')} className="materials-breadcrumbs">
-              <button className="btn-text" onClick={() => navigate('/data/conversations')}>{tx('会话', 'Conversations')}</button>
-              {currentBundleContext ? (
-                <>
-                  <span className="breadcrumbs-sep">/</span>
-                  <button className="btn-text" onClick={() => openConversationBundle(currentBundlePath)}>{currentBundleContext.name}</button>
-                </>
-              ) : null}
-              {relativeSegments.map((segment, index) => {
-                const relative = relativeSegments.slice(0, index + 1).join('/')
-                return (
-                  <span key={relative}>
-                    <span className="breadcrumbs-sep">/</span>
-                    <button className="btn-text" onClick={() => openConversationBundle(currentBundlePath, relative)}>{segment}</button>
-                  </span>
-                )
-              })}
-            </nav>
-            <div className="materials-kicker">neuDrive Data</div>
-            <h2 className="materials-title">{currentBundleContext?.name || tx('会话 Bundle', 'Conversation Bundle')}</h2>
-          <p className="materials-subtitle">{tx('会话现在作为一等 bundle 管理：可读转录和规范化 sidecar 都放在同一个目录。', 'Conversations now live as first-class bundles: the readable transcript and normalized sidecar stay in one directory.')}</p>
-            {currentConversationMeta ? (
-              <ConversationMetaPanel entries={buildConversationMetaEntries(currentConversationMeta, locale, true)} />
-            ) : null}
-          </div>
-        </section>
-
-        {error && <div className="alert alert-error">{error}</div>}
-        {!error && !currentBundleContext && (
-          <div className="alert alert-warn">{tx('没有找到这个 conversation bundle。', 'This conversation bundle could not be found.')}</div>
-        )}
-
-        {currentBundleContext ? (
-          <section className="materials-section">
-            <div className="materials-section-head">
-              <div>
-                <h3 className="materials-section-title">{tx('Bundle 内容', 'Bundle contents')}</h3>
-                <p className="materials-section-copy">{tx('直接浏览会话归档里的 transcript 和 normalized sidecar。', 'Browse the transcript and normalized sidecar directly inside the conversation archive.')}</p>
-              </div>
-              <MaterialsSectionToolbar
-                count={filteredBundleEntries.length}
-                sortKey={sortKey}
-                sortOptions={sortOptions}
-                sortDir={sortDir}
-                onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
-                onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
-              >
-                <button className="btn btn-sm materials-toolbar-control" onClick={() => navigate(dataFileEditorRoute(transcriptPath))}>
-                  {tx('打开转录', 'Open transcript')}
-                </button>
-                <button
-                  className="btn btn-sm materials-toolbar-control is-danger"
-                  disabled={!canDeleteSelection}
-                  onClick={() => {
-                    if (selectedDeletePath) void requestDelete([selectedDeletePath])
-                  }}
-                >
-                  {tx('删除', 'Delete')}
-                </button>
-              </MaterialsSectionToolbar>
-            </div>
-
-            {(entrySourceOptions.length > 1 || sourceFilter !== 'all') && (
-              <SourceFilterBar options={entrySourceOptions} value={sourceFilter} onChange={setSourceFilter} />
-            )}
-
-            {filteredBundleEntries.length === 0 ? (
-              <div className="empty-state">
-                <p>{tx('这个会话目录还没有内容', 'This conversation folder is empty')}</p>
-              </div>
-            ) : (
-              <div className="materials-grid">
-                {filteredBundleEntries.map((entry) => {
-                  const tile = buildFileTileModel({
-                    node: entry,
-                    variant: 'bundle-entry',
-                    bundleLabel: currentBundleContext.name,
-                    locale,
-                  })
-                  const editable = isTextLikeFile(entry.name, entry.mime_type)
-                  return (
-                    <FileMaterialsTile
-                      key={entry.path}
-                      node={tile.node}
-                      subtitle={tile.subtitle}
-                      description={tile.description}
-                      extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
-                      path={tile.path}
-                      footerStart={tile.footerStart}
-                      footerEnd={tile.footerEnd}
-                      selected={selectedEntryPath === entry.path}
-                      menuOpen={isMenuOpen(entry.path)}
-                      menuButtonAriaLabel={tx(`打开 ${entry.name} 的工具菜单`, `Open tools menu for ${entry.name}`)}
-                      menuPanel={(
-                        <ResourceActionMenu
-                          items={[
-                            ...((entry.is_dir || editable)
-                              ? [{
-                                  key: 'open',
-                                  label: entry.is_dir ? tx('进入目录', 'Open folder') : tx('打开文件', 'Open file'),
-                                  onSelect: () => {
-                                    closeMenu()
-                                    if (entry.is_dir) {
-                                      openBundleFolder(entry.path)
-                                    } else {
-                                      openFileEditor(entry.path)
-                                    }
-                                  },
-                                }]
-                              : []),
-                            {
-                              key: 'download',
-                              label: tx('下载 ZIP', 'Download ZIP'),
-                              onSelect: () => {
-                                void handleDownloadZip(entry.path)
-                              },
-                            },
-                            {
-                              key: 'select',
-                              label: selectedEntryPath === entry.path ? tx('取消选中', 'Unselect') : tx('加入选择', 'Select'),
-                              onSelect: () => {
-                                closeMenu()
-                                setSelectedEntryPath((value) => (value === entry.path ? null : entry.path))
-                              },
-                            },
-                            {
-                              key: 'delete',
-                              label: tx('删除', 'Delete'),
-                              tone: 'danger' as const,
-                              onSelect: () => {
-                                closeMenu()
-                                void requestDelete([entry.path])
-                              },
-                            },
-                          ]}
-                        />
-                      )}
-                      onMenuToggle={() => toggleMenu(entry.path)}
-                      onSelect={() => setSelectedEntryPath(entry.path)}
-                      onOpen={entry.is_dir ? () => openBundleFolder(entry.path) : (editable ? () => openFileEditor(entry.path) : undefined)}
-                    />
-                  )
-                })}
-              </div>
-            )}
-          </section>
-        ) : null}
-
-        <ResourceConfirmDialog
-          open={Boolean(deleteDialog)}
-          kicker={tx('删除确认', 'Delete confirmation')}
-          title={deleteDialog?.nonEmptyDirectories.length ? tx('这些目录不是空的', 'These folders are not empty') : tx('确认删除选中条目', 'Confirm deletion')}
-          description={deleteDialog?.nonEmptyDirectories.length
-            ? tx('确认后会递归删除其中所有可写文件和文件夹。', 'Continuing will recursively delete all writable files and folders inside.')
-            : tx('这个操作会删除选中的会话文件或目录，且不可撤销。', 'This will delete the selected conversation file or directory and cannot be undone.')}
-          cancelLabel={tx('取消', 'Cancel')}
-          confirmLabel={deleteSubmitting ? tx('删除中...', 'Deleting...') : tx('确认删除', 'Delete')}
-          tone="danger"
-          submitting={deleteSubmitting}
-          onCancel={closeDeleteDialog}
-          onConfirm={() => void confirmDelete()}
-        />
-      </div>
-    )
+  const addToProject = async (node: FileNode) => {
+    const projectName = window.prompt(tx('输入项目名称', 'Project name'))
+    if (!projectName) return
+    try {
+      await api.appendProjectLog(projectName, {
+        source: 'neudrive',
+        action: 'link_conversation',
+        summary: `${titleFor(node)} · ${transcriptPath(node)}`,
+        tags: ['conversation'],
+      })
+      setError(tx('已添加到项目记录。', 'Added to project log.'))
+    } catch (err: any) {
+      setError(err?.message || tx('添加到项目失败', 'Failed to add to project'))
+    }
   }
+
+  const deleteConversation = async (node: FileNode) => {
+    if (!window.confirm(tx(`删除会话 ${titleFor(node)}？`, `Delete conversation ${titleFor(node)}?`))) return
+    try {
+      await api.deleteTree(node.path)
+      setSelected(null)
+      await load()
+    } catch (err: any) {
+      setError(err?.message || tx('删除失败', 'Delete failed'))
+    }
+  }
+
+  const sourceCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const item of items) {
+      const source = String(item.bundle_context?.source || item.source || item.metadata?.source || 'unknown')
+      counts.set(source, (counts.get(source) || 0) + 1)
+    }
+    return Array.from(counts.entries())
+  }, [items])
+
+  if (loading) return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
 
   return (
-    <div className="page materials-page">
-      <section className="materials-hero">
-        <div className="materials-hero-copy">
-          <div className="materials-kicker">neuDrive Data</div>
-          <h2 className="materials-title">{tx('会话', 'Conversations')}</h2>
-          <p className="materials-subtitle">{tx('Conversation 现在和 Projects、Skills、Memory 并列，是一等 neuDrive 域。每张卡片都是一个 bundle，里面包含 transcript 和 normalized sidecar。', 'Conversations now sit alongside Projects, Skills, and Memory as a first-class neuDrive domain. Each card is a bundle that contains the transcript and normalized sidecar.')}</p>
+    <div className="page conversations-page">
+      <div className="page-header compact-header">
+        <div>
+          <h2>Conversations</h2>
+          <p className="page-subtitle">
+            {tx('Imported AI conversations that can become memory, project context or reusable references.', 'Imported AI conversations that can become memory, project context or reusable references.')}
+          </p>
         </div>
-      </section>
+        <div className="page-actions">
+          <Link to="/imports/claude-export" className="btn btn-primary">{tx('导入会话', 'Import conversations')}</Link>
+        </div>
+      </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
+      {error && <div className={error.includes('失败') || error.toLowerCase().includes('failed') ? 'alert alert-warn' : 'alert alert-success'}>{error}</div>}
 
-      <section className="materials-section">
-        <div className="materials-section-head">
-          <div>
-            <h3 className="materials-section-title">{tx('Conversation Library', 'Conversation Library')}</h3>
-            <p className="materials-section-copy">{tx('统一浏览 conversation bundles，并查看 transcript 与 normalized sidecar。', 'Browse conversation bundles and inspect the transcript and normalized sidecar.')}</p>
+      <section className="conversation-layout">
+        <div className="conversation-list-panel">
+          <div className="data-summary-grid compact">
+            <div className="data-summary-card"><span>Total</span><strong>{items.length}</strong><small>conversations</small></div>
+            {sourceCounts.slice(0, 3).map(([source, count]) => (
+              <div key={source} className="data-summary-card"><span>{sourceLabel(source, locale)}</span><strong>{count}</strong><small>source</small></div>
+            ))}
           </div>
-          <MaterialsSectionToolbar
-            count={filteredBundles.length}
-            sortKey={sortKey}
-            sortOptions={sortOptions}
-            sortDir={sortDir}
-            onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
-            onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
-          >
-            <button
-              className="btn btn-sm materials-toolbar-control is-danger"
-              disabled={!canDeleteSelection}
-              onClick={() => {
-                if (selectedDeletePath) void requestDelete([selectedDeletePath])
-              }}
-            >
-              {tx('删除', 'Delete')}
-            </button>
-          </MaterialsSectionToolbar>
+          <table className="data-table conversation-table">
+            <thead>
+              <tr>
+                <th>Title</th>
+                <th>Source</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((node) => (
+                <tr key={node.path} className={selected?.path === node.path ? 'is-selected' : ''} onClick={() => setSelected(node)}>
+                  <td><strong>{titleFor(node)}</strong><small>{summaryFor(node)}</small></td>
+                  <td>{sourceLabel(String(node.bundle_context?.source || node.source || node.metadata?.source || 'unknown'), locale)}</td>
+                  <td>{formatDateTime(node.updated_at || node.created_at, locale)}</td>
+                  <td>{statusFor(node)}</td>
+                  <td><button className="btn-text" onClick={(event) => { event.stopPropagation(); setSelected(node) }}>Open</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
 
-        {(bundleSourceOptions.length > 1 || sourceFilter !== 'all') && (
-          <SourceFilterBar options={bundleSourceOptions} value={sourceFilter} onChange={setSourceFilter} />
-        )}
-
-        {filteredBundles.length === 0 ? (
-          <div className="empty-state">
-            <p>{tx('还没有 Conversation 内容', 'No conversations yet')}</p>
-            <p className="empty-hint">{tx('从 Claude Web、ChatGPT Web 或 Claude Code 导入后，会在这里生成 conversation bundle。', 'Conversation bundles will appear here after imports from Claude Web, ChatGPT Web, or Claude Code.')}</p>
-          </div>
-        ) : (
-          <div className="materials-grid materials-grid-wide">
-            {filteredBundles.map((bundle) => {
-              const tile = buildFileTileModel({
-                node: bundle,
-                variant: 'browser',
-                currentLabel: tx('会话', 'Conversations'),
-                locale,
-              })
-              const bundlePath = bundle.path
-              const meta = conversationBundleMeta(bundle)
-              const metaEntries = buildConversationMetaEntries(meta, locale)
-              const subtitle = conversationTimeSpanLabel(meta, locale) || tile.subtitle
-              const description = conversationCardDescription(meta, typeof tile.description === 'string' ? tile.description : meta.description, locale) || undefined
-              return (
-                <FileMaterialsTile
-                  key={bundle.path}
-                  node={tile.node}
-                  subtitle={subtitle}
-                  description={description}
-                  path={tile.path}
-                  extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
-                  footerStart={tile.footerStart}
-                  footerEnd={tile.footerEnd}
-                  selected={selectedBundlePath === bundle.path}
-                  children={<ConversationMetaPanel entries={metaEntries} compact />}
-                  menuOpen={isMenuOpen(bundle.path)}
-                  menuButtonAriaLabel={tx(`打开 ${tile.node.name} 的工具菜单`, `Open tools menu for ${tile.node.name}`)}
-                  menuPanel={(
-                    <ResourceActionMenu
-                      items={[
-                        {
-                          key: 'open',
-                          label: tx('打开 Bundle', 'Open bundle'),
-                          onSelect: () => openConversationBundle(bundle.path),
-                        },
-                        {
-                          key: 'download',
-                          label: tx('下载 ZIP', 'Download ZIP'),
-                          onSelect: () => {
-                            void handleDownloadZip(bundle.path)
-                          },
-                        },
-                        {
-                          key: 'delete',
-                          label: tx('删除', 'Delete'),
-                          tone: 'danger' as const,
-                          onSelect: () => {
-                            closeMenu()
-                            void requestDelete([bundle.path])
-                          },
-                        },
-                      ]}
-                    />
-                  )}
-                  onMenuToggle={() => toggleMenu(bundle.path)}
-                  onSelect={() => setSelectedBundlePath((value) => (value === bundle.path ? null : bundle.path))}
-                  onOpen={() => openConversationBundle(bundle.path)}
-                />
-              )
-            })}
-          </div>
-        )}
+        <aside className="conversation-detail-panel">
+          {selected ? (
+            <>
+              <h3>{titleFor(selected)}</h3>
+              <p>{summaryFor(selected)}</p>
+              <dl className="preview-meta">
+                <div><dt>Source</dt><dd>{sourceLabel(String(selected.bundle_context?.source || selected.source || selected.metadata?.source || 'unknown'), locale)}</dd></div>
+                <div><dt>Transcript</dt><dd><code>{transcriptPath(selected)}</code></dd></div>
+                <div><dt>Status</dt><dd>{statusFor(selected)}</dd></div>
+                <div><dt>Updated</dt><dd>{formatDateTime(selected.updated_at || selected.created_at, locale)}</dd></div>
+              </dl>
+              <div className="drawer-actions">
+                <Link className="btn btn-primary" to={dataFileEditorRoute(transcriptPath(selected))}>Open transcript</Link>
+                <button className="btn btn-outline" onClick={() => { void copyReplayPrompt(selected) }}>{copied === selected.path ? tx('已复制', 'Copied') : 'Replay into another agent'}</button>
+                <button className="btn btn-outline" onClick={() => { void convertToMemory(selected) }}>Convert to memory</button>
+                <button className="btn btn-outline" onClick={() => { void addToProject(selected) }}>Add to project</button>
+                <button className="btn btn-danger" onClick={() => { void deleteConversation(selected) }}>Delete</button>
+              </div>
+            </>
+          ) : (
+            <div className="empty-action-state">
+              <p>{tx('No conversations yet.', 'No conversations yet.')}</p>
+              <Link className="btn btn-primary" to="/imports/claude-export">{tx('导入会话', 'Import conversations')}</Link>
+            </div>
+          )}
+        </aside>
       </section>
-
-      <ResourceConfirmDialog
-        open={Boolean(deleteDialog)}
-        kicker={tx('删除确认', 'Delete confirmation')}
-        title={deleteDialog?.nonEmptyDirectories.length ? tx('这些目录不是空的', 'These folders are not empty') : tx('确认删除选中条目', 'Confirm deletion')}
-        description={deleteDialog?.nonEmptyDirectories.length
-          ? tx('确认后会递归删除其中所有可写文件和文件夹。', 'Continuing will recursively delete all writable files and folders inside.')
-          : tx('这个操作会删除选中的 conversation bundle，且不可撤销。', 'This will delete the selected conversation bundle and cannot be undone.')}
-        cancelLabel={tx('取消', 'Cancel')}
-        confirmLabel={deleteSubmitting ? tx('删除中...', 'Deleting...') : tx('确认删除', 'Delete')}
-        tone="danger"
-        submitting={deleteSubmitting}
-        onCancel={closeDeleteDialog}
-        onConfirm={() => void confirmDelete()}
-      />
     </div>
   )
 }

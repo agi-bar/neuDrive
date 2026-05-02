@@ -1,212 +1,174 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api, type FileNode } from '../../api'
-import MaterialsSectionToolbar from '../../components/MaterialsSectionToolbar'
-import FileMaterialsTile from '../../components/FileMaterialsTile'
-import SourceFilterBar from '../../components/SourceFilterBar'
+import { FormEvent, useEffect, useMemo, useState } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { api, type FileNode, type MemoryConflict } from '../../api'
 import { useI18n } from '../../i18n'
-import {
-  getMaterialsSortOptions,
-  buildFileTileModel,
-  buildSourceFilterOptions,
-  dataFileEditorRoute,
-  fileNodeSource,
-  isMemoryEntry,
-  matchesSourceFilter,
-  sourceLabel,
-  type MaterialsSortDir,
-  type MaterialsSortKey,
-  sortMaterialsItems,
-} from './DataShared'
+import { dataFileEditorRoute, formatDateTime, sourceLabel } from './DataShared'
 
-function ensureMemoryFilename(value: string) {
-  const trimmed = value.trim().replace(/^\/+/, '')
-  if (!trimmed) return ''
-  return /\.md$/i.test(trimmed) ? trimmed : `${trimmed}.md`
-}
+type MemoryTab = 'profile' | 'project' | 'scratch' | 'conflicts'
 
-function memoryTitleFromFilename(filename: string) {
-  return filename.replace(/\.md$/i, '').replace(/[-_]+/g, ' ').trim() || 'New Memory'
+function titleFromPath(path: string) {
+  return path.split('/').pop()?.replace(/\.md$/i, '').replace(/[-_]+/g, ' ') || path
 }
 
 export default function DataMemoryPage() {
   const { locale, tx } = useI18n()
-  const [entries, setEntries] = useState<FileNode[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
-  const [showNewForm, setShowNewForm] = useState(false)
-  const [newEntryName, setNewEntryName] = useState('memory-note.md')
-  const [creating, setCreating] = useState(false)
-  const [sortKey, setSortKey] = useState<MaterialsSortKey>('updated_at')
-  const [sortDir, setSortDir] = useState<MaterialsSortDir>('desc')
-  const [sourceFilter, setSourceFilter] = useState('all')
   const navigate = useNavigate()
+  const [tab, setTab] = useState<MemoryTab>('profile')
+  const [profileEntries, setProfileEntries] = useState<FileNode[]>([])
+  const [projectEntries, setProjectEntries] = useState<FileNode[]>([])
+  const [scratch, setScratch] = useState('')
+  const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
+  const [newMemoryName, setNewMemoryName] = useState('working-note.md')
+
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    const [profileResult, projectsResult, scratchResult, conflictsResult] = await Promise.allSettled([
+      api.getTreeSnapshot('/memory/profile'),
+      api.getTreeSnapshot('/projects'),
+      api.getScratchMemory(),
+      api.getConflicts(),
+    ])
+    if (profileResult.status === 'fulfilled') setProfileEntries(profileResult.value.entries.filter((entry) => !entry.is_dir))
+    if (projectsResult.status === 'fulfilled') setProjectEntries(projectsResult.value.entries)
+    if (scratchResult.status === 'fulfilled') {
+      const value = scratchResult.value?.content || scratchResult.value?.scratch || scratchResult.value?.text || ''
+      setScratch(typeof value === 'string' ? value : JSON.stringify(value, null, 2))
+    }
+    if (conflictsResult.status === 'fulfilled') setConflicts(conflictsResult.value || [])
+    setLoading(false)
+  }
 
   useEffect(() => {
-    const load = async () => {
-      try {
-        const snapshot = await api.getTreeSnapshot('/memory')
-        setEntries(snapshot.entries.filter(isMemoryEntry))
-      } catch (err: any) {
-        setError(err.message || tx('加载 Memory 失败', 'Failed to load memory'))
-      } finally {
-        setLoading(false)
-      }
-    }
-
     void load()
-  }, [tx])
+  }, [])
 
-  const sortedEntries = useMemo(
-    () =>
-      sortMaterialsItems({
-        items: entries,
-        sortKey,
-        sortDir,
-        getName: (entry) => entry.name,
-        getUpdatedAt: (entry) => entry.updated_at || entry.created_at,
-      }),
-    [entries, sortDir, sortKey],
-  )
-  const filteredEntries = useMemo(
-    () => sortedEntries.filter((entry) => matchesSourceFilter(fileNodeSource(entry), sourceFilter)),
-    [sortedEntries, sourceFilter],
-  )
-  const sourceOptions = useMemo(
-    () => buildSourceFilterOptions(entries, fileNodeSource, locale),
-    [entries, locale],
-  )
+  const tabs = useMemo(() => [
+    { key: 'profile' as const, label: 'Profile Memory', count: profileEntries.length },
+    { key: 'project' as const, label: 'Project Memory', count: projectEntries.length },
+    { key: 'scratch' as const, label: 'Scratch Memory', count: scratch.trim() ? 1 : 0 },
+    { key: 'conflicts' as const, label: 'Conflicts', count: conflicts.length },
+  ], [conflicts.length, profileEntries.length, projectEntries.length, scratch])
 
-  const handleCreateMemory = async (event: React.FormEvent) => {
-    event.preventDefault()
-    const filename = ensureMemoryFilename(newEntryName)
-    if (!filename) return
-
-    setCreating(true)
+  const saveScratch = async () => {
+    setSaving(true)
     setError('')
     try {
-      const path = `/memory/${filename}`
-      const title = memoryTitleFromFilename(filename)
-      await api.writeTree(path, {
-        content: `# ${title}\n\n`,
-        mimeType: 'text/markdown',
-        metadata: { source: 'manual' },
-      })
-      setShowNewForm(false)
-      setNewEntryName('memory-note.md')
-      const snapshot = await api.getTreeSnapshot('/memory')
-      setEntries(snapshot.entries.filter(isMemoryEntry))
-      navigate(dataFileEditorRoute(path))
+      await api.writeScratchMemory({ content: scratch })
+      setMessage(tx('Scratch Memory 已保存。', 'Scratch Memory saved.'))
     } catch (err: any) {
-      setError(err.message || tx('新建 Memory 失败', 'Failed to create memory entry'))
+      setError(err?.message || tx('保存 Scratch Memory 失败', 'Failed to save Scratch Memory'))
     } finally {
-      setCreating(false)
+      setSaving(false)
     }
   }
 
-  const sortOptions = getMaterialsSortOptions(locale)
-
-  if (loading) {
-    return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
+  const createMemory = async (event: FormEvent) => {
+    event.preventDefault()
+    const fileName = newMemoryName.trim().replace(/^\/+/, '')
+    if (!fileName) return
+    const normalized = fileName.endsWith('.md') ? fileName : `${fileName}.md`
+    try {
+      const path = `/memory/${normalized}`
+      await api.writeTree(path, {
+        content: `# ${titleFromPath(normalized)}\n\n`,
+        mimeType: 'text/markdown',
+        metadata: { source: 'manual' },
+        minTrustLevel: 3,
+      })
+      navigate(dataFileEditorRoute(path))
+    } catch (err: any) {
+      setError(err?.message || tx('创建 Memory 失败', 'Failed to create memory'))
+    }
   }
 
-  return (
-    <div className="page materials-page">
-      <section className="materials-hero">
-        <div className="materials-hero-copy">
-          <div className="materials-kicker">neuDrive Data</div>
-          <h2 className="materials-title">Memory</h2>
-          <p className="materials-subtitle">{tx('这里显示 ', 'This page shows entries under ')}<code>/memory</code>{tx(' 下的记忆内容，不包含“我的资料”使用的 ', ', excluding ') }<code>/memory/profile</code>{tx(' 条目。', ' entries used by My Profile.')}</p>
-        </div>
-      </section>
+  const resolveConflict = async (id: string, resolution: string) => {
+    try {
+      await api.resolveConflict(id, resolution)
+      setConflicts((current) => current.filter((item) => item.id !== id))
+      setMessage(tx('冲突已解决。', 'Conflict resolved.'))
+    } catch (err: any) {
+      setError(err?.message || tx('解决冲突失败', 'Failed to resolve conflict'))
+    }
+  }
 
+  if (loading) return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
+
+  return (
+    <div className="page memory-page">
+      <div className="page-header compact-header">
+        <div>
+          <h2>Memory</h2>
+          <p className="page-subtitle">{tx('Manage long-term preferences, project context, temporary scratch memory, and conflicts.', 'Manage long-term preferences, project context, temporary scratch memory, and conflicts.')}</p>
+        </div>
+        <form className="inline-create-form" onSubmit={createMemory}>
+          <input className="input" value={newMemoryName} onChange={(event) => setNewMemoryName(event.target.value)} />
+          <button className="btn btn-primary">Create memory</button>
+        </form>
+      </div>
+
+      {message && <div className="alert alert-success">{message}</div>}
       {error && <div className="alert alert-warn">{error}</div>}
 
-      {showNewForm && (
-        <div className="materials-panel form-card">
-          <div className="materials-section-head">
-            <div>
-              <h3 className="materials-section-title">{tx('新建 Memory', 'New memory entry')}</h3>
-              <p className="materials-section-copy">{tx('创建一个新的 markdown 记忆条目，保存后会直接进入编辑器。', 'Create a new markdown memory entry and jump straight into the editor after saving.')}</p>
-            </div>
-          </div>
-          <form onSubmit={handleCreateMemory}>
-            <div className="form-group">
-              <label htmlFor="memory-name">{tx('文件名称', 'File name')}</label>
-              <input
-                id="memory-name"
-                type="text"
-                value={newEntryName}
-                onChange={(event) => setNewEntryName(event.target.value)}
-                placeholder={tx('例如：travel-notes.md', 'For example: travel-notes.md')}
-                disabled={creating}
-                autoFocus
-              />
-            </div>
-            <div className="form-actions">
-              <button type="submit" className="btn btn-primary" disabled={creating}>
-                {creating ? tx('创建中...', 'Creating...') : tx('创建', 'Create')}
-              </button>
-              <button type="button" className="btn" onClick={() => setShowNewForm(false)} disabled={creating}>
-                {tx('取消', 'Cancel')}
-              </button>
-            </div>
-          </form>
-        </div>
+      <div className="tab-strip">
+        {tabs.map((item) => (
+          <button key={item.key} className={tab === item.key ? 'active' : ''} onClick={() => setTab(item.key)}>
+            {item.label}<span>{item.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {tab === 'profile' && (
+        <section className="memory-list">
+          {profileEntries.map((entry) => (
+            <Link key={entry.path} to={dataFileEditorRoute(entry.path)} className="memory-row">
+              <strong>{titleFromPath(entry.path)}</strong>
+              <span>{sourceLabel(entry.source, locale)} · {formatDateTime(entry.updated_at || entry.created_at, locale)}</span>
+            </Link>
+          ))}
+          {profileEntries.length === 0 && <div className="empty-action-state"><p>No profile memory yet.</p><Link to="/settings/profile" className="btn btn-primary">Open Profile</Link></div>}
+        </section>
       )}
 
-      <section className="materials-section">
-        <div className="materials-section-head">
-          <div>
-            <h3 className="materials-section-title">Recent Memory</h3>
-            <p className="materials-section-copy">{tx('统一按时间或名称整理可见的 memory 条目。', 'Sort visible memory entries by time or name.')}</p>
-          </div>
-          <MaterialsSectionToolbar
-            count={filteredEntries.length}
-            sortKey={sortKey}
-            sortOptions={sortOptions}
-            sortDir={sortDir}
-            onSortKeyChange={(value) => setSortKey(value as MaterialsSortKey)}
-            onSortDirToggle={() => setSortDir((value) => (value === 'desc' ? 'asc' : 'desc'))}
-          >
-            <button className="btn btn-sm materials-toolbar-control" onClick={() => setShowNewForm((value) => !value)}>
-              {showNewForm ? tx('取消新建', 'Close form') : tx('新建 Memory', 'New memory')}
-            </button>
-          </MaterialsSectionToolbar>
-        </div>
-
-        {(sourceOptions.length > 1 || sourceFilter !== 'all') && (
-          <SourceFilterBar options={sourceOptions} value={sourceFilter} onChange={setSourceFilter} />
-        )}
-
-        {filteredEntries.length === 0 ? (
-          <div className="empty-state">
-            <p>{tx('还没有 Memory 内容', 'No memory entries yet')}</p>
-            <p className="empty-hint">{tx('Agent 写入记忆后，会在这里看到对应条目。', 'Memory entries will appear here after agents write them.')}</p>
-          </div>
-        ) : (
-          <div className="materials-grid materials-grid-wide">
-          {filteredEntries.map((entry) => (
-            (() => {
-              const tile = buildFileTileModel({ node: entry, variant: 'memory', locale })
-              return (
-                <FileMaterialsTile
-                  key={entry.path}
-                  node={tile.node}
-                  subtitle={tile.subtitle}
-                  description={tile.description}
-                  path={tile.path}
-                  extraPills={tile.source ? <span className="materials-tile-pill materials-source-pill">{sourceLabel(tile.source, locale)}</span> : undefined}
-                  footerStart={tile.footerStart}
-                  footerEnd={tile.footerEnd}
-                  onOpen={() => navigate(dataFileEditorRoute(entry.path))}
-                />
-              )
-            })()
+      {tab === 'project' && (
+        <section className="memory-list">
+          {projectEntries.map((entry) => (
+            <Link key={entry.path} to={entry.is_dir ? `/data/projects/${encodeURIComponent(entry.name)}` : dataFileEditorRoute(entry.path)} className="memory-row">
+              <strong>{titleFromPath(entry.path)}</strong>
+              <span>{entry.is_dir ? 'Project' : sourceLabel(entry.source, locale)} · {formatDateTime(entry.updated_at || entry.created_at, locale)}</span>
+            </Link>
           ))}
+          {projectEntries.length === 0 && <div className="empty-action-state"><p>No project memory yet.</p><Link to="/data/projects" className="btn btn-primary">Create project</Link></div>}
+        </section>
+      )}
+
+      {tab === 'scratch' && (
+        <section className="card scratch-card">
+          <textarea value={scratch} onChange={(event) => setScratch(event.target.value)} placeholder={tx('Temporary notes that can expire or be replaced quickly.', 'Temporary notes that can expire or be replaced quickly.')} />
+          <div className="page-actions">
+            <button className="btn btn-primary" disabled={saving} onClick={() => { void saveScratch() }}>{saving ? tx('保存中...', 'Saving...') : tx('保存 Scratch', 'Save scratch')}</button>
           </div>
-        )}
-      </section>
+        </section>
+      )}
+
+      {tab === 'conflicts' && (
+        <section className="conflict-list">
+          {conflicts.map((conflict) => (
+            <div key={conflict.id} className="conflict-card">
+              <strong>{conflict.category}</strong>
+              <div className="conflict-options">
+                <div><span>{conflict.source_a}</span><p>{conflict.content_a}</p><button className="btn btn-outline" onClick={() => { void resolveConflict(conflict.id, 'keep_a') }}>Keep this</button></div>
+                <div><span>{conflict.source_b}</span><p>{conflict.content_b}</p><button className="btn btn-outline" onClick={() => { void resolveConflict(conflict.id, 'keep_b') }}>Keep this</button></div>
+              </div>
+            </div>
+          ))}
+          {conflicts.length === 0 && <div className="empty-action-state"><p>No memory conflicts.</p></div>}
+        </section>
+      )}
     </div>
   )
 }

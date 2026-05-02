@@ -384,11 +384,14 @@ export default function GitMirrorPage() {
     <div className="page materials-page">
       <section className="materials-hero">
         <div className="materials-hero-copy">
-          <div className="materials-kicker">neuDrive Mirror</div>
-          <h2 className="materials-title">{tx('Git Mirror', 'Git Mirror')}</h2>
-          <p className="materials-subtitle">{tx('把 neuDrive Hub 持续同步到 Git 仓库。local 模式继续支持本地 worktree；hosted 模式则会在后台排队执行。', 'Continuously sync your neuDrive Hub into a Git repository. Local mode keeps using a local worktree, while hosted mode runs queued syncs in the background.')}</p>
+          <div className="materials-kicker">neuDrive Backup</div>
+          <h2 className="materials-title">{tx('Sync & Backup', 'Sync & Backup')}</h2>
+          <p className="materials-subtitle">{tx('把 neuDrive 数据备份到 Git，或随时导出 ZIP。用户关心的是备份、恢复和版本记录；Git 配置放在下方高级区域。', 'Back up your neuDrive data to Git or export it anytime. The focus is backup, recovery, and version history; Git details stay in the advanced area below.')}</p>
         </div>
         <div className="materials-actions">
+          <button className="btn" type="button" onClick={() => { void api.exportZip() }}>
+            {tx('导出 ZIP', 'Export ZIP')}
+          </button>
           <button className="btn" type="button" disabled={reposBusy || !mirror?.github_app_user_connected} onClick={() => void loadRepos()}>
             {reposBusy ? tx('刷新中...', 'Refreshing...') : tx('刷新仓库列表', 'Refresh repos')}
           </button>
@@ -436,7 +439,7 @@ export default function GitMirrorPage() {
 
       <div className="materials-panel data-sync-card" style={{ marginTop: 16 }}>
         <div className="card-header">
-          <h3 className="card-title">{tx('Mirror 配置', 'Mirror settings')}</h3>
+          <h3 className="card-title">{tx('Backup destination', 'Backup destination')}</h3>
         </div>
 
         {isLocalExecution && !mirror?.enabled && (

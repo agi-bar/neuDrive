@@ -1,329 +1,283 @@
-import { useState, useEffect } from 'react'
-import { api, MemoryConflict } from '../api'
+import { useEffect, useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { api, type ConnectionResponse, type FileNode, type MemoryConflict, type OAuthGrantResponse } from '../api'
 import { useI18n } from '../i18n'
 import { sourceLabel } from './data/DataShared'
-
-interface ProfileEntry {
-  id?: string
-  category: string
-  key: string
-  value: string
-  source?: string
-}
-
-interface VaultScope {
-  id?: string
-  scope: string
-  description: string
-  trust_level: number
-}
 
 interface InfoPageProps {
   title?: string
 }
 
+const profileFields = [
+  { key: 'preferences', label: 'Work preferences' },
+  { key: 'writing_style', label: 'Writing style' },
+  { key: 'communication', label: 'Communication preferences' },
+  { key: 'principles', label: 'Decision style' },
+]
+
+function dataType(node: FileNode) {
+  const path = node.path.toLowerCase()
+  if (path.startsWith('/conversations/')) return 'Conversations'
+  if (path.startsWith('/memory/')) return 'Memory'
+  if (path.startsWith('/skills/')) return 'Skills'
+  if (path.startsWith('/projects/')) return 'Projects'
+  if (path.startsWith('/vault/')) return 'Vault items'
+  return 'Files'
+}
+
+function trustLabel(level?: number) {
+  switch (level) {
+    case 1: return 'L1 Guest'
+    case 2: return 'L2 Shared'
+    case 3: return 'L3 Work Trust'
+    case 4: return 'L4 Full Trust'
+    default: return 'Inherited'
+  }
+}
+
 export default function InfoPage({ title }: InfoPageProps) {
   const { locale, tx } = useI18n()
-  const [profiles, setProfiles] = useState<ProfileEntry[]>([])
-  const [vaultScopes, setVaultScopes] = useState<VaultScope[]>([])
+  const [profile, setProfile] = useState<Record<string, any>>({})
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [entries, setEntries] = useState<FileNode[]>([])
+  const [connections, setConnections] = useState<ConnectionResponse[]>([])
+  const [grants, setGrants] = useState<OAuthGrantResponse[]>([])
   const [conflicts, setConflicts] = useState<MemoryConflict[]>([])
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
   const [saving, setSaving] = useState('')
-  const [resolving, setResolving] = useState('')
-  const [editValues, setEditValues] = useState<Record<string, string>>({})
-  const [successMsg, setSuccessMsg] = useState('')
+  const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
 
-  const profileCategories = [
-    { key: 'preferences', label: tx('个人偏好', 'Preferences'), placeholder: tx('例如：喜欢简洁的代码风格，偏好 TypeScript...', 'For example: prefers concise code style and TypeScript...') },
-    { key: 'relationships', label: tx('人际关系', 'Relationships'), placeholder: tx('例如：Alice 是同事，负责后端开发...', 'For example: Alice is a teammate who owns backend development...') },
-    { key: 'principles', label: tx('行为准则', 'Principles'), placeholder: tx('例如：重要决定需要确认，不要自动发送消息...', 'For example: confirm major decisions and do not send messages automatically...') },
-  ]
-
-  const trustLabels: Record<number, string> = {
-    1: tx('L1 访客', 'L1 Visitor'),
-    2: tx('L2 共享', 'L2 Shared'),
-    3: tx('L3 工作信任', 'L3 Work Trust'),
-    4: tx('L4 完全信任', 'L4 Full Trust'),
+  const load = async () => {
+    setLoading(true)
+    setError('')
+    const [profileResult, snapshotResult, connectionsResult, grantsResult, conflictsResult] = await Promise.allSettled([
+      api.getProfile(),
+      api.getTreeSnapshot('/'),
+      api.getConnections(),
+      api.getOAuthGrants(),
+      api.getConflicts(),
+    ])
+    if (profileResult.status === 'fulfilled') {
+      const next = profileResult.value || {}
+      setProfile(next)
+      const prefs = next.preferences || {}
+      setValues({
+        preferences: String(prefs.preferences || ''),
+        writing_style: String(prefs.writing_style || ''),
+        communication: String(prefs.communication || ''),
+        principles: String(prefs.principles || ''),
+      })
+    }
+    if (snapshotResult.status === 'fulfilled') setEntries(snapshotResult.value.entries)
+    if (connectionsResult.status === 'fulfilled') setConnections(connectionsResult.value || [])
+    if (grantsResult.status === 'fulfilled') setGrants(grantsResult.value || [])
+    if (conflictsResult.status === 'fulfilled') setConflicts(conflictsResult.value || [])
+    setLoading(false)
   }
-
-  const pageTitle = title || tx('我的资料', 'My Profile')
 
   useEffect(() => {
-    loadData()
+    void load()
   }, [])
 
-  const loadData = async () => {
-    try {
-      const [profileData, profileSnapshotData, vaultData, conflictData] = await Promise.allSettled([
-        api.getProfile(),
-        api.getTreeSnapshot('/memory/profile'),
-        api.getVaultScopes(),
-        api.getConflicts(),
-      ])
-
-      if (profileData.status === 'fulfilled') {
-        const raw = profileData.value || {}
-        // API returns {user_id, display_name, preferences: {key: value}}
-        // Transform preferences map into ProfileEntry[] for display
-        const prefs = raw.preferences || {}
-        const sourceLookup = new Map<string, string>()
-        if (profileSnapshotData.status === 'fulfilled') {
-          profileSnapshotData.value.entries.forEach((entry) => {
-            const name = entry.path.split('/').pop()?.replace(/\.md$/i, '') || ''
-            if (name) sourceLookup.set(name, entry.source || '')
-          })
-        }
-        const entries: ProfileEntry[] = Object.entries(prefs).map(([key, value]) => ({
-          category: key,
-          key: key,
-          value: String(value),
-          source: sourceLookup.get(key) || '',
-        }))
-        setProfiles(entries)
-        // Initialize edit values from preferences
-        const values: Record<string, string> = {}
-        for (const cat of profileCategories) {
-          values[cat.key] = prefs[cat.key] || ''
-        }
-        setEditValues(values)
-      }
-
-      if (vaultData.status === 'fulfilled') {
-        setVaultScopes(vaultData.value || [])
-      }
-
-      if (conflictData.status === 'fulfilled') {
-        setConflicts(conflictData.value || [])
-      }
-    } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setLoading(false)
+  const counts = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const entry of entries) {
+      map.set(dataType(entry), (map.get(dataType(entry)) || 0) + 1)
     }
-  }
+    return ['Conversations', 'Memory', 'Skills', 'Files', 'Vault items', 'Projects'].map((label) => ({
+      label,
+      count: map.get(label) || 0,
+    }))
+  }, [entries])
 
-  const handleResolveConflict = async (conflictId: string, resolution: string) => {
-    setResolving(conflictId)
+  const sources = useMemo(() => {
+    const map = new Map<string, number>()
+    for (const entry of entries) {
+      const source = String(entry.source || entry.metadata?.source || entry.bundle_context?.source || 'system')
+      map.set(source, (map.get(source) || 0) + 1)
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]).slice(0, 8)
+  }, [entries])
+
+  const saveProfile = async () => {
+    setSaving('profile')
     setError('')
     try {
-      await api.resolveConflict(conflictId, resolution)
-      setConflicts((prev) => prev.filter((c) => c.id !== conflictId))
-      setSuccessMsg(tx('冲突已解决', 'Conflict resolved'))
-      setTimeout(() => setSuccessMsg(''), 2000)
+      await api.upsertProfile({ preferences: values })
+      setMessage(tx('Profile 已保存。', 'Profile saved.'))
+      await load()
     } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setResolving('')
-    }
-  }
-
-  const handleSaveProfile = async (category: string) => {
-    const text = editValues[category] || ''
-    setSaving(category)
-    setError('')
-
-    try {
-      // Send as {preferences: {category: content}} — backend expects this format
-      await api.upsertProfile({
-        preferences: { [category]: text },
-      })
-      await loadData()
-      setSuccessMsg(tx(`${profileCategories.find((c) => c.key === category)?.label || category} 已保存`, `${profileCategories.find((c) => c.key === category)?.label || category} saved`))
-      setTimeout(() => setSuccessMsg(''), 2000)
-    } catch (err: any) {
-      setError(err.message)
+      setError(err?.message || tx('保存失败', 'Save failed'))
     } finally {
       setSaving('')
     }
   }
 
-  const handleSaveAll = async () => {
-    setSaving('all')
-    setError('')
-
+  const resolveConflict = async (id: string, resolution: string) => {
     try {
-      const prefs: Record<string, string> = {}
-      for (const cat of profileCategories) {
-        prefs[cat.key] = editValues[cat.key] || ''
-      }
-      await api.upsertProfile({ preferences: prefs })
-      await loadData()
-      setSuccessMsg(tx('所有配置已保存', 'All settings saved'))
-      setTimeout(() => setSuccessMsg(''), 2000)
+      await api.resolveConflict(id, resolution)
+      setConflicts((current) => current.filter((item) => item.id !== id))
+      setMessage(tx('冲突已解决。', 'Conflict resolved.'))
     } catch (err: any) {
-      setError(err.message)
-    } finally {
-      setSaving('')
+      setError(err?.message || tx('解决冲突失败', 'Failed to resolve conflict'))
     }
   }
 
-  if (loading) {
-    return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
+  const exportAll = async () => {
+    await api.exportZip()
+    setMessage(tx('导出已开始。', 'Export started.'))
   }
+
+  const deleteImportedConversations = async () => {
+    if (!window.confirm(tx('删除所有导入会话？此操作不可撤销。', 'Delete all imported conversations? This cannot be undone.'))) return
+    const conversations = entries.filter((entry) => entry.path.startsWith('/conversations/') && (entry.is_dir || entry.name.endsWith('.md')))
+    for (const entry of conversations) {
+      await api.deleteTree(entry.path)
+    }
+    setMessage(tx('导入会话已删除。', 'Imported conversations deleted.'))
+    await load()
+  }
+
+  const clearMemory = async () => {
+    if (!window.confirm(tx('清空 Memory？Profile 之外的记忆会被删除。', 'Clear memory? Memory outside Profile will be deleted.'))) return
+    const memory = entries.filter((entry) => entry.path.startsWith('/memory/') && !entry.path.startsWith('/memory/profile/'))
+    for (const entry of memory) {
+      await api.deleteTree(entry.path)
+    }
+    setMessage(tx('Memory 已清空。', 'Memory cleared.'))
+    await load()
+  }
+
+  const revokeAllTokens = async () => {
+    if (!window.confirm(tx('撤销所有 token？所有外部 Agent 将失去访问权限。', 'Revoke all tokens? External agents will lose access.'))) return
+    const tokens = await api.getTokens()
+    for (const token of tokens) {
+      if (!token.is_revoked) await api.revokeToken(token.id)
+    }
+    setMessage(tx('Token 已全部撤销。', 'All tokens revoked.'))
+  }
+
+  if (loading) return <div className="page-loading">{tx('加载中...', 'Loading...')}</div>
 
   return (
-    <div className="page materials-page">
-      <div className="page-header">
+    <div className="page profile-page">
+      <div className="page-header compact-header">
         <div>
-          <h2>{pageTitle}</h2>
-          <p className="page-subtitle">{tx('这里统一管理个人偏好、行为准则、冲突记录和 Vault 访问范围。', 'Manage profile preferences, principles, conflict records, and Vault access scopes here.')}</p>
+          <h2>{title || tx('My Profile', 'My Profile')}</h2>
+          <p className="page-subtitle">{tx('See what neuDrive knows about you, where it came from, and which agents can use it.', 'See what neuDrive knows about you, where it came from, and which agents can use it.')}</p>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-primary" disabled={saving !== ''} onClick={() => { void saveProfile() }}>{saving ? tx('保存中...', 'Saving...') : tx('保存 Profile', 'Save Profile')}</button>
         </div>
       </div>
 
-      {error && <div className="alert alert-error">{error}</div>}
-      {successMsg && <div className="alert alert-success">{successMsg}</div>}
+      {message && <div className="alert alert-success">{message}</div>}
+      {error && <div className="alert alert-warn">{error}</div>}
 
-      {conflicts.length > 0 && (
-        <section className="section">
-          <div className="alert alert-error" style={{ marginBottom: '1rem' }}>
-            <strong>{tx(`检测到 ${conflicts.length} 个记忆冲突`, `${conflicts.length} memory conflicts detected`)}</strong> -
-            {tx('不同 Agent 平台记录了矛盾的偏好，请选择保留哪个版本。', 'Different agent platforms recorded conflicting preferences. Choose which version to keep.')}
+      <section className="profile-layout">
+        <div className="card profile-main-card">
+          <div className="card-header">
+            <h3 className="card-title">{tx('What neuDrive knows about you', 'What neuDrive knows about you')}</h3>
           </div>
-          {conflicts.map((c) => (
-            <div key={c.id} className="card" style={{ marginBottom: '1rem' }}>
-              <div className="card-header">
-                <h4 className="card-title">
-                  {tx('冲突', 'Conflict')}: {c.category}
-                </h4>
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', padding: '1rem' }}>
-                <div>
-                  <strong>{tx('来源 A', 'Source A')}: {c.source_a}</strong>
-                  <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: '0.5rem', borderRadius: '4px', marginTop: '0.5rem' }}>
-                    {c.content_a}
-                  </pre>
-                  <button
-                    className="btn btn-sm btn-primary"
-                    style={{ marginTop: '0.5rem' }}
-                    disabled={resolving === c.id}
-                    onClick={() => handleResolveConflict(c.id, 'keep_a')}
-                  >
-                    {tx('保留 A', 'Keep A')}
-                  </button>
-                </div>
-                <div>
-                  <strong>{tx('来源 B', 'Source B')}: {c.source_b}</strong>
-                  <pre style={{ whiteSpace: 'pre-wrap', background: '#f5f5f5', padding: '0.5rem', borderRadius: '4px', marginTop: '0.5rem' }}>
-                    {c.content_b}
-                  </pre>
-                  <button
-                    className="btn btn-sm btn-primary"
-                    style={{ marginTop: '0.5rem' }}
-                    disabled={resolving === c.id}
-                    onClick={() => handleResolveConflict(c.id, 'keep_b')}
-                  >
-                    {tx('保留 B', 'Keep B')}
-                  </button>
-                </div>
-              </div>
-              <div style={{ padding: '0 1rem 1rem', display: 'flex', gap: '0.5rem' }}>
-                <button
-                  className="btn btn-sm"
-                  disabled={resolving === c.id}
-                  onClick={() => handleResolveConflict(c.id, 'keep_both')}
-                >
-                  {tx('两者都保留', 'Keep both')}
-                </button>
-                <button
-                  className="btn btn-sm"
-                  disabled={resolving === c.id}
-                  onClick={() => handleResolveConflict(c.id, 'dismiss')}
-                >
-                  {tx('忽略', 'Dismiss')}
-                </button>
-              </div>
+          <div className="profile-field-grid">
+            <div className="profile-readonly-field">
+              <span>Name</span>
+              <strong>{profile.display_name || '-'}</strong>
             </div>
-          ))}
-        </section>
-      )}
-
-      <section className="section">
-        <h3 className="section-title">{tx('个人偏好', 'Preferences')}</h3>
-        <p className="section-desc">
-          {tx('Agent 会记住这些信息，在对话和任务中参考使用。格式为 "键: 值"，每行一条。', 'Agents will remember this information and use it during conversations and tasks. Format each line as "key: value".')}
-        </p>
-
-        <div className="profile-cards">
-          {profileCategories.map((cat) => (
-            <div key={cat.key} className="card">
-              <div className="card-header">
-                <h4 className="card-title">{cat.label}</h4>
-                <span className="dashboard-inline-chip">
-                  {sourceLabel(profiles.find((entry) => entry.key === cat.key)?.source, locale)}
-                </span>
-              </div>
-              <textarea
-                className="profile-textarea"
-                value={editValues[cat.key] || ''}
-                onChange={(e) =>
-                  setEditValues({ ...editValues, [cat.key]: e.target.value })
-                }
-                placeholder={cat.placeholder}
-                rows={5}
-              />
+            <div className="profile-readonly-field">
+              <span>Language preference</span>
+              <strong>{profile.language || locale}</strong>
             </div>
-          ))}
+            {profileFields.map((field) => (
+              <label key={field.key} className="profile-edit-field">
+                <span>{field.label}</span>
+                <textarea value={values[field.key] || ''} onChange={(event) => setValues({ ...values, [field.key]: event.target.value })} />
+              </label>
+            ))}
+          </div>
         </div>
 
-        <div style={{ marginTop: 16 }}>
-          <button
-            className="btn btn-primary"
-            onClick={handleSaveAll}
-            disabled={saving === 'all'}
-          >
-            {saving === 'all' ? tx('保存中...', 'Saving...') : tx('保存所有配置', 'Save all settings')}
-          </button>
-        </div>
+        <aside className="card">
+          <div className="card-header">
+            <h3 className="card-title">Memory Map</h3>
+          </div>
+          <div className="memory-map-grid">
+            {counts.map((item) => (
+              <Link key={item.label} to={`/data/files?type=${encodeURIComponent(item.label.replace(/ items$/, ''))}`} className="memory-map-item">
+                <span>{item.label}</span>
+                <strong>{item.count}</strong>
+              </Link>
+            ))}
+          </div>
+        </aside>
       </section>
 
-      <section className="section">
-        <h3 className="section-title">{tx('安全存储', 'Secure storage')}</h3>
-        <p className="section-desc">
-          {tx('Vault 中的敏感信息按信任等级控制访问。只有达到对应信任等级的连接才能读取。', 'Sensitive Vault data is gated by trust level. Only connections with sufficient trust can read it.')}
-        </p>
-
-        {vaultScopes.length === 0 ? (
-          <div className="empty-state">
-            <p>{tx('暂无安全存储配置', 'No secure storage scopes yet')}</p>
-            <p className="empty-hint">{tx('安全存储用于管理 API 密钥、密码等敏感信息的访问权限', 'Secure storage manages access to sensitive data such as API keys and passwords.')}</p>
+      <section className="profile-layout">
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">{tx('Data sources', 'Data sources')}</h3>
           </div>
-        ) : (
-          <div className="vault-list">
-            {vaultScopes.map((scope, i) => (
-              <div key={scope.id || i} className="card vault-card">
-                <div className="vault-header">
-                  <span className="vault-scope">{scope.scope}</span>
-                  <span className={`trust-badge trust-l${scope.trust_level}`}>
-                    {trustLabels[scope.trust_level] || `L${scope.trust_level}`}
-                  </span>
-                </div>
-                <p className="vault-desc">{scope.description || tx('无描述', 'No description')}</p>
+          <div className="source-list">
+            {sources.map(([source, count]) => (
+              <div key={source} className="source-row">
+                <span>{sourceLabel(source, locale)}</span>
+                <strong>{count}</strong>
               </div>
             ))}
           </div>
-        )}
+        </div>
 
-        <div className="trust-legend">
-          <h4>{tx('信任等级说明', 'Trust levels')}</h4>
-          <div className="legend-grid">
-            <div className="legend-item">
-              <span className="trust-badge trust-l1">{tx('L1 访客', 'L1 Visitor')}</span>
-              <span>{tx('只能访问公开信息', 'Can only access public information')}</span>
-            </div>
-            <div className="legend-item">
-              <span className="trust-badge trust-l2">{tx('L2 共享', 'L2 Shared')}</span>
-              <span>{tx('可访问有限共享信息', 'Can access limited shared information')}</span>
-            </div>
-            <div className="legend-item">
-              <span className="trust-badge trust-l3">{tx('L3 工作信任', 'L3 Work Trust')}</span>
-              <span>{tx('可访问敏感工作信息', 'Can access sensitive work information')}</span>
-            </div>
-            <div className="legend-item">
-              <span className="trust-badge trust-l4">{tx('L4 完全信任', 'L4 Full Trust')}</span>
-              <span>{tx('完全访问所有信息', 'Can access everything')}</span>
-            </div>
+        <div className="card">
+          <div className="card-header">
+            <h3 className="card-title">{tx('Who can access your data?', 'Who can access your data?')}</h3>
           </div>
+          <div className="source-list">
+            {connections.map((connection) => (
+              <div key={connection.id} className="source-row">
+                <span>{connection.name || connection.platform}</span>
+                <strong>{trustLabel(connection.trust_level)}</strong>
+              </div>
+            ))}
+            {grants.map((grant) => (
+              <div key={grant.id} className="source-row">
+                <span>{grant.app?.name || 'OAuth App'}</span>
+                <strong>{grant.scopes?.includes('admin') ? 'L4 Full Trust' : 'L3 Work Trust'}</strong>
+              </div>
+            ))}
+            {connections.length === 0 && grants.length === 0 && <p className="dashboard-empty-copy">{tx('No agents connected yet.', 'No agents connected yet.')}</p>}
+          </div>
+        </div>
+      </section>
+
+      {conflicts.length > 0 && (
+        <section className="card">
+          <div className="card-header">
+            <h3 className="card-title">{tx('Memory conflicts', 'Memory conflicts')}</h3>
+          </div>
+          <div className="conflict-list">
+            {conflicts.map((conflict) => (
+              <div key={conflict.id} className="conflict-card">
+                <strong>{conflict.category}</strong>
+                <div className="conflict-options">
+                  <div><span>{conflict.source_a}</span><p>{conflict.content_a}</p><button className="btn btn-outline" onClick={() => { void resolveConflict(conflict.id, 'keep_a') }}>Keep</button></div>
+                  <div><span>{conflict.source_b}</span><p>{conflict.content_b}</p><button className="btn btn-outline" onClick={() => { void resolveConflict(conflict.id, 'keep_b') }}>Keep</button></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="card privacy-actions">
+        <div className="card-header">
+          <h3 className="card-title">{tx('Privacy Actions', 'Privacy Actions')}</h3>
+        </div>
+        <div className="page-actions">
+          <button className="btn btn-outline" onClick={() => { void exportAll() }}>Export all data</button>
+          <button className="btn btn-outline" onClick={() => { void deleteImportedConversations() }}>Delete imported conversations</button>
+          <button className="btn btn-outline" onClick={() => { void clearMemory() }}>Clear memory</button>
+          <button className="btn btn-danger" onClick={() => { void revokeAllTokens() }}>Revoke all tokens</button>
         </div>
       </section>
     </div>

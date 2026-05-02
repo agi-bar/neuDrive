@@ -118,6 +118,7 @@ export interface FileNode {
   checksum?: string;
   metadata?: Record<string, any>;
   bundle_context?: BundleContext;
+  min_trust_level?: number;
   children?: FileNode[];
   created_at?: string;
   updated_at?: string;
@@ -178,6 +179,7 @@ export interface BillingStatus {
   current_plan: BillingPlanCode
   entitlement_status: 'active' | 'grace'
   subscription_status?: string
+  current_period_end?: string
   access_source: BillingAccessSource
   used_bytes: number
   limit_bytes: number
@@ -536,6 +538,18 @@ export const api = {
   getAuthProviders: (): Promise<AuthProvider[]> =>
     request<AuthProvider[]>("/auth/providers"),
 
+  register: (data: RegisterRequest): Promise<AuthResponse> =>
+    request<AuthResponse>("/auth/register", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
+  login: (data: LoginRequest): Promise<AuthResponse> =>
+    request<AuthResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+
   startAuthProvider: (
     provider: string,
     redirectUrl?: string,
@@ -656,6 +670,12 @@ export const api = {
   upsertProfile: (data: any) =>
     request<any>("/memory/profile", {
       method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  getScratchMemory: () => request<any>("/memory/scratch"),
+  writeScratchMemory: (data: any) =>
+    request<any>("/memory/scratch", {
+      method: "POST",
       body: JSON.stringify(data),
     }),
 

@@ -482,9 +482,13 @@ export default function DataSkillsPage() {
     <div className="page materials-page">
       <section className="materials-hero">
         <div className="materials-hero-copy">
-          <div className="materials-kicker">neuDrive Data</div>
-          <h2 className="materials-title">{tx('技能', 'Skills')}</h2>
-          <p className="materials-subtitle">{tx('按 skill bundle 展示 ', 'Show skills in ')}<code>/skills</code>{tx(' 下的技能。一个文件夹就是一个 skill。', '. Each folder is a skill bundle.')}</p>
+          <div className="materials-kicker">AI Toolbox</div>
+          <h2 className="materials-title">Skills</h2>
+          <p className="materials-subtitle">{tx('Skills 是你的 AI 工具箱，可以被 Claude、ChatGPT、Cursor 等工具复用。', 'Reusable instructions and tools for your AI agents across Claude, ChatGPT, Cursor, and more.')}</p>
+        </div>
+        <div className="materials-actions">
+          <button className="btn btn-primary" onClick={() => setShowNewForm(true)}>{tx('创建 Skill', 'Create skill')}</button>
+          <button className="btn" onClick={() => navigate('/import/skills')}>{tx('导入 Skill', 'Import skill')}</button>
         </div>
       </section>
 

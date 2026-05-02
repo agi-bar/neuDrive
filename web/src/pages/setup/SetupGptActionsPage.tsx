@@ -36,15 +36,15 @@ export default function SetupGptActionsPage() {
         ) : (
           <button
             className="copy-btn"
-            onClick={() => navigate('/setup/tokens#token-creator')}
+            onClick={() => navigate('/settings/developer-access')}
           >
-            {tx('前往 Token 管理', 'Open Token Manager')}
+            {tx('前往 Developer Access', 'Open Developer Access')}
           </button>
         )}
       />
 
       <p className="setup-note">
-        {tx('本页不会自动为 GPT Actions 生成 token。需要新的 Bearer Token 时，请前往“Token 管理”手动创建，再把它填到 Actions 的认证配置里。', 'This page does not generate a token for GPT Actions automatically. If you need a new Bearer token, create one manually in Token Manager and paste it into the Actions auth settings.')}
+        {tx('本页不会自动为 GPT Actions 生成 token。需要新的 Bearer Token 时，请前往 Developer Access 创建，再把它填到 Actions 的认证配置里。', 'This page does not generate a token for GPT Actions automatically. If you need a new Bearer token, create one in Developer Access and paste it into the Actions auth settings.')}
       </p>
     </SetupSection>
   )

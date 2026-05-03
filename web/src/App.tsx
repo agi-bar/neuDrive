@@ -35,9 +35,12 @@ const DeveloperAccessPage = lazy(() => import('./pages/DeveloperAccessPage'))
 const MarketingHomePage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.MarketingHomePage })))
 const PricingPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.PricingPage })))
 const IntegrationsPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.IntegrationsPage })))
+const IntegrationDetailPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.IntegrationDetailPage })))
 const DocsLandingPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.DocsLandingPage })))
 const GuidePage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.GuidePage })))
 const SignupPage = lazy(() => import('./pages/PublicPages').then((module) => ({ default: module.SignupPage })))
+const PrivacyPage = lazy(() => import('./pages/PublicPages').then(({ LegalPage }) => ({ default: () => <LegalPage kind="privacy" /> })))
+const TermsPage = lazy(() => import('./pages/PublicPages').then(({ LegalPage }) => ({ default: () => <LegalPage kind="terms" /> })))
 
 const emptyStats: DashboardStats = {
   connections: 0,
@@ -185,6 +188,30 @@ function App() {
     return () => window.removeEventListener(BILLING_REDIRECT_EVENT, onBillingRedirect as EventListener)
   }, [billingEnabled, navigate])
 
+  useEffect(() => {
+    if (!user) return
+    const path = location.pathname
+    const pageTitle =
+      path === '/' ? 'Home' :
+      path.startsWith('/plan') ? 'Choose Plan' :
+      path.startsWith('/onboarding') ? 'Get Started' :
+      path.startsWith('/connections') ? 'Connections' :
+      path.startsWith('/sync-backup') || path.startsWith('/git-mirror') ? 'Sync & Backup' :
+      path.startsWith('/settings/billing') || path.startsWith('/billing') ? 'Plan & Billing' :
+      path.startsWith('/settings/developer-access') || path.startsWith('/settings/developer') ? 'Developer Access' :
+      path.startsWith('/settings/security') ? 'Security' :
+      path.startsWith('/settings/profile') || path.startsWith('/info') ? 'My Profile' :
+      path.startsWith('/setup') ? 'Setup Guide' :
+      path.startsWith('/data/conversations') ? 'Conversations' :
+      path.startsWith('/data/projects') || path.startsWith('/projects') ? 'Projects' :
+      path.startsWith('/data') ? 'Data Explorer' :
+      path.startsWith('/memory') ? 'Memory' :
+      path.startsWith('/skills') ? 'Skills' :
+      path.startsWith('/imports') ? 'Data Imports' :
+      'neuDrive'
+    document.title = pageTitle === 'neuDrive' ? 'neuDrive' : `${pageTitle} — neuDrive`
+  }, [location.pathname, user])
+
   const routeFallback = (
     <div className="loading-screen">
       <div className="loading-spinner" />
@@ -215,11 +242,14 @@ function App() {
     return <Suspense fallback={routeFallback}><SkillsImportPage /></Suspense>
   }
 
-  if (location.pathname.startsWith('/guides/')) {
+  if (location.pathname.startsWith('/guides/') || location.pathname.startsWith('/integrations/') || location.pathname === '/privacy' || location.pathname === '/terms') {
     return (
       <Suspense fallback={routeFallback}>
         <Routes>
           <Route path="/guides/:platform" element={<GuidePage />} />
+          <Route path="/integrations/:platform" element={<IntegrationDetailPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
         </Routes>
       </Suspense>
     )
@@ -234,8 +264,11 @@ function App() {
           <Route path="/" element={<MarketingHomePage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/integrations" element={<IntegrationsPage />} />
+          <Route path="/integrations/:platform" element={<IntegrationDetailPage />} />
           <Route path="/docs" element={<DocsLandingPage />} />
           <Route path="/guides/:platform" element={<GuidePage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/signup" element={<SignupPage />} />
           <Route path="/onboarding/*" element={<Navigate to={protectedSignupRedirect} replace />} />

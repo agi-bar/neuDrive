@@ -14,6 +14,10 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
 
   useEffect(() => {
+    document.title = tx('登录 — neuDrive', 'Log in — neuDrive')
+  }, [tx])
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     setError(params.get('error') || '')
     api.getAuthProviders().then((items) => setProviders(items || [])).catch(() => setProviders([]))
@@ -113,7 +117,7 @@ export default function LoginPage() {
             </form>
 
             <p className="login-note">
-              {tx('还没有账户？', 'No account yet?')} <Link to="/signup">{tx('立即开始', 'Get started')}</Link>
+              {tx('还没有账户？', 'No account yet?')} <Link to="/signup">{tx('免费创建账号', 'Create free account')}</Link>
             </p>
           </div>
         </section>

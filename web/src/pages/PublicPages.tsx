@@ -42,6 +42,10 @@ type IntegrationGuide = {
   testPrompt: LocalizedText
   afterConnection: LocalizedText[]
   limits?: LocalizedText[]
+  detailSummary?: LocalizedText
+  detailHighlights?: LocalizedText[]
+  detailLimits?: LocalizedText[]
+  detailFaq?: Array<{ question: LocalizedText; answer: LocalizedText }>
 }
 
 const integrations: IntegrationGuide[] = [
@@ -117,6 +121,29 @@ const integrations: IntegrationGuide[] = [
       { zh: '把当前项目资料保存到 neuDrive。', en: 'Save current project material to neuDrive.' },
       { zh: '在 Connections 里查看 Claude 连接状态。', en: 'Check Claude connection status in Connections.' },
     ],
+    detailSummary: {
+      zh: 'Claude 适合成为第一个接入的 AI 工具：连接后可以直接读取 neuDrive 中的 Profile Memory、项目资料和可用 Skills。',
+      en: 'Claude is a good first connection: after setup, it can read Profile Memory, project material, and available Skills from neuDrive.',
+    },
+    detailHighlights: [
+      { zh: '通过 Claude Connectors 添加 neuDrive。', en: 'Add neuDrive through Claude Connectors.' },
+      { zh: '浏览器授权后，新会话即可使用。', en: 'After browser authorization, use it from a fresh chat.' },
+      { zh: '适合读取偏好、项目上下文和可复用技能。', en: 'Good for reading preferences, project context, and reusable skills.' },
+    ],
+    detailLimits: [
+      { zh: '如果账号看不到自定义 Connector，可能需要确认 Claude 账号或团队策略。', en: 'If custom Connectors are unavailable, check your Claude account or team policy.' },
+      { zh: '新增工具通常在新开的 Claude 对话里最稳定。', en: 'Newly added tools are usually most reliable in a fresh Claude chat.' },
+    ],
+    detailFaq: [
+      {
+        question: { zh: 'Claude 会读取全部 neuDrive 数据吗？', en: 'Can Claude read all neuDrive data?' },
+        answer: { zh: '不会。Claude 只能读取当前连接被授权访问的资料。', en: 'No. Claude can only read material authorized for that connection.' },
+      },
+      {
+        question: { zh: '需要每次复制上下文吗？', en: 'Do I need to paste context every time?' },
+        answer: { zh: '不需要。连接后可以让 Claude 从 neuDrive 读取已有记忆和项目资料。', en: 'No. After setup, Claude can read existing memory and project material from neuDrive.' },
+      },
+    ],
   },
   {
     key: 'chatgpt',
@@ -185,6 +212,29 @@ const integrations: IntegrationGuide[] = [
       { zh: '把重要对话保存到 Conversations。', en: 'Save important chats to Conversations.' },
       { zh: '在 Connections 里查看 ChatGPT 连接状态。', en: 'Check ChatGPT connection status in Connections.' },
       { zh: '需要网页导入时，继续安装浏览器插件。', en: 'Install the browser extension when you need web-chat import.' },
+    ],
+    detailSummary: {
+      zh: 'ChatGPT Apps 接入适合希望在 ChatGPT 里调用 neuDrive 记忆、文件和技能的用户。',
+      en: 'ChatGPT Apps setup is for using neuDrive memory, files, and skills from inside ChatGPT.',
+    },
+    detailHighlights: [
+      { zh: '创建 neuDrive App 并粘贴 MCP Server URL。', en: 'Create a neuDrive App and paste the MCP Server URL.' },
+      { zh: '授权后在新会话里测试读取。', en: 'After authorization, test from a fresh chat.' },
+      { zh: '浏览器插件可以补充网页对话导入。', en: 'The browser extension can add web-chat import when needed.' },
+    ],
+    detailLimits: [
+      { zh: 'ChatGPT Apps 入口取决于账号计划和开放范围。', en: 'The ChatGPT Apps entry depends on account plan and rollout availability.' },
+      { zh: '如果暂时没有 Create app，可以先使用 Claude、编辑器或浏览器插件。', en: 'If Create app is unavailable, start with Claude, editors, or the browser extension.' },
+    ],
+    detailFaq: [
+      {
+        question: { zh: '这是 GPT Actions 吗？', en: 'Is this GPT Actions?' },
+        answer: { zh: '不是。这里面向 ChatGPT Apps 的 MCP 接入。', en: 'No. This page is for MCP setup through ChatGPT Apps.' },
+      },
+      {
+        question: { zh: '连接后能做什么？', en: 'What can I do after setup?' },
+        answer: { zh: '可以让 ChatGPT 读取 neuDrive 中的 profile、项目上下文、文件和 skills。', en: 'You can ask ChatGPT to read your neuDrive profile, project context, files, and skills.' },
+      },
     ],
   },
   {
@@ -261,6 +311,29 @@ const integrations: IntegrationGuide[] = [
       { zh: '保存项目 README 和开发约定。', en: 'Save the project README and development conventions.' },
       { zh: '导入可复用 skill。', en: 'Import reusable skills.' },
       { zh: '在 Data Explorer 里查看写入结果。', en: 'Review the result in Data Explorer.' },
+    ],
+    detailSummary: {
+      zh: 'Cursor / Windsurf 适合把当前 repo 的项目背景、命令、约定和长期上下文写入 neuDrive。',
+      en: 'Cursor / Windsurf are best for saving repo background, commands, conventions, and durable project context into neuDrive.',
+    },
+    detailHighlights: [
+      { zh: '在编辑器 MCP 设置里添加 neuDrive。', en: 'Add neuDrive in the editor MCP settings.' },
+      { zh: '让编辑器 AI 读取当前 repo 并写入项目上下文。', en: 'Ask the editor AI to read the current repo and write project context.' },
+      { zh: '后续可在 Claude 或 ChatGPT 复用这些项目资料。', en: 'Reuse that project material later from Claude or ChatGPT.' },
+    ],
+    detailLimits: [
+      { zh: '不同编辑器的 MCP 配置字段可能不同，请使用对应配置。', en: 'MCP config fields differ by editor; use the matching config.' },
+      { zh: '首次保存后建议到 Data Explorer 检查写入路径。', en: 'After first save, check the written path in Data Explorer.' },
+    ],
+    detailFaq: [
+      {
+        question: { zh: 'Cursor 和 Windsurf 为什么放一起？', en: 'Why are Cursor and Windsurf grouped together?' },
+        answer: { zh: '它们都属于代码编辑器接入，目标都是让 repo 上下文进入 neuDrive。', en: 'They are both coding editor setups, focused on bringing repo context into neuDrive.' },
+      },
+      {
+        question: { zh: '会自动上传整个仓库吗？', en: 'Will it upload the entire repo automatically?' },
+        answer: { zh: '不会。你需要让 Agent 选择并写入有长期价值的上下文、文件或摘要。', en: 'No. You ask the agent to select and write durable context, files, or summaries.' },
+      },
     ],
   },
   {
@@ -353,6 +426,29 @@ const integrations: IntegrationGuide[] = [
       { zh: '用 `neu import project` 导入项目资料。', en: 'Use `neu import project` to import project material.' },
       { zh: '用 `neu sync pull` 导出备份。', en: 'Use `neu sync pull` to export a backup.' },
     ],
+    detailSummary: {
+      zh: 'CLI 接入适合日常在终端工作的用户，把 Codex、Claude Code 等命令行 Agent 接到同一个 neuDrive 数据层。',
+      en: 'CLI setup is for terminal-based work, connecting Codex, Claude Code, and similar agents to the same neuDrive data layer.',
+    },
+    detailHighlights: [
+      { zh: '用 `neu login` 设置官方 hosted profile。', en: 'Use `neu login` to set up the hosted profile.' },
+      { zh: '为 Claude Code 或 Codex CLI 添加 remote MCP。', en: 'Add remote MCP for Claude Code or Codex CLI.' },
+      { zh: '用 neu 命令导入、浏览和验证资料。', en: 'Use neu commands to import, browse, and verify material.' },
+    ],
+    detailLimits: [
+      { zh: 'CLI 接入需要一个可访问的 HTTPS neuDrive 地址。', en: 'CLI setup needs a reachable HTTPS neuDrive URL.' },
+      { zh: '不同 CLI 的登录命令不同，请按对应平台执行。', en: 'Login commands differ by CLI; use the commands for your platform.' },
+    ],
+    detailFaq: [
+      {
+        question: { zh: 'Codex CLI 和 Claude Code 都支持吗？', en: 'Are Codex CLI and Claude Code both supported?' },
+        answer: { zh: '是。详情页和指南分别给出对应命令。', en: 'Yes. The detail and guide pages show separate commands for each.' },
+      },
+      {
+        question: { zh: 'CLI 适合做什么？', en: 'What is CLI setup best for?' },
+        answer: { zh: '适合导入项目资料、保存开发约定、同步备份和让终端 Agent 读取 neuDrive。', en: 'It is best for importing project material, saving conventions, syncing backups, and letting terminal agents read neuDrive.' },
+      },
+    ],
   },
   {
     key: 'browser',
@@ -416,6 +512,29 @@ const integrations: IntegrationGuide[] = [
       { zh: '导入当前 Claude 或 ChatGPT 对话。', en: 'Import the current Claude or ChatGPT chat.' },
       { zh: '在 Data Explorer 里查看导入结果。', en: 'Review the imported result in Data Explorer.' },
       { zh: '把重要对话转成 Memory。', en: 'Convert important chats into Memory.' },
+    ],
+    detailSummary: {
+      zh: '浏览器插件适合把网页聊天里的当前对话导入 neuDrive，也适合把偏好、项目资料或技能注入当前输入框。',
+      en: 'The browser extension imports the current web chat into neuDrive and can inject preferences, project material, or skills into the current input box.',
+    },
+    detailHighlights: [
+      { zh: '支持 Claude、ChatGPT、Gemini、Kimi 等网页聊天。', en: 'Supports web chats such as Claude, ChatGPT, Gemini, and Kimi.' },
+      { zh: '导入当前对话后，可在 Data Explorer 查看。', en: 'After importing the current chat, review it in Data Explorer.' },
+      { zh: '可把重要对话转成 Memory。', en: 'Important chats can become Memory.' },
+    ],
+    detailLimits: [
+      { zh: '插件依赖网页结构，平台改版后可能需要更新。', en: 'The extension depends on page structure and may need updates when platforms change their UI.' },
+      { zh: '批量历史迁移建议使用官方导出导入器。', en: 'For large history migration, prefer the official export importer.' },
+    ],
+    detailFaq: [
+      {
+        question: { zh: '导入会自动发送给聊天平台吗？', en: 'Does import automatically send content to the chat platform?' },
+        answer: { zh: '不会。导入保存到 neuDrive；注入内容也只有你点击发送后才会发给当前聊天平台。', en: 'No. Import saves to neuDrive; injected content is sent only if you send the message yourself.' },
+      },
+      {
+        question: { zh: '能导入整个 ChatGPT 历史吗？', en: 'Can it import all ChatGPT history?' },
+        answer: { zh: '当前重点是当前对话导入。大量历史迁移更适合使用平台导出文件。', en: 'The current focus is current-chat import. Large history migration is better handled through platform export files.' },
+      },
     ],
   },
   {
@@ -482,6 +601,29 @@ const integrations: IntegrationGuide[] = [
       { zh: '在 Recent Activity 查看写入记录。', en: 'Review writes in Recent Activity.' },
       { zh: '不再使用时撤销连接。', en: 'Revoke the connection when it is no longer used.' },
     ],
+    detailSummary: {
+      zh: 'MCP / REST API 面向自研 Agent、内部系统和自动化脚本，用 scoped credential 连接 neuDrive。',
+      en: 'MCP / REST API is for custom agents, internal systems, and automation scripts using scoped credentials.',
+    },
+    detailHighlights: [
+      { zh: '按用途创建 Custom Agent 凭证。', en: 'Create Custom Agent credentials by purpose.' },
+      { zh: '接入 MCP 或 REST 服务地址。', en: 'Connect through the MCP or REST service URL.' },
+      { zh: '可审计、轮换和撤销访问。', en: 'Access can be audited, rotated, and revoked.' },
+    ],
+    detailLimits: [
+      { zh: 'API 接入需要你自己处理凭证保存和调用逻辑。', en: 'API setup requires you to handle credential storage and calls.' },
+      { zh: '生产系统建议为每个 Agent 单独创建凭证。', en: 'For production systems, create a separate credential for each agent.' },
+    ],
+    detailFaq: [
+      {
+        question: { zh: '什么时候用 API 而不是平台接入？', en: 'When should I use API instead of a platform setup?' },
+        answer: { zh: '当你在构建自研 Agent、内部自动化或平台适配器时，API 更合适。', en: 'Use API when building custom agents, internal automation, or platform adapters.' },
+      },
+      {
+        question: { zh: 'Token 可以撤销吗？', en: 'Can tokens be revoked?' },
+        answer: { zh: '可以。Developer Access 中可以查看、轮换和撤销凭证。', en: 'Yes. Developer Access lets you review, rotate, and revoke credentials.' },
+      },
+    ],
   },
 ]
 
@@ -494,14 +636,36 @@ function tr(tx: (zh: string, en: string) => string, text: LocalizedText) {
   return tx(text.zh, text.en)
 }
 
+function useDocumentTitle(title: string) {
+  useEffect(() => {
+    document.title = title
+  }, [title])
+}
+
 function CopySnippet({ label, value, language = 'text' }: { label: string; value: string; language?: string }) {
   const { tx } = useI18n()
   const [copied, setCopied] = useState(false)
+  const copyWithFallback = async () => {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(value)
+      return
+    }
+    const textarea = document.createElement('textarea')
+    textarea.value = value
+    textarea.setAttribute('readonly', '')
+    textarea.style.position = 'fixed'
+    textarea.style.left = '-9999px'
+    textarea.style.top = '0'
+    document.body.appendChild(textarea)
+    textarea.select()
+    document.execCommand('copy')
+    document.body.removeChild(textarea)
+  }
   const copy = async () => {
     try {
-      await navigator.clipboard.writeText(value)
+      await copyWithFallback()
       setCopied(true)
-      window.setTimeout(() => setCopied(false), 1400)
+      window.setTimeout(() => setCopied(false), 1500)
     } catch {
       setCopied(false)
     }
@@ -510,7 +674,7 @@ function CopySnippet({ label, value, language = 'text' }: { label: string; value
     <div className="public-code-block">
       <div className="public-code-head">
         <span>{label}</span>
-        <button type="button" onClick={copy}>{copied ? tx('已复制', 'Copied') : tx('复制', 'Copy')}</button>
+        <button type="button" onClick={copy} aria-live="polite">{copied ? tx('已复制 ✓', 'Copied ✓') : tx('复制', 'Copy')}</button>
       </div>
       <pre><code className={`language-${language}`}>{value}</code></pre>
     </div>
@@ -519,32 +683,148 @@ function CopySnippet({ label, value, language = 'text' }: { label: string; value
 
 function PublicShell({ children }: { children: ReactNode }) {
   const { tx } = useI18n()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const closeMobileMenu = () => setMobileMenuOpen(false)
   return (
-    <div className="public-site">
+    <div className={`public-site ${mobileMenuOpen ? 'public-menu-open' : ''}`}>
       <header className="public-nav">
-        <Link to="/" className="public-brand">neuDrive</Link>
-        <nav className="public-nav-links">
+        <Link to="/" className="public-brand" onClick={closeMobileMenu}>neuDrive</Link>
+        <nav className="public-nav-links" aria-label={tx('主导航', 'Primary navigation')}>
           <a href="/#product">{tx('产品', 'Product')}</a>
           <Link to="/integrations">{tx('集成', 'Integrations')}</Link>
           <Link to="/pricing">{tx('价格', 'Pricing')}</Link>
           <Link to="/docs">{tx('文档', 'Docs')}</Link>
         </nav>
         <div className="public-nav-actions">
-          <LanguageToggle compact />
-          <Link to="/login" className="btn btn-outline">{tx('登录', 'Log in')}</Link>
-          <Link to="/signup" className="btn btn-primary">{tx('立即开始', 'Get started')}</Link>
+          <div className="public-nav-language"><LanguageToggle compact /></div>
+          <Link to="/login" className="btn btn-outline public-login-link">{tx('登录', 'Log in')}</Link>
+          <Link to="/signup" className="btn btn-primary" onClick={closeMobileMenu}>{tx('免费创建账号', 'Create free account')}</Link>
+          <button
+            type="button"
+            className="public-menu-button"
+            aria-label={mobileMenuOpen ? tx('关闭菜单', 'Close menu') : tx('打开菜单', 'Open menu')}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="public-mobile-menu"
+            onClick={() => setMobileMenuOpen((open) => !open)}
+          >
+            <span />
+            <span />
+            <span />
+          </button>
         </div>
       </header>
+      {mobileMenuOpen && (
+        <div
+          id="public-mobile-menu"
+          className="public-mobile-menu"
+        >
+          <a href="/#product" onClick={closeMobileMenu}>{tx('产品', 'Product')}</a>
+          <Link to="/integrations" onClick={closeMobileMenu}>{tx('集成', 'Integrations')}</Link>
+          <Link to="/pricing" onClick={closeMobileMenu}>{tx('价格', 'Pricing')}</Link>
+          <Link to="/docs" onClick={closeMobileMenu}>{tx('文档', 'Docs')}</Link>
+          <Link to="/login" onClick={closeMobileMenu}>{tx('登录', 'Log in')}</Link>
+          <div className="public-mobile-language">
+            <LanguageToggle compact />
+          </div>
+        </div>
+      )}
       {children}
+      <PublicFooter />
     </div>
   )
 }
 
-export function MarketingHomePage() {
+function PublicFooter() {
   const { tx } = useI18n()
+  const year = new Date().getFullYear()
+  return (
+    <footer className="public-footer">
+      <div className="public-footer-main">
+        <div className="public-footer-brand">
+          <Link to="/" className="public-brand">neuDrive</Link>
+          <p>{tx('让 Claude、ChatGPT、Cursor 等 AI 工具共用同一份记忆、文件和技能。', 'One shared memory, file, and skill layer for Claude, ChatGPT, Cursor, and other AI tools.')}</p>
+          <a className="public-footer-support" href="mailto:support@neudrive.ai">support@neudrive.ai</a>
+        </div>
+        <nav className="public-footer-columns" aria-label={tx('页脚导航', 'Footer navigation')}>
+          <div>
+            <h2>{tx('产品', 'Product')}</h2>
+            <Link to="/integrations">{tx('集成', 'Integrations')}</Link>
+            <Link to="/pricing">{tx('价格', 'Pricing')}</Link>
+            <a href="/#how-it-works">{tx('接入方式', 'How it works')}</a>
+            <a href="/#product">{tx('能力', 'Capabilities')}</a>
+          </div>
+          <div>
+            <h2>{tx('资源', 'Resources')}</h2>
+            <Link to="/docs">{tx('文档', 'Docs')}</Link>
+            <Link to="/guides/claude">Claude</Link>
+            <Link to="/guides/chatgpt">ChatGPT</Link>
+            <Link to="/guides/editors">Cursor / Windsurf</Link>
+          </div>
+          <div>
+            <h2>{tx('公司', 'Company')}</h2>
+            <a href="mailto:support@neudrive.ai">{tx('联系支持', 'Contact support')}</a>
+            <a href="mailto:support@neudrive.ai?subject=neuDrive%20status">{tx('状态咨询', 'Status')}</a>
+            <a href="https://github.com/agi-bar/neuDrive" target="_blank" rel="noreferrer">GitHub</a>
+          </div>
+          <div>
+            <h2>{tx('法律', 'Legal')}</h2>
+            <Link to="/privacy">{tx('隐私政策', 'Privacy')}</Link>
+            <Link to="/terms">{tx('服务条款', 'Terms')}</Link>
+            <a href="mailto:support@neudrive.ai?subject=neuDrive%20security">{tx('安全联系', 'Security contact')}</a>
+          </div>
+        </nav>
+      </div>
+      <div className="public-footer-bottom">
+        <span>© {year} neuDrive</span>
+        <span>{tx('AI 数据由你控制。', 'Your AI data stays under your control.')}</span>
+      </div>
+    </footer>
+  )
+}
+
+export function MarketingHomePage() {
+  const { tx, isZh } = useI18n()
+  useDocumentTitle(tx('别让 AI 工具每次重新认识你 — neuDrive', 'Your AI tools should not have to meet you again every time — neuDrive'))
   const [activeKey, setActiveKey] = useState('claude')
+  const [activeHeroPanel, setActiveHeroPanel] = useState<'memory' | 'files' | 'skills'>('memory')
   const activeIntegration = getIntegration(activeKey)
   const firstCode = activeIntegration.steps.flatMap((step) => step.codes || [])[0]
+  const heroPanels = {
+    memory: {
+      label: tx('记忆', 'Memory'),
+      source: 'Claude',
+      prompt: tx('读取我的工作偏好和项目上下文。', 'Read my working preferences and project context.'),
+      response: tx('返回已授权的 Profile Memory、项目资料和可用 Skills。', 'Returns approved profile memory, project files, and available skills.'),
+      meta: [
+        tx('长期偏好', 'Stable preferences'),
+        tx('项目上下文', 'Project context'),
+        tx('短期工作记忆', 'Scratch memory'),
+      ],
+    },
+    files: {
+      label: tx('文件', 'Files'),
+      source: 'Cursor',
+      prompt: tx('查找这个项目里和接入配置有关的资料。', 'Find the project material related to setup configuration.'),
+      response: tx('从 Data Explorer 返回匹配文件、来源和可访问范围。', 'Returns matching files, sources, and access ranges from Data Explorer.'),
+      meta: [
+        tx('会话资料', 'Conversations'),
+        tx('项目文件', 'Project files'),
+        tx('可导出', 'Exportable'),
+      ],
+    },
+    skills: {
+      label: tx('技能', 'Skills'),
+      source: 'ChatGPT',
+      prompt: tx('查看我有哪些可以复用的工作技能。', 'Show the reusable work skills I can use.'),
+      response: tx('列出已启用的 Skills，并说明哪些 Agent 可以使用。', 'Lists enabled Skills and which agents can use them.'),
+      meta: [
+        tx('一次注册', 'Register once'),
+        tx('多端复用', 'Reuse across agents'),
+        tx('可测试', 'Testable'),
+      ],
+    },
+  }
+  const activeHero = heroPanels[activeHeroPanel]
   const pains = [
     {
       title: tx('上下文散落', 'Context is scattered'),
@@ -560,9 +840,9 @@ export function MarketingHomePage() {
     },
   ]
   const modules = [
-    { name: tx('记忆 Memory', 'Memory'), label: tx('Profile / Projects / Scratch', 'Profile / Projects / Scratch'), copy: tx('保存个人偏好、项目上下文和短期工作记忆。', 'Store profile, project, and scratch working memory.') },
-    { name: tx('文件 Files', 'Files'), label: tx('Data Explorer', 'Data Explorer'), copy: tx('统一管理 AI 可读取的文件、会话和资料。', 'Manage files, conversations, and references your AI can read.') },
-    { name: tx('技能 Skills', 'Skills'), label: tx('.skill 路由', '.skill routing'), copy: tx('一次注册，多个 Agent 复用。', 'Register once and reuse across multiple agents.') },
+    { name: tx('记忆', 'Memory'), label: tx('档案 / 项目 / 临时记忆', 'Profile / Projects / Scratch'), copy: tx('保存个人偏好、项目上下文和短期工作记忆。', 'Store profile, project, and scratch working memory.') },
+    { name: tx('文件', 'Files'), label: tx('数据浏览器', 'Data Explorer'), copy: tx('统一管理 AI 可读取的文件、会话和资料。', 'Manage files, conversations, and references your AI can read.') },
+    { name: tx('技能', 'Skills'), label: tx('技能路由', '.skill routing'), copy: tx('一次注册，多个 Agent 复用。', 'Register once and reuse across multiple agents.') },
     { name: tx('私密数据', 'Private data'), label: tx('访问控制', 'Access control'), copy: tx('决定每个 AI 工具能看到哪些资料。', 'Decide which material each AI tool can see.') },
   ]
   return (
@@ -571,7 +851,16 @@ export function MarketingHomePage() {
         <section className="public-hero">
           <div className="public-hero-copy">
             <p className="public-kicker">{tx('AI 数据层', 'AI data layer')}</p>
-            <h1>{tx('让所有 AI 工具共用同一份记忆。', 'One memory layer for all your AI agents.')}</h1>
+            <h1 className="public-hero-title">
+              {isZh ? (
+                <>
+                  <span>别让 AI 工具</span>
+                  <span>每次重新认识你</span>
+                </>
+              ) : (
+                'Your AI tools should not have to meet you again every time.'
+              )}
+            </h1>
             <p>
               {tx(
                 'neuDrive 把你的会话、项目上下文、技能、文件和私密数据统一存放，并连接 Claude、ChatGPT、Cursor、Windsurf 等 AI 工具。',
@@ -579,13 +868,13 @@ export function MarketingHomePage() {
               )}
             </p>
             <div className="public-hero-actions">
-              <Link to="/signup" className="btn btn-primary">{tx('立即开始', 'Get started')}</Link>
+              <Link to="/signup" className="btn btn-primary">{tx('3 分钟接入第一个 AI 工具', 'Connect your first agent in 3 min')}</Link>
               <a href="#how-it-works" className="btn btn-outline">{tx('查看如何接入', 'See how it works')}</a>
             </div>
             <div className="public-hero-proof" aria-label="Product capabilities">
-              <span>{tx('Profile 记忆', 'Profile memory')}</span>
+              <span>{tx('档案记忆', 'Profile memory')}</span>
               <span>{tx('私密数据控制', 'Private data control')}</span>
-              <span>{tx('Skill 路由', 'Skill routing')}</span>
+              <span>{tx('技能路由', 'Skill routing')}</span>
             </div>
             <a href="#product" className="public-scroll-cue">
               {tx('继续看 neuDrive 如何工作', 'Explore how the layer works')}
@@ -612,25 +901,32 @@ export function MarketingHomePage() {
             </div>
             <div className="hero-window">
               <div className="window-bar"><span /><span /><span /></div>
-              <div className="window-tabs">
-                <span className="active">{tx('记忆', 'Memory')}</span>
-                <span>{tx('文件', 'Files')}</span>
-                <span>{tx('技能', 'Skills')}</span>
+              <div className="window-tabs" role="tablist" aria-label={tx('产品示例', 'Product examples')}>
+                {(Object.keys(heroPanels) as Array<keyof typeof heroPanels>).map((key) => (
+                  <button
+                    key={key}
+                    type="button"
+                    role="tab"
+                    aria-selected={activeHeroPanel === key}
+                    className={activeHeroPanel === key ? 'active' : ''}
+                    onClick={() => setActiveHeroPanel(key)}
+                  >
+                    {heroPanels[key].label}
+                  </button>
+                ))}
               </div>
-              <div className="memory-thread">
+              <div className="memory-thread" role="tabpanel">
                 <div>
-                  <span className="thread-label">Claude</span>
-                  <p>{tx('读取我的工作偏好和项目上下文。', 'Read my working preferences and project context.')}</p>
+                  <span className="thread-label">{activeHero.source}</span>
+                  <p>{activeHero.prompt}</p>
                 </div>
                 <div className="thread-response">
                   <span className="thread-label">neuDrive</span>
-                  <p>{tx('返回已授权的 Profile Memory、项目资料和可用 Skills。', 'Returns approved profile memory, project files, and available skills.')}</p>
+                  <p>{activeHero.response}</p>
                 </div>
               </div>
               <div className="visual-access-row">
-                <span>{tx('登录授权', 'Signed-in access')}</span>
-                <span>{tx('可查看范围', 'Visible range')}</span>
-                <span>{tx('可随时撤销', 'Revocable')}</span>
+                {activeHero.meta.map((item) => <span key={item}>{item}</span>)}
               </div>
             </div>
           </div>
@@ -657,7 +953,7 @@ export function MarketingHomePage() {
         <section className="public-band pain-band">
           <div className="public-section-head stacked">
             <p className="public-kicker">{tx('为什么需要 neuDrive', 'Why neuDrive')}</p>
-            <h2>{tx('你的 AI 工具不该每次都重新认识你。', 'Your AI tools should not have to meet you again every time.')}</h2>
+            <h2>{tx('上下文散落，是 AI 工作流最隐形的成本。', 'Scattered context is the hidden cost of AI workflows.')}</h2>
           </div>
           <div className="public-card-grid three">
             {pains.map((item) => (
@@ -736,9 +1032,56 @@ export function MarketingHomePage() {
               </div>
               <div className="workflow-actions">
                 <Link to={`/guides/${activeIntegration.key}`} className="btn btn-outline">{tx('查看完整指南', 'Open full guide')}</Link>
-                <Link to={`/signup?platform=${activeIntegration.key}`} className="btn btn-primary">{tx('开始连接', 'Connect now')}</Link>
+                <Link to={`/signup?platform=${activeIntegration.key}`} className="btn btn-primary">{tx('创建账号并接入', 'Create account to connect')}</Link>
               </div>
             </div>
+          </div>
+          <div className="workflow-mobile-accordion" aria-label={tx('移动端接入指南', 'Mobile setup guides')}>
+            {integrations.map((item) => {
+              const isActive = item.key === activeKey
+              const itemCode = item.steps.flatMap((step) => step.codes || [])[0]
+              return (
+                <article key={item.key} className={`workflow-accordion-card ${isActive ? 'active' : ''}`}>
+                  <button
+                    type="button"
+                    className="workflow-accordion-trigger"
+                    aria-expanded={isActive}
+                    aria-controls={`workflow-panel-${item.key}`}
+                    onClick={() => setActiveKey(item.key)}
+                  >
+                    <span className="workflow-accordion-icon" aria-hidden="true">{item.accent}</span>
+                    <span className="workflow-accordion-copy">
+                      <strong>{item.shortName}</strong>
+                      <small>{tr(tx, item.method)} · {tr(tx, item.setup)}</small>
+                    </span>
+                    <span className="workflow-accordion-caret" aria-hidden="true">⌄</span>
+                  </button>
+                  {isActive && (
+                    <div id={`workflow-panel-${item.key}`} className="workflow-accordion-panel">
+                      <p>{tr(tx, item.demo)}</p>
+                      <p className="workflow-summary">{tr(tx, item.workflowSummary)}</p>
+                      {itemCode && <CopySnippet label={tr(tx, itemCode.label)} language={itemCode.language} value={itemCode.value} />}
+                      <div className="workflow-timeline compact">
+                        {item.steps.map((step, index) => (
+                          <div key={tr(tx, step.title)} className="workflow-step">
+                            <span>{index + 1}</span>
+                            <div>
+                              <strong>{tr(tx, step.title)}</strong>
+                              <p>{tr(tx, step.copy)}</p>
+                              {step.detail && <small>{tr(tx, step.detail)}</small>}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="workflow-actions">
+                        <Link to={`/guides/${item.key}`} className="btn btn-outline">{tx('查看完整指南', 'Open full guide')}</Link>
+                        <Link to={`/signup?platform=${item.key}`} className="btn btn-primary">{tx('创建账号并接入', 'Create account to connect')}</Link>
+                      </div>
+                    </div>
+                  )}
+                </article>
+              )
+            })}
           </div>
         </section>
 
@@ -774,7 +1117,7 @@ export function MarketingHomePage() {
 function IntegrationsSection() {
   const { tx } = useI18n()
   return (
-    <section className="public-band">
+    <section className="public-band" id="integrations">
       <div className="public-section-head">
         <div>
           <p className="public-kicker">{tx('集成', 'Integrations')}</p>
@@ -791,8 +1134,8 @@ function IntegrationsSection() {
             <p>{tr(tx, item.method)} · {tr(tx, item.setup)}</p>
             <small>{tr(tx, item.demo)}</small>
             <div className="integration-actions">
-              <Link className="integration-guide-link" to={`/guides/${item.key}`}>{tx('演示指南', 'Demo guide')}</Link>
-              <Link className="integration-connect-link" to={`/signup?platform=${item.key}`}>{tx('立即连接', 'Connect now')}</Link>
+              <Link className="integration-guide-link" to={`/integrations/${item.key}`}>{tx('查看详情', 'View details')}</Link>
+              <Link className="integration-connect-link" to={`/guides/${item.key}`}>{tx('接入指南', 'Setup guide')}</Link>
             </div>
           </article>
         ))}
@@ -818,7 +1161,7 @@ function PricingSection() {
           <h3>Free</h3>
           <div className="pricing-price">$0</div>
           <p>{tx('10 MiB 存储', '10 MiB storage')}</p>
-          <Link to="/signup" className="btn btn-outline">{tx('免费开始', 'Start free')}</Link>
+          <Link to="/signup" className="btn btn-outline">{tx('免费创建账号', 'Create free account')}</Link>
         </article>
         <article className="pricing-public-card featured">
           <span className="recommended-chip">{tx('推荐', 'Recommended')}</span>
@@ -831,7 +1174,7 @@ function PricingSection() {
           <h3>Pro Monthly</h3>
           <div className="pricing-price">$10 / month</div>
           <p>{tx('按月灵活使用 Pro 能力。', 'Use Pro month to month.')}</p>
-          <Link to="/signup?plan=pro_monthly" className="btn btn-outline">{tx('月付 Pro', 'Start monthly')}</Link>
+          <Link to="/signup?plan=pro_monthly" className="btn btn-outline">{tx('月付 Pro', 'Start Pro monthly')}</Link>
         </article>
       </div>
     </section>
@@ -840,6 +1183,7 @@ function PricingSection() {
 
 export function PricingPage() {
   const { tx } = useI18n()
+  useDocumentTitle(tx('价格 — neuDrive', 'Pricing — neuDrive'))
   const comparisonRows = [
     [tx('存储空间', 'Storage'), '10 MiB', '1 GiB', '1 GiB'],
     [tx('AI 工具连接', 'AI connections'), tx('不限连接', 'Unlimited'), tx('不限连接', 'Unlimited'), tx('不限连接', 'Unlimited')],
@@ -848,10 +1192,70 @@ export function PricingPage() {
     [tx('导入', 'Import'), tx('基础导入', 'Basic import'), tx('优先导入大批量会话', 'Priority large conversation import'), tx('优先导入大批量会话', 'Priority large conversation import')],
     [tx('私密数据控制', 'Private data controls'), tx('基础控制', 'Basic controls'), tx('完整控制', 'Full controls'), tx('完整控制', 'Full controls')],
   ]
+  const faqItems = [
+    {
+      question: tx('我的数据属于谁？', 'Who owns my data?'),
+      answer: tx(
+        '你的记忆、文件、会话和技能属于你。neuDrive 负责存放和连接，你可以随时导出或删除。',
+        'Your memory, files, conversations, and skills belong to you. neuDrive stores and connects them, and you can export or delete them anytime.',
+      ),
+    },
+    {
+      question: tx('存储空间满了会怎样？', 'What happens when storage is full?'),
+      answer: tx(
+        '导入和同步会停止写入新数据，已有数据仍可读取。你可以清理数据、导出备份，或升级到 Pro 获得 1 GiB 存储。',
+        'Imports and sync stop writing new data, while existing data remains readable. You can clean up data, export a backup, or upgrade to Pro for 1 GiB storage.',
+      ),
+    },
+    {
+      question: tx('是否支持团队？', 'Do you support teams?'),
+      answer: tx(
+        '当前公开价格面向个人工作流。团队、企业部署、更高存储、审计和统一管理可以联系我们单独配置。',
+        'The public plans are designed for individual workflows. Teams, enterprise deployment, higher storage, audit, and centralized administration can be arranged with us.',
+      ),
+    },
+    {
+      question: tx('可以自托管吗？', 'Can I self-host?'),
+      answer: tx(
+        '可以。neuDrive Core 是开源核心能力，自托管适合需要完全控制基础设施的团队；Hosted Pro 适合希望直接使用托管同步、备份和升级路径的用户。',
+        'Yes. neuDrive Core is open-source and fits teams that want full infrastructure control; Hosted Pro is for users who want managed sync, backup, and an upgrade path.',
+      ),
+    },
+    {
+      question: tx('有试用或退款政策吗？', 'Is there a trial or refund policy?'),
+      answer: tx(
+        '你可以先用 Free 验证接入路径。若出现重复扣费、误购或账单异常，请联系 support@neudrive.ai，我们会根据实际情况处理。',
+        'You can validate the setup path on Free first. For duplicate charges, accidental purchases, or billing issues, contact support@neudrive.ai and we will review the case.',
+      ),
+    },
+  ]
   return (
     <PublicShell>
       <main className="public-simple">
         <PricingSection />
+        <section className="public-band pricing-roi-section">
+          <div className="pricing-roi-panel">
+            <div>
+              <p className="public-kicker">{tx('年付价值', 'Yearly value')}</p>
+              <h2>{tx('年付 Pro 相当于每月 $5。', 'Pro Yearly is effectively $5 per month.')}</h2>
+              <p>{tx('按月一年是 $120，年付是 $60。省下来的 $60 可以覆盖一整年的托管同步、备份和更大的 AI 工作记忆空间。', 'Monthly for a full year is $120; yearly is $60. The $60 saved covers a year of managed sync, backup, and a larger AI working-memory space.')}</p>
+            </div>
+            <div className="pricing-roi-metrics" aria-label={tx('年付节省', 'Yearly savings')}>
+              <span>
+                <strong>$60</strong>
+                {tx('每年节省', 'saved yearly')}
+              </span>
+              <span>
+                <strong>1 GiB</strong>
+                {tx('托管存储', 'managed storage')}
+              </span>
+              <span>
+                <strong>{tx('自动', 'Auto')}</strong>
+                {tx('同步与备份', 'sync and backup')}
+              </span>
+            </div>
+          </div>
+        </section>
         <section className="public-band pricing-compare-section">
           <div className="public-section-head">
             <div>
@@ -882,16 +1286,164 @@ export function PricingPage() {
             </table>
           </div>
         </section>
+        <section className="public-band pricing-team-section">
+          <article className="pricing-team-card">
+            <div>
+              <p className="public-kicker">{tx('团队与企业', 'Team and Enterprise')}</p>
+              <h2>{tx('需要共享工作区、审计或更高存储？', 'Need shared workspaces, audit, or higher storage?')}</h2>
+              <p>{tx('我们可以为团队配置更高存储、统一管理、部署支持和安全审查材料。', 'We can configure higher storage, centralized administration, deployment support, and security review materials for teams.')}</p>
+            </div>
+            <a className="btn btn-primary" href="mailto:support@neudrive.ai?subject=neuDrive%20Team%20or%20Enterprise">{tx('联系团队方案', 'Contact for teams')}</a>
+          </article>
+        </section>
+        <section className="public-band self-host-section">
+          <div className="public-section-head">
+            <div>
+              <p className="public-kicker">{tx('自托管', 'Self-hosting')}</p>
+              <h2>{tx('开源核心可以自托管。', 'The open-source core can be self-hosted.')}</h2>
+              <p>{tx('如果你只需要核心数据层、MCP 接入和本地控制，可以部署 neuDrive Core。Hosted Pro 则适合想减少运维、直接使用托管同步和备份的个人用户。', 'If you only need the core data layer, MCP access, and local control, you can deploy neuDrive Core. Hosted Pro is for individual users who want less operations work and managed sync and backup.')}</p>
+            </div>
+            <Link to="/docs" className="btn btn-outline">{tx('查看部署文档', 'View deployment docs')}</Link>
+          </div>
+        </section>
+        <section className="public-band pricing-faq-section">
+          <div className="public-section-head">
+            <div>
+              <p className="public-kicker">FAQ</p>
+              <h2>{tx('购买前常见问题', 'Questions before you buy')}</h2>
+            </div>
+          </div>
+          <div className="public-faq-grid">
+            {faqItems.map((item) => (
+              <article key={item.question} className="public-faq-item">
+                <h3>{item.question}</h3>
+                <p>{item.answer}</p>
+              </article>
+            ))}
+          </div>
+        </section>
       </main>
     </PublicShell>
   )
 }
 
 export function IntegrationsPage() {
+  const { tx } = useI18n()
+  useDocumentTitle(tx('集成 — neuDrive', 'Integrations — neuDrive'))
   return (
     <PublicShell>
       <main className="public-simple">
-        <IntegrationsSection />
+        <section className="public-band integrations-hero-section">
+          <p className="public-kicker">{tx('集成目录', 'Integration catalog')}</p>
+          <h1>{tx('选择你要把 neuDrive 接到哪里。', 'Choose where neuDrive should connect.')}</h1>
+          <p>{tx('每个平台详情页都会说明适用场景、接入步骤、限制和常见问题。', 'Each platform detail page explains use cases, setup steps, limitations, and common questions.')}</p>
+        </section>
+        <section className="public-band integration-directory-section">
+          <div className="integration-directory-grid">
+            {integrations.map((item) => (
+              <article key={item.key} className="integration-directory-card">
+                <div className="integration-directory-top">
+                  <div className="integration-icon" aria-hidden="true">{item.accent}</div>
+                  <span>{tr(tx, item.method)} · {tr(tx, item.setup)}</span>
+                </div>
+                <h2>{item.name}</h2>
+                <p>{tr(tx, item.detailSummary || item.demo)}</p>
+                <ul>
+                  {(item.detailHighlights || item.afterConnection).slice(0, 3).map((highlight) => (
+                    <li key={tr(tx, highlight)}>{tr(tx, highlight)}</li>
+                  ))}
+                </ul>
+                <div className="integration-directory-actions">
+                  <Link className="btn btn-primary" to={`/integrations/${item.key}`}>{tx('查看详情', 'View details')}</Link>
+                  <Link className="btn btn-outline" to={`/guides/${item.key}`}>{tx('接入指南', 'Setup guide')}</Link>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
+    </PublicShell>
+  )
+}
+
+export function IntegrationDetailPage() {
+  const { platform } = useParams()
+  const { tx } = useI18n()
+  const item = getIntegration(platform)
+  useDocumentTitle(tx(`${item.shortName} 集成 — neuDrive`, `${item.shortName} Integration — neuDrive`))
+  const codeSnippets = item.steps.flatMap((step) => step.codes || [])
+  const previewCode = codeSnippets[0]
+  return (
+    <PublicShell>
+      <main className="public-simple integration-detail-page">
+        <section className="public-band integration-detail-hero">
+          <div>
+            <p className="public-kicker">{tx('集成详情', 'Integration detail')}</p>
+            <h1>{item.name}</h1>
+            <p>{tr(tx, item.detailSummary || item.demo)}</p>
+            <div className="public-hero-actions">
+              <Link to={`/guides/${item.key}`} className="btn btn-primary">{tx('打开接入指南', 'Open setup guide')}</Link>
+              <Link to={`/signup?platform=${item.key}`} className="btn btn-outline">{tx('创建账号并接入', 'Create account to connect')}</Link>
+            </div>
+          </div>
+          <div className="integration-preview-panel">
+            <div className="window-bar"><span /><span /><span /></div>
+            <div className="integration-preview-head">
+              <strong>{tr(tx, item.method)}</strong>
+              <span>{tr(tx, item.setup)}</span>
+            </div>
+            <div className="integration-preview-flow">
+              {item.steps.slice(0, 4).map((step, index) => (
+                <div key={tr(tx, step.title)}>
+                  <span>{index + 1}</span>
+                  <p>{tr(tx, step.title)}</p>
+                </div>
+              ))}
+            </div>
+            {previewCode && (
+              <div className="integration-preview-code">
+                <span>{tr(tx, previewCode.label)}</span>
+                <code>{previewCode.value}</code>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <section className="public-band integration-detail-grid-section">
+          <article className="integration-detail-card">
+            <h2>{tx('适合什么场景', 'Best for')}</h2>
+            <ul>
+              {(item.detailHighlights || item.afterConnection).map((highlight) => (
+                <li key={tr(tx, highlight)}>{tr(tx, highlight)}</li>
+              ))}
+            </ul>
+          </article>
+          <article className="integration-detail-card">
+            <h2>{tx('限制和注意事项', 'Limits and notes')}</h2>
+            <ul>
+              {(item.detailLimits || item.limits || []).map((limit) => (
+                <li key={tr(tx, limit)}>{tr(tx, limit)}</li>
+              ))}
+            </ul>
+          </article>
+        </section>
+
+        <section className="public-band integration-detail-faq-section">
+          <div className="public-section-head">
+            <div>
+              <p className="public-kicker">Q&A</p>
+              <h2>{tx('接入前常见问题', 'Questions before setup')}</h2>
+            </div>
+          </div>
+          <div className="public-faq-grid">
+            {(item.detailFaq || []).map((faq) => (
+              <article key={tr(tx, faq.question)} className="public-faq-item">
+                <h3>{tr(tx, faq.question)}</h3>
+                <p>{tr(tx, faq.answer)}</p>
+              </article>
+            ))}
+          </div>
+        </section>
       </main>
     </PublicShell>
   )
@@ -901,6 +1453,7 @@ export function GuidePage() {
   const { platform } = useParams()
   const { tx } = useI18n()
   const guide = getIntegration(platform)
+  useDocumentTitle(tx(`${guide.shortName} 接入指南 — neuDrive`, `${guide.shortName} Setup Guide — neuDrive`))
   return (
     <PublicShell>
       <main className="public-simple guide-page">
@@ -911,7 +1464,7 @@ export function GuidePage() {
             <p>{tr(tx, guide.audience)}</p>
             <p>{tr(tx, guide.demo)}</p>
             <div className="public-hero-actions">
-              <Link to={`/signup?platform=${guide.key}`} className="btn btn-primary">{tx('开始这个接入', 'Start this setup')}</Link>
+              <Link to={`/signup?platform=${guide.key}`} className="btn btn-primary">{tx('创建账号开始接入', 'Create account for this setup')}</Link>
               <Link to="/integrations" className="btn btn-outline">{tx('查看全部集成', 'View integrations')}</Link>
             </div>
           </div>
@@ -970,6 +1523,7 @@ export function GuidePage() {
 
 export function DocsLandingPage() {
   const { tx } = useI18n()
+  useDocumentTitle(tx('文档 — neuDrive', 'Docs — neuDrive'))
   const docsGroups = [
     {
       title: tx('快速开始', 'Quick start'),
@@ -1024,8 +1578,99 @@ export function DocsLandingPage() {
   )
 }
 
+const legalContent = {
+  privacy: {
+    kicker: { zh: '隐私', en: 'Privacy' },
+    title: { zh: '隐私政策', en: 'Privacy Policy' },
+    intro: {
+      zh: 'neuDrive 用来保存 AI 工具需要读取的记忆、文件、会话、技能和私密资料。我们的产品原则是：你能看到保存了什么，能导出，能撤销访问，也能删除数据。',
+      en: 'neuDrive stores memory, files, conversations, skills, and private material that your AI tools may need to read. Our product principle is simple: you can see what is stored, export it, revoke access, and delete data.',
+    },
+    sections: [
+      {
+        title: { zh: '我们保存什么', en: 'What we store' },
+        body: {
+          zh: '你主动导入或创建的资料，例如 profile memory、项目上下文、conversation、skill、文件、Vault 条目和连接授权记录。',
+          en: 'Material you import or create, such as profile memory, project context, conversations, skills, files, Vault entries, and connection authorization records.',
+        },
+      },
+      {
+        title: { zh: '你如何控制访问', en: 'How you control access' },
+        body: {
+          zh: '每个连接的 AI 工具只应读取被授权的资料。你可以在产品内调整访问范围、撤销连接、删除 token 或导出数据。',
+          en: 'Each connected AI tool should only read material that has been authorized. You can adjust access, revoke connections, delete tokens, or export data from the product.',
+        },
+      },
+      {
+        title: { zh: '联系我们', en: 'Contact us' },
+        body: {
+          zh: '隐私、安全或数据删除请求可以发送到 support@neudrive.ai。',
+          en: 'Privacy, security, or data deletion requests can be sent to support@neudrive.ai.',
+        },
+      },
+    ],
+  },
+  terms: {
+    kicker: { zh: '条款', en: 'Terms' },
+    title: { zh: '服务条款', en: 'Terms of Service' },
+    intro: {
+      zh: '使用 neuDrive 时，你需要确保导入的数据、连接的 AI 工具和创建的 token 符合你的组织规则和适用法律。',
+      en: 'When using neuDrive, you are responsible for ensuring that imported data, connected AI tools, and created tokens comply with your organization’s rules and applicable law.',
+    },
+    sections: [
+      {
+        title: { zh: '账户和访问', en: 'Accounts and access' },
+        body: {
+          zh: '你负责保护账号、token 和连接授权。发现异常访问时，请尽快撤销相关连接并联系我们。',
+          en: 'You are responsible for protecting your account, tokens, and connection authorizations. If you notice unexpected access, revoke the related connection and contact us.',
+        },
+      },
+      {
+        title: { zh: '数据和导出', en: 'Data and export' },
+        body: {
+          zh: 'neuDrive 旨在帮助你集中管理 AI 工作数据。你可以导出数据；删除或撤销操作可能影响已连接 AI 工具的可用上下文。',
+          en: 'neuDrive is designed to help you manage AI working data in one place. You can export data; deletion or revocation may affect context available to connected AI tools.',
+        },
+      },
+      {
+        title: { zh: '付费和支持', en: 'Billing and support' },
+        body: {
+          zh: '托管版的支付、订阅和存储限制由 neuDrive 的支付网关处理。账单或支持问题可以发送到 support@neudrive.ai。',
+          en: 'Hosted billing, subscriptions, and storage limits are handled by the neuDrive payment gateway. Billing or support questions can be sent to support@neudrive.ai.',
+        },
+      },
+    ],
+  },
+}
+
+export function LegalPage({ kind }: { kind: 'privacy' | 'terms' }) {
+  const { tx } = useI18n()
+  const page = legalContent[kind]
+  useDocumentTitle(kind === 'privacy' ? tx('隐私 — neuDrive', 'Privacy — neuDrive') : tx('条款 — neuDrive', 'Terms — neuDrive'))
+  return (
+    <PublicShell>
+      <main className="public-simple legal-page">
+        <section className="public-band legal-hero">
+          <p className="public-kicker">{tr(tx, page.kicker)}</p>
+          <h1>{tr(tx, page.title)}</h1>
+          <p>{tr(tx, page.intro)}</p>
+        </section>
+        <section className="public-band legal-section-list">
+          {page.sections.map((section) => (
+            <article key={tr(tx, section.title)} className="legal-section-card">
+              <h2>{tr(tx, section.title)}</h2>
+              <p>{tr(tx, section.body)}</p>
+            </article>
+          ))}
+        </section>
+      </main>
+    </PublicShell>
+  )
+}
+
 export function SignupPage() {
   const { tx } = useI18n()
+  useDocumentTitle(tx('注册 — neuDrive', 'Sign up — neuDrive'))
   const navigate = useNavigate()
   const [providers, setProviders] = useState<AuthProvider[]>([])
   const [error, setError] = useState('')
@@ -1090,7 +1735,7 @@ export function SignupPage() {
     <PublicShell>
       <main className="auth-split">
         <section className="auth-copy">
-          <p className="public-kicker">Get started</p>
+          <p className="public-kicker">{tx('创建账号', 'Create account')}</p>
           <h1>{tx('3 分钟接入第一个 AI 工具。', 'Connect your first AI tool in 3 minutes.')}</h1>
           <p>{tx('注册后先选择套餐，再进入接入向导。Free 可以继续使用，Pro Yearly 会默认推荐。', 'After signup you will choose a plan, then enter the setup wizard. Free remains available and Pro Yearly is recommended by default.')}</p>
         </section>

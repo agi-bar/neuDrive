@@ -84,7 +84,7 @@ Install the CLI locally:
 
 ```bash
 git clone https://github.com/agi-bar/neuDrive.git
-cd neudrive
+cd neuDrive
 ./tools/install-neudrive.sh
 ```
 

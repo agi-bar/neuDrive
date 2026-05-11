@@ -151,7 +151,7 @@ func (r *AuthRepo) LookupLogin(ctx context.Context, identifier string) (*models.
 		        u.id, u.slug, u.display_name, u.email, u.avatar_url, u.bio, u.timezone, u.language, u.created_at, u.updated_at
 		   FROM credentials c
 		   JOIN users u ON u.id = c.user_id
-		  WHERE c.email = ? OR u.slug = ?
+		  WHERE lower(c.email) = lower(?) OR u.slug = ?
 		  ORDER BY CASE WHEN lower(c.email) = lower(?) THEN 0 ELSE 1 END
 		  LIMIT 1`,
 		identifier, identifier, identifier,

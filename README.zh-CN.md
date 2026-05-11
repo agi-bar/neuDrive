@@ -82,7 +82,7 @@ Cursor、Windsurf 和更完整的接入变体见：[Web / Desktop Apps](docs/set
 
 ```bash
 git clone https://github.com/agi-bar/neuDrive.git
-cd neudrive
+cd neuDrive
 ./tools/install-neudrive.sh
 ```
 

@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/config"
+	"github.com/agi-bar/neuDrive/internal/config"
 )
 
 func TestBaseURLUsesConfiguredPublicBaseURL(t *testing.T) {

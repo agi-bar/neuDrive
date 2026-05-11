@@ -7,21 +7,21 @@ const installCommand = `git clone https://github.com/agi-bar/neuDrive.git
 cd neuDrive
 ./tools/install-neudrive.sh`
 
-const loginCommand = `neu login`
+const loginCommand = `neudrive login`
 
-const dailyCommands = `neu status
-neu platform ls
-neu connect claude
-neu browse`
+const dailyCommands = `neudrive status
+neudrive platform ls
+neudrive connect claude
+neudrive browse`
 
-const importCommands = `neu import claude --dry-run
-neu import codex --dry-run
-neu import skill ./demo-skill
-neu import memory ./notes`
+const importCommands = `neudrive import claude --dry-run
+neudrive import codex --dry-run
+neudrive import skill ./demo-skill
+neudrive import memory ./notes`
 
-const backupCommands = `neu git init --output ./neudrive-export/git-mirror
-neu git pull
-neu sync pull --format archive --output neudrive-backup.ndrvz`
+const backupCommands = `neudrive git init --output ./neudrive-export/git-mirror
+neudrive git pull
+neudrive sync pull --format archive --output neudrive-backup.ndrvz`
 
 function CommandBlock({
   title,
@@ -73,12 +73,12 @@ export default function CommandLineToolsPage() {
     <div className="page materials-page cli-tools-page">
       <section className="materials-hero cli-tools-hero">
         <div className="materials-hero-copy">
-          <div className="materials-kicker">neu CLI</div>
+          <div className="materials-kicker">neuDrive CLI</div>
           <h2 className="materials-title">{tx('命令行工具', 'Command Line Tools')}</h2>
           <p className="materials-subtitle">
             {tx(
-              '使用 neu 在终端里登录官方云服务、检查本地运行状态、连接 AI 工具、导入本地数据，并把 neuDrive 内容备份出来。',
-              'Use neu from your terminal to sign in to the hosted service, check local status, connect AI tools, import local data, and back up neuDrive content.',
+              '使用 neudrive 在终端里登录官方云服务、检查本地运行状态、连接 AI 工具、导入本地数据，并把 neuDrive 内容备份出来。',
+              'Use neudrive from your terminal to sign in to the hosted service, check local status, connect AI tools, import local data, and back up neuDrive content.',
             )}
           </p>
         </div>
@@ -100,8 +100,8 @@ export default function CommandLineToolsPage() {
         </div>
         <div className="cli-command-list">
         <CommandBlock
-          title={tx('安装 neu', 'Install neu')}
-          description={tx('从当前开源仓库安装 CLI。安装后直接使用 neu。', 'Install the CLI from the open-source repository. After install, use neu directly.')}
+          title={tx('安装 neuDrive CLI', 'Install neuDrive CLI')}
+          description={tx('从当前开源仓库安装 CLI。安装后直接使用 neu 命令。', 'Install the CLI from the open-source repository. After install, use the neu command directly.')}
           command={installCommand}
           copyKey="install"
           copied={copied}

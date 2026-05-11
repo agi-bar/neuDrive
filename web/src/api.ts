@@ -36,15 +36,17 @@ function triggerBrowserDownload(blob: Blob, filename: string) {
 // ---------------------------------------------------------------------------
 
 export interface RegisterRequest {
-  email: string;
+  username: string;
+  email?: string;
   password: string;
-  display_name: string;
-  slug: string;
+  display_name?: string;
+  slug?: string;
 }
 
 export interface LoginRequest {
-  email: string;
+  identifier: string;
   password: string;
+  email?: string;
 }
 
 export interface AuthProvider {

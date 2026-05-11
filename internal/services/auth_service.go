@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -67,23 +67,23 @@ func NewAuthServiceWithRepo(repo AuthRepo, tokenGen TokenGeneratorFunc, ghExchan
 	}
 }
 
-// Register creates a new user with email/password credentials.
+// Register creates a new user with username/password credentials.
 func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) (*models.AuthResponse, error) {
-	// Validate email
 	email := strings.TrimSpace(strings.ToLower(req.Email))
-	if !emailRegexp.MatchString(email) {
+	if email != "" && !emailRegexp.MatchString(email) {
 		return nil, fmt.Errorf("invalid email format")
 	}
 
-	// Validate password
 	if len(req.Password) < 8 {
 		return nil, fmt.Errorf("password must be at least 8 characters")
 	}
 
-	// Validate slug
-	slug := strings.TrimSpace(req.Slug)
+	slug := strings.TrimSpace(req.Username)
 	if slug == "" {
-		return nil, fmt.Errorf("slug is required")
+		slug = strings.TrimSpace(req.Slug)
+	}
+	if slug == "" {
+		return nil, fmt.Errorf("username is required")
 	}
 
 	displayName := strings.TrimSpace(req.DisplayName)
@@ -91,15 +91,19 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		displayName = slug
 	}
 
-	// Hash password
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcryptCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
 	now := time.Now().UTC()
+	userEmail := email
+	credentialEmail := email
+	if credentialEmail == "" {
+		credentialEmail = strings.ToLower(slug) + "@local.neu"
+	}
 	if s.repo != nil {
-		user, err := s.repo.RegisterUser(ctx, email, slug, displayName, string(hash), now)
+		user, err := s.repo.RegisterUser(ctx, userEmail, credentialEmail, slug, displayName, string(hash), now)
 		if err != nil {
 			return nil, err
 		}
@@ -114,24 +118,24 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 
 	userID := uuid.New()
 	var existing uuid.UUID
-	err = tx.QueryRow(ctx, `SELECT id FROM credentials WHERE email = $1`, email).Scan(&existing)
-	if err == nil {
-		return nil, fmt.Errorf("email already registered")
+	if email != "" {
+		err = tx.QueryRow(ctx, `SELECT id FROM credentials WHERE email = $1`, email).Scan(&existing)
+		if err == nil {
+			return nil, fmt.Errorf("email already registered")
+		}
+		if err != pgx.ErrNoRows {
+			return nil, fmt.Errorf("register: check email: %w", err)
+		}
 	}
-	if err != pgx.ErrNoRows {
-		return nil, fmt.Errorf("register: check email: %w", err)
-	}
-	err = tx.QueryRow(ctx, `SELECT id FROM users WHERE slug = $1`, slug).Scan(&existing)
-	if err == nil {
-		return nil, fmt.Errorf("slug already taken")
-	}
-	if err != pgx.ErrNoRows {
-		return nil, fmt.Errorf("register: check slug: %w", err)
+	if err := tx.QueryRow(ctx, `SELECT id FROM users WHERE slug = $1`, slug).Scan(&existing); err == nil {
+		return nil, fmt.Errorf("username already taken")
+	} else if err != pgx.ErrNoRows {
+		return nil, fmt.Errorf("register: check username: %w", err)
 	}
 	_, err = tx.Exec(ctx,
 		`INSERT INTO users (id, slug, display_name, email, timezone, language, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, 'UTC', 'en', $5, $5)`,
-		userID, slug, displayName, email, now)
+		userID, slug, displayName, userEmail, now)
 	if err != nil {
 		return nil, fmt.Errorf("register: insert user: %w", err)
 	}
@@ -139,7 +143,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	_, err = tx.Exec(ctx,
 		`INSERT INTO credentials (id, user_id, email, password_hash, email_verified, login_count, created_at, updated_at)
 		 VALUES ($1, $2, $3, $4, false, 0, $5, $5)`,
-		credID, userID, email, string(hash), now)
+		credID, userID, credentialEmail, string(hash), now)
 	if err != nil {
 		return nil, fmt.Errorf("register: insert credentials: %w", err)
 	}
@@ -158,7 +162,7 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 		ID:          userID,
 		Slug:        slug,
 		DisplayName: displayName,
-		Email:       email,
+		Email:       userEmail,
 		Timezone:    "UTC",
 		Language:    "en",
 		CreatedAt:   now,
@@ -167,26 +171,28 @@ func (s *AuthService) Register(ctx context.Context, req models.RegisterRequest) 
 	return s.generateAuthResponse(ctx, &user, "", "")
 }
 
-// Login authenticates a user with email/password.
+// Login authenticates a user with username/email and password.
 func (s *AuthService) Login(ctx context.Context, req models.LoginRequest, userAgent, ipAddress string) (*models.AuthResponse, error) {
-	email := strings.TrimSpace(strings.ToLower(req.Email))
-	if email == "" {
-		return nil, fmt.Errorf("email is required")
+	identifier := strings.TrimSpace(req.Identifier)
+	if identifier == "" {
+		identifier = strings.TrimSpace(strings.ToLower(req.Email))
+	}
+	if identifier == "" {
+		return nil, fmt.Errorf("username or email is required")
 	}
 	if req.Password == "" {
 		return nil, fmt.Errorf("password is required")
 	}
 
-	// Look up credentials
 	var (
 		cred *models.Credentials
 		user *models.User
 		err  error
 	)
 	if s.repo != nil {
-		cred, user, err = s.repo.LookupLogin(ctx, email)
+		cred, user, err = s.repo.LookupLogin(ctx, identifier)
 		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("invalid email or password")
+			return nil, fmt.Errorf("invalid username/email or password")
 		}
 		if err != nil {
 			return nil, fmt.Errorf("login: query credentials: %w", err)
@@ -194,11 +200,15 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest, userAg
 	} else {
 		var currentCred models.Credentials
 		err = s.db.QueryRow(ctx,
-			`SELECT id, user_id, email, password_hash, email_verified, login_count
-			 FROM credentials WHERE email = $1`, email).
+			`SELECT c.id, c.user_id, c.email, c.password_hash, c.email_verified, c.login_count
+			   FROM credentials c
+			   JOIN users u ON u.id = c.user_id
+			  WHERE lower(c.email) = lower($1) OR u.slug = $1
+			  ORDER BY CASE WHEN lower(c.email) = lower($1) THEN 0 ELSE 1 END
+			  LIMIT 1`, identifier).
 			Scan(&currentCred.ID, &currentCred.UserID, &currentCred.Email, &currentCred.PasswordHash, &currentCred.EmailVerified, &currentCred.LoginCount)
 		if err == pgx.ErrNoRows {
-			return nil, fmt.Errorf("invalid email or password")
+			return nil, fmt.Errorf("invalid username/email or password")
 		}
 		if err != nil {
 			return nil, fmt.Errorf("login: query credentials: %w", err)
@@ -206,9 +216,8 @@ func (s *AuthService) Login(ctx context.Context, req models.LoginRequest, userAg
 		cred = &currentCred
 	}
 
-	// Verify password
 	if err := bcrypt.CompareHashAndPassword([]byte(cred.PasswordHash), []byte(req.Password)); err != nil {
-		return nil, fmt.Errorf("invalid email or password")
+		return nil, fmt.Errorf("invalid username/email or password")
 	}
 
 	// Update last_login_at and login_count

@@ -10,8 +10,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/hubpath"
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/hubpath"
+	"github.com/agi-bar/neuDrive/internal/models"
 )
 
 func (c *Client) importClaudeInventory(ctx context.Context, platform string, inventory ClaudeInventory, result *AgentImportResult) error {

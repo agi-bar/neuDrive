@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/localgitsync"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/services"
 )
 
 // JobConfig controls whether a job is enabled and how often it runs.

@@ -228,24 +228,53 @@ a:hover {
   gap: 16px;
 }
 
-.login-note {
-  margin-top: 20px;
-  font-size: 12px;
-  color: var(--color-text-muted);
-  text-align: center;
+.login-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field span {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.form-field input {
+  width: 100%;
+  min-height: 44px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--color-text);
+  font: inherit;
+}
+
+.form-field input:focus {
+  outline: 2px solid rgba(39, 51, 95, 0.16);
+  border-color: rgba(39, 51, 95, 0.32);
+}
+
 
 .login-actions {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  margin-top: 16px;
 }
 
-.login-provider-status {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin-top: 18px;
+.login-note {
+  margin-top: 20px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  text-align: center;
 }
 
 .login-provider-note {

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/hubpath"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/platforms"
-	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/hubpath"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/platforms"
+	sqlitestorage "github.com/agi-bar/neuDrive/internal/storage/sqlite"
 )
 
 func TestSQLiteSharedServerLocalPlatformPreviewCodex(t *testing.T) {

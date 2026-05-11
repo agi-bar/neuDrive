@@ -19,9 +19,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/services"
 )
 
 var (

@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/models"
 )
 
 func TestEnrichBundleDirectoryEntryDetectsConversationBundle(t *testing.T) {

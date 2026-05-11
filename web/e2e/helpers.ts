@@ -35,7 +35,7 @@ export async function registerUser(request: any) {
   const password = 'playwright1234'
 
   const res = await request.post('/api/auth/register', {
-    data: { slug, email, password },
+    data: { username: slug, slug, email, password },
   })
   const body = await res.json()
   if (res.status() === 404) {
@@ -82,25 +82,25 @@ async function installBrowserSession(page: Page, accessToken: string, refreshTok
 }
 
 // Establish a browser session without depending on the login page form fields.
-export async function loginViaUI(page: Page, email: string, password: string) {
+export async function loginViaUI(page: Page, identifier: string, password: string) {
   if (page.url() === 'about:blank' || !page.url().includes('/login')) {
     await page.goto('/login')
     await page.waitForLoadState('networkidle')
   }
 
   const redirect = new URL(page.url()).searchParams.get('redirect') || '/'
-  const auth = await page.evaluate(async ({ email, password }) => {
+  const auth = await page.evaluate(async ({ identifier, password }) => {
     const res = await fetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ identifier, email: identifier, password }),
     })
     const body = await res.json().catch(() => null)
     if (!res.ok) {
       throw new Error(body?.message || body?.error || res.statusText || 'login failed')
     }
     return body && body.ok === true && body.data !== undefined ? body.data : body
-  }, { email, password })
+  }, { identifier, password })
 
   await installBrowserSession(page, auth.access_token, auth.refresh_token)
   await page.goto(redirect)

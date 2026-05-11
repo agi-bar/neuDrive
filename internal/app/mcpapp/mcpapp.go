@@ -7,9 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/agi-bar/neudrive/internal/app/appcore"
-	"github.com/agi-bar/neudrive/internal/mcp"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/app/appcore"
+	"github.com/agi-bar/neuDrive/internal/mcp"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
 )
 
 const DefaultTokenEnvVar = "NEUDRIVE_TOKEN"

@@ -83,7 +83,7 @@ For Cursor, Windsurf, and the full setup variants, see [Web / Desktop Apps](docs
 Install the CLI locally:
 
 ```bash
-git clone https://github.com/agi-bar/neudrive.git
+git clone https://github.com/agi-bar/neuDrive.git
 cd neudrive
 ./tools/install-neudrive.sh
 ```

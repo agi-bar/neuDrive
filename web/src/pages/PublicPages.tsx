@@ -1711,6 +1711,11 @@ export function SignupPage() {
   const [providers, setProviders] = useState<AuthProvider[]>([])
   const [error, setError] = useState('')
   const [loadingAction, setLoadingAction] = useState('')
+  const [username, setUsername] = useState('')
+  const [displayName, setDisplayName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     api.getAuthProviders().then(setProviders).catch(() => setProviders([]))
@@ -1721,6 +1726,12 @@ export function SignupPage() {
   const githubEnabled = !!githubProvider?.enabled
   const pocketEnabled = !!pocketProvider?.enabled
   const busy = loadingAction !== ''
+
+  const persistAuth = (accessToken: string, refreshToken?: string) => {
+    localStorage.setItem('token', accessToken)
+    if (refreshToken) localStorage.setItem('refresh_token', refreshToken)
+    else localStorage.removeItem('refresh_token')
+  }
 
   const beginProviderSignup = async (provider: AuthProvider | undefined, action: 'login' | 'signup', key: string) => {
     if (!provider?.enabled) return
@@ -1736,21 +1747,78 @@ export function SignupPage() {
     }
   }
 
+  const handleSignup = async () => {
+    if (!username.trim() || !password) {
+      setError(tx('请填写用户名和密码。', 'Enter a username and password.'))
+      return
+    }
+    setSubmitting(true)
+    setError('')
+    localStorage.setItem('neudrive.postSignupIntent', '1')
+    try {
+      const auth = await api.register({
+        username: username.trim(),
+        slug: username.trim(),
+        display_name: displayName.trim() || username.trim(),
+        email: email.trim() || undefined,
+        password,
+      })
+      persistAuth(auth.access_token, auth.refresh_token)
+      window.location.assign('/plan')
+    } catch (err: any) {
+      setError(err?.message || tx('注册失败', 'Sign-up failed'))
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
   return (
     <PublicShell>
       <main className="auth-split">
         <section className="auth-copy">
           <p className="public-kicker">{tx('创建账号', 'Create account')}</p>
-          <h1>{tx('3 分钟连接第一个 AI 工具。', 'Connect your first AI tool in 3 minutes.')}</h1>
+          <h1>{tx('3 分钟开始你的 neuDrive 工作台。', 'Start your neuDrive workspace in 3 minutes.')}</h1>
         </section>
         <section className="auth-card">
           {error && <div className="alert alert-warn">{error}</div>}
-          <button className="btn btn-primary btn-block" disabled={busy || !githubEnabled} onClick={() => { void beginProviderSignup(githubProvider, 'login', 'github') }}>
-            {loadingAction === 'github' ? tx('跳转中...', 'Redirecting...') : tx('使用 GitHub 继续', 'Continue with GitHub')}
-          </button>
-          <button className="btn btn-outline btn-block" disabled={busy || !pocketEnabled} onClick={() => { void beginProviderSignup(pocketProvider, 'signup', 'pocket') }}>
-            {loadingAction === 'pocket' ? tx('跳转中...', 'Redirecting...') : tx('邮箱登录 / 注册', 'Continue with email')}
-          </button>
+
+          <div className="login-form-fields">
+            <label className="form-field">
+              <span>{tx('用户名', 'Username')}</span>
+              <input type="text" value={username} onChange={(event) => setUsername(event.target.value)} placeholder={tx('例如：alice', 'For example: alice')} autoComplete="username" />
+            </label>
+            <label className="form-field">
+              <span>{tx('显示名称（可选）', 'Display name (optional)')}</span>
+              <input type="text" value={displayName} onChange={(event) => setDisplayName(event.target.value)} placeholder={tx('例如：Alice Chen', 'For example: Alice Chen')} autoComplete="nickname" />
+            </label>
+            <label className="form-field">
+              <span>{tx('邮箱（可选）', 'Email (optional)')}</span>
+              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder={tx('例如：alice@example.com', 'For example: alice@example.com')} autoComplete="email" />
+            </label>
+            <label className="form-field">
+              <span>{tx('密码', 'Password')}</span>
+              <input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder={tx('至少 8 位', 'At least 8 characters')} autoComplete="new-password" />
+            </label>
+            <button className="btn btn-primary btn-block" disabled={submitting} onClick={() => { void handleSignup() }}>
+              {submitting ? tx('注册中...', 'Creating account...') : tx('创建账号', 'Create account')}
+            </button>
+          </div>
+
+          {(githubEnabled || pocketEnabled) && (
+            <div className="login-actions">
+              {githubEnabled && (
+                <button className="btn btn-outline btn-block" disabled={busy} onClick={() => { void beginProviderSignup(githubProvider, 'login', 'github') }}>
+                  {loadingAction === 'github' ? tx('跳转中...', 'Redirecting...') : tx('使用 GitHub 继续', 'Continue with GitHub')}
+                </button>
+              )}
+              {pocketEnabled && (
+                <button className="btn btn-outline btn-block" disabled={busy} onClick={() => { void beginProviderSignup(pocketProvider, 'signup', 'pocket') }}>
+                  {loadingAction === 'pocket' ? tx('跳转中...', 'Redirecting...') : tx('使用 Pocket ID 继续', 'Continue with Pocket ID')}
+                </button>
+              )}
+            </div>
+          )}
+
           <p className="login-note">
             {tx('已有账户？', 'Already have an account?')} <Link to="/login">{tx('登录', 'Log in')}</Link>
           </p>

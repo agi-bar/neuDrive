@@ -50,28 +50,47 @@ async function mockProviderRoutes(page: any, options?: { pocketEnabled?: boolean
 }
 
 test.describe('Auth — Login Page', () => {
-  test('renders split layout with fixed button order', async ({ page }) => {
+  test('renders username login form and optional provider actions', async ({ page }) => {
     await mockProviderRoutes(page)
     await page.goto('/login')
 
-    await expect(page.locator('.login-shell')).toBeVisible()
-    await expect(page.locator('.login-hero')).toBeVisible()
-    await expect(page.locator('.login-panel-card')).toBeVisible()
-    await expect(page.locator('.login-hero-title')).toHaveText('neuDrive')
-    await expect(page.locator('.login-hero-slogan')).toHaveText('One hub for all your AI agents')
-    await expect(page.locator('.login-hero-subtitle')).toHaveText('Identity, memory, skills, and connections in one place.')
-
-    const buttons = page.locator('.login-actions button')
-    await expect(buttons).toHaveCount(3)
-    await expect(buttons.nth(0)).toHaveText('Login')
-    await expect(buttons.nth(1)).toHaveText('Sign up')
-    await expect(buttons.nth(2)).toHaveText('Login with GitHub')
+    await expect(page.getByText('Log in to neuDrive')).toBeVisible()
+    await expect(page.getByText('Use your username or email to access the product.')).toBeVisible()
+    await expect(page.getByLabel('Username or email')).toBeVisible()
+    await expect(page.getByLabel('Password')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Log in', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Continue with Pocket ID' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Continue with GitHub' })).toBeVisible()
   })
 
-  test('clicking Login starts Pocket login action', async ({ page }) => {
+  test('submits local password login and redirects to requested route', async ({ page }) => {
+    await mockProviderRoutes(page)
+    await page.goto('/login?redirect=%2Fprojects')
+    await page.route('**/api/auth/login', async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          access_token: 'access-1',
+          refresh_token: 'refresh-1',
+          expires_in: 86400,
+          user: { id: 'u1', slug: 'alice', display_name: 'Alice' },
+        }),
+      })
+    })
+    await page.getByLabel('Username or email').fill('alice')
+    await page.getByLabel('Password').fill('playwright1234')
+    await page.getByRole('button', { name: 'Log in', exact: true }).click()
+
+    await page.waitForURL(/\/projects$/)
+    await expect(page.evaluate(() => localStorage.getItem('token'))).resolves.toBe('access-1')
+    await expect(page.evaluate(() => localStorage.getItem('refresh_token'))).resolves.toBe('refresh-1')
+  })
+
+  test('clicking Continue with Pocket ID starts Pocket login action', async ({ page }) => {
     const { startCalls } = await mockProviderRoutes(page)
     await page.goto('/login?redirect=%2Foauth%2Fauthorize%3Fclient_id%3Ddemo')
-    await page.getByRole('button', { name: 'Login', exact: true }).click()
+    await page.getByRole('button', { name: 'Continue with Pocket ID' }).click()
 
     await page.waitForURL('about:blank#pocket-login')
     expect(startCalls).toHaveLength(1)
@@ -81,23 +100,10 @@ test.describe('Auth — Login Page', () => {
     })
   })
 
-  test('clicking Sign up starts Pocket signup action', async ({ page }) => {
-    const { startCalls } = await mockProviderRoutes(page)
-    await page.goto('/login?redirect=%2Foauth%2Fauthorize%3Fclient_id%3Ddemo')
-    await page.getByRole('button', { name: 'Sign up' }).click()
-
-    await page.waitForURL('about:blank#pocket-signup')
-    expect(startCalls).toHaveLength(1)
-    expect(startCalls[0]).toEqual({
-      provider: 'pocket',
-      body: { redirect_url: '/oauth/authorize?client_id=demo', action: 'signup' },
-    })
-  })
-
-  test('clicking Login with GitHub starts GitHub login action', async ({ page }) => {
+  test('clicking Continue with GitHub starts GitHub login action', async ({ page }) => {
     const { startCalls } = await mockProviderRoutes(page)
     await page.goto('/login')
-    await page.getByRole('button', { name: 'Login with GitHub' }).click()
+    await page.getByRole('button', { name: 'Continue with GitHub' }).click()
 
     await page.waitForURL('about:blank#github-login')
     expect(startCalls).toHaveLength(1)
@@ -107,17 +113,13 @@ test.describe('Auth — Login Page', () => {
     })
   })
 
-  test('disables buttons and shows provider hints when providers are unavailable', async ({ page }) => {
+  test('shows provider hints when external providers are unavailable', async ({ page }) => {
     await mockProviderRoutes(page, { pocketEnabled: false, githubEnabled: false })
     await page.goto('/login')
 
-    await expect(page.getByRole('button', { name: 'Login', exact: true })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Sign up' })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Login with GitHub' })).toBeDisabled()
-    await expect(page.locator('.login-provider-note')).toContainText([
-      'Pocket ID login and signup are unavailable right now.',
-      'GitHub login is unavailable right now.',
-    ])
+    await expect(page.getByRole('button', { name: 'Log in', exact: true })).toBeEnabled()
+    await expect(page.getByText('Pocket ID login is unavailable right now.')).toBeVisible()
+    await expect(page.getByText('GitHub login is unavailable right now.')).toBeVisible()
   })
 })
 

@@ -272,8 +272,8 @@ const consentHTML = `<!DOCTYPE html>
             {{if .ShowLogin}}
             <div id="login-section">
             <div style="margin-bottom:16px;">
-                <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Email</label>
-                <input type="email" name="email" placeholder="your@email.com" required
+                <label style="display:block;margin-bottom:4px;font-size:14px;color:#555;">Username or email</label>
+                <input type="text" name="email" placeholder="username or email" required
                     style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:8px;font-size:14px;box-sizing:border-box;">
             </div>
             <div style="margin-bottom:16px;">

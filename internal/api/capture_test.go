@@ -10,8 +10,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/config"
-	"github.com/agi-bar/neudrive/internal/logger"
+	"github.com/agi-bar/neuDrive/internal/config"
+	"github.com/agi-bar/neuDrive/internal/logger"
 )
 
 func TestInferCaptureSourceFromCapturedFixtures(t *testing.T) {

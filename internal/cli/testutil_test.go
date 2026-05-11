@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
 )
 
 const heavyCLIIntegrationEnv = "NEUDRIVE_RUN_CLI_INTEGRATION"

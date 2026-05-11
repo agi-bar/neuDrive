@@ -8,9 +8,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/agi-bar/neudrive/internal/hubpath"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/hubpath"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/services"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )

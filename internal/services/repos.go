@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/models"
 	"github.com/google/uuid"
 )
 
@@ -79,8 +79,8 @@ type UserRepo interface {
 }
 
 type AuthRepo interface {
-	RegisterUser(ctx context.Context, email, slug, displayName, passwordHash string, now time.Time) (*models.User, error)
-	LookupLogin(ctx context.Context, email string) (*models.Credentials, *models.User, error)
+	RegisterUser(ctx context.Context, userEmail, credentialEmail, slug, displayName, passwordHash string, now time.Time) (*models.User, error)
+	LookupLogin(ctx context.Context, identifier string) (*models.Credentials, *models.User, error)
 	UpdateLoginStats(ctx context.Context, credentialID uuid.UUID, now time.Time) error
 	CreateSession(ctx context.Context, userID uuid.UUID, refreshTokenHash, userAgent, ipAddress string, expiresAt, createdAt time.Time) error
 	GetSession(ctx context.Context, refreshTokenHash string) (*models.Session, error)

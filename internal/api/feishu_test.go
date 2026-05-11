@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/config"
+	"github.com/agi-bar/neuDrive/internal/config"
 	"github.com/go-chi/chi/v5"
 )
 

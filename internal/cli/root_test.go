@@ -3,7 +3,7 @@ package cli
 import (
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/app/appcore"
+	"github.com/agi-bar/neuDrive/internal/app/appcore"
 )
 
 func TestShouldUseLocalSyncDefaults(t *testing.T) {

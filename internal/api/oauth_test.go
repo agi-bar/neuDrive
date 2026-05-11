@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/models"
 )
 
 func TestEffectiveOAuthScopes_UsesRequestedScopesWhenPresent(t *testing.T) {

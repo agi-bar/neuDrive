@@ -3,8 +3,8 @@ package mcp
 import (
 	"context"
 
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/systemskills"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/systemskills"
 )
 
 func (s *MCPServer) systemSkillSnapshotDeps() systemskills.SnapshotDeps {

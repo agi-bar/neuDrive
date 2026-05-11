@@ -125,7 +125,7 @@ export default function ConnectionsPage() {
           </table>
         ) : (
           <div className="empty-action-state">
-            <p>{tx('连接第一个 AI 应用后，neuDrive 就可以开始同步记忆。', 'Connect your first AI app to start syncing memory.')}</p>
+            <p>{tx('连接第一个 AI 应用后，neuDrive 就可以开始同步记忆。', 'Connect your first AI app to start syncing memory with neuDrive.')}</p>
             <Link className="btn btn-primary" to="/onboarding">{tx('立即连接', 'Connect now')}</Link>
           </div>
         )}

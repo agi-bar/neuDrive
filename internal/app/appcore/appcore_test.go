@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/mcp"
-	"github.com/agi-bar/neudrive/internal/models"
-	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/mcp"
+	"github.com/agi-bar/neuDrive/internal/models"
+	sqlitestorage "github.com/agi-bar/neuDrive/internal/storage/sqlite"
 )
 
 func TestBuildSQLiteAppProvidesHTTPAndMCP(t *testing.T) {

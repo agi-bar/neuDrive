@@ -18,16 +18,16 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/api"
-	"github.com/agi-bar/neudrive/internal/app/appcore"
-	"github.com/agi-bar/neudrive/internal/app/mcpapp"
-	"github.com/agi-bar/neudrive/internal/app/serverapp"
-	"github.com/agi-bar/neudrive/internal/localgitsync"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/platforms"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
-	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
-	"github.com/agi-bar/neudrive/internal/synccli"
+	"github.com/agi-bar/neuDrive/internal/api"
+	"github.com/agi-bar/neuDrive/internal/app/appcore"
+	"github.com/agi-bar/neuDrive/internal/app/mcpapp"
+	"github.com/agi-bar/neuDrive/internal/app/serverapp"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/platforms"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
+	sqlitestorage "github.com/agi-bar/neuDrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/synccli"
 )
 
 func Run(args []string) int {

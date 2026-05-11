@@ -15,10 +15,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/hubpath"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/skillsarchive"
-	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/hubpath"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/skillsarchive"
+	sqlitestorage "github.com/agi-bar/neuDrive/internal/storage/sqlite"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )

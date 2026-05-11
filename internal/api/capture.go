@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/config"
-	"github.com/agi-bar/neudrive/internal/logger"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/config"
+	"github.com/agi-bar/neuDrive/internal/logger"
+	"github.com/agi-bar/neuDrive/internal/services"
 )
 
 const captureBodyLimit = 128 * 1024

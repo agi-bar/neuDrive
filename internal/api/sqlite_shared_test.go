@@ -17,14 +17,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/auth"
-	"github.com/agi-bar/neudrive/internal/config"
-	"github.com/agi-bar/neudrive/internal/localgitsync"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
-	"github.com/agi-bar/neudrive/internal/services"
-	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
-	"github.com/agi-bar/neudrive/internal/vault"
+	"github.com/agi-bar/neuDrive/internal/auth"
+	"github.com/agi-bar/neuDrive/internal/config"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/services"
+	sqlitestorage "github.com/agi-bar/neuDrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/vault"
 	"github.com/google/uuid"
 )
 

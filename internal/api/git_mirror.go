@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/localgitsync"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
 	"github.com/google/uuid"
 )
 

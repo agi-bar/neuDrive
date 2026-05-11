@@ -15,9 +15,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
-	"github.com/agi-bar/neudrive/internal/skillsarchive"
-	"github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/skillsarchive"
+	"github.com/agi-bar/neuDrive/internal/storage/sqlite"
 )
 
 const claudeBinaryInlineMaxBytes = 64 << 10

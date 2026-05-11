@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/hubpath"
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/hubpath"
+	"github.com/agi-bar/neuDrive/internal/models"
 )
 
 type AgentExportPayload struct {

@@ -11,7 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/agi-bar/neudrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
 )
 
 type localAPIEnvelope struct {

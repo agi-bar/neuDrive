@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/config"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/config"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/services"
 )
 
 type stubExternalAuthRepo struct {

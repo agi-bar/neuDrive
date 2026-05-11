@@ -7,8 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/services"
 	"github.com/google/uuid"
 )
 
@@ -76,7 +76,7 @@ func NewAuthRepo(store *Store) services.AuthRepo {
 	return &AuthRepo{Store: store}
 }
 
-func (r *AuthRepo) RegisterUser(ctx context.Context, email, slug, displayName, passwordHash string, now time.Time) (*models.User, error) {
+func (r *AuthRepo) RegisterUser(ctx context.Context, userEmail, credentialEmail, slug, displayName, passwordHash string, now time.Time) (*models.User, error) {
 	tx, err := r.Store.DB().BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite.AuthRepo.RegisterUser: begin tx: %w", err)
@@ -84,17 +84,19 @@ func (r *AuthRepo) RegisterUser(ctx context.Context, email, slug, displayName, p
 	defer tx.Rollback()
 
 	var existing string
-	err = tx.QueryRowContext(ctx, `SELECT id FROM credentials WHERE email = ?`, email).Scan(&existing)
-	if err == nil {
-		return nil, fmt.Errorf("email already registered")
-	}
-	if err != nil && err != sql.ErrNoRows {
-		return nil, fmt.Errorf("sqlite.AuthRepo.RegisterUser: check email: %w", err)
+	if strings.TrimSpace(credentialEmail) != "" {
+		err = tx.QueryRowContext(ctx, `SELECT id FROM credentials WHERE email = ?`, credentialEmail).Scan(&existing)
+		if err == nil {
+			return nil, fmt.Errorf("email already registered")
+		}
+		if err != nil && err != sql.ErrNoRows {
+			return nil, fmt.Errorf("sqlite.AuthRepo.RegisterUser: check email: %w", err)
+		}
 	}
 
 	err = tx.QueryRowContext(ctx, `SELECT id FROM users WHERE slug = ?`, slug).Scan(&existing)
 	if err == nil {
-		return nil, fmt.Errorf("slug already taken")
+		return nil, fmt.Errorf("username already taken")
 	}
 	if err != nil && err != sql.ErrNoRows {
 		return nil, fmt.Errorf("sqlite.AuthRepo.RegisterUser: check slug: %w", err)
@@ -104,7 +106,7 @@ func (r *AuthRepo) RegisterUser(ctx context.Context, email, slug, displayName, p
 		ID:          uuid.New(),
 		Slug:        slug,
 		DisplayName: displayName,
-		Email:       email,
+		Email:       userEmail,
 		Timezone:    "UTC",
 		Language:    "en",
 		CreatedAt:   now,
@@ -122,7 +124,7 @@ func (r *AuthRepo) RegisterUser(ctx context.Context, email, slug, displayName, p
 	_, err = tx.ExecContext(ctx,
 		`INSERT INTO credentials (id, user_id, email, password_hash, email_verified, login_count, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, 0, 0, ?, ?)`,
-		credID.String(), user.ID.String(), email, passwordHash, timeText(now), timeText(now),
+		credID.String(), user.ID.String(), credentialEmail, passwordHash, timeText(now), timeText(now),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite.AuthRepo.RegisterUser: insert credentials: %w", err)
@@ -142,14 +144,17 @@ func (r *AuthRepo) RegisterUser(ctx context.Context, email, slug, displayName, p
 	return user, nil
 }
 
-func (r *AuthRepo) LookupLogin(ctx context.Context, email string) (*models.Credentials, *models.User, error) {
+func (r *AuthRepo) LookupLogin(ctx context.Context, identifier string) (*models.Credentials, *models.User, error) {
+	identifier = strings.TrimSpace(identifier)
 	row := r.Store.DB().QueryRowContext(ctx,
 		`SELECT c.id, c.user_id, c.email, c.password_hash, c.email_verified, c.login_count,
 		        u.id, u.slug, u.display_name, u.email, u.avatar_url, u.bio, u.timezone, u.language, u.created_at, u.updated_at
 		   FROM credentials c
 		   JOIN users u ON u.id = c.user_id
-		  WHERE c.email = ?`,
-		email,
+		  WHERE lower(c.email) = lower(?) OR u.slug = ?
+		  ORDER BY CASE WHEN lower(c.email) = lower(?) THEN 0 ELSE 1 END
+		  LIMIT 1`,
+		identifier, identifier, identifier,
 	)
 	var (
 		credID, credUserID                                   string

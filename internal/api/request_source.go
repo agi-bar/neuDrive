@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/services"
 )
 
 func explicitRequestSource(r *http.Request) string {

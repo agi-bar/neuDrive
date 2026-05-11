@@ -62,15 +62,17 @@ type Session struct {
 // Auth API request/response types
 
 type RegisterRequest struct {
+	Username    string `json:"username"`
 	Email       string `json:"email"`
 	Password    string `json:"password"`
 	DisplayName string `json:"display_name"`
-	Slug        string `json:"slug"`
+	Slug        string `json:"slug,omitempty"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Identifier string `json:"identifier"`
+	Password   string `json:"password"`
+	Email      string `json:"email,omitempty"`
 }
 
 type AuthResponse struct {

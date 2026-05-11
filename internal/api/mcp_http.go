@@ -9,9 +9,9 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/agi-bar/neudrive/internal/auth"
-	"github.com/agi-bar/neudrive/internal/mcp"
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/auth"
+	"github.com/agi-bar/neuDrive/internal/mcp"
+	"github.com/agi-bar/neuDrive/internal/models"
 	"github.com/google/uuid"
 )
 

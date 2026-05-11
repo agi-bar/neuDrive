@@ -78,8 +78,8 @@ Cursor、Windsurf 和更完整的接入变体见：[Web / Desktop Apps](docs/set
 先在本地安装 CLI：
 
 ```bash
-git clone https://github.com/agi-bar/neudrive.git
-cd neudrive
+git clone https://github.com/agi-bar/neuDrive.git
+cd neuDrive
 ./tools/install-neudrive.sh
 ```
 

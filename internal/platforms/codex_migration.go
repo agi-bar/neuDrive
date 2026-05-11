@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/storage/sqlite"
 )
 
 type codexLocalScanResult struct {

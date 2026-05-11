@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/models"
 )
 
 func TestDeletableEntriesForDeletionSkipsProtectedDescendants(t *testing.T) {

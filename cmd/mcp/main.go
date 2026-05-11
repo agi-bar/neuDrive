@@ -7,7 +7,7 @@ import (
 	"log/slog"
 	"os"
 
-	"github.com/agi-bar/neudrive/internal/app/mcpapp"
+	"github.com/agi-bar/neuDrive/internal/app/mcpapp"
 )
 
 func main() {

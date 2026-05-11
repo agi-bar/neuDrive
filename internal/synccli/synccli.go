@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/profileauth"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/profileauth"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
 )
 
 const (

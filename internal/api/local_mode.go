@@ -6,8 +6,8 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/agi-bar/neudrive/internal/localgitsync"
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/models"
 	"github.com/google/uuid"
 )
 

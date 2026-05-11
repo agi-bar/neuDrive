@@ -11,10 +11,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/database"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/services"
-	"github.com/agi-bar/neudrive/internal/vault"
+	"github.com/agi-bar/neuDrive/internal/database"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/vault"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )

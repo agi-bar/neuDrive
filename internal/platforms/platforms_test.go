@@ -3,7 +3,7 @@ package platforms_test
 import (
 	"testing"
 
-	platformspkg "github.com/agi-bar/neudrive/internal/platforms"
+	platformspkg "github.com/agi-bar/neuDrive/internal/platforms"
 )
 
 func TestResolveSupportsAliases(t *testing.T) {

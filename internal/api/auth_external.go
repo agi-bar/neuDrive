@@ -9,7 +9,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/models"
 	"github.com/go-chi/chi/v5"
 )
 

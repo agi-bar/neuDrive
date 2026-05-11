@@ -1,4 +1,4 @@
-module github.com/agi-bar/neudrive
+module github.com/agi-bar/neuDrive
 
 go 1.25.0
 

@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/logger"
+	"github.com/agi-bar/neuDrive/internal/logger"
 	"github.com/go-chi/cors"
 	"github.com/google/uuid"
 )

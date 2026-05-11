@@ -9,11 +9,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/app/appcore"
-	"github.com/agi-bar/neudrive/internal/jobs"
-	"github.com/agi-bar/neudrive/internal/logger"
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
-	"github.com/agi-bar/neudrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/app/appcore"
+	"github.com/agi-bar/neuDrive/internal/jobs"
+	"github.com/agi-bar/neuDrive/internal/logger"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/services"
 )
 
 type Options struct {

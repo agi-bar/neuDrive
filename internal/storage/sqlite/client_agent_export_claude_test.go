@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/models"
 )
 
 func TestImportAgentExportClaudeConversationWritesCanonicalArchive(t *testing.T) {

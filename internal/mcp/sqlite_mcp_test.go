@@ -11,10 +11,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/localgitsync"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/services"
-	sqlitestorage "github.com/agi-bar/neudrive/internal/storage/sqlite"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/services"
+	sqlitestorage "github.com/agi-bar/neuDrive/internal/storage/sqlite"
 )
 
 func setupSQLiteMCPServer(t *testing.T) (context.Context, *sqlitestorage.Store, *models.User, *MCPServer) {

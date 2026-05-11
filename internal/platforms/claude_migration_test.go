@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/agi-bar/neudrive/internal/runtimecfg"
+	"github.com/agi-bar/neuDrive/internal/runtimecfg"
 )
 
 func TestScanLocalClaudeMigrationBuildsTypedInventory(t *testing.T) {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	platformspkg "github.com/agi-bar/neudrive/internal/platforms"
+	platformspkg "github.com/agi-bar/neuDrive/internal/platforms"
 )
 
 type adapterContractCase struct {

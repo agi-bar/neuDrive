@@ -11,11 +11,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/agi-bar/neudrive/internal/hubpath"
-	"github.com/agi-bar/neudrive/internal/localgitsync"
-	"github.com/agi-bar/neudrive/internal/models"
-	"github.com/agi-bar/neudrive/internal/services"
-	"github.com/agi-bar/neudrive/internal/vault"
+	"github.com/agi-bar/neuDrive/internal/hubpath"
+	"github.com/agi-bar/neuDrive/internal/localgitsync"
+	"github.com/agi-bar/neuDrive/internal/models"
+	"github.com/agi-bar/neuDrive/internal/services"
+	"github.com/agi-bar/neuDrive/internal/vault"
 	"github.com/google/uuid"
 )
 

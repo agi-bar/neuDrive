@@ -1,6 +1,6 @@
 # neuDrive Python SDK
 
-Python client library for [neuDrive](https://github.com/agi-bar/neudrive) -- AI identity and trust infrastructure.
+Python client library for [neuDrive](https://github.com/agi-bar/neuDrive) -- AI identity and trust infrastructure.
 
 The client wraps the scoped-token `/agent/*` API surface, including the
 canonical virtual tree sync endpoints.

@@ -6056,6 +6056,19 @@ textarea {
   font-weight: 600;
 }
 
+.public-feedback-link {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  font-weight: 800;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.public-feedback-link:hover {
+  color: #12192d;
+  text-decoration: none;
+}
+
 .public-hero {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(420px, 0.86fr);

@@ -85,7 +85,7 @@ func TestLoadWithOverridesParsesFeedbackLaunchConfig(t *testing.T) {
 	}
 }
 
-func TestLoadWithOverridesDefaultsFeedbackEnabledFromSecretAndClampsTTL(t *testing.T) {
+func TestLoadWithOverridesKeepsFeedbackDisabledByDefaultAndClampsTTL(t *testing.T) {
 	cfg, err := LoadWithOverrides(map[string]string{
 		"JWT_SECRET":                  "secret",
 		"VAULT_MASTER_KEY":            "vault",
@@ -95,8 +95,8 @@ func TestLoadWithOverridesDefaultsFeedbackEnabledFromSecretAndClampsTTL(t *testi
 	if err != nil {
 		t.Fatalf("LoadWithOverrides: %v", err)
 	}
-	if !cfg.FeedbackEnabled {
-		t.Fatal("FeedbackEnabled = false, want true when launch secret is configured")
+	if cfg.FeedbackEnabled {
+		t.Fatal("FeedbackEnabled = true, want false unless FEEDBACK_ENABLED is explicitly enabled")
 	}
 	if cfg.FeedbackLaunchTTLSeconds != 300 {
 		t.Fatalf("FeedbackLaunchTTLSeconds = %d, want clamp to 300", cfg.FeedbackLaunchTTLSeconds)

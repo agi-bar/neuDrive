@@ -4,6 +4,7 @@ import { api, BILLING_REDIRECT_EVENT, type BillingRedirectDetail, type BillingSt
 import LanguageToggle from './components/LanguageToggle'
 import GitHubRepoLink from './components/GitHubRepoLink'
 import { useI18n } from './i18n'
+import { PublicFeedbackProvider } from './publicFeedback'
 
 const LoginPage = lazy(() => import('./pages/LoginPage'))
 const DashboardPage = lazy(() => import('./pages/DashboardPage'))
@@ -326,7 +327,7 @@ function App() {
     navigate('/login')
   }
 
-  const handleFeedbackOpen = async () => {
+  const handleFeedbackOpen = useCallback(async () => {
     if (feedbackLaunching) return
     setFeedbackLaunching(true)
     try {
@@ -337,7 +338,17 @@ function App() {
       setFeedbackLaunching(false)
       window.alert(tx('暂时无法打开反馈入口，请稍后再试。', 'Feedback is unavailable right now. Please try again later.'))
     }
-  }
+  }, [feedbackLaunching, tx])
+
+  useEffect(() => {
+    if (!user || !feedbackEnabled) return
+    const params = new URLSearchParams(location.search)
+    if (params.get('open_feedback') !== '1') return
+    params.delete('open_feedback')
+    const nextSearch = params.toString()
+    window.history.replaceState({}, '', `${location.pathname}${nextSearch ? `?${nextSearch}` : ''}${location.hash}`)
+    void handleFeedbackOpen()
+  }, [feedbackEnabled, handleFeedbackOpen, location.hash, location.pathname, location.search, user])
 
   if (loading) {
     return (
@@ -360,12 +371,14 @@ function App() {
     return (
       <RouteErrorBoundary key={location.key} fallback={routeErrorFallback}>
       <Suspense fallback={routeFallback}>
+        <PublicFeedbackProvider enabled={feedbackEnabled}>
         <Routes>
           <Route path="/guides/:platform" element={<GuidePage />} />
           <Route path="/integrations/:platform" element={<IntegrationDetailPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
         </Routes>
+        </PublicFeedbackProvider>
       </Suspense>
       </RouteErrorBoundary>
     )
@@ -377,6 +390,7 @@ function App() {
     return (
       <RouteErrorBoundary key={location.key} fallback={routeErrorFallback}>
       <Suspense fallback={routeFallback}>
+        <PublicFeedbackProvider enabled={feedbackEnabled}>
         <Routes>
           <Route path="/" element={<MarketingHomePage />} />
           <Route path="/pricing" element={<PricingPage />} />
@@ -392,6 +406,7 @@ function App() {
           <Route path="/plan" element={<Navigate to={protectedSignupRedirect} replace />} />
           <Route path="*" element={<Navigate to={protectedLoginRedirect} replace />} />
         </Routes>
+        </PublicFeedbackProvider>
       </Suspense>
       </RouteErrorBoundary>
     )
@@ -453,18 +468,6 @@ function App() {
             <span>{tx('命令行工具', 'Command Line')}</span>
           </NavLink>
 
-          {feedbackEnabled && (
-            <button
-              type="button"
-              className="nav-item nav-item-button"
-              onClick={() => { void handleFeedbackOpen() }}
-              disabled={feedbackLaunching}
-            >
-              <span className="nav-icon">?</span>
-              <span>{feedbackLaunching ? tx('打开中...', 'Opening...') : tx('反馈', 'Feedback')}</span>
-            </button>
-          )}
-
           {billingEnabled && (
             <NavLink to="/settings/billing" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>
               <span className="nav-icon">◈</span>
@@ -477,6 +480,18 @@ function App() {
               <span className="nav-icon">⚙</span>
               <span>{tx('系统设置', 'System Settings')}</span>
             </NavLink>
+          )}
+
+          {feedbackEnabled && (
+            <button
+              type="button"
+              className="nav-item nav-item-button"
+              onClick={() => { void handleFeedbackOpen() }}
+              disabled={feedbackLaunching}
+            >
+              <span className="nav-icon">?</span>
+              <span>{feedbackLaunching ? tx('打开反馈中...', 'Opening feedback...') : tx('反馈', 'Feedback')}</span>
+            </button>
           )}
         </nav>
 

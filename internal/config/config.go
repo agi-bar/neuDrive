@@ -102,7 +102,7 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		CaptureOAuth:            getEnvBool("NEUDRIVE_CAPTURE_OAUTH", false),
 		CaptureDir:              envOrOverride("NEUDRIVE_CAPTURE_DIR", "tmp/oauth-captures"),
 	}
-	cfg.FeedbackEnabled = parseBool(envOrOverride("FEEDBACK_ENABLED", ""), cfg.FeedbackLaunchSecret != "")
+	cfg.FeedbackEnabled = parseBool(envOrOverride("FEEDBACK_ENABLED", ""), false)
 	cfg.FeedbackLaunchTTLSeconds = parseInt(envOrOverride("FEEDBACK_LAUNCH_TTL_SECONDS", ""), 90)
 	if cfg.FeedbackLaunchTTLSeconds < 1 {
 		cfg.FeedbackLaunchTTLSeconds = 90

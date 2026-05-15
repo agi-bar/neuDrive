@@ -4,6 +4,7 @@ import { api, type AuthProvider } from '../api'
 import GitHubRepoLink from '../components/GitHubRepoLink'
 import LanguageToggle from '../components/LanguageToggle'
 import { useI18n } from '../i18n'
+import { usePublicFeedbackEnabled } from '../publicFeedback'
 
 const HUB_URL = 'https://www.neudrive.ai'
 const MCP_URL = `${HUB_URL}/mcp`
@@ -612,10 +613,13 @@ function CopySnippet({ label, value, language = 'text' }: { label: string; value
   )
 }
 
-export function PublicShell({ children }: { children: ReactNode }) {
+export function PublicShell({ children, feedbackEnabled }: { children: ReactNode; feedbackEnabled?: boolean }) {
   const { tx } = useI18n()
+  const contextFeedbackEnabled = usePublicFeedbackEnabled()
+  const showFeedback = feedbackEnabled ?? contextFeedbackEnabled
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const closeMobileMenu = () => setMobileMenuOpen(false)
+  const feedbackLoginHref = `/login?redirect=${encodeURIComponent('/?open_feedback=1')}`
   return (
     <div className={`public-site ${mobileMenuOpen ? 'public-menu-open' : ''}`}>
       <header className="public-nav">
@@ -627,6 +631,11 @@ export function PublicShell({ children }: { children: ReactNode }) {
           <Link to="/docs">{tx('文档', 'Docs')}</Link>
         </nav>
         <div className="public-nav-actions">
+          {showFeedback && (
+            <Link to={feedbackLoginHref} className="public-feedback-link" onClick={closeMobileMenu}>
+              {tx('反馈', 'Feedback')}
+            </Link>
+          )}
           <GitHubRepoLink className="public-github-link" />
           <div className="public-nav-language"><LanguageToggle compact /></div>
           <Link to="/login" className="btn btn-outline public-login-link">{tx('登录', 'Log in')}</Link>

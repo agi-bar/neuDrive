@@ -817,6 +817,11 @@ a:hover {
   text-align: left;
 }
 
+.nav-item-button:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
 .nav-group-caret {
   margin-left: auto;
   font-size: 10px;

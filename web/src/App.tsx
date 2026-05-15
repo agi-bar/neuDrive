@@ -122,12 +122,14 @@ function App() {
   const [shellBilling, setShellBilling] = useState<BillingStatus | null>(null)
   const [loading, setLoading] = useState(true)
   const [userMenuOpen, setUserMenuOpen] = useState(false)
+  const [feedbackLaunching, setFeedbackLaunching] = useState(false)
   const { tx } = useI18n()
   const navigate = useNavigate()
   const location = useLocation()
   const systemSettingsEnabled = !!publicConfig?.system_settings_enabled
   const localMode = !!publicConfig?.local_mode
   const billingEnabled = !!publicConfig?.billing_enabled
+  const feedbackEnabled = !!publicConfig?.feedback_enabled
   const importsHomePath = localMode ? '/imports/local-apps' : '/imports/claude-export'
 
   const checkAuth = useCallback(async () => {
@@ -324,6 +326,19 @@ function App() {
     navigate('/login')
   }
 
+  const handleFeedbackOpen = async () => {
+    if (feedbackLaunching) return
+    setFeedbackLaunching(true)
+    try {
+      const launch = await api.launchFeedback()
+      if (!launch?.launch_url) throw new Error('feedback launch url missing')
+      window.location.assign(launch.launch_url)
+    } catch {
+      setFeedbackLaunching(false)
+      window.alert(tx('暂时无法打开反馈入口，请稍后再试。', 'Feedback is unavailable right now. Please try again later.'))
+    }
+  }
+
   if (loading) {
     return (
       <div className="loading-screen">
@@ -437,6 +452,18 @@ function App() {
             <span className="nav-icon">›_</span>
             <span>{tx('命令行工具', 'Command Line')}</span>
           </NavLink>
+
+          {feedbackEnabled && (
+            <button
+              type="button"
+              className="nav-item nav-item-button"
+              onClick={() => { void handleFeedbackOpen() }}
+              disabled={feedbackLaunching}
+            >
+              <span className="nav-icon">?</span>
+              <span>{feedbackLaunching ? tx('打开中...', 'Opening...') : tx('反馈', 'Feedback')}</span>
+            </button>
+          )}
 
           {billingEnabled && (
             <NavLink to="/settings/billing" className={({ isActive }) => isActive ? 'nav-item active' : 'nav-item'}>

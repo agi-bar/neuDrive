@@ -60,6 +60,11 @@ export interface StartAuthProviderResponse {
   authorization_url: string;
 }
 
+export interface FeedbackLaunchResponse {
+  launch_url: string;
+  expires_at: string;
+}
+
 export interface AuthResponse {
   access_token: string;
   refresh_token: string;
@@ -149,6 +154,7 @@ export interface PublicConfig {
   github_app_enabled?: boolean;
   github_app_slug?: string;
   billing_enabled?: boolean;
+  feedback_enabled?: boolean;
   storage?: string;
   local_mode?: boolean;
   system_settings_enabled?: boolean;
@@ -596,6 +602,11 @@ export const api = {
 
   getPublicConfig: (): Promise<PublicConfig> =>
     request<PublicConfig>("/config"),
+
+  launchFeedback: (): Promise<FeedbackLaunchResponse> =>
+    request<FeedbackLaunchResponse>("/feedback/launch", {
+      method: "POST",
+    }),
 
   bootstrapLocalOwnerToken: (): Promise<CreateTokenResponse> =>
     request<CreateTokenResponse>("/local/owner-token", {

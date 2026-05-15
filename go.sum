@@ -1,3 +1,5 @@
+github.com/agi-bar/triage/sdk/go v0.1.0 h1:UTCwfDVt0Rq7VJqd4zgRuz91D6Ezdb0PDvKcXN2jKTc=
+github.com/agi-bar/triage/sdk/go v0.1.0/go.mod h1:ffa2V+5uwHSjzL24kYo9MtcC0SjZj5SfHeiVXo2401k=
 github.com/coreos/go-oidc/v3 v3.18.0 h1:V9orjXynvu5wiC9SemFTWnG4F45v403aIcjWo0d41+A=
 github.com/coreos/go-oidc/v3 v3.18.0/go.mod h1:DYCf24+ncYi+XkIH97GY1+dqoRlbaSI26KVTCI9SrY4=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=

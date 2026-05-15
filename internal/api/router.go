@@ -270,6 +270,7 @@ func (s *Server) setupRoutes() {
 
 		r.Get("/api/auth/me", s.handleAuthMe)
 		r.Put("/api/auth/me", s.handleAuthUpdateMe)
+		r.Post("/api/feedback/launch", s.handleFeedbackLaunch)
 		if s.isLocalMode() {
 			r.Post("/api/auth/change-password", s.handleAuthChangePassword)
 		}
@@ -746,6 +747,7 @@ func (s *Server) handlePublicConfig(w http.ResponseWriter, r *http.Request) {
 		"github_app_enabled":                      s.GitHubAppClientID != "",
 		"github_app_slug":                         s.GitHubAppSlug,
 		"billing_enabled":                         s.billingEnabled(),
+		"feedback_enabled":                        s.feedbackEnabled(),
 		"system_settings_enabled":                 s.systemSettingsEnabled(),
 		"git_mirror_manual_sync_cooldown_seconds": s.gitMirrorManualSyncCooldownSeconds(),
 	}
@@ -776,6 +778,13 @@ func (s *Server) billingEnabled() bool {
 		return false
 	}
 	return s.Config.EnableBilling
+}
+
+func (s *Server) feedbackEnabled() bool {
+	if s.Config == nil {
+		return false
+	}
+	return s.Config.FeedbackEnabled
 }
 
 // ---------------------------------------------------------------------------

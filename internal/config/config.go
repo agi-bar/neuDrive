@@ -33,6 +33,13 @@ type Config struct {
 	FeishuEncryptKey                      string
 	VaultMasterKey                        string
 	PublicBaseURL                         string
+	FeedbackEnabled                       bool
+	FeedbackLaunchURL                     string
+	FeedbackLaunchSecret                  string
+	FeedbackLaunchIssuer                  string
+	FeedbackLaunchAudience                string
+	FeedbackLaunchProjectID               string
+	FeedbackLaunchTTLSeconds              int
 	CORSOrigins                           []string
 	RateLimit                             int   // max requests per minute
 	MaxBodySize                           int64 // max request body in bytes
@@ -80,6 +87,11 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		FeishuEncryptKey:        envOrOverride("FEISHU_ENCRYPT_KEY", ""),
 		VaultMasterKey:          envOrOverride("VAULT_MASTER_KEY", ""),
 		PublicBaseURL:           strings.TrimRight(envOrOverride("PUBLIC_BASE_URL", ""), "/"),
+		FeedbackLaunchURL:       envOrOverride("FEEDBACK_LAUNCH_URL", "/feedback/start"),
+		FeedbackLaunchSecret:    envOrOverride("FEEDBACK_LAUNCH_SECRET", ""),
+		FeedbackLaunchIssuer:    strings.TrimRight(envOrOverride("FEEDBACK_LAUNCH_ISSUER", ""), "/"),
+		FeedbackLaunchAudience:  envOrOverride("FEEDBACK_LAUNCH_AUDIENCE", "triage.feedback"),
+		FeedbackLaunchProjectID: envOrOverride("FEEDBACK_LAUNCH_PROJECT_ID", "neudrive"),
 		CORSOrigins:             strings.Split(envOrOverride("CORS_ORIGINS", "http://localhost:3000"), ","),
 		RateLimit:               getEnvInt("RATE_LIMIT", 100),
 		MaxBodySize:             int64(getEnvInt("MAX_BODY_SIZE", 10*1024*1024)),
@@ -89,6 +101,17 @@ func LoadWithOverrides(overrides map[string]string) (*Config, error) {
 		EnableBilling:           getEnvBool("NEUDRIVE_ENABLE_BILLING", false),
 		CaptureOAuth:            getEnvBool("NEUDRIVE_CAPTURE_OAUTH", false),
 		CaptureDir:              envOrOverride("NEUDRIVE_CAPTURE_DIR", "tmp/oauth-captures"),
+	}
+	cfg.FeedbackEnabled = parseBool(envOrOverride("FEEDBACK_ENABLED", ""), cfg.FeedbackLaunchSecret != "")
+	cfg.FeedbackLaunchTTLSeconds = parseInt(envOrOverride("FEEDBACK_LAUNCH_TTL_SECONDS", ""), 90)
+	if cfg.FeedbackLaunchTTLSeconds < 1 {
+		cfg.FeedbackLaunchTTLSeconds = 90
+	}
+	if cfg.FeedbackLaunchTTLSeconds > 300 {
+		cfg.FeedbackLaunchTTLSeconds = 300
+	}
+	if cfg.FeedbackLaunchIssuer == "" {
+		cfg.FeedbackLaunchIssuer = cfg.PublicBaseURL
 	}
 	if rawCooldown := strings.TrimSpace(envOrOverride("GIT_MIRROR_MANUAL_SYNC_COOLDOWN_SECONDS", "")); rawCooldown != "" {
 		cooldown, err := strconv.Atoi(rawCooldown)
@@ -136,7 +159,11 @@ func getEnvInt(key string, fallback int) int {
 }
 
 func getEnvBool(key string, fallback bool) bool {
-	s := strings.TrimSpace(strings.ToLower(getEnv(key, "")))
+	return parseBool(getEnv(key, ""), fallback)
+}
+
+func parseBool(value string, fallback bool) bool {
+	s := strings.TrimSpace(strings.ToLower(value))
 	if s == "" {
 		return fallback
 	}
@@ -148,6 +175,18 @@ func getEnvBool(key string, fallback bool) bool {
 	default:
 		return fallback
 	}
+}
+
+func parseInt(value string, fallback int) int {
+	s := strings.TrimSpace(value)
+	if s == "" {
+		return fallback
+	}
+	v, err := strconv.Atoi(s)
+	if err != nil {
+		return fallback
+	}
+	return v
 }
 
 func splitScopes(value string) []string {

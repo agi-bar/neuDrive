@@ -1,24 +1,30 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { api, type AuthProvider } from '../api'
+import { isFeedbackLoginIntent, rememberPendingFeedbackLaunch } from '../feedbackIntent'
 import { useI18n } from '../i18n'
 import { PublicShell } from './PublicPages'
 
 export default function LoginPage() {
   const { tx } = useI18n()
+  const location = useLocation()
   const [providers, setProviders] = useState<AuthProvider[]>([])
   const [error, setError] = useState('')
   const [loadingAction, setLoadingAction] = useState('')
+  const [feedbackIntent, setFeedbackIntent] = useState(false)
 
   useEffect(() => {
     document.title = tx('登录 — neuDrive', 'Log in — neuDrive')
   }, [tx])
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
+    const params = new URLSearchParams(location.search)
     setError(params.get('error') || '')
+    const wantsFeedback = isFeedbackLoginIntent(location.search)
+    setFeedbackIntent(wantsFeedback)
+    if (wantsFeedback) rememberPendingFeedbackLaunch()
     api.getAuthProviders().then((items) => setProviders(items || [])).catch(() => setProviders([]))
-  }, [])
+  }, [location.search])
 
   const githubProvider = providers.find((provider) => provider.id === 'github')
   const pocketProvider = providers.find((provider) => provider.kind === 'oidc')
@@ -55,6 +61,11 @@ export default function LoginPage() {
         <section className="auth-card">
           <h1 className="login-title">{tx('登录 neuDrive', 'Log in to neuDrive')}</h1>
           <p className="login-desc">{tx('使用已有账号进入产品。', 'Use your existing account to enter the product.')}</p>
+          {feedbackIntent && (
+            <div className="alert alert-warn">
+              {tx('需要登录后才能提交反馈。登录完成后，我们会自动打开反馈入口。', 'Sign in to send feedback. We will open the feedback form automatically after login.')}
+            </div>
+          )}
           {error && <div className="alert alert-warn">{error}</div>}
 
           <div className="login-actions">

@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation, useParams } from 'react-router-dom'
 import { api, type AuthProvider } from '../api'
 import GitHubRepoLink from '../components/GitHubRepoLink'
 import LanguageToggle from '../components/LanguageToggle'
+import { feedbackLoginHref, rememberPendingFeedbackLaunch } from '../feedbackIntent'
 import { useI18n } from '../i18n'
 import { usePublicFeedbackEnabled } from '../publicFeedback'
 
@@ -619,7 +620,6 @@ export function PublicShell({ children, feedbackEnabled }: { children: ReactNode
   const showFeedback = feedbackEnabled ?? contextFeedbackEnabled
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const closeMobileMenu = () => setMobileMenuOpen(false)
-  const feedbackLoginHref = `/login?redirect=${encodeURIComponent('/?open_feedback=1')}`
   return (
     <div className={`public-site ${mobileMenuOpen ? 'public-menu-open' : ''}`}>
       <header className="public-nav">
@@ -632,7 +632,14 @@ export function PublicShell({ children, feedbackEnabled }: { children: ReactNode
         </nav>
         <div className="public-nav-actions">
           {showFeedback && (
-            <Link to={feedbackLoginHref} className="public-feedback-link" onClick={closeMobileMenu}>
+            <Link
+              to={feedbackLoginHref()}
+              className="public-feedback-link"
+              onClick={() => {
+                rememberPendingFeedbackLaunch()
+                closeMobileMenu()
+              }}
+            >
               {tx('反馈', 'Feedback')}
             </Link>
           )}

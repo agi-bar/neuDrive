@@ -3,6 +3,7 @@ import { Navigate, NavLink, Outlet, Route, Routes, useLocation, useNavigate, use
 import { api, BILLING_REDIRECT_EVENT, type BillingRedirectDetail, type BillingStatus, type PublicConfig } from './api'
 import LanguageToggle from './components/LanguageToggle'
 import GitHubRepoLink from './components/GitHubRepoLink'
+import { consumePendingFeedbackLaunch } from './feedbackIntent'
 import { useI18n } from './i18n'
 import { PublicFeedbackProvider } from './publicFeedback'
 
@@ -343,10 +344,14 @@ function App() {
   useEffect(() => {
     if (!user || !feedbackEnabled) return
     const params = new URLSearchParams(location.search)
-    if (params.get('open_feedback') !== '1') return
-    params.delete('open_feedback')
-    const nextSearch = params.toString()
-    window.history.replaceState({}, '', `${location.pathname}${nextSearch ? `?${nextSearch}` : ''}${location.hash}`)
+    const hasURLIntent = params.get('open_feedback') === '1'
+    const hasStoredIntent = consumePendingFeedbackLaunch()
+    if (!hasURLIntent && !hasStoredIntent) return
+    if (hasURLIntent) {
+      const currentURL = new URL(window.location.href)
+      currentURL.searchParams.delete('open_feedback')
+      window.history.replaceState({}, '', `${currentURL.pathname}${currentURL.search}${currentURL.hash}`)
+    }
     void handleFeedbackOpen()
   }, [feedbackEnabled, handleFeedbackOpen, location.hash, location.pathname, location.search, user])
 

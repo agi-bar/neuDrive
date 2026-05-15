@@ -9787,11 +9787,45 @@ button.data-summary-card {
   line-height: 1.66;
 }
 
-.integrations-hero-section {
-  padding-bottom: 24px !important;
+.public-page-hero {
+  display: grid;
+  align-content: start;
+  gap: 16px;
+  padding-bottom: 28px !important;
 }
 
-.integrations-hero-section h1,
+.public-page-hero-copy {
+  display: grid;
+  gap: 16px;
+}
+
+.public-page-hero > .public-kicker,
+.public-page-hero-copy > .public-kicker {
+  margin-bottom: 0;
+}
+
+.public-page-hero h1 {
+  max-width: 860px;
+  margin: 0;
+  color: #111827;
+  font-size: 56px;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.public-page-hero > p:not(.public-kicker),
+.public-page-hero-copy > p:not(.public-kicker) {
+  max-width: 760px;
+  margin: 0;
+  color: #59687a;
+  font-size: 17px;
+  line-height: 1.7;
+}
+
+.pricing-hero-section .pricing-public-grid {
+  margin-top: 10px;
+}
+
 .integration-detail-hero h1 {
   max-width: 860px;
   margin: 0;
@@ -9801,7 +9835,6 @@ button.data-summary-card {
   letter-spacing: 0;
 }
 
-.integrations-hero-section p:not(.public-kicker),
 .integration-detail-hero p {
   max-width: 760px;
   color: #59687a;
@@ -9987,26 +10020,6 @@ button.data-summary-card {
   padding-top: 20px !important;
 }
 
-.docs-hero-section {
-  padding-bottom: 28px !important;
-}
-
-.docs-hero-section h1 {
-  max-width: 820px;
-  margin: 0;
-  color: #111827;
-  font-size: 56px;
-  line-height: 1;
-  letter-spacing: 0;
-}
-
-.docs-hero-section p:not(.public-kicker) {
-  max-width: 760px;
-  color: #59687a;
-  font-size: 17px;
-  line-height: 1.7;
-}
-
 .docs-grid-section {
   padding-top: 20px !important;
 }
@@ -10185,7 +10198,7 @@ button.data-summary-card {
 
   .public-hero-copy h1,
   .guide-hero h1,
-  .integrations-hero-section h1,
+  .public-page-hero h1,
   .integration-detail-hero h1 {
     font-size: 46px;
     line-height: 1;
@@ -10255,10 +10268,6 @@ button.data-summary-card {
     width: 48px;
     height: 48px;
     border-radius: 14px;
-  }
-
-  .docs-hero-section h1 {
-    font-size: 40px;
   }
 
   .public-continuity-strip {
@@ -10410,14 +10419,16 @@ button.data-summary-card {
 
   .public-hero-copy h1,
   .guide-hero h1,
-  .integrations-hero-section h1,
+  .public-page-hero h1,
   .integration-detail-hero h1 {
     font-size: 40px;
   }
 
   .public-hero-copy p,
   .auth-copy p,
-  .guide-hero p {
+  .guide-hero p,
+  .public-page-hero > p:not(.public-kicker),
+  .public-page-hero-copy > p:not(.public-kicker) {
     font-size: 16px;
   }
 

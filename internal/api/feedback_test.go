@@ -12,7 +12,7 @@ import (
 	"github.com/agi-bar/neudrive/internal/config"
 )
 
-func TestHandleFeedbackLaunchUsesTriageSDK(t *testing.T) {
+func TestHandleFeedbackLaunchCreatesTriageLaunchURL(t *testing.T) {
 	cfg := &config.Config{
 		JWTSecret:                testJWTSecret,
 		VaultMasterKey:           strings.Repeat("0", 64),

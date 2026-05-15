@@ -1087,18 +1087,29 @@ function IntegrationsSection() {
   )
 }
 
-function PricingSection() {
+function PricingSection({ pageHero = false }: { pageHero?: boolean } = {}) {
   const { tx } = useI18n()
+  const kicker = tx('价格', 'Pricing')
+  const title = tx('默认年付，省下 50%。', 'Yearly by default. Save 50%.')
+  const copy = tx('Free 适合试用和自托管评估。Pro 提供更多存储、自动同步和备份。', 'Free is for trying neuDrive or evaluating self-hosting. Pro adds more storage, auto sync, and backup.')
   return (
-    <section className="public-band">
-      <div className="public-section-head">
-        <div>
-          <p className="public-kicker">{tx('价格', 'Pricing')}</p>
-          <h2>{tx('默认年付，省下 50%。', 'Yearly by default. Save 50%.')}</h2>
-          <p>{tx('Free 适合试用和自托管评估。Pro 提供更多存储、自动同步和备份。', 'Free is for trying neuDrive or evaluating self-hosting. Pro adds more storage, auto sync, and backup.')}</p>
+    <section className={pageHero ? 'public-band public-page-hero pricing-hero-section' : 'public-band'}>
+      {pageHero ? (
+        <div className="public-page-hero-copy">
+          <p className="public-kicker">{kicker}</p>
+          <h1>{title}</h1>
+          <p>{copy}</p>
         </div>
-        <Link to="/pricing" className="btn btn-outline">{tx('比较套餐', 'Compare plans')}</Link>
-      </div>
+      ) : (
+        <div className="public-section-head">
+          <div>
+            <p className="public-kicker">{kicker}</p>
+            <h2>{title}</h2>
+            <p>{copy}</p>
+          </div>
+          <Link to="/pricing" className="btn btn-outline">{tx('比较套餐', 'Compare plans')}</Link>
+        </div>
+      )}
       <div className="pricing-public-grid">
         <article className="pricing-public-card">
           <h3>{tx('Free 免费版', 'Free')}</h3>
@@ -1177,7 +1188,7 @@ export function PricingPage() {
   return (
     <PublicShell>
       <main className="public-simple">
-        <PricingSection />
+        <PricingSection pageHero />
         <section className="public-band pricing-roi-section">
           <div className="pricing-roi-panel">
             <div>
@@ -1281,7 +1292,7 @@ export function IntegrationsPage() {
   return (
     <PublicShell>
       <main className="public-simple">
-        <section className="public-band integrations-hero-section">
+        <section className="public-band public-page-hero integrations-hero-section">
           <p className="public-kicker">{tx('集成目录', 'Integration catalog')}</p>
           <h1>{tx('选择你要把 neuDrive 接到哪里。', 'Choose where neuDrive should connect.')}</h1>
           <p>{tx('每个平台详情页都会说明适用场景、接入步骤、限制和常见问题。', 'Each platform detail page explains use cases, setup steps, limitations, and common questions.')}</p>
@@ -1519,7 +1530,7 @@ export function DocsLandingPage() {
   return (
     <PublicShell>
       <main className="public-simple">
-        <section className="public-band docs-hero-section">
+        <section className="public-band public-page-hero docs-hero-section">
           <p className="public-kicker">{tx('文档', 'Docs')}</p>
           <h1>{tx('选择你要连接的工具。', 'Choose the tool you want to connect.')}</h1>
           <p>{tx('每个指南都给出设置路径、可复制内容、授权步骤和连接后的测试问题。', 'Each guide gives the settings path, copyable content, authorization steps, and a test question for after connection.')}</p>

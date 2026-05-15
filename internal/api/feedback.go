@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	feedbacklaunch "github.com/agi-bar/triage/sdk/go/feedbacklaunch"
+	"github.com/agi-bar/neudrive/internal/feedbacklaunch"
 )
 
 type feedbackLaunchResponse struct {
@@ -63,10 +63,6 @@ func (s *Server) handleFeedbackLaunch(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) feedbackLaunchClient(r *http.Request) (*feedbacklaunch.Client, error) {
 	secret := strings.TrimSpace(s.Config.FeedbackLaunchSecret)
-	signer, err := feedbacklaunch.NewHS256Signer([]byte(secret))
-	if err != nil {
-		return nil, err
-	}
 	issuer := strings.TrimSpace(s.Config.FeedbackLaunchIssuer)
 	if issuer == "" {
 		issuer = requestOrigin(r)
@@ -77,7 +73,7 @@ func (s *Server) feedbackLaunchClient(r *http.Request) (*feedbacklaunch.Client, 
 		ProjectID: nonEmpty(s.Config.FeedbackLaunchProjectID, "neudrive"),
 		LaunchURL: s.Config.FeedbackLaunchURL,
 		TTL:       time.Duration(s.Config.FeedbackLaunchTTLSeconds) * time.Second,
-		Signer:    signer,
+		Secret:    []byte(secret),
 	})
 }
 

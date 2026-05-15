@@ -16,6 +16,8 @@ const (
 	ErrCodeUnsupported  = "unsupported"
 	ErrCodeRateLimit    = "rate_limit_exceeded"
 	ErrCodeValidation   = "validation_error"
+
+	ErrCodeGitHubAppPermissionUpdateRequired = "github_app_permission_update_required"
 )
 
 // APIError is the standard error response envelope.

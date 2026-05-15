@@ -324,6 +324,19 @@ func (s *Server) handleGitMirrorGitHubAppDisconnect(w http.ResponseWriter, r *ht
 	respondOK(w, map[string]string{"status": "disconnected"})
 }
 
+func (s *Server) respondGitHubAppPermissionUpdateRequired(w http.ResponseWriter, r *http.Request, userID uuid.UUID) {
+	if err := s.LocalGitSync.DisconnectGitHubAppUser(r.Context(), userID); err != nil {
+		respondInternalError(w, err)
+		return
+	}
+	respondError(
+		w,
+		http.StatusForbidden,
+		ErrCodeGitHubAppPermissionUpdateRequired,
+		"GitHub App permissions changed and need to be approved again. The old GitHub Backup connection was disconnected. Open GitHub to approve Repository Administration read/write access, then reconnect GitHub in neuDrive and create the backup repository again.",
+	)
+}
+
 func (s *Server) handleGitMirrorGitHubAppReposList(w http.ResponseWriter, r *http.Request) {
 	if s.LocalGitSync == nil {
 		respondNotConfigured(w, "git mirror service")
@@ -359,6 +372,10 @@ func (s *Server) handleGitMirrorGitHubAppReposCreate(w http.ResponseWriter, r *h
 	}
 	repo, err := s.LocalGitSync.CreateGitHubAppRepo(r.Context(), userID, req)
 	if err != nil {
+		if localgitsync.IsGitHubAppPermissionUpdateRequired(err) {
+			s.respondGitHubAppPermissionUpdateRequired(w, r, userID)
+			return
+		}
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}
@@ -381,6 +398,10 @@ func (s *Server) handleGitMirrorGitHubAppDefaultBackupRepo(w http.ResponseWriter
 	}
 	result, err := s.LocalGitSync.CreateOrReuseDefaultGitHubAppBackupRepo(r.Context(), userID)
 	if err != nil {
+		if localgitsync.IsGitHubAppPermissionUpdateRequired(err) {
+			s.respondGitHubAppPermissionUpdateRequired(w, r, userID)
+			return
+		}
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}

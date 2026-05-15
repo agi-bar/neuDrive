@@ -20,6 +20,7 @@ type AuthHelp = {
 const DEFAULT_AUTH_MODE: AuthMode = 'local_credentials'
 const DEFAULT_REMOTE_NAME = 'origin'
 const DEFAULT_REMOTE_BRANCH = 'main'
+const GITHUB_APP_PERMISSION_UPDATE_REQUIRED_CODE = 'github_app_permission_update_required'
 
 function githubRepoLabel(remoteURL?: string) {
   const value = (remoteURL || '').trim()
@@ -61,6 +62,13 @@ function delay(ms: number) {
   return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
+function isGitHubAppPermissionUpdateRequiredError(err: any) {
+  const message = String(err?.message || '')
+  return err?.code === GITHUB_APP_PERMISSION_UPDATE_REQUIRED_CODE ||
+    /Repository Administration/i.test(message) ||
+    /Resource not accessible by integration/i.test(message)
+}
+
 function PencilIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -90,6 +98,7 @@ export default function GitMirrorPage() {
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const [githubAppError, setGithubAppError] = useState('')
+  const [githubAppReauthRequired, setGithubAppReauthRequired] = useState(false)
   const [authMode, setAuthMode] = useState<AuthMode>(DEFAULT_AUTH_MODE)
   const [authHelpOpen, setAuthHelpOpen] = useState(false)
   const [remoteURL, setRemoteURL] = useState('')
@@ -111,6 +120,9 @@ export default function GitMirrorPage() {
       const nextExecutionMode = settings.execution_mode || config.git_mirror_execution_mode || 'hosted'
       setMirror(settings)
       setPublicConfig(config)
+      if (settings.github_app_user_connected) {
+        setGithubAppReauthRequired(false)
+      }
       setAuthMode(authModeForExecution(settings.auth_mode, nextExecutionMode, settings.github_token_configured))
       setRemoteURL(settings.remote_url || '')
       setUrlEditing(!(settings.remote_url || '').trim() && settings.auth_mode !== 'github_app_user')
@@ -136,6 +148,7 @@ export default function GitMirrorPage() {
     if (callbackError) {
       setGithubAppError(callbackError)
     } else if (status === 'connected') {
+      setGithubAppReauthRequired(false)
       setMessage(tx('GitHub 已连接。现在可以创建备份仓库。', 'GitHub connected. You can create the backup repository now.'))
     }
     void loadPage()
@@ -194,7 +207,7 @@ export default function GitMirrorPage() {
             'Recommended for the easiest setup. After you connect GitHub, neuDrive creates or reuses your private neudrive-backup repository without asking you to manage a token.',
           ),
           steps: [
-            tx('点击连接 GitHub，在 GitHub 授权页批准 neuDrive App。', 'Click Connect GitHub and approve the neuDrive App on GitHub.'),
+            tx('点击连接 GitHub，按 GitHub 页面完成 App 安装和用户授权。', 'Click Connect GitHub, then finish the App installation and user authorization on GitHub.'),
             tx('回到 neuDrive 后点击创建私有备份仓库。', 'Back in neuDrive, click Create private backup repo.'),
             tx('之后点击立即同步，后台会把 neuDrive 数据推送到这个仓库。', 'Then click Sync now; the worker pushes your neuDrive data to that repository.'),
           ],
@@ -297,8 +310,19 @@ export default function GitMirrorPage() {
       setAuthMode(result.settings.auth_mode || 'github_app_user')
       setRemoteURL(result.settings.remote_url || '')
       setUrlEditing(false)
+      setGithubAppReauthRequired(false)
       setInlineMessage(tx('备份仓库已准备好。', 'Backup repository is ready.'))
     } catch (err: any) {
+      if (isGitHubAppPermissionUpdateRequiredError(err)) {
+        await loadPage()
+        setAuthMode('github_app_user')
+        setGithubAppReauthRequired(true)
+        setGithubAppError(tx(
+          'GitHub App 权限已更新，我们已自动断开旧的 GitHub Backup 授权。请先在 GitHub 批准新的 Repository Administration 读写权限，然后回到这里重新连接。',
+          'GitHub App permissions were updated, so we disconnected the old GitHub Backup authorization. Approve the new Repository Administration read/write permission on GitHub, then reconnect here.',
+        ))
+        return
+      }
       setInlineError(err.message || tx('创建备份仓库失败', 'Failed to create the backup repository'))
     } finally {
       setWorking(false)
@@ -313,6 +337,7 @@ export default function GitMirrorPage() {
     try {
       await api.disconnectGitMirrorGitHubAppUser()
       await loadPage()
+      setGithubAppReauthRequired(false)
       setInlineMessage(tx('GitHub 已断开连接', 'GitHub disconnected'))
     } catch (err: any) {
       setInlineError(err.message || tx('断开 GitHub 失败', 'Failed to disconnect GitHub'))
@@ -522,13 +547,36 @@ export default function GitMirrorPage() {
           {githubAppUnavailableMessage}
         </div>
       )}
-      {githubAppError && (
+      {githubAppError && !githubAppReauthRequired && (
         <div className="alert alert-warn" style={{ marginTop: 12 }}>
           {githubAppError}
         </div>
       )}
+      {githubAppReauthRequired && !mirror?.github_app_user_connected && (
+        <div className="alert alert-warn" style={{ marginTop: 12 }}>
+          <div className="data-record-title">{tx('需要重新批准 GitHub App 权限', 'GitHub App permissions need approval')}</div>
+          {githubAppError && (
+            <div className="data-record-secondary" style={{ marginTop: 6 }}>
+              {githubAppError}
+            </div>
+          )}
+          <div className="data-record-secondary" style={{ marginTop: 8 }}>
+            {tx('我们已断开旧授权。点击下面按钮后，GitHub 会要求你批准新权限并重新授权。', 'The old authorization was disconnected. Click the button below to approve the new permissions on GitHub and reconnect.')}
+          </div>
+          <div className="data-sync-actions data-sync-actions-compact">
+            <button
+              className="btn btn-primary"
+              type="button"
+              disabled={working}
+              onClick={handleConnectGitHubApp}
+            >
+              {working ? tx('连接中...', 'Connecting...') : tx('批准新权限并连接 GitHub', 'Approve permissions and connect GitHub')}
+            </button>
+          </div>
+        </div>
+      )}
       {!mirror?.github_app_user_connected ? (
-        <div className="data-sync-actions data-sync-actions-compact">
+        !githubAppReauthRequired && <div className="data-sync-actions data-sync-actions-compact">
           <button className="btn btn-primary" type="button" disabled={working} onClick={handleConnectGitHubApp}>
             {working ? tx('连接中...', 'Connecting...') : tx('连接 GitHub', 'Connect GitHub')}
           </button>
@@ -566,6 +614,9 @@ export default function GitMirrorPage() {
                 setError('')
                 setMessage('')
                 setGithubAppError('')
+                if (next !== 'github_app_user') {
+                  setGithubAppReauthRequired(false)
+                }
                 setTokenTest(null)
                 setAuthHelpOpen(false)
                 setUrlEditing(next !== 'github_app_user' && !remoteURL.trim())

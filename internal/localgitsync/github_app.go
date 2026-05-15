@@ -84,6 +84,12 @@ type gitHubAPIError struct {
 	Body       string
 }
 
+type gitHubAppPermissionUpdateRequiredError struct{}
+
+func (gitHubAppPermissionUpdateRequiredError) Error() string {
+	return "GitHub App cannot create the backup repository because it is missing Repository Administration write permission. Update the GitHub App permissions, have the user approve the new permissions, then reconnect GitHub and try again"
+}
+
 func (e *gitHubAPIError) Error() string {
 	if e == nil {
 		return ""
@@ -168,21 +174,18 @@ func (s *Service) StartGitHubAppBrowserFlow(_ context.Context, userID uuid.UUID,
 	if !s.gitHubAppConfigured() {
 		return nil, fmt.Errorf("GitHub App auth is not configured")
 	}
+	slug := strings.TrimSpace(s.gitHubAppSlug)
+	if slug == "" {
+		return nil, fmt.Errorf("GitHub App slug is not configured")
+	}
 	state, err := s.signGitHubAppState(userID, normalizeReturnTo(returnTo))
 	if err != nil {
 		return nil, err
 	}
-	callbackURL, err := s.gitHubAppCallbackURL()
-	if err != nil {
-		return nil, err
-	}
 	values := url.Values{}
-	values.Set("client_id", s.gitHubAppClientID)
-	values.Set("redirect_uri", callbackURL)
 	values.Set("state", state)
-	values.Set("allow_signup", "false")
 	return &GitHubAppBrowserStartResult{
-		AuthorizationURL: strings.TrimRight(s.githubBaseURL, "/") + "/login/oauth/authorize?" + values.Encode(),
+		AuthorizationURL: strings.TrimRight(s.githubBaseURL, "/") + "/apps/" + url.PathEscape(slug) + "/installations/new?" + values.Encode(),
 	}, nil
 }
 
@@ -806,6 +809,11 @@ func isGitHubAppRepoCreatePermissionError(err error) bool {
 	return strings.Contains(strings.ToLower(apiErr.Body), "resource not accessible by integration")
 }
 
+func IsGitHubAppPermissionUpdateRequired(err error) bool {
+	var target gitHubAppPermissionUpdateRequiredError
+	return errors.As(err, &target)
+}
+
 func gitHubAppRepoCreatePermissionError() error {
-	return fmt.Errorf("GitHub App cannot create the backup repository because it is missing Repository Administration write permission. Update the GitHub App permissions, have the user approve the new permissions or reconnect GitHub, then try again")
+	return gitHubAppPermissionUpdateRequiredError{}
 }

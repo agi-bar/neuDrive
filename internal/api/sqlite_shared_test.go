@@ -456,7 +456,7 @@ func TestHostedGitMirrorDefaultBackupRepoCreatesAndReuses(t *testing.T) {
 	}
 }
 
-func TestHostedGitMirrorDefaultBackupRepoExplainsMissingGitHubAppCreatePermission(t *testing.T) {
+func TestHostedGitMirrorDefaultBackupRepoDisconnectsStaleGitHubAppConnection(t *testing.T) {
 	ghState := &fakeGitHubAppOAuthState{
 		login:           "octocat",
 		permission:      "write",
@@ -485,14 +485,29 @@ func TestHostedGitMirrorDefaultBackupRepoExplainsMissingGitHubAppCreatePermissio
 	connectGitHubAppUserForTest(t, ts.URL, adminToken)
 
 	status, failed := doJSON(t, http.MethodPost, ts.URL+"/api/git-mirror/github-app/default-backup-repo", adminToken, []byte(`{}`))
-	if status != http.StatusBadRequest || failed.OK {
+	if status != http.StatusForbidden || failed.OK {
 		t.Fatalf("expected default backup repo create to fail: status=%d body=%+v", status, failed)
 	}
-	if !strings.Contains(failed.Message, "Repository Administration write permission") {
-		t.Fatalf("expected actionable GitHub App permission error, got %+v", failed)
+	if failed.Code != ErrCodeGitHubAppPermissionUpdateRequired {
+		t.Fatalf("expected GitHub App permission update error code, got %+v", failed)
+	}
+	if !strings.Contains(failed.Message, "old GitHub Backup connection was disconnected") {
+		t.Fatalf("expected disconnect guidance in GitHub App permission error, got %+v", failed)
 	}
 	if got := ghState.createCountValue(); got != 0 {
 		t.Fatalf("create count after forbidden create = %d, want 0", got)
+	}
+
+	status, settingsEnv := doJSON(t, http.MethodGet, ts.URL+"/api/git-mirror", adminToken, nil)
+	if status != http.StatusOK || !settingsEnv.OK {
+		t.Fatalf("git mirror settings after permission failure failed: status=%d body=%+v", status, settingsEnv)
+	}
+	var settings localgitsync.MirrorSettings
+	if err := json.Unmarshal(settingsEnv.Data, &settings); err != nil {
+		t.Fatalf("unmarshal settings: %v", err)
+	}
+	if settings.GitHubAppUserConnected {
+		t.Fatalf("expected stale GitHub App connection to be cleared, got %+v", settings)
 	}
 }
 

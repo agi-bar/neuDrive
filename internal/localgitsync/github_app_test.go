@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -19,6 +20,40 @@ type fakeGitHubAppServerState struct {
 	login          string
 	permission     string
 	repoAccessible bool
+}
+
+func TestStartGitHubAppBrowserFlowUsesInstallationURL(t *testing.T) {
+	svc, userID := newGitHubAppSettingsTestService(t, fakeGitHubAppServerState{
+		login:          "octocat",
+		permission:     "write",
+		repoAccessible: true,
+	})
+
+	result, err := svc.StartGitHubAppBrowserFlow(context.Background(), userID, "/sync-backup")
+	if err != nil {
+		t.Fatalf("StartGitHubAppBrowserFlow: %v", err)
+	}
+	parsed, err := url.Parse(result.AuthorizationURL)
+	if err != nil {
+		t.Fatalf("parse authorization URL: %v", err)
+	}
+	if got, want := parsed.Path, "/apps/neudrive/installations/new"; got != want {
+		t.Fatalf("authorization URL path = %q, want %q", got, want)
+	}
+	if parsed.Query().Get("client_id") != "" {
+		t.Fatalf("authorization URL should not use direct OAuth authorize params: %s", result.AuthorizationURL)
+	}
+	state := parsed.Query().Get("state")
+	if state == "" {
+		t.Fatalf("authorization URL missing state: %s", result.AuthorizationURL)
+	}
+	claims, err := svc.parseGitHubAppState(state)
+	if err != nil {
+		t.Fatalf("parse state: %v", err)
+	}
+	if claims.UserID != userID.String() || claims.ReturnTo != "/sync-backup" {
+		t.Fatalf("unexpected state claims: %+v", claims)
+	}
 }
 
 func TestUpdateMirrorSettingsGitHubAppUserValidatesRepoOnSave(t *testing.T) {
@@ -135,6 +170,7 @@ func TestHostedGitMirrorAuthModesReuseSameRootPath(t *testing.T) {
 		WithGitHubAPIBaseURL(server.URL),
 		WithGitHubBaseURL(server.URL),
 		WithGitHubAppConfig("client-id", "client-secret", "neudrive"),
+		WithStateSigningSecret(strings.Repeat("1", 32)),
 		WithHTTPClient(server.Client()),
 	)
 
@@ -230,6 +266,7 @@ func newGitHubAppSettingsTestService(t *testing.T, state fakeGitHubAppServerStat
 		WithGitHubAPIBaseURL(server.URL),
 		WithGitHubBaseURL(server.URL),
 		WithGitHubAppConfig("client-id", "client-secret", "neudrive"),
+		WithStateSigningSecret(strings.Repeat("1", 32)),
 		WithHTTPClient(server.Client()),
 	)
 	if _, err := svc.RegisterMirrorAndSync(ctx, user.ID, filepath.Join(t.TempDir(), "mirror")); err != nil {

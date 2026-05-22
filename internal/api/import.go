@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -114,10 +115,22 @@ func (s *Server) HandleImportSkills(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.importSkillsForUser(r, userID)
 	if err != nil {
+		if isRequestBodyTooLarge(err) {
+			respondError(w, http.StatusRequestEntityTooLarge, ErrCodeRequestLarge, fmt.Sprintf("skills archive is too large for this endpoint; upload archives up to %d MiB or use the chunked Bundle Sync session flow", maxSkillsArchiveRequestBytes>>20))
+			return
+		}
 		respondError(w, http.StatusBadRequest, ErrCodeBadRequest, err.Error())
 		return
 	}
 	respondOKWithLocalGitSync(w, result, s.syncLocalGitMirror(r.Context(), userID))
+}
+
+func isRequestBodyTooLarge(err error) bool {
+	if err == nil {
+		return false
+	}
+	var maxBytesErr *http.MaxBytesError
+	return errors.As(err, &maxBytesErr) || strings.Contains(err.Error(), "request body too large")
 }
 
 func (s *Server) importSkillsForUser(r *http.Request, userID uuid.UUID) (*ImportResult, error) {

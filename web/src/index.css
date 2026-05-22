@@ -1436,6 +1436,25 @@ a:hover {
   line-height: 1.6;
 }
 
+.local-import-targets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 14px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+}
+
+.local-import-targets code {
+  padding: 4px 7px;
+  border: 1px solid var(--color-border-light);
+  border-radius: 6px;
+  background: #f8fafc;
+  color: var(--materials-title);
+  font-size: 12px;
+}
+
 .local-import-scan-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

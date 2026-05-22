@@ -22,6 +22,11 @@ function pathParts(path: string) {
   return normalizePath(path).split('/').filter(Boolean)
 }
 
+function isDirectSkillBundlePath(path: string) {
+  const parts = pathParts(path)
+  return parts.length === 2 && parts[0]?.toLowerCase() === 'skills'
+}
+
 function joinPath(parts: string[]) {
   return parts.length === 0 ? rootPath : `/${parts.join('/')}`
 }
@@ -33,7 +38,7 @@ function parentPath(path: string) {
 function nodeType(node: FileNode) {
   const path = normalizePath(node.path).toLowerCase()
   if (node.bundle_context?.kind === 'conversation' || path.startsWith('/conversations/')) return 'Conversation'
-  if (node.bundle_context?.kind === 'skill' || path.startsWith('/skills/')) return 'Skill'
+  if (node.bundle_context?.kind === 'skill' || isDirectSkillBundlePath(path)) return 'Skill'
   if (node.bundle_context?.kind === 'project' || path.startsWith('/projects/')) return 'Project'
   if (path.startsWith('/memory/')) return 'Memory'
   if (path.startsWith('/vault/')) return 'Vault'
@@ -244,17 +249,12 @@ export default function DashboardFileBrowser({ stats, initialSnapshotEntries = [
       }))
   }, [hasFilters, query, snapshotEntries, sourceFilter, treeNode?.children, typeFilter])
 
-  const countForType = (type: string, fallback: number) => {
-    if (snapshotLoading && snapshotEntries.length === 0) return fallback
-    return summary.byType.get(type) || 0
-  }
-
   const categories = [
-    { label: tx('全部', 'All'), path: rootPath, type: 'all', value: snapshotEntries.length || stats.files },
-    { label: tx('技能', 'Skills'), path: '/skills', type: 'Skill', value: countForType('Skill', stats.skills) },
-    { label: tx('记忆', 'Memory'), path: '/memory', type: 'Memory', value: countForType('Memory', stats.memory) },
-    { label: tx('项目', 'Projects'), path: '/projects', type: 'Project', value: countForType('Project', stats.projects) },
-    { label: tx('会话', 'Conversations'), path: '/conversations', type: 'Conversation', value: countForType('Conversation', stats.conversations) },
+    { label: tx('全部', 'All'), path: rootPath, type: 'all', value: stats.files },
+    { label: tx('技能', 'Skills'), path: '/skills', type: 'Skill', value: stats.skills },
+    { label: tx('记忆', 'Memory'), path: '/memory', type: 'Memory', value: stats.memory },
+    { label: tx('项目', 'Projects'), path: '/projects', type: 'Project', value: stats.projects },
+    { label: tx('会话', 'Conversations'), path: '/conversations', type: 'Conversation', value: stats.conversations },
   ]
 
   const handleUpload = async (file: File) => {

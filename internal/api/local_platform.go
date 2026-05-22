@@ -399,8 +399,7 @@ func (s *Server) importLocalPlatformAgentPayload(ctx context.Context, userID uui
 			continue
 		}
 		now := time.Now().UTC()
-		expiresAt := now.AddDate(1, 0, 0)
-		entry, err := s.MemoryService.ImportScratch(ctx, userID, renderAgentMemoryItem(item), source, item.Title, now, &expiresAt)
+		entry, err := s.importLocalPlatformMemoryItem(ctx, userID, platform, source, item, now)
 		if err != nil {
 			return nil, err
 		}
@@ -617,6 +616,29 @@ func isBinaryMetadata(metadata map[string]interface{}) bool {
 	default:
 		return false
 	}
+}
+
+func (s *Server) importLocalPlatformMemoryItem(ctx context.Context, userID uuid.UUID, platform, source string, item sqlitestorage.AgentMemoryItem, now time.Time) (*models.FileTreeEntry, error) {
+	content := renderAgentMemoryItem(item)
+	if s.FileTreeService != nil {
+		slug := normalizeClaudeName(item.Title, "memory")
+		target := path.Join("/memory", platform, slug+".md")
+		return s.FileTreeService.WriteEntry(ctx, userID, target, content, "text/markdown", models.FileTreeWriteOptions{
+			Kind:          "memory_note",
+			MinTrustLevel: models.TrustLevelWork,
+			Metadata: map[string]interface{}{
+				"source":          source,
+				"source_platform": platform,
+				"title":           strings.TrimSpace(item.Title),
+				"capture_mode":    "agent",
+				"exactness":       fallbackAgentExactness(item.Exactness),
+				"source_paths":    item.SourcePaths,
+				"imported_at":     now.UTC().Format(time.RFC3339),
+			},
+		})
+	}
+	expiresAt := now.AddDate(1, 0, 0)
+	return s.MemoryService.ImportScratch(ctx, userID, content, source, item.Title, now, &expiresAt)
 }
 
 func renderAgentProfileRules(platform string, rules []sqlitestorage.AgentProfileRule) string {

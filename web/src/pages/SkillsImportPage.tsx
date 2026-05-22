@@ -116,7 +116,13 @@ function uploadSkillsArchive(
         return
       }
 
-      const error = buildAPIErrorFromPayload(payload, xhr.statusText || 'upload failed')
+      const fallbackPayload = xhr.status === 413 && !payload
+        ? {
+            code: 'request_too_large',
+            message: 'The skills archive is too large for the current upload path. Use a smaller archive or the chunked Bundle Sync flow.',
+          }
+        : payload
+      const error = buildAPIErrorFromPayload(fallbackPayload, xhr.statusText || 'upload failed')
       notifyBillingRedirect(error)
       reject(error)
     }
@@ -272,7 +278,12 @@ export default function SkillsImportPage() {
         inputRef.current.value = ''
       }
     } catch (err: any) {
-      const message = err?.message === 'network error'
+      const message = err?.code === 'request_too_large'
+        ? tx(
+            '这个 skills archive 超过了当前上传链路限制。请拆分上传，或改用 Bundle Sync 的分片上传流程。',
+            'This skills archive is larger than the current upload path allows. Split the upload or use the chunked Bundle Sync flow.',
+          )
+        : err?.message === 'network error'
         ? tx('上传过程中发生网络错误，请重试。', 'A network error occurred during upload. Please try again.')
         : (err?.message || tx('上传失败', 'Upload failed'))
       setError(message)

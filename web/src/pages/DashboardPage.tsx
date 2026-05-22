@@ -116,6 +116,23 @@ function entrySize(entry: FileNode) {
   return Math.max(0, Number(entry.size || entry.content?.length || 0))
 }
 
+function normalizeEntryPath(entry: FileNode) {
+  const path = `/${String(entry.path || '').replace(/^\/+|\/+$/g, '')}`
+  return path === '/.' ? '/' : path
+}
+
+function skillTreeStats(entries: FileNode[]) {
+  let files = 0
+  let folders = 0
+  for (const entry of entries) {
+    const path = normalizeEntryPath(entry).toLowerCase()
+    if (!path.startsWith('/skills/')) continue
+    if (entry.is_dir) folders += 1
+    else files += 1
+  }
+  return { files, folders }
+}
+
 function latestTimestamp(entries: FileNode[]) {
   let latest = 0
   for (const entry of entries) {
@@ -249,10 +266,15 @@ export default function DashboardPage({}: DashboardPageProps) {
     : '-'
   const pending = Array.isArray(stats.pending) ? stats.pending : []
   const pendingCount = pending.reduce((total, item) => total + Math.max(0, item.count || 0), 0)
+  const skillEntries = skillTreeStats(treeEntries)
   const summaryItems = [
     { label: tx('连接', 'Connections'), value: stats.connections },
+    { label: tx('文件', 'Files'), value: stats.files },
     { label: tx('存储', 'Storage'), value: formatBytes(storageBytes) },
     { label: tx('上次同步', 'Last sync'), value: lastSyncLabel, compact: true },
+    { label: tx('Skill 包', 'Skill bundles'), value: stats.skills },
+    { label: tx('Skill 文件', 'Skill files'), value: skillEntries.files },
+    { label: tx('Skill 文件夹', 'Skill folders'), value: skillEntries.folders },
     { label: tx('文件夹', 'Folders'), value: folderCount },
     { label: tx('待处理', 'Pending'), value: pendingCount },
   ]

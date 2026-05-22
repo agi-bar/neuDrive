@@ -337,6 +337,10 @@ export default function ClaudeMigrationPage({
     : [];
   const previewNotes = Array.isArray(preview?.notes) ? preview.notes : [];
   const importPaths = result?.agent?.paths || result?.files?.paths || [];
+  const targetPaths =
+    platform === "codex"
+      ? ["/skills/<skill-name>/...", "/memory/codex/...", "/conversations/codex/..."]
+      : ["/skills/<skill-name>/...", "/memory/claude/...", "/conversations/claude/..."];
   const lastScanAt = preview?.completed_at || preview?.started_at || "";
   const statusCompletedAt =
     taskStatus?.completed_at || taskStatus?.updated_at || "";
@@ -456,6 +460,12 @@ export default function ClaudeMigrationPage({
                     ? tx("导入中...", "Importing...")
                     : tx("导入", "Import")}
                 </button>
+              </div>
+              <div className="local-import-targets" aria-label={tx("目标路径", "Target paths")}>
+                <span>{tx("目标路径", "Target paths")}</span>
+                {targetPaths.map((target) => (
+                  <code key={target}>{target}</code>
+                ))}
               </div>
               <div className="local-import-command">
                 <div className="local-import-command-label">{tx("也可使用终端命令", "Terminal command")}</div>

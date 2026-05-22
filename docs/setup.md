@@ -184,6 +184,19 @@ claude mcp add -s user neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 codex mcp add neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 ```
 
+For a first-class Codex migration, use the local import flow when neuDrive is
+running on the same machine:
+
+```bash
+neu import codex --dry-run
+neu import codex
+```
+
+The preview shows what will be written before import. Codex skills from
+`~/.codex/skills` and `~/.agents/skills` become `/skills/<skill-name>/...`;
+Codex memories become `/memory/codex/...`; Codex sessions are archived under
+`/conversations/codex/...`.
+
 If you only want to inspect the setup and do not want to mint a token yet, open `Connection Setup -> Local Mode` in the dashboard. You can create and copy a mode-specific token there when you are ready.
 
 ### What To Do After Local Mode Setup

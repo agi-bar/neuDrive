@@ -84,6 +84,7 @@ func TestSQLiteSharedServerLocalPlatformImportCodex(t *testing.T) {
 
 	for _, target := range []string{
 		hubpath.ProfilePath("codex-agent"),
+		"/memory/codex/memories-workspace.md",
 		"/projects/neudrive/context.md",
 		"/skills/sample/SKILL.md",
 		"/skills/codex-bundled-builtin/SKILL.md",

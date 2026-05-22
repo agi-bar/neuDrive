@@ -16,6 +16,7 @@ const (
 	ErrCodeUnsupported  = "unsupported"
 	ErrCodeRateLimit    = "rate_limit_exceeded"
 	ErrCodeValidation   = "validation_error"
+	ErrCodeRequestLarge = "request_too_large"
 
 	ErrCodeGitHubAppPermissionUpdateRequired = "github_app_permission_update_required"
 )

@@ -14,8 +14,9 @@ neu platform ls
 neu connect claude
 neu browse`
 
-const importCommands = `neu import claude --dry-run
-neu import codex --dry-run
+const importCommands = `neu import codex --dry-run
+neu import codex
+neu import claude --dry-run
 neu import skill ./demo-skill
 neu import memory ./notes`
 
@@ -124,8 +125,8 @@ export default function CommandLineToolsPage() {
           onCopy={copyCommand}
         />
         <CommandBlock
-          title={tx('导入本地数据', 'Import local data')}
-          description={tx('在本地模式下扫描 Claude、Codex、skills、memory 等内容；正式导入前推荐先 dry-run。', 'In local mode, scan Claude, Codex, skills, memory, and related content. Run dry-run before writing data.')}
+          title={tx('导入 Codex / 本地数据', 'Import Codex / local data')}
+          description={tx('优先用 dry-run 预览 Codex 的 ~/.codex/skills、~/.codex/memories 和会话等目标路径，再正式导入。', 'Use dry-run first to preview target paths for Codex ~/.codex/skills, ~/.codex/memories, sessions, and related data before importing.')}
           command={importCommands}
           copyKey="import"
           copied={copied}

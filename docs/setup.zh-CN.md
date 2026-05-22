@@ -184,6 +184,17 @@ claude mcp add -s user neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 codex mcp add neudrive -- neudrive-mcp --token-env NEUDRIVE_TOKEN
 ```
 
+如果要做一等的 Codex 迁移，并且 neuDrive 和 Codex 在同一台机器上，推荐直接走本地导入：
+
+```bash
+neu import codex --dry-run
+neu import codex
+```
+
+预览会在正式写入前展示目标路径。`~/.codex/skills` 和
+`~/.agents/skills` 会写到 `/skills/<skill-name>/...`；Codex memories 会写到
+`/memory/codex/...`；Codex sessions 会归档到 `/conversations/codex/...`。
+
 如果你只是想查看接法而不想立刻生成 token，建议直接打开管理后台“连接设置 -> 本地模式”，在那里可以创建和复制当前模式专用 token。
 
 ### 本地模式接好后下一步做什么
